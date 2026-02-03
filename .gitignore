@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# BMAD
+_bmad/
+.agent/
+planning-artifacts/
+implementation-artifacts/
+scripts/
+implementation_plan.md
+walkthrough.md
+
+
+#Node
+node_modules/
+dist/
+build/
+.env
+task.md

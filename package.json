@@ -1,0 +1,17 @@
+{
+    "name": "raid-ledger",
+    "private": true,
+    "workspaces": [
+        "api",
+        "web",
+        "packages/*"
+    ],
+    "scripts": {
+        "dev": "docker-compose up",
+        "build": "npm run build --workspaces",
+        "lint": "npm run lint --workspaces",
+        "test": "npm run test --workspaces",
+        "db:migrate": "npm run migrate -w api",
+        "seed": "npm run seed -w api"
+    }
+}
