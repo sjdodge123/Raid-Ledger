@@ -1,0 +1,87 @@
+#!/usr/bin/env ts-node
+/**
+ * Bootstrap Admin Script
+ * 
+ * Creates an initial admin account on first run if no local admins exist.
+ * Password can be set via ADMIN_PASSWORD environment variable, otherwise generated.
+ * 
+ * Usage: npx ts-node scripts/bootstrap-admin.ts
+ */
+
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
+import * as schema from '../src/drizzle/schema';
+
+const SALT_ROUNDS = 12;
+const DEFAULT_EMAIL = 'admin@local';
+
+async function bootstrapAdmin() {
+    const databaseUrl = process.env.DATABASE_URL;
+
+    if (!databaseUrl) {
+        console.error('❌ DATABASE_URL environment variable is required');
+        process.exit(1);
+    }
+
+    const sql = postgres(databaseUrl);
+    const db = drizzle(sql, { schema });
+
+    try {
+        // Check if any local admins exist
+        const existingAdmins = await db
+            .select()
+            .from(schema.localAdmins)
+            .limit(1);
+
+        if (existingAdmins.length > 0) {
+            console.log('ℹ️  Local admin already exists, skipping bootstrap');
+            await sql.end();
+            return;
+        }
+
+        // Generate or use provided password
+        const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(16).toString('base64');
+        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+        // Create user record first
+        const [user] = await db
+            .insert(schema.users)
+            .values({
+                discordId: `local:${DEFAULT_EMAIL}`,
+                username: 'Admin',
+                isAdmin: true,
+            })
+            .returning();
+
+        // Create local admin linked to user
+        await db
+            .insert(schema.localAdmins)
+            .values({
+                email: DEFAULT_EMAIL,
+                passwordHash,
+                userId: user.id,
+            });
+
+        console.log('');
+        console.log('╔════════════════════════════════════════════════════════════╗');
+        console.log('║          🔐 INITIAL ADMIN CREDENTIALS                      ║');
+        console.log('╠════════════════════════════════════════════════════════════╣');
+        console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
+        console.log(`║  Password: ${password.padEnd(46)} ║`);
+        console.log('╠════════════════════════════════════════════════════════════╣');
+        console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
+        console.log('║  You can link your Discord account in the profile page.    ║');
+        console.log('╚════════════════════════════════════════════════════════════╝');
+        console.log('');
+
+        await sql.end();
+    } catch (error) {
+        console.error('❌ Bootstrap failed:', error);
+        await sql.end();
+        process.exit(1);
+    }
+}
+
+bootstrapAdmin();

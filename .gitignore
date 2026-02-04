@@ -28,6 +28,7 @@ _bmad-output/
 planning-artifacts/
 implementation-artifacts/
 scripts/
+!/api/scripts/
 implementation_plan.md
 walkthrough.md
 handover.zip
