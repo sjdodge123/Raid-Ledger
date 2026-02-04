@@ -2,6 +2,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useEvents } from '../hooks/use-events';
 import { useAuth } from '../hooks/use-auth';
 import { EventCard, EventCardSkeleton } from '../components/events/event-card';
+import { EventsEmptyState } from '../components/events/events-empty-state';
 
 /**
  * Events List Page - displays upcoming events in a responsive grid
@@ -56,13 +57,8 @@ export function EventsPage() {
                             <EventCardSkeleton key={i} />
                         ))
                     ) : data?.data.length === 0 ? (
-                        // Empty state
-                        <div className="col-span-full text-center py-16">
-                            <p className="text-xl text-slate-400">No upcoming events</p>
-                            <p className="text-slate-500 mt-2">
-                                Check back later or create a new event
-                            </p>
-                        </div>
+                        // Empty state with illustration and CTA
+                        <EventsEmptyState />
                     ) : (
                         // Event cards - now using signupCount from event response
                         data?.data.map((event) => (

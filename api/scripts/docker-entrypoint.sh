@@ -37,8 +37,26 @@ if [ -n "$DATABASE_URL" ]; then
     node ./dist/scripts/bootstrap-admin.js 2>&1 || {
         echo "ℹ️ Bootstrap skipped (may already exist or failed)"
     }
+
+    # Demo mode: Seed sample data for demos/testing
+    if [ "$DEMO_MODE" = "true" ]; then
+        echo "🎮 Demo mode enabled - seeding sample data..."
+        
+        # Seed game registry
+        node ./dist/scripts/seed-games.js 2>&1 || {
+            echo "ℹ️ Game seeding skipped (may already exist)"
+        }
+        
+        # Seed sample events
+        node ./dist/scripts/seed-events.js 2>&1 || {
+            echo "ℹ️ Event seeding skipped (may already exist)"
+        }
+        
+        echo "✅ Demo data seeded"
+    fi
 fi
 
 # Execute the main command
 echo "🎮 Starting server..."
 exec "$@"
+

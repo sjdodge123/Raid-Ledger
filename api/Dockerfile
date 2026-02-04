@@ -63,6 +63,9 @@ COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-led
 COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
+# Copy seed scripts for demo mode
+COPY --from=builder /app/api/dist/scripts ./dist/scripts
+
 # Switch to non-root user
 USER nestjs
 

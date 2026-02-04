@@ -62,6 +62,9 @@ services:
       # Optional: IGDB
       IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
       IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      # Demo mode: Set to "true" to seed sample games and events on startup
+      # Defaults to true for demos, set to false in production
+      DEMO_MODE: ${DEMO_MODE:-true}
     networks:
       - raid-ledger-network
     healthcheck:
