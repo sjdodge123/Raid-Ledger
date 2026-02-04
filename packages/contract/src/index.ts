@@ -21,3 +21,6 @@ export * from './signups.schema.js';
 
 // Characters
 export * from './characters.schema.js';
+
+// Availability
+export * from './availability.schema.js';

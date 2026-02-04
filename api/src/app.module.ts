@@ -11,6 +11,7 @@ import { IgdbModule } from './igdb/igdb.module';
 import { EventsModule } from './events/events.module';
 import { GameRegistryModule } from './game-registry/game-registry.module';
 import { CharactersModule } from './characters/characters.module';
+import { AvailabilityModule } from './availability/availability.module';
 
 @Module({
   imports: [
@@ -23,8 +24,9 @@ import { CharactersModule } from './characters/characters.module';
     EventsModule,
     GameRegistryModule,
     CharactersModule,
+    AvailabilityModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

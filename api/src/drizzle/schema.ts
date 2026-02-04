@@ -6,3 +6,4 @@ export * from './schema/event-signups';
 export * from './schema/game-registry';
 export * from './schema/characters';
 export * from './schema/local-admins';
+export * from './schema/availability';
