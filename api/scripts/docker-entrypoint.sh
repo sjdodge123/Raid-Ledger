@@ -51,6 +51,11 @@ if [ -n "$DATABASE_URL" ]; then
         node ./dist/scripts/seed-events.js 2>&1 || {
             echo "ℹ️ Event seeding skipped (may already exist)"
         }
+
+        # Seed test fixtures (signups, availability)
+        node ./dist/scripts/seed-testing.js 2>&1 || {
+            echo "ℹ️ Test fixture seeding skipped (may already exist)"
+        }
         
         echo "✅ Demo data seeded"
     fi

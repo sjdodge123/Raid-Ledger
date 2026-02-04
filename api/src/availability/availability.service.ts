@@ -29,7 +29,7 @@ export class AvailabilityService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   /**
    * Get all availability windows for a user.

@@ -13,6 +13,11 @@ services:
       - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U user -d raid_ledger" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:alpine
@@ -20,17 +25,23 @@ services:
     restart: always
     ports:
       - "6379:6379"
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  # API service (optional for local dev, required for ui-testing)
-  # Start with: docker compose up db redis api
+  # API service with health check
   api:
     build:
       context: .
       dockerfile: api/Dockerfile
     container_name: raid-ledger-api
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
       JWT_SECRET: dev-secret-change-in-prod
@@ -39,8 +50,34 @@ services:
       DEMO_MODE: "true"
     ports:
       - "3000:3000"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:3000/health || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     profiles:
-      - full # Only starts with: docker compose --profile full up
+      - full
+      - test
+
+  # Web service (Vite preview mode for testing)
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      target: production
+    container_name: raid-ledger-web
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      VITE_API_URL: http://localhost:3000
+    ports:
+      - "5173:80"
+    profiles:
+      - test
 
 volumes:
   db_data:
+
+
