@@ -8,6 +8,48 @@
       "when": 1770095687862,
       "tag": "0000_lumpy_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1770130087549,
+      "tag": "0001_strange_ben_urich",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770132238112,
+      "tag": "0002_narrow_enchantress",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1770156900213,
+      "tag": "0003_unique_zuras",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1770160190299,
+      "tag": "0004_smiling_tarot",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1770161224436,
+      "tag": "0005_chunky_lady_bullseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1770162167035,
+      "tag": "0006_magical_mojo",
+      "breakpoints": true
     }
   ]
 }

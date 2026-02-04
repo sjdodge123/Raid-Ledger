@@ -6,20 +6,56 @@
 .Spotlight-V100
 .Trashes
 
-# BMAD
+# Windows
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+*.swp
+*.swo
+
+# BMAD / Agent
 _bmad/
+_bmad-output/
 .agent/
+.gemini/
+.cursor/
+.windsurf/
+.claude/
 planning-artifacts/
 implementation-artifacts/
 scripts/
 implementation_plan.md
 walkthrough.md
+handover.zip
 
-
-#Node
+# Node.js
 node_modules/
 dist/
 build/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+
+# Environment (NEVER commit secrets)
 .env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# Project state
 task.md
 project-context.md
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Turborepo
+.turbo/

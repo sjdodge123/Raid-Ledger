@@ -5,11 +5,11 @@ import { AdminGuard } from '../auth/admin.guard';
 @Controller('admin')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
 export class AdminController {
-    @Get('check')
-    checkAccess(@Req() req: any) {
-        return {
-            message: 'Admin access granted',
-            user: req.user,
-        };
-    }
+  @Get('check')
+  checkAccess(@Req() req: any) {
+    return {
+      message: 'Admin access granted',
+      user: req.user,
+    };
+  }
 }
