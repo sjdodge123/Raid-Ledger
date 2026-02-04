@@ -8,9 +8,9 @@ import { DrizzleModule } from '../drizzle/drizzle.module';
  * Provides CRUD operations and conflict detection for scheduling.
  */
 @Module({
-    imports: [DrizzleModule],
-    controllers: [AvailabilityController],
-    providers: [AvailabilityService],
-    exports: [AvailabilityService],
+  imports: [DrizzleModule],
+  controllers: [AvailabilityController],
+  providers: [AvailabilityService],
+  exports: [AvailabilityService],
 })
-export class AvailabilityModule { }
+export class AvailabilityModule {}

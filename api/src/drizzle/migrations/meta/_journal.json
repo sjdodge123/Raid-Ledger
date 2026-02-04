@@ -64,6 +64,13 @@
       "when": 1770182099914,
       "tag": "0008_nifty_argent",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1770239037155,
+      "tag": "0009_supreme_medusa",
+      "breakpoints": true
     }
   ]
 }
