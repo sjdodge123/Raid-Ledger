@@ -13,6 +13,7 @@ import type {
     AvailabilityWithConflicts,
     CreateAvailabilityInput,
     UpdateAvailabilityDto,
+    RosterAvailabilityResponse,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -272,4 +273,27 @@ export async function updateAvailability(
  */
 export async function deleteAvailability(id: string): Promise<void> {
     return fetchApi(`/users/me/availability/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================
+// Roster Availability API (ROK-113)
+// ============================================================
+
+export interface RosterAvailabilityParams {
+    from?: string;
+    to?: string;
+}
+
+/**
+ * Fetch availability for all signed-up users in an event (for heatmap)
+ */
+export async function getRosterAvailability(
+    eventId: number,
+    params?: RosterAvailabilityParams
+): Promise<RosterAvailabilityResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.from) searchParams.set('from', params.from);
+    if (params?.to) searchParams.set('to', params.to);
+    const query = searchParams.toString();
+    return fetchApi(`/events/${eventId}/roster/availability${query ? `?${query}` : ''}`);
 }

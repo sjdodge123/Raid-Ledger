@@ -238,4 +238,63 @@ describe('EventsController', () => {
       ).rejects.toThrow(BadRequestException);
     });
   });
+
+  describe('getRosterAvailability (ROK-113)', () => {
+    const mockRosterAvailability = {
+      eventId: 1,
+      timeRange: {
+        start: '2026-02-10T16:00:00.000Z',
+        end: '2026-02-10T22:00:00.000Z',
+      },
+      users: [
+        {
+          id: 1,
+          username: 'testuser',
+          avatar: null,
+          slots: [
+            {
+              start: '2026-02-10T17:00:00.000Z',
+              end: '2026-02-10T21:00:00.000Z',
+              status: 'available',
+              gameId: null,
+              sourceEventId: null,
+            },
+          ],
+        },
+      ],
+    };
+
+    beforeEach(() => {
+      mockEventsService.getRosterAvailability = jest
+        .fn()
+        .mockResolvedValue(mockRosterAvailability);
+    });
+
+    it('should return roster availability for event', async () => {
+      const result = await controller.getRosterAvailability(1, {});
+
+      expect(result.eventId).toBe(1);
+      expect(result.users).toHaveLength(1);
+      expect(mockEventsService.getRosterAvailability).toHaveBeenCalledWith(
+        1,
+        undefined,
+        undefined,
+      );
+    });
+
+    it('should pass query params to service', async () => {
+      const query = {
+        from: '2026-02-10T16:00:00.000Z',
+        to: '2026-02-10T22:00:00.000Z',
+      };
+
+      await controller.getRosterAvailability(1, query);
+
+      expect(mockEventsService.getRosterAvailability).toHaveBeenCalledWith(
+        1,
+        query.from,
+        query.to,
+      );
+    });
+  });
 });

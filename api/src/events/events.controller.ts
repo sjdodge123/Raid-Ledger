@@ -25,6 +25,8 @@ import {
   EventListResponseDto,
   SignupResponseDto,
   EventRosterDto,
+  RosterAvailabilityResponse,
+  RosterAvailabilityQuerySchema,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -193,6 +195,28 @@ export class EventsController {
     @Param('id', ParseIntPipe) eventId: number,
   ): Promise<EventRosterDto> {
     return this.signupsService.getRoster(eventId);
+  }
+
+  /**
+   * Get roster availability for heatmap visualization (ROK-113).
+   * Returns availability data for all signed-up users within the event timeframe.
+   * Public endpoint.
+   */
+  @Get(':id/roster/availability')
+  async getRosterAvailability(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Query() query: Record<string, string>,
+  ): Promise<RosterAvailabilityResponse> {
+    try {
+      const dto = RosterAvailabilityQuerySchema.parse(query);
+      return this.eventsService.getRosterAvailability(
+        eventId,
+        dto.from,
+        dto.to,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   /**

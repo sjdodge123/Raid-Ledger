@@ -5,7 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { eq, and, sql, asc } from 'drizzle-orm';
+import { eq, and, sql, asc, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -29,7 +29,7 @@ export class AvailabilityService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) { }
 
   /**
    * Get all availability windows for a user.
@@ -319,7 +319,7 @@ export class AvailabilityService {
       .from(schema.availability)
       .where(
         and(
-          sql`${schema.availability.userId} = ANY(${userIds})`,
+          inArray(schema.availability.userId, userIds),
           sql`${schema.availability.timeRange} && ${rangeStr}::tsrange`,
         ),
       );

@@ -16,7 +16,10 @@ import {
   EventResponseDto,
   EventListResponseDto,
   EventListQueryDto,
+  RosterAvailabilityResponse,
+  UserWithAvailabilitySlots,
 } from '@raid-ledger/contract';
+import { AvailabilityService } from '../availability/availability.service';
 
 /** Constants for events service */
 const EVENTS_CONFIG = {
@@ -31,6 +34,7 @@ export class EventsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private readonly availabilityService: AvailabilityService,
   ) {}
 
   /**
@@ -287,6 +291,87 @@ export class EventsService {
     await this.db.delete(schema.events).where(eq(schema.events.id, id));
 
     this.logger.log(`Event deleted: ${id} by user ${userId}`);
+  }
+
+  /**
+   * Get availability for all signed-up users (ROK-113).
+   * Used by heatmap component to visualize team availability.
+   * @param eventId - Event ID
+   * @param from - Optional: override start time (defaults to event start - 2h)
+   * @param to - Optional: override end time (defaults to event end + 2h)
+   * @returns Roster availability data for heatmap
+   * @throws NotFoundException if event not found
+   */
+  async getRosterAvailability(
+    eventId: number,
+    from?: string,
+    to?: string,
+  ): Promise<RosterAvailabilityResponse> {
+    // Get event details
+    const event = await this.findOne(eventId);
+
+    // Calculate time window (event duration ± 2 hours buffer)
+    const eventStart = new Date(event.startTime);
+    const eventEnd = new Date(event.endTime);
+    const bufferMs = 2 * 60 * 60 * 1000; // 2 hours
+    const startTime =
+      from || new Date(eventStart.getTime() - bufferMs).toISOString();
+    const endTime = to || new Date(eventEnd.getTime() + bufferMs).toISOString();
+
+    // Get all signups for this event
+    const signups = await this.db
+      .select({
+        signup: schema.eventSignups,
+        user: schema.users,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    if (signups.length === 0) {
+      return {
+        eventId,
+        timeRange: { start: startTime, end: endTime },
+        users: [],
+      };
+    }
+
+    // Get user IDs from signups
+    const userIds = signups
+      .filter((s) => s.user !== null)
+      .map((s) => s.user!.id);
+
+    // Fetch availability for all signed-up users
+    const availabilityMap = await this.availabilityService.findForUsersInRange(
+      userIds,
+      startTime,
+      endTime,
+    );
+
+    // Build response with user info and their slots
+    const users: UserWithAvailabilitySlots[] = signups
+      .filter((s) => s.user !== null)
+      .map((s) => {
+        const userAvailability = availabilityMap.get(s.user!.id) || [];
+        return {
+          id: s.user!.id,
+          username: s.user!.username,
+          avatar: s.user!.avatar,
+          slots: userAvailability.map((a) => ({
+            start: a.timeRange.start,
+            end: a.timeRange.end,
+            status: a.status,
+            gameId: a.gameId,
+            sourceEventId: a.sourceEventId,
+          })),
+        };
+      });
+
+    return {
+      eventId,
+      timeRange: { start: startTime, end: endTime },
+      users,
+    };
   }
 
   /**

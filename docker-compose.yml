@@ -21,5 +21,26 @@ services:
     ports:
       - "6379:6379"
 
+  # API service (optional for local dev, required for ui-testing)
+  # Start with: docker compose up db redis api
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: raid-ledger-api
+    depends_on:
+      - db
+      - redis
+    environment:
+      DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
+      JWT_SECRET: dev-secret-change-in-prod
+      CORS_ORIGIN: http://localhost:5173
+      # Enable demo mode for seeding sample data (games + events)
+      DEMO_MODE: "true"
+    ports:
+      - "3000:3000"
+    profiles:
+      - full # Only starts with: docker compose --profile full up
+
 volumes:
   db_data:

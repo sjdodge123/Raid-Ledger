@@ -4,8 +4,10 @@ import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
+import { useRosterAvailability } from '../hooks/use-roster-availability';
 import { RosterList } from '../components/events/roster-list';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
+import { HeatmapGrid } from '../components/features/heatmap';
 
 /**
  * Format date/time in user's local timezone
@@ -56,6 +58,16 @@ export function EventDetailPage() {
     // Modal state for character confirmation (ROK-131 AC-2)
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
+
+    // Heatmap visibility toggle (ROK-113)
+    const [showHeatmap, setShowHeatmap] = useState(false);
+
+    // Roster availability for heatmap (lazy-loaded when visible)
+    const { data: rosterAvailability, isLoading: availabilityLoading } = useRosterAvailability(
+        eventId,
+        undefined,
+        showHeatmap // Only fetch when heatmap is visible
+    );
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
@@ -255,6 +267,41 @@ export function EventDetailPage() {
                                     signups={roster?.signups ?? []}
                                     isLoading={rosterLoading}
                                 />
+                            </div>
+
+                            {/* Team Availability Heatmap (ROK-113) */}
+                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-lg font-semibold text-white">
+                                        Team Availability
+                                    </h2>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <span className="text-sm text-slate-400">Show</span>
+                                        <input
+                                            type="checkbox"
+                                            checked={showHeatmap}
+                                            onChange={(e) => setShowHeatmap(e.target.checked)}
+                                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500"
+                                        />
+                                    </label>
+                                </div>
+                                {showHeatmap ? (
+                                    availabilityLoading ? (
+                                        <div className="text-center py-8 text-slate-400">
+                                            Loading availability...
+                                        </div>
+                                    ) : rosterAvailability ? (
+                                        <HeatmapGrid data={rosterAvailability} />
+                                    ) : (
+                                        <div className="text-center py-8 text-slate-400">
+                                            No availability data
+                                        </div>
+                                    )
+                                ) : (
+                                    <p className="text-sm text-slate-400">
+                                        Toggle to see when team members are available
+                                    </p>
+                                )}
                             </div>
                         </div>
                     </div>

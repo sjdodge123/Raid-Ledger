@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { AvailabilityService } from '../availability/availability.service';
 
 describe('EventsService', () => {
   let service: EventsService;
@@ -121,6 +122,12 @@ describe('EventsService', () => {
       providers: [
         EventsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        {
+          provide: AvailabilityService,
+          useValue: {
+            findForUsersInRange: jest.fn().mockResolvedValue(new Map()),
+          },
+        },
       ],
     }).compile();
 

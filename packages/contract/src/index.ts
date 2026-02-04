@@ -24,3 +24,6 @@ export * from './characters.schema.js';
 
 // Availability
 export * from './availability.schema.js';
+
+// Roster Availability (heatmap)
+export * from './roster-availability.schema.js';
