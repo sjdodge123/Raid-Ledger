@@ -1,68 +1,123 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+@import "tailwindcss";
+
+/* ============================================
+   UX Design System - Raid Ledger
+   Based on ux-design-specification.md
+   ============================================ */
+
 :root {
-  font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+    /* Class/Role Colors (MMO Standard) */
+    --color-tank: #C79C6E;
+    --color-healer: #F58CBA;
+    --color-dps-melee: #ABD473;
+    --color-dps-ranged: #3FC7EB;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+    /* Rarity Scale (Loot Colors) */
+    --color-legendary: #FF8000;
+    --color-epic: #A335EE;
+    --color-rare: #0070DD;
+    --color-uncommon: #1EFF00;
+    --color-poor: #9D9D9D;
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+    /* Status Colors */
+    --color-ready: #22C55E;
+    --color-late: #EAB308;
+    --color-absent: #EF4444;
+
+    /* Glow Effects */
+    --glow-emerald: 0 0 20px rgba(16, 185, 129, 0.4);
+    --glow-indigo: 0 0 20px rgba(99, 102, 241, 0.4);
+    --glow-epic: 0 0 20px rgba(163, 53, 238, 0.4);
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #535bf2;
+/* Base Styles */
+html {
+    color-scheme: dark;
 }
 
 body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
+    margin: 0;
+    min-height: 100vh;
+    background-color: rgb(2 6 23);
+    /* slate-950 */
+    font-family: 'Inter', system-ui, sans-serif;
 }
 
-h1 {
-  font-size: 3.2em;
-  line-height: 1.1;
+#root {
+    min-height: 100vh;
 }
 
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
+/* Typography - Display/Headers */
+.font-display {
+    font-family: 'Cinzel', serif;
+    letter-spacing: 0.02em;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
+/* Glassmorphism Card */
+.glass-card {
+    background: rgba(15, 23, 42, 0.7);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.glass-card:hover {
+    border-color: rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.8);
+}
+
+/* Glow Button Effects */
+.glow-emerald {
+    box-shadow: var(--glow-emerald);
+}
+
+.glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+}
+
+.glow-indigo {
+    box-shadow: var(--glow-indigo);
+}
+
+.glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+/* Role Badge Colors */
+.role-tank {
+    color: var(--color-tank);
+    border-color: var(--color-tank);
+}
+
+.role-healer {
+    color: var(--color-healer);
+    border-color: var(--color-healer);
+}
+
+.role-dps {
+    color: var(--color-dps-melee);
+    border-color: var(--color-dps-melee);
+}
+
+/* Rarity Badges */
+.rarity-legendary {
+    color: var(--color-legendary);
+    text-shadow: 0 0 10px var(--color-legendary);
+}
+
+.rarity-epic {
+    color: var(--color-epic);
+    text-shadow: 0 0 10px var(--color-epic);
+}
+
+.rarity-rare {
+    color: var(--color-rare);
+}
+
+/* Smooth transitions */
+* {
+    transition-property: color, background-color, border-color, box-shadow, opacity, transform;
+    transition-duration: 150ms;
+    transition-timing-function: ease-out;
 }

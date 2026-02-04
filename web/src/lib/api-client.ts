@@ -4,6 +4,11 @@ import type {
     EventRosterDto,
     SignupResponseDto,
     CharacterListResponseDto,
+    GameSearchResponseDto,
+    CreateEventDto,
+    CreateCharacterDto,
+    UpdateCharacterDto,
+    CharacterDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -11,6 +16,8 @@ import {
     EventRosterSchema,
     SignupResponseSchema,
     CharacterListResponseSchema,
+    GameSearchResponseSchema,
+    CharacterSchema,
 } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
 
@@ -83,6 +90,32 @@ export async function getEventRoster(eventId: number): Promise<EventRosterDto> {
     return fetchApi(`/events/${eventId}/roster`, {}, EventRosterSchema);
 }
 
+/**
+ * Create a new event
+ */
+export async function createEvent(dto: CreateEventDto): Promise<EventResponseDto> {
+    return fetchApi(
+        '/events',
+        {
+            method: 'POST',
+            body: JSON.stringify(dto),
+        },
+        EventResponseSchema
+    );
+}
+
+// ============================================================
+// Games API (IGDB Search)
+// ============================================================
+
+/**
+ * Search for games via IGDB
+ */
+export async function searchGames(query: string): Promise<GameSearchResponseDto> {
+    const params = new URLSearchParams({ q: query });
+    return fetchApi(`/games/search?${params}`, {}, GameSearchResponseSchema);
+}
+
 // ============================================================
 // Signups API
 // ============================================================
@@ -131,3 +164,53 @@ export async function getMyCharacters(gameId?: string): Promise<CharacterListRes
     const params = gameId ? `?gameId=${gameId}` : '';
     return fetchApi(`/users/me/characters${params}`, {}, CharacterListResponseSchema);
 }
+
+/**
+ * Create a new character
+ */
+export async function createCharacter(dto: CreateCharacterDto): Promise<CharacterDto> {
+    return fetchApi(
+        '/users/me/characters',
+        {
+            method: 'POST',
+            body: JSON.stringify(dto),
+        },
+        CharacterSchema
+    );
+}
+
+/**
+ * Update a character
+ */
+export async function updateCharacter(
+    characterId: string,
+    dto: UpdateCharacterDto
+): Promise<CharacterDto> {
+    return fetchApi(
+        `/users/me/characters/${characterId}`,
+        {
+            method: 'PATCH',
+            body: JSON.stringify(dto),
+        },
+        CharacterSchema
+    );
+}
+
+/**
+ * Set a character as main (swaps if another was main for that game)
+ */
+export async function setMainCharacter(characterId: string): Promise<CharacterDto> {
+    return fetchApi(
+        `/users/me/characters/${characterId}/main`,
+        { method: 'PATCH' },
+        CharacterSchema
+    );
+}
+
+/**
+ * Delete a character
+ */
+export async function deleteCharacter(characterId: string): Promise<void> {
+    return fetchApi(`/users/me/characters/${characterId}`, { method: 'DELETE' });
+}
+
