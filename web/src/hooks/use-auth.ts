@@ -35,9 +35,11 @@ async function fetchCurrentUser(): Promise<User | null> {
         });
 
         if (!response.ok) {
-            // 401 means token is invalid - clear it
+            // 401 means token is invalid/expired - clear it
             if (response.status === 401) {
                 localStorage.removeItem(TOKEN_KEY);
+                // Note: Don't show toast here - this runs on every page load
+                // Session expiry feedback is handled by ProtectedRoute redirecting to login
                 return null;
             }
             throw new Error(`HTTP ${response.status}`);

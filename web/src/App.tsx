@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/layout';
+import { ProtectedRoute } from './components/auth';
 import { HomePage } from './pages/home-page';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
@@ -24,9 +25,17 @@ function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/events" element={<EventsPage />} />
-          <Route path="/events/new" element={<CreateEventPage />} />
+          <Route path="/events/new" element={
+            <ProtectedRoute>
+              <CreateEventPage />
+            </ProtectedRoute>
+          } />
           <Route path="/events/:id" element={<EventDetailPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/profile" element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          } />
           <Route path="/auth/success" element={<AuthSuccessPage />} />
         </Routes>
       </Layout>
@@ -35,4 +44,5 @@ function App() {
 }
 
 export default App;
+
 
