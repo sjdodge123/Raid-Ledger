@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 
@@ -7,9 +7,10 @@ import { API_BASE_URL } from '../../lib/config';
  * User menu dropdown showing avatar, username, and actions.
  */
 export function UserMenu() {
-    const { user, isAuthenticated } = useAuth();
+    const { user, isAuthenticated, logout } = useAuth();
     const [isOpen, setIsOpen] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
+    const navigate = useNavigate();
 
     // Close dropdown when clicking outside
     useEffect(() => {
@@ -38,6 +39,12 @@ export function UserMenu() {
         }
         return () => document.removeEventListener('keydown', handleEscape);
     }, [isOpen]);
+
+    const handleLogout = () => {
+        logout();
+        setIsOpen(false);
+        navigate('/', { replace: true });
+    };
 
     if (!isAuthenticated || !user) {
         return (
@@ -99,12 +106,12 @@ export function UserMenu() {
                         >
                             Profile
                         </Link>
-                        <a
-                            href={`${API_BASE_URL}/auth/logout`}
-                            className="block px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                        <button
+                            onClick={handleLogout}
+                            className="block w-full text-left px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
                         >
                             Logout
-                        </a>
+                        </button>
                     </div>
                 </div>
             )}

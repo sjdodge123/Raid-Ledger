@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -62,6 +62,39 @@ export class UsersService {
       .set({ isAdmin, updatedAt: new Date() })
       .where(eq(schema.users.discordId, discordId))
       .returning();
+    return updated;
+  }
+
+  /**
+   * Link a Discord account to an existing user.
+   * Throws ConflictException if Discord account is already linked to another user.
+   */
+  async linkDiscord(
+    userId: number,
+    discordId: string,
+    username: string,
+    avatar?: string,
+  ) {
+    // Check if Discord account is already linked to another user
+    const existingWithDiscord = await this.findByDiscordId(discordId);
+    if (existingWithDiscord && existingWithDiscord.id !== userId) {
+      throw new ConflictException(
+        'This Discord account is already linked to another user',
+      );
+    }
+
+    // Update user with Discord info
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        discordId,
+        username, // Update username to Discord username
+        avatar,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
+
     return updated;
   }
 }

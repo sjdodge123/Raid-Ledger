@@ -1,10 +1,13 @@
-import { Controller, Get, Req, UseGuards, Res } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards, Res, Query } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import type { Response } from 'express';
+import { UsersService } from '../users/users.service';
+import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import * as crypto from 'crypto';
 
-interface RequestWithUser {
+interface RequestWithUser extends Request {
   user: any;
 }
 
@@ -12,8 +15,54 @@ interface RequestWithUser {
 export class AuthController {
   constructor(
     private authService: AuthService,
+    private usersService: UsersService,
     private configService: ConfigService,
+    private jwtService: JwtService,
   ) {}
+
+  /**
+   * Sign OAuth state parameter to prevent tampering
+   */
+  private signState(payload: object): string {
+    const data = JSON.stringify(payload);
+    const secret = this.configService.get<string>('JWT_SECRET')!;
+    const signature = crypto
+      .createHmac('sha256', secret)
+      .update(data)
+      .digest('hex');
+    return Buffer.from(JSON.stringify({ data, signature })).toString('base64');
+  }
+
+  /**
+   * Verify and decode signed OAuth state parameter
+   */
+  private verifyState(
+    state: string,
+  ): { userId: number; action: string } | null {
+    try {
+      const { data, signature } = JSON.parse(
+        Buffer.from(state, 'base64').toString(),
+      );
+      const secret = this.configService.get<string>('JWT_SECRET')!;
+      const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(data)
+        .digest('hex');
+
+      if (
+        !crypto.timingSafeEqual(
+          Buffer.from(signature),
+          Buffer.from(expectedSignature),
+        )
+      ) {
+        return null; // Signature mismatch - state was tampered with
+      }
+
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
 
   @Get('discord')
   @UseGuards(AuthGuard('discord'))
@@ -34,6 +83,117 @@ export class AuthController {
     const clientUrl = this.configService.get<string>('CLIENT_URL');
     // Using query param for simplicity in MVP. Secure httpOnly cookie is better for prod.
     res.redirect(`${clientUrl}/auth/success?token=${access_token}`);
+  }
+
+  /**
+   * GET /auth/discord/link
+   * Protected endpoint - user must be logged in
+   * Initiates Discord OAuth with signed state containing user ID for linking
+   */
+  @Get('discord/link')
+  @UseGuards(AuthGuard('jwt'))
+  async discordLink(@Req() req: RequestWithUser, @Res() res: Response) {
+    const userId = req.user.id;
+
+    // Create SIGNED state with user ID and action for callback
+    const state = this.signState({
+      userId,
+      action: 'link',
+      timestamp: Date.now(), // Prevent replay attacks
+    });
+
+    const clientId = this.configService.get<string>('DISCORD_CLIENT_ID');
+    const redirectUri = this.configService
+      .get<string>('DISCORD_CALLBACK_URL')
+      ?.replace('/callback', '/link/callback');
+
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri!)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+
+    res.redirect(discordAuthUrl);
+  }
+
+  /**
+   * GET /auth/discord/link/callback
+   * Handles Discord OAuth callback for linking (not login)
+   */
+  @Get('discord/link/callback')
+  async discordLinkCallback(
+    @Query('code') code: string,
+    @Query('state') state: string,
+    @Res() res: Response,
+  ) {
+    const clientUrl = this.configService.get<string>('CLIENT_URL');
+
+    try {
+      // Verify signed state to get user ID
+      const stateData = this.verifyState(state);
+      if (!stateData) {
+        throw new Error('Invalid or tampered state parameter');
+      }
+
+      const { userId, action } = stateData;
+
+      if (action !== 'link') {
+        throw new Error('Invalid state action');
+      }
+
+      // Exchange code for access token
+      const tokenResponse = await fetch(
+        'https://discord.com/api/oauth2/token',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: new URLSearchParams({
+            client_id: this.configService.get<string>('DISCORD_CLIENT_ID')!,
+            client_secret: this.configService.get<string>(
+              'DISCORD_CLIENT_SECRET',
+            )!,
+            grant_type: 'authorization_code',
+            code,
+            redirect_uri: this.configService
+              .get<string>('DISCORD_CALLBACK_URL')
+              ?.replace('/callback', '/link/callback')!,
+          }),
+        },
+      );
+
+      if (!tokenResponse.ok) {
+        throw new Error('Failed to exchange code for token');
+      }
+
+      const tokens = await tokenResponse.json();
+
+      // Get Discord user profile
+      const userResponse = await fetch('https://discord.com/api/users/@me', {
+        headers: {
+          Authorization: `Bearer ${tokens.access_token}`,
+        },
+      });
+
+      if (!userResponse.ok) {
+        throw new Error('Failed to fetch Discord profile');
+      }
+
+      const discordProfile = await userResponse.json();
+
+      // Link Discord account to user
+      await this.usersService.linkDiscord(
+        userId,
+        discordProfile.id,
+        discordProfile.username,
+        discordProfile.avatar,
+      );
+
+      // Redirect to profile with success
+      res.redirect(`${clientUrl}/profile?linked=success`);
+    } catch (error) {
+      console.error('Discord link error:', error);
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Link failed')}`,
+      );
+    }
   }
 
   @Get('me')

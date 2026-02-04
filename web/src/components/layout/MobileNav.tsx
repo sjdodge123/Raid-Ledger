@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 
@@ -13,7 +13,8 @@ interface MobileNavProps {
  */
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     const location = useLocation();
-    const { user, isAuthenticated } = useAuth();
+    const navigate = useNavigate();
+    const { user, isAuthenticated, logout } = useAuth();
 
     // Close on route change
     useEffect(() => {
@@ -37,6 +38,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             document.body.style.overflow = '';
         };
     }, [isOpen, onClose]);
+
+    const handleLogout = () => {
+        logout();
+        onClose();
+        navigate('/', { replace: true });
+    };
 
     if (!isOpen) return null;
 
@@ -122,12 +129,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 {/* Auth action */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-800">
                     {isAuthenticated ? (
-                        <a
-                            href={`${API_BASE_URL}/auth/logout`}
+                        <button
+                            onClick={handleLogout}
                             className="block w-full text-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg transition-colors"
                         >
                             Logout
-                        </a>
+                        </button>
                     ) : (
                         <a
                             href={`${API_BASE_URL}/auth/discord`}
@@ -144,3 +151,4 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         </div>
     );
 }
+

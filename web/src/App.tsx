@@ -7,6 +7,7 @@ import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
+import { LoginPage } from './pages/login-page';
 import './App.css';
 
 function App() {
@@ -21,6 +22,7 @@ function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/new" element={<CreateEventPage />} />
           <Route path="/events/:id" element={<EventDetailPage />} />
@@ -33,3 +35,4 @@ function App() {
 }
 
 export default App;
+

@@ -1,0 +1,53 @@
+# Dependencies
+node_modules
+.npm
+
+# Build outputs
+dist
+build
+.next
+
+# Development files
+.env
+.env.local
+.env.*.local
+*.log
+npm-debug.log*
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Documentation (not needed in image)
+*.md
+!README.md
+docs/
+
+# Test files
+*.spec.ts
+*.test.ts
+__tests__
+coverage
+.nyc_output
+
+# Planning artifacts (not needed in production)
+planning-artifacts/
+implementation-artifacts/
+_bmad/
+
+# Development compose
+docker-compose.yml
+
+# Misc
+.dockerignore
+Dockerfile*

@@ -50,6 +50,20 @@
       "when": 1770162167035,
       "tag": "0006_magical_mojo",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1770181559522,
+      "tag": "0007_fast_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770182099914,
+      "tag": "0008_nifty_argent",
+      "breakpoints": true
     }
   ]
 }
