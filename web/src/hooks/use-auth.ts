@@ -1,5 +1,7 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
+
+const TOKEN_KEY = 'raid_ledger_token';
 
 export interface User {
     id: number;
@@ -9,17 +11,33 @@ export interface User {
 }
 
 /**
+ * Get stored auth token
+ */
+export function getAuthToken(): string | null {
+    return localStorage.getItem(TOKEN_KEY);
+}
+
+/**
  * Fetch current authenticated user from /auth/me
  */
 async function fetchCurrentUser(): Promise<User | null> {
+    const token = getAuthToken();
+
+    if (!token) {
+        return null;
+    }
+
     try {
         const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            credentials: 'include',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+            },
         });
 
         if (!response.ok) {
-            // 401 means not authenticated - this is not an error
+            // 401 means token is invalid - clear it
             if (response.status === 401) {
+                localStorage.removeItem(TOKEN_KEY);
                 return null;
             }
             throw new Error(`HTTP ${response.status}`);
@@ -36,6 +54,8 @@ async function fetchCurrentUser(): Promise<User | null> {
  * Returns null when not authenticated
  */
 export function useAuth() {
+    const queryClient = useQueryClient();
+
     const { data: user, isLoading, error, refetch } = useQuery({
         queryKey: ['auth', 'me'],
         queryFn: fetchCurrentUser,
@@ -43,11 +63,24 @@ export function useAuth() {
         retry: false, // Don't retry auth failures
     });
 
+    const login = (token: string) => {
+        localStorage.setItem(TOKEN_KEY, token);
+        // Invalidate the auth query to trigger a refetch
+        queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+    };
+
+    const logout = () => {
+        localStorage.removeItem(TOKEN_KEY);
+        queryClient.setQueryData(['auth', 'me'], null);
+    };
+
     return {
         user: user ?? null,
         isLoading,
         isAuthenticated: !!user,
         error,
         refetch,
+        login,
+        logout,
     };
 }

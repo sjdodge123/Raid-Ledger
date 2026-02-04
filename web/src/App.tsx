@@ -6,6 +6,7 @@ import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
+import { AuthSuccessPage } from './pages/auth-success-page';
 import './App.css';
 
 function App() {
@@ -24,6 +25,7 @@ function App() {
           <Route path="/events/new" element={<CreateEventPage />} />
           <Route path="/events/:id" element={<EventDetailPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/auth/success" element={<AuthSuccessPage />} />
         </Routes>
       </Layout>
     </BrowserRouter>
