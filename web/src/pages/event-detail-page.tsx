@@ -42,6 +42,10 @@ function formatDuration(start: string, end: string): string {
 
 /**
  * Event Detail Page - shows full event info, roster, and signup actions
+ * 
+ * Layout (ROK-156): 60/40 split on desktop
+ * - Main (60%): Heatmap + Roster (always visible)
+ * - Sidebar (40%): Event Info + Actions
  */
 export function EventDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -59,14 +63,11 @@ export function EventDetailPage() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
 
-    // Heatmap visibility toggle (ROK-113)
-    const [showHeatmap, setShowHeatmap] = useState(false);
-
-    // Roster availability for heatmap (lazy-loaded when visible)
+    // ROK-156: Roster availability always fetched (no toggle)
     const { data: rosterAvailability, isLoading: availabilityLoading } = useRosterAvailability(
         eventId,
         undefined,
-        showHeatmap // Only fetch when heatmap is visible
+        true // Always fetch - heatmap is always visible
     );
 
     // Check if current user is signed up
@@ -126,7 +127,7 @@ export function EventDetailPage() {
 
     return (
         <div className="min-h-screen bg-slate-950 py-8 px-4">
-            <div className="max-w-4xl mx-auto">
+            <div className="max-w-6xl mx-auto">
                 {/* Back button */}
                 <button
                     onClick={() => navigate('/events')}
@@ -138,9 +139,52 @@ export function EventDetailPage() {
                 {eventLoading ? (
                     <EventDetailSkeleton />
                 ) : event ? (
-                    <div className="grid md:grid-cols-3 gap-8">
-                        {/* Main Content */}
-                        <div className="md:col-span-2 space-y-6">
+                    <div className="grid lg:grid-cols-5 gap-8">
+                        {/* Main Content - 60% (3/5) - Heatmap & Roster */}
+                        <div className="lg:col-span-3 space-y-6">
+                            {/* Team Availability Heatmap (ROK-156: Always visible) */}
+                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
+                                <h2 className="text-lg font-semibold text-white mb-4">
+                                    Team Availability
+                                </h2>
+                                {availabilityLoading ? (
+                                    <div className="space-y-3">
+                                        <div className="h-8 bg-slate-800 rounded animate-pulse" />
+                                        <div className="h-32 bg-slate-800 rounded animate-pulse" />
+                                    </div>
+                                ) : roster?.count === 0 ? (
+                                    <div className="text-center py-8">
+                                        <div className="text-4xl mb-3">👥</div>
+                                        <p className="text-slate-400">
+                                            No signups yet. Be the first to join!
+                                        </p>
+                                    </div>
+                                ) : rosterAvailability ? (
+                                    <HeatmapGrid data={rosterAvailability} />
+                                ) : (
+                                    <div className="text-center py-8">
+                                        <div className="text-4xl mb-3">📅</div>
+                                        <p className="text-slate-400">
+                                            No availability data from signed-up users
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Roster List */}
+                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
+                                <h2 className="text-lg font-semibold text-white mb-4">
+                                    Roster ({roster?.count ?? 0})
+                                </h2>
+                                <RosterList
+                                    signups={roster?.signups ?? []}
+                                    isLoading={rosterLoading}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Sidebar - 40% (2/5) - Event Info & Actions */}
+                        <div className="lg:col-span-2 space-y-6">
                             {/* Event Header */}
                             <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
                                 {event.game?.coverUrl && (
@@ -203,10 +247,7 @@ export function EventDetailPage() {
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Sidebar - Roster & Actions */}
-                        <div className="space-y-6">
                             {/* Signup Action */}
                             <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
                                 <h2 className="text-lg font-semibold text-white mb-4">
@@ -257,52 +298,6 @@ export function EventDetailPage() {
                                     </a>
                                 )}
                             </div>
-
-                            {/* Roster */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                                <h2 className="text-lg font-semibold text-white mb-4">
-                                    Roster ({roster?.count ?? 0})
-                                </h2>
-                                <RosterList
-                                    signups={roster?.signups ?? []}
-                                    isLoading={rosterLoading}
-                                />
-                            </div>
-
-                            {/* Team Availability Heatmap (ROK-113) */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h2 className="text-lg font-semibold text-white">
-                                        Team Availability
-                                    </h2>
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <span className="text-sm text-slate-400">Show</span>
-                                        <input
-                                            type="checkbox"
-                                            checked={showHeatmap}
-                                            onChange={(e) => setShowHeatmap(e.target.checked)}
-                                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500"
-                                        />
-                                    </label>
-                                </div>
-                                {showHeatmap ? (
-                                    availabilityLoading ? (
-                                        <div className="text-center py-8 text-slate-400">
-                                            Loading availability...
-                                        </div>
-                                    ) : rosterAvailability ? (
-                                        <HeatmapGrid data={rosterAvailability} />
-                                    ) : (
-                                        <div className="text-center py-8 text-slate-400">
-                                            No availability data
-                                        </div>
-                                    )
-                                ) : (
-                                    <p className="text-sm text-slate-400">
-                                        Toggle to see when team members are available
-                                    </p>
-                                )}
-                            </div>
                         </div>
                     </div>
                 ) : null}
@@ -332,12 +327,28 @@ export function EventDetailPage() {
 }
 
 /**
- * Skeleton loader for event detail page
+ * Skeleton loader for event detail page (ROK-156: 60/40 layout)
  */
 function EventDetailSkeleton() {
     return (
-        <div className="grid md:grid-cols-3 gap-8 animate-pulse">
-            <div className="md:col-span-2">
+        <div className="grid lg:grid-cols-5 gap-8 animate-pulse">
+            {/* Main - Heatmap & Roster skeletons */}
+            <div className="lg:col-span-3 space-y-6">
+                <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
+                    <div className="h-6 bg-slate-800 rounded w-1/3 mb-4" />
+                    <div className="h-8 bg-slate-800 rounded mb-3" />
+                    <div className="h-32 bg-slate-800 rounded" />
+                </div>
+                <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
+                    <div className="h-6 bg-slate-800 rounded w-1/4 mb-4" />
+                    <div className="space-y-2">
+                        <div className="h-10 bg-slate-800 rounded" />
+                        <div className="h-10 bg-slate-800 rounded" />
+                    </div>
+                </div>
+            </div>
+            {/* Sidebar - Event Info skeleton */}
+            <div className="lg:col-span-2 space-y-6">
                 <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
                     <div className="h-48 bg-slate-800" />
                     <div className="p-6 space-y-4">
@@ -347,8 +358,6 @@ function EventDetailSkeleton() {
                         <div className="h-24 bg-slate-800 rounded" />
                     </div>
                 </div>
-            </div>
-            <div className="space-y-6">
                 <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
                     <div className="h-6 bg-slate-800 rounded w-1/2 mb-4" />
                     <div className="h-12 bg-slate-800 rounded" />

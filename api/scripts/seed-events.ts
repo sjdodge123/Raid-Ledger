@@ -65,19 +65,28 @@ async function bootstrap() {
 
         const now = new Date();
 
-        // Helper to create dates relative to now
-        const hoursFromNow = (hours: number) => new Date(now.getTime() + hours * 60 * 60 * 1000);
-        const daysFromNow = (days: number) => new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+        // Helper to snap to the start of the current hour
+        const roundToHour = (date: Date): Date => {
+            const rounded = new Date(date);
+            rounded.setMinutes(0, 0, 0);
+            return rounded;
+        };
+
+        const baseHour = roundToHour(now);
+
+        // Helper to create dates relative to base hour (rounds to clean hours)
+        const hoursFromNow = (hours: number) => new Date(baseHour.getTime() + hours * 60 * 60 * 1000);
+        const daysFromNow = (days: number) => new Date(baseHour.getTime() + days * 24 * 60 * 60 * 1000);
 
         const EVENTS_SEED = [
-            // LIVE EVENT (started 30 min ago, ends in 2.5 hours)
+            // LIVE EVENT (started 1 hour ago, ends in 2 hours)
             {
                 title: 'Heroic Amirdrassil Clear',
                 description: 'Weekly heroic raid run. All welcome! BE-only pulls.',
                 registryGameId: wowGame.id,
                 gameId: '5339', // WoW IGDB ID
-                startTime: new Date(now.getTime() - 30 * 60 * 1000), // Started 30 min ago
-                endTime: hoursFromNow(2.5),
+                startTime: hoursFromNow(-1), // Started 1 hour ago (clean hour)
+                endTime: hoursFromNow(2),
             },
             // UPCOMING EVENT (in 2 hours)
             {
@@ -112,8 +121,8 @@ async function bootstrap() {
                 description: 'Casual dungeon runs for alts.',
                 registryGameId: wowGame.id,
                 gameId: '5339',
-                startTime: new Date(now.getTime() - 4 * 60 * 60 * 1000), // Started 4 hours ago
-                endTime: new Date(now.getTime() - 2 * 60 * 60 * 1000), // Ended 2 hours ago
+                startTime: hoursFromNow(-4), // Started 4 hours ago (clean hour)
+                endTime: hoursFromNow(-2), // Ended 2 hours ago (clean hour)
             },
             // UPCOMING EVENT (in 6 hours)
             {

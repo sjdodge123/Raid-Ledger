@@ -22,19 +22,29 @@ interface TooltipInfo {
 
 /**
  * Generate time slots for the heatmap grid.
+ * Uses 15-minute increments starting from the hour for finer granularity.
+ * Only generates labels for the :00 marks.
  */
 function generateTimeSlots(startTime: string, endTime: string, durationMinutes: number): TimeSlot[] {
     const slots: TimeSlot[] = [];
     const start = new Date(startTime);
     const end = new Date(endTime);
 
-    let current = new Date(start);
+    // Snap to beginning of the hour for clean grid alignment
+    const snappedStart = new Date(start);
+    snappedStart.setMinutes(0, 0, 0);
+
+    let current = new Date(snappedStart);
     while (current < end) {
         const slotEnd = new Date(current.getTime() + durationMinutes * 60 * 1000);
+        // Only show label on the hour (when minutes === 0)
+        const showLabel = current.getMinutes() === 0;
         slots.push({
             start: new Date(current),
             end: slotEnd > end ? end : slotEnd,
-            label: current.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+            label: showLabel
+                ? current.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                : '',
         });
         current = slotEnd;
     }

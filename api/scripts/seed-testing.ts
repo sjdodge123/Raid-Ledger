@@ -89,8 +89,17 @@ async function bootstrap() {
         // Create availability windows for SeedAdmin
         console.log('\n  Creating availability windows...\n');
 
-        // Helper to create dates relative to now
-        const hoursFromNow = (hours: number) => new Date(now.getTime() + hours * 60 * 60 * 1000);
+        // Helper to snap to the start of the current hour
+        const roundToHour = (date: Date): Date => {
+            const rounded = new Date(date);
+            rounded.setMinutes(0, 0, 0);
+            return rounded;
+        };
+
+        const baseHour = roundToHour(now);
+
+        // Helper to create dates relative to base hour (rounds to clean hours)
+        const hoursFromNow = (hours: number) => new Date(baseHour.getTime() + hours * 60 * 60 * 1000);
 
         const AVAILABILITY_WINDOWS = [
             {
