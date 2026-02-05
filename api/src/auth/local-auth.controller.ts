@@ -13,20 +13,24 @@ import { z } from 'zod';
 const emailRegex = /^[^\s@]+@[^\s@]+$/;
 
 // Accept either 'email' or 'username' field for backwards compatibility
-const LocalLoginSchema = z.object({
-  email: z.string().regex(emailRegex, 'Invalid email format').optional(),
-  username: z.string().regex(emailRegex, 'Invalid username format').optional(),
-  password: z.string().min(1, 'Password is required'),
-}).refine(
-  (data) => data.email || data.username,
-  { message: 'Email or username is required' }
-);
+const LocalLoginSchema = z
+  .object({
+    email: z.string().regex(emailRegex, 'Invalid email format').optional(),
+    username: z
+      .string()
+      .regex(emailRegex, 'Invalid username format')
+      .optional(),
+    password: z.string().min(1, 'Password is required'),
+  })
+  .refine((data) => data.email || data.username, {
+    message: 'Email or username is required',
+  });
 
 type LocalLoginDto = z.infer<typeof LocalLoginSchema>;
 
 @Controller('auth')
 export class LocalAuthController {
-  constructor(private localAuthService: LocalAuthService) { }
+  constructor(private localAuthService: LocalAuthService) {}
 
   /**
    * POST /auth/local
@@ -56,4 +60,3 @@ export class LocalAuthController {
     return this.localAuthService.login(user);
   }
 }
-

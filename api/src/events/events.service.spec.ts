@@ -64,26 +64,30 @@ describe('EventsService', () => {
         leftJoin: jest.fn().mockReturnValue({
           leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([
-                  {
-                    events: mockEvent,
-                    users: mockUser,
-                    games: mockGame,
-                    signupCount: 0,
-                  },
-                ]),
-              }),
-              orderBy: jest.fn().mockReturnValue({
-                limit: jest.fn().mockReturnValue({
-                  offset: jest.fn().mockResolvedValue([
+              leftJoin: jest.fn().mockReturnValue({
+                where: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockResolvedValue([
                     {
                       events: mockEvent,
                       users: mockUser,
                       games: mockGame,
+                      gameRegistry: null,
                       signupCount: 0,
                     },
                   ]),
+                }),
+                orderBy: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockReturnValue({
+                    offset: jest.fn().mockResolvedValue([
+                      {
+                        events: mockEvent,
+                        users: mockUser,
+                        games: mockGame,
+                        gameRegistry: null,
+                        signupCount: 0,
+                      },
+                    ]),
+                  }),
                 }),
               }),
             }),
@@ -179,8 +183,10 @@ describe('EventsService', () => {
             leftJoin: jest.fn().mockReturnValue({
               leftJoin: jest.fn().mockReturnValue({
                 leftJoin: jest.fn().mockReturnValue({
-                  where: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue([]),
+                  leftJoin: jest.fn().mockReturnValue({
+                    where: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockResolvedValue([]),
+                    }),
                   }),
                 }),
               }),

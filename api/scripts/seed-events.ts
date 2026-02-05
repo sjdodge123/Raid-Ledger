@@ -84,7 +84,7 @@ async function bootstrap() {
                 title: 'Heroic Amirdrassil Clear',
                 description: 'Weekly heroic raid run. All welcome! BE-only pulls.',
                 registryGameId: wowGame.id,
-                gameId: '5339', // WoW IGDB ID
+                gameId: '136', // WoW IGDB ID from games-seed.json
                 startTime: hoursFromNow(-1), // Started 1 hour ago (clean hour)
                 endTime: hoursFromNow(2),
             },
@@ -93,7 +93,7 @@ async function bootstrap() {
                 title: 'Mythic+ Push Night',
                 description: 'High key pushing session. Need 2 DPS, 1 tank.',
                 registryGameId: wowGame.id,
-                gameId: '5339',
+                gameId: '136', // WoW IGDB ID from games-seed.json
                 startTime: hoursFromNow(2),
                 endTime: hoursFromNow(5),
             },
@@ -102,7 +102,7 @@ async function bootstrap() {
                 title: 'Valheim Boss Rush',
                 description: 'Taking down all bosses in one session!',
                 registryGameId: valheimGame?.id || null,
-                gameId: '120598', // Valheim IGDB ID
+                gameId: '104967', // Valheim IGDB ID from games-seed.json
                 startTime: daysFromNow(1),
                 endTime: new Date(daysFromNow(1).getTime() + 3 * 60 * 60 * 1000),
             },
@@ -111,7 +111,7 @@ async function bootstrap() {
                 title: 'FFXIV Savage Prog',
                 description: 'M4S progression - Phase 2 onwards. Know the fight!',
                 registryGameId: ffxivGame?.id || null,
-                gameId: '11283', // FFXIV IGDB ID
+                gameId: '386', // FFXIV IGDB ID from games-seed.json
                 startTime: daysFromNow(3),
                 endTime: new Date(daysFromNow(3).getTime() + 3 * 60 * 60 * 1000),
             },
@@ -120,7 +120,7 @@ async function bootstrap() {
                 title: 'Morning Dungeon Runs',
                 description: 'Casual dungeon runs for alts.',
                 registryGameId: wowGame.id,
-                gameId: '5339',
+                gameId: '136', // WoW IGDB ID from games-seed.json
                 startTime: hoursFromNow(-4), // Started 4 hours ago (clean hour)
                 endTime: hoursFromNow(-2), // Ended 2 hours ago (clean hour)
             },
@@ -129,7 +129,7 @@ async function bootstrap() {
                 title: 'Late Night Raids',
                 description: 'For the night owls. Normal mode farm.',
                 registryGameId: wowGame.id,
-                gameId: '5339',
+                gameId: '136', // WoW IGDB ID from games-seed.json
                 startTime: hoursFromNow(6),
                 endTime: hoursFromNow(9),
             },

@@ -1,3 +1,4 @@
+import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 interface EventCardProps {
@@ -106,10 +107,23 @@ function formatEventTime(dateString: string): string {
 }
 
 /**
- * Handle image load errors by hiding the broken image
+ * SVG placeholder paths by game slug
  */
-function handleImageError(e: React.SyntheticEvent<HTMLImageElement>) {
-    e.currentTarget.style.display = 'none';
+const GAME_PLACEHOLDER_PATHS: Record<string, string> = {
+    wow: '/placeholders/wow-placeholder.svg',
+    ffxiv: '/placeholders/ffxiv-placeholder.svg',
+    valheim: '/placeholders/valheim-placeholder.svg',
+    generic: '/placeholders/generic-placeholder.svg',
+};
+
+/**
+ * Get placeholder SVG path based on game slug
+ */
+function getPlaceholderPath(slug: string | undefined): string {
+    if (slug && GAME_PLACEHOLDER_PATHS[slug]) {
+        return GAME_PLACEHOLDER_PATHS[slug];
+    }
+    return GAME_PLACEHOLDER_PATHS.generic;
 }
 
 /**
@@ -119,6 +133,11 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
     const gameCoverUrl = event.game?.coverUrl || null;
     const status = getEventStatus(event.startTime, event.endTime);
     const relativeTime = getRelativeTime(event.startTime, event.endTime);
+    const placeholderPath = getPlaceholderPath(event.game?.slug);
+
+    // Track image load failure to show placeholder
+    const [imageError, setImageError] = React.useState(false);
+    const showPlaceholder = !gameCoverUrl || imageError;
 
     return (
         <div
@@ -135,17 +154,20 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
         >
             {/* Game Cover */}
             <div className="aspect-[3/4] relative overflow-hidden bg-slate-800">
-                {gameCoverUrl ? (
+                {!showPlaceholder && gameCoverUrl && (
                     <img
                         src={gameCoverUrl}
                         alt={event.game?.name || 'Event'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        onError={handleImageError}
+                        onError={() => setImageError(true)}
                     />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-4xl text-slate-600">
-                        🎮
-                    </div>
+                )}
+                {showPlaceholder && (
+                    <img
+                        src={placeholderPath}
+                        alt={event.game?.name || 'Gaming Event'}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
                 )}
                 {/* Status Badge - top right */}
                 <div className="absolute top-2 right-2">
@@ -157,6 +179,7 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
                     </div>
                 )}
             </div>
+
 
             {/* Event Info */}
             <div className="p-4">

@@ -63,6 +63,9 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Copy seed scripts for demo mode
 COPY --from=builder /app/api/dist/scripts ./dist/scripts
 
+# Copy seed data files (games-seed.json for ROK-160)
+COPY --from=builder /app/api/seeds ./dist/seeds
+
 # Switch to non-root user
 USER nestjs
 

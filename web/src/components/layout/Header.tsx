@@ -11,6 +11,7 @@ export function Header() {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     const navLinks = [
+        { to: '/calendar', label: 'Calendar' },
         { to: '/events', label: 'Events' },
     ];
 

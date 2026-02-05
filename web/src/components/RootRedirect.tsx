@@ -21,9 +21,9 @@ export function RootRedirect() {
         );
     }
 
-    // Authenticated users go to events (will be calendar in ROK-171)
+    // Authenticated users go to calendar (ROK-175 AC-1)
     if (isAuthenticated) {
-        return <Navigate to="/events" replace />;
+        return <Navigate to="/calendar" replace />;
     }
 
     // Unauthenticated users see login page inline (no URL redirect)

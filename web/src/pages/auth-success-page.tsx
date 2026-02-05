@@ -38,8 +38,8 @@ export function AuthSuccessPage() {
             // Store the token and update auth state
             login(token);
 
-            // Check for saved redirect destination
-            const redirectTo = consumeAuthRedirect() || '/events';
+            // Check for saved redirect destination (ROK-175: default to calendar)
+            const redirectTo = consumeAuthRedirect() || '/calendar';
             toast.success('Logged in successfully!');
             navigate(redirectTo, { replace: true });
         } else {

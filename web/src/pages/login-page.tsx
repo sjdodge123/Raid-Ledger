@@ -50,8 +50,19 @@ export function LoginPage() {
             login(data.access_token);
             toast.success('Logged in successfully!');
 
-            // Respect saved redirect destination
-            const redirectTo = consumeAuthRedirect() || '/events';
+            // AC-6: First-run welcome toast (shows once)
+            const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
+            if (isFirstRun && !hasSeenWelcome) {
+                localStorage.setItem('rl-welcome-shown', 'true');
+                setTimeout(() => {
+                    toast.info('Welcome! Visit your Profile to add characters.', {
+                        duration: 6000,
+                    });
+                }, 1000);
+            }
+
+            // Respect saved redirect destination (ROK-175: default to calendar)
+            const redirectTo = consumeAuthRedirect() || '/calendar';
             navigate(redirectTo, { replace: true });
         } catch (err) {
             const message = err instanceof Error ? err.message : 'Login failed';

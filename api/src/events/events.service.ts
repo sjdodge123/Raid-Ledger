@@ -149,13 +149,18 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
+        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
       .leftJoin(
         schema.games,
-        eq(schema.events.gameId, sql`${schema.games.id}::text`),
+        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
+      )
+      .leftJoin(
+        schema.gameRegistry,
+        eq(schema.events.registryGameId, schema.gameRegistry.id),
       )
       .leftJoin(
         signupCountSubquery,
@@ -209,13 +214,18 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
+        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
       .leftJoin(
         schema.games,
-        eq(schema.events.gameId, sql`${schema.games.id}::text`),
+        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
+      )
+      .leftJoin(
+        schema.gameRegistry,
+        eq(schema.events.registryGameId, schema.gameRegistry.id),
       )
       .leftJoin(
         signupCountSubquery,
@@ -414,9 +424,30 @@ export class EventsService {
     events: typeof schema.events.$inferSelect;
     users: typeof schema.users.$inferSelect | null;
     games: typeof schema.games.$inferSelect | null;
+    gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
     signupCount: number;
   }): EventResponseDto {
-    const { events: event, users: creator, games: game, signupCount } = row;
+    const { events: event, users: creator, games: game, gameRegistry: registry, signupCount } = row;
+
+    // Prefer gameRegistry for slug (color coding) but use IGDB game coverUrl for artwork
+    // Priority: registry slug/name + game coverUrl > game only > registry only
+    let gameData = null;
+    if (registry) {
+      gameData = {
+        id: 0, // No numeric ID for registry
+        name: registry.name,
+        slug: registry.slug,
+        // Prefer IGDB coverUrl if available, fallback to registry iconUrl
+        coverUrl: game?.coverUrl || registry.iconUrl,
+      };
+    } else if (game) {
+      gameData = {
+        id: game.id,
+        name: game.name,
+        slug: game.slug,
+        coverUrl: game.coverUrl,
+      };
+    }
 
     return {
       id: event.id,
@@ -429,14 +460,7 @@ export class EventsService {
         username: creator?.username ?? 'Unknown',
         avatar: creator?.avatar ?? null,
       },
-      game: game
-        ? {
-          id: game.id,
-          name: game.name,
-          slug: game.slug,
-          coverUrl: game.coverUrl,
-        }
-        : null,
+      game: gameData,
       signupCount: Number(signupCount),
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),

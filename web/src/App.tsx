@@ -8,6 +8,7 @@ import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
+import { CalendarPage } from './pages/calendar-page';
 import './App.css';
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
           <Route path="/" element={<RootRedirect />} />
           {/* Legacy /login redirects to root (AC-2) */}
           <Route path="/login" element={<Navigate to="/" replace />} />
+          <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/new" element={
             <ProtectedRoute>

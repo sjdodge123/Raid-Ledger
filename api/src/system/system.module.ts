@@ -7,7 +7,7 @@ import { UsersModule } from '../users/users.module';
  * Provides system status endpoint for first-run detection.
  */
 @Module({
-    imports: [UsersModule],
-    controllers: [SystemController],
+  imports: [UsersModule],
+  controllers: [SystemController],
 })
-export class SystemModule { }
+export class SystemModule {}

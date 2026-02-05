@@ -67,7 +67,8 @@ export function UserMenu() {
         );
     }
 
-    const avatarUrl = user.avatar
+    // Only use Discord CDN if user has both discordId AND avatar hash
+    const avatarUrl = user.discordId && user.avatar
         ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
         : '/default-avatar.png';
 

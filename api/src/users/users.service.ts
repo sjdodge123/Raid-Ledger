@@ -9,7 +9,7 @@ export class UsersService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   async findByDiscordId(discordId: string) {
     const result = await this.db.query.users.findFirst({
