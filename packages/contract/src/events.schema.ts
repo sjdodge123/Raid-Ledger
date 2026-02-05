@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SignupUserSchema } from './signups.schema.js';
 
 // ============================================================
 // Event Creation/Update Schemas
@@ -70,6 +71,8 @@ export const EventResponseSchema = z.object({
     creator: EventCreatorSchema,
     game: EventGameSchema,
     signupCount: z.number(),
+    /** Preview of first N signups for calendar view (ROK-177) */
+    signupsPreview: z.array(SignupUserSchema).optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
@@ -89,7 +92,7 @@ export const EventListResponseSchema = z.object({
 
 export type EventListResponseDto = z.infer<typeof EventListResponseSchema>;
 
-/** Query params for event list (ROK-174: Date Range Filtering) */
+/** Query params for event list (ROK-174: Date Range Filtering, ROK-177: Signups Preview) */
 export const EventListQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -97,6 +100,8 @@ export const EventListQuerySchema = z.object({
     startAfter: z.string().datetime({ message: 'startAfter must be a valid ISO8601 datetime' }).optional(),
     endBefore: z.string().datetime({ message: 'endBefore must be a valid ISO8601 datetime' }).optional(),
     gameId: z.string().optional(), // Filter by game ID (string, since gameId is stored as text)
+    /** Include first N signups preview for calendar views (ROK-177) */
+    includeSignups: z.enum(['true', 'false']).optional(),
 }).refine(
     (data) => {
         if (data.startAfter && data.endBefore) {

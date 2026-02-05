@@ -1,0 +1,135 @@
+import { useMemo } from 'react';
+
+interface SignupPreview {
+    id: number;
+    username: string;
+    avatar: string | null;
+}
+
+interface AttendeeAvatarsProps {
+    /** Array of signups to display (first N from API) */
+    signups: SignupPreview[];
+    /** Total signup count for calculating overflow */
+    totalCount: number;
+    /** Maximum avatars to show (default 5) */
+    maxVisible?: number;
+    /** Avatar size: sm=20px, md=24px (default md) */
+    size?: 'sm' | 'md';
+    /** Accent color for avatar borders (from game theme) */
+    accentColor?: string;
+}
+
+/**
+ * Displays overlapping attendee avatars for calendar event blocks (ROK-177).
+ * Shows first N avatars with a "+X" badge for overflow.
+ */
+export function AttendeeAvatars({
+    signups,
+    totalCount,
+    maxVisible = 5,
+    size = 'md',
+    accentColor = '#6366f1', // Default indigo
+}: AttendeeAvatarsProps) {
+    // Calculate visible signups and overflow
+    const visibleSignups = useMemo(
+        () => signups.slice(0, maxVisible),
+        [signups, maxVisible]
+    );
+    const overflowCount = totalCount - visibleSignups.length;
+
+    // Size classes
+    const sizeClasses = {
+        sm: 'w-5 h-5 text-[8px]',
+        md: 'w-6 h-6 text-[10px]',
+    };
+    const sizePx = size === 'sm' ? 20 : 24;
+
+    // Generate initials from username
+    const getInitials = (username: string): string => {
+        return username.charAt(0).toUpperCase();
+    };
+
+    // Generate a consistent background color from username
+    const getInitialsBg = (username: string): string => {
+        const colors = [
+            'bg-red-500',
+            'bg-orange-500',
+            'bg-amber-500',
+            'bg-yellow-500',
+            'bg-lime-500',
+            'bg-green-500',
+            'bg-emerald-500',
+            'bg-teal-500',
+            'bg-cyan-500',
+            'bg-sky-500',
+            'bg-blue-500',
+            'bg-indigo-500',
+            'bg-violet-500',
+            'bg-purple-500',
+            'bg-fuchsia-500',
+            'bg-pink-500',
+        ];
+        const hash = username.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        return colors[hash % colors.length];
+    };
+
+    if (visibleSignups.length === 0) {
+        return null;
+    }
+
+    return (
+        <div
+            className="attendee-avatars flex items-center"
+            style={{ marginLeft: '2px' }}
+        >
+            {/* Avatar stack */}
+            <div className="flex items-center">
+                {visibleSignups.map((signup, index) => (
+                    <div
+                        key={signup.id}
+                        className={`
+                            attendee-avatar 
+                            ${sizeClasses[size]} 
+                            rounded-full 
+                            overflow-hidden 
+                            ring-2
+                            flex-shrink-0
+                            flex items-center justify-center
+                            font-semibold text-white
+                            ${!signup.avatar ? getInitialsBg(signup.username) : ''}
+                        `}
+                        style={{
+                            marginLeft: index > 0 ? `-${sizePx / 3}px` : 0,
+                            zIndex: visibleSignups.length - index,
+                            boxShadow: `0 0 0 2px ${accentColor}`,
+                        }}
+                        title={signup.username}
+                    >
+                        {signup.avatar ? (
+                            <img
+                                src={signup.avatar}
+                                alt={signup.username}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                            />
+                        ) : (
+                            <span className="select-none">
+                                {getInitials(signup.username)}
+                            </span>
+                        )}
+                    </div>
+                ))}
+            </div>
+
+            {/* Overflow badge */}
+            {overflowCount > 0 && (
+                <span
+                    className="ml-1 text-xs text-white/80 font-medium whitespace-nowrap"
+                    title={`${overflowCount} more signed up`}
+                >
+                    +{overflowCount}
+                </span>
+            )}
+        </div>
+    );
+}

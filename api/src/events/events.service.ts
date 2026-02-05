@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, desc, gte, lte, asc, sql, and } from 'drizzle-orm';
+import { eq, desc, gte, lte, asc, sql, and, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -179,7 +179,19 @@ export class EventsService {
       .limit(limit)
       .offset(offset);
 
-    const data = events.map((row) => this.mapToResponse(row));
+    // ROK-177: Fetch signups preview if requested (prevents N+1)
+    let signupsPreviewMap: Map<
+      number,
+      { id: number; username: string; avatar: string | null }[]
+    > = new Map();
+    if (query.includeSignups === 'true' && events.length > 0) {
+      const eventIds = events.map((e) => e.events.id);
+      signupsPreviewMap = await this.getSignupsPreviewForEvents(eventIds, 5);
+    }
+
+    const data = events.map((row) =>
+      this.mapToResponse(row, signupsPreviewMap.get(row.events.id)),
+    );
 
     return {
       data,
@@ -418,15 +430,71 @@ export class EventsService {
   }
 
   /**
-   * Map database row to response DTO.
+   * Get first N signups for multiple events (ROK-177).
+   * Batched query to avoid N+1 for calendar views.
+   * @param eventIds - Event IDs to fetch signups for
+   * @param limit - Max signups per event (default 5)
+   * @returns Map of eventId -> signups preview array
    */
-  private mapToResponse(row: {
-    events: typeof schema.events.$inferSelect;
-    users: typeof schema.users.$inferSelect | null;
-    games: typeof schema.games.$inferSelect | null;
-    gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
-    signupCount: number;
-  }): EventResponseDto {
+  private async getSignupsPreviewForEvents(
+    eventIds: number[],
+    limit = 5,
+  ): Promise<
+    Map<number, { id: number; username: string; avatar: string | null }[]>
+  > {
+    if (eventIds.length === 0) return new Map();
+
+    // Fetch all signups for these events with user info, ordered by signup time
+    const signups = await this.db
+      .select({
+        eventId: schema.eventSignups.eventId,
+        userId: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        signedUpAt: schema.eventSignups.signedUpAt,
+      })
+      .from(schema.eventSignups)
+      .innerJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+      .where(inArray(schema.eventSignups.eventId, eventIds))
+      .orderBy(asc(schema.eventSignups.signedUpAt));
+
+    // Group by event and take first N
+    const result = new Map<
+      number,
+      { id: number; username: string; avatar: string | null }[]
+    >();
+    for (const signup of signups) {
+      if (!result.has(signup.eventId)) {
+        result.set(signup.eventId, []);
+      }
+      const eventSignups = result.get(signup.eventId)!;
+      if (eventSignups.length < limit) {
+        eventSignups.push({
+          id: signup.userId,
+          username: signup.username,
+          avatar: signup.avatar,
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Map database row to response DTO.
+   * @param row - Database row with joined tables
+   * @param signupsPreview - Optional signups preview for calendar views (ROK-177)
+   */
+  private mapToResponse(
+    row: {
+      events: typeof schema.events.$inferSelect;
+      users: typeof schema.users.$inferSelect | null;
+      games: typeof schema.games.$inferSelect | null;
+      gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
+      signupCount: number;
+    },
+    signupsPreview?: { id: number; username: string; avatar: string | null }[],
+  ): EventResponseDto {
     const {
       events: event,
       users: creator,
@@ -468,6 +536,7 @@ export class EventsService {
       },
       game: gameData,
       signupCount: Number(signupCount),
+      signupsPreview,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };

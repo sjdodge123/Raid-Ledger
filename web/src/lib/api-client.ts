@@ -72,7 +72,7 @@ async function fetchApi<T>(
 // ============================================================
 
 /**
- * Parameters for event list queries (ROK-174: Date Range Filtering)
+ * Parameters for event list queries (ROK-174: Date Range Filtering, ROK-177: Signups Preview)
  */
 export interface EventListParams {
     page?: number;
@@ -84,6 +84,8 @@ export interface EventListParams {
     endBefore?: string;
     /** Filter events by game ID */
     gameId?: string;
+    /** Include first N signups preview for calendar views (ROK-177) */
+    includeSignups?: boolean;
 }
 
 export async function getEvents(params: EventListParams = {}): Promise<EventListResponseDto> {
@@ -94,6 +96,7 @@ export async function getEvents(params: EventListParams = {}): Promise<EventList
     if (params.startAfter) searchParams.set('startAfter', params.startAfter);
     if (params.endBefore) searchParams.set('endBefore', params.endBefore);
     if (params.gameId) searchParams.set('gameId', params.gameId);
+    if (params.includeSignups) searchParams.set('includeSignups', 'true');
 
     const query = searchParams.toString();
     const endpoint = `/events${query ? `?${query}` : ''}`;

@@ -22,6 +22,7 @@ import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
+import { AttendeeAvatars } from './AttendeeAvatars';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
@@ -133,10 +134,12 @@ export function CalendarView({
     }, [currentDate, view]);
 
     // Fetch events for the current month
+    // ROK-177: Include signups preview for week/day views to show attendee avatars
     const { data: eventsData, isLoading } = useEvents({
         startAfter,
         endBefore,
         upcoming: false, // Get all events in range, not just upcoming
+        includeSignups: view === Views.WEEK || view === Views.DAY,
     });
 
     // Extract unique games from events
@@ -269,6 +272,7 @@ export function CalendarView({
             const coverUrl = event.resource?.game?.coverUrl;
             const gameName = event.resource?.game?.name || 'Event';
             const signupCount = event.resource?.signupCount ?? 0;
+            const signupsPreview = event.resource?.signupsPreview;
             const creatorName = event.resource?.creator?.username;
             const colors = getGameColors(gameSlug);
 
@@ -299,14 +303,24 @@ export function CalendarView({
                         {creatorName && (
                             <span className="week-event-creator">by {creatorName}</span>
                         )}
-                        {signupCount > 0 && (
+                        {/* ROK-177: Attendee avatars with signup preview */}
+                        {signupsPreview && signupsPreview.length > 0 ? (
+                            <div className="week-event-attendees">
+                                <AttendeeAvatars
+                                    signups={signupsPreview}
+                                    totalCount={signupCount}
+                                    size="sm"
+                                    accentColor={colors.border}
+                                />
+                            </div>
+                        ) : signupCount > 0 ? (
                             <span className="week-event-signups">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
                                     <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
                                 </svg>
                                 {signupCount} signed up
                             </span>
-                        )}
+                        ) : null}
                     </div>
                 </div>
             );
@@ -321,9 +335,12 @@ export function CalendarView({
             const coverUrl = event.resource?.game?.coverUrl;
             const gameName = event.resource?.game?.name || 'Event';
             const signupCount = event.resource?.signupCount ?? 0;
+            const signupsPreview = event.resource?.signupsPreview;
             const description = event.resource?.description || '';
             const creatorName = event.resource?.creator?.username;
             const colors = getGameColors(gameSlug);
+
+
 
             // Format time range (e.g., "7:00 AM - 10:00 AM")
             const startTime = format(event.start, 'h:mm a');
@@ -373,16 +390,24 @@ export function CalendarView({
                         {descriptionPreview && (
                             <p className="day-event-description">{descriptionPreview}</p>
                         )}
-                        {signupCount > 0 && (
-                            <div className="day-event-footer">
+                        {/* ROK-177: Attendee avatars in day view footer */}
+                        <div className="day-event-footer">
+                            {signupsPreview && signupsPreview.length > 0 ? (
+                                <AttendeeAvatars
+                                    signups={signupsPreview}
+                                    totalCount={signupCount}
+                                    size="md"
+                                    accentColor={colors.border}
+                                />
+                            ) : signupCount > 0 ? (
                                 <span className="day-event-signups">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
                                         <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
                                     </svg>
                                     {signupCount} signed up
                                 </span>
-                            </div>
-                        )}
+                            ) : null}
+                        </div>
                     </div>
                 </div>
             );
