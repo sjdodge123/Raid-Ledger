@@ -30,6 +30,20 @@ This file provides configuration and guidance for AI agents working on this code
 ./scripts/test-ui.sh --down
 ```
 
+> **Docker Demo Mode**: When running builds in Docker containers, always use **demo mode = true** to ensure proper seeding and configuration.
+
+### Browser Testing - Use Playwright MCP
+
+> **RECOMMENDED**: Use **Playwright MCP** instead of `browser_subagent` for browser testing.
+> The browser_subagent frequently causes timeout and connection reset issues.
+> 
+> Playwright MCP is more reliable. Use `read_resource` to list available tools from the Playwright MCP server.
+
+If you must use `browser_subagent`, kill Chrome processes first:
+```bash
+pkill -f "Google Chrome" || true
+```
+
 ### Verification Workflow
 
 Use `/verify-ui` workflow for browser testing. See `.agent/workflows/verify-ui.md`.

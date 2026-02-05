@@ -8,10 +8,15 @@ import {
     getDay,
     startOfMonth,
     endOfMonth,
+    startOfDay,
+    endOfDay,
     addMonths,
     subMonths,
     addWeeks,
     subWeeks,
+    addDays,
+    subDays,
+    differenceInMinutes,
 } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -77,10 +82,12 @@ export function CalendarView({
     const getInitialView = (): View => {
         const urlView = searchParams.get('view');
         if (urlView === 'week') return Views.WEEK;
+        if (urlView === 'day') return Views.DAY;
         if (urlView === 'month') return Views.MONTH;
         // Fallback to localStorage
         const stored = localStorage.getItem('calendar-view');
         if (stored === 'week') return Views.WEEK;
+        if (stored === 'day') return Views.DAY;
         return Views.MONTH;
     };
 
@@ -89,16 +96,25 @@ export function CalendarView({
     // Sync view changes to URL and localStorage
     const setView = useCallback((newView: View) => {
         setViewState(newView);
-        localStorage.setItem('calendar-view', newView === Views.WEEK ? 'week' : 'month');
+        const viewStr = newView === Views.WEEK ? 'week' : newView === Views.DAY ? 'day' : 'month';
+        localStorage.setItem('calendar-view', viewStr);
         setSearchParams(prev => {
             const next = new URLSearchParams(prev);
-            next.set('view', newView === Views.WEEK ? 'week' : 'month');
+            next.set('view', viewStr);
             return next;
         }, { replace: true });
     }, [setSearchParams]);
 
-    // Calculate date range for current view (month or week)
+    // Calculate date range for current view (month, week, or day)
     const { startAfter, endBefore } = useMemo(() => {
+        if (view === Views.DAY) {
+            const start = startOfDay(currentDate);
+            const end = endOfDay(currentDate);
+            return {
+                startAfter: start.toISOString(),
+                endBefore: end.toISOString(),
+            };
+        }
         if (view === Views.WEEK) {
             const start = startOfWeek(currentDate, { weekStartsOn: 0 });
             const end = endOfWeek(currentDate, { weekStartsOn: 0 });
@@ -171,18 +187,22 @@ export function CalendarView({
         setCurrentDate(date);
     }, [setCurrentDate]);
 
-    // Navigate prev (week or month based on current view)
+    // Navigate prev (day, week, or month based on current view)
     const handlePrev = useCallback(() => {
-        if (view === Views.WEEK) {
+        if (view === Views.DAY) {
+            setCurrentDate(subDays(currentDate, 1));
+        } else if (view === Views.WEEK) {
             setCurrentDate(subWeeks(currentDate, 1));
         } else {
             setCurrentDate(subMonths(currentDate, 1));
         }
     }, [currentDate, setCurrentDate, view]);
 
-    // Navigate next (week or month based on current view)
+    // Navigate next (day, week, or month based on current view)
     const handleNext = useCallback(() => {
-        if (view === Views.WEEK) {
+        if (view === Views.DAY) {
+            setCurrentDate(addDays(currentDate, 1));
+        } else if (view === Views.WEEK) {
             setCurrentDate(addWeeks(currentDate, 1));
         } else {
             setCurrentDate(addMonths(currentDate, 1));
@@ -249,6 +269,7 @@ export function CalendarView({
             const coverUrl = event.resource?.game?.coverUrl;
             const gameName = event.resource?.game?.name || 'Event';
             const signupCount = event.resource?.signupCount ?? 0;
+            const creatorName = event.resource?.creator?.username;
             const colors = getGameColors(gameSlug);
 
             // Format time range (e.g., "7:00 AM - 10:00 AM")
@@ -260,7 +281,7 @@ export function CalendarView({
                     className="week-event-block"
                     style={{
                         backgroundImage: coverUrl
-                            ? `linear-gradient(180deg, ${colors.bg}ee 0%, ${colors.bg}cc 40%, transparent 100%), url(${coverUrl})`
+                            ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
                             : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center',
@@ -275,6 +296,9 @@ export function CalendarView({
                         <span className="week-event-time">
                             {startTime}{endTime ? ` - ${endTime}` : ''}
                         </span>
+                        {creatorName && (
+                            <span className="week-event-creator">by {creatorName}</span>
+                        )}
                         {signupCount > 0 && (
                             <span className="week-event-signups">
                                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
@@ -282,6 +306,82 @@ export function CalendarView({
                                 </svg>
                                 {signupCount} signed up
                             </span>
+                        )}
+                    </div>
+                </div>
+            );
+        },
+        []
+    );
+
+    // Custom event component for DAY view (expanded with centered art + description)
+    const DayEventComponent = useCallback(
+        ({ event }: { event: CalendarEvent }) => {
+            const gameSlug = event.resource?.game?.slug || 'default';
+            const coverUrl = event.resource?.game?.coverUrl;
+            const gameName = event.resource?.game?.name || 'Event';
+            const signupCount = event.resource?.signupCount ?? 0;
+            const description = event.resource?.description || '';
+            const creatorName = event.resource?.creator?.username;
+            const colors = getGameColors(gameSlug);
+
+            // Format time range (e.g., "7:00 AM - 10:00 AM")
+            const startTime = format(event.start, 'h:mm a');
+            const endTime = event.end ? format(event.end, 'h:mm a') : '';
+
+            // Calculate duration
+            const durationMins = event.end ? differenceInMinutes(event.end, event.start) : 0;
+            const hours = Math.floor(durationMins / 60);
+            const mins = durationMins % 60;
+            const durationStr = hours > 0
+                ? (mins > 0 ? `${hours}h ${mins}m` : `${hours}h`)
+                : `${mins}m`;
+
+            // Truncate description for preview
+            const descriptionPreview = description.length > 80
+                ? `${description.slice(0, 80)}...`
+                : description;
+
+            return (
+                <div
+                    className="day-event-block"
+                    style={{
+                        // Centered art with horizontal edge fades - subtle art treatment
+                        backgroundImage: coverUrl
+                            ? `linear-gradient(90deg, ${colors.bg}f5 0%, ${colors.bg}dd 20%, ${colors.bg}aa 40%, ${colors.bg}aa 60%, ${colors.bg}dd 80%, ${colors.bg}f5 100%), url(${coverUrl})`
+                            : `linear-gradient(90deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
+                        backgroundSize: 'auto 100%, cover',
+                        backgroundPosition: 'center, center',
+                        backgroundRepeat: 'no-repeat',
+                        borderLeft: `4px solid ${colors.border}`,
+                    }}
+                >
+                    <div className="day-event-content">
+                        <div className="day-event-header">
+                            <span className="day-event-duration">{durationStr}</span>
+                            <span className="day-event-title">{event.title}</span>
+                        </div>
+                        <div className="day-event-meta">
+                            <span className="day-event-game">{gameName}</span>
+                            <span className="day-event-time">
+                                {startTime}{endTime ? ` - ${endTime}` : ''}
+                            </span>
+                            {creatorName && (
+                                <span className="day-event-creator">by {creatorName}</span>
+                            )}
+                        </div>
+                        {descriptionPreview && (
+                            <p className="day-event-description">{descriptionPreview}</p>
+                        )}
+                        {signupCount > 0 && (
+                            <div className="day-event-footer">
+                                <span className="day-event-signups">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
+                                        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
+                                    </svg>
+                                    {signupCount} signed up
+                                </span>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -298,7 +398,7 @@ export function CalendarView({
                     <button
                         onClick={handlePrev}
                         className="toolbar-btn"
-                        aria-label={view === Views.WEEK ? 'Previous week' : 'Previous month'}
+                        aria-label={view === Views.DAY ? 'Previous day' : view === Views.WEEK ? 'Previous week' : 'Previous month'}
                     >
                         <svg
                             className="w-5 h-5"
@@ -320,7 +420,7 @@ export function CalendarView({
                     <button
                         onClick={handleNext}
                         className="toolbar-btn"
-                        aria-label={view === Views.WEEK ? 'Next week' : 'Next month'}
+                        aria-label={view === Views.DAY ? 'Next day' : view === Views.WEEK ? 'Next week' : 'Next month'}
                     >
                         <svg
                             className="w-5 h-5"
@@ -338,16 +438,18 @@ export function CalendarView({
                     </button>
                 </div>
                 <h2 className="toolbar-title">
-                    {view === Views.WEEK
-                        ? (() => {
-                            const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
-                            const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
-                            const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
-                            return sameMonth
-                                ? `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'd, yyyy')}`
-                                : `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`;
-                        })()
-                        : format(currentDate, 'MMMM yyyy')
+                    {view === Views.DAY
+                        ? format(currentDate, 'EEEE, MMMM d, yyyy')
+                        : view === Views.WEEK
+                            ? (() => {
+                                const weekStart = startOfWeek(currentDate, { weekStartsOn: 0 });
+                                const weekEnd = endOfWeek(currentDate, { weekStartsOn: 0 });
+                                const sameMonth = weekStart.getMonth() === weekEnd.getMonth();
+                                return sameMonth
+                                    ? `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'd, yyyy')}`
+                                    : `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`;
+                            })()
+                            : format(currentDate, 'MMMM yyyy')
                     }
                 </h2>
                 <div className="toolbar-views" role="group" aria-label="Calendar view">
@@ -367,6 +469,14 @@ export function CalendarView({
                     >
                         Week
                     </button>
+                    <button
+                        type="button"
+                        className={`toolbar-btn ${view === Views.DAY ? 'active' : ''}`}
+                        onClick={() => setView(Views.DAY)}
+                        aria-pressed={view === Views.DAY}
+                    >
+                        Day
+                    </button>
                 </div>
             </div>
 
@@ -385,7 +495,7 @@ export function CalendarView({
                     events={calendarEvents}
                     date={currentDate}
                     view={view}
-                    views={[Views.MONTH, Views.WEEK]}
+                    views={[Views.MONTH, Views.WEEK, Views.DAY]}
                     onNavigate={handleNavigate}
                     onView={setView}
                     onSelectEvent={handleSelectEvent}
@@ -393,6 +503,7 @@ export function CalendarView({
                     components={{
                         month: { event: MonthEventComponent },
                         week: { event: WeekEventComponent },
+                        day: { event: DayEventComponent }, // Enhanced day view with centered art
                         toolbar: () => null, // Hide default toolbar
                     }}
                     popup
@@ -407,7 +518,7 @@ export function CalendarView({
             {!isLoading && calendarEvents.length === 0 && (
                 <div className="calendar-empty">
                     <div className="empty-icon">📅</div>
-                    <p>No events {view === Views.WEEK ? 'this week' : 'this month'}</p>
+                    <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
                     <button
                         onClick={() => navigate('/events/new')}
                         className="empty-cta"

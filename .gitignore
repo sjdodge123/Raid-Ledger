@@ -61,3 +61,4 @@ coverage/
 
 # Turborepo
 .turbo/
+test-results/
