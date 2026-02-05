@@ -13,6 +13,19 @@ vi.mock('../hooks/use-auth', () => ({
 
 vi.mock('../hooks/use-system-status');
 
+// Type-safe mock helper
+function mockSystemStatus(data: { isFirstRun: boolean; discordConfigured: boolean }) {
+    vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
+        data,
+        isLoading: false,
+        error: null,
+        isError: false,
+        isPending: false,
+        isSuccess: true,
+        refetch: vi.fn(),
+    } as unknown as ReturnType<typeof useSystemStatusModule.useSystemStatus>);
+}
+
 // Wrapper for router context
 const renderWithRouter = (ui: React.ReactElement) => {
     return render(<BrowserRouter>{ui}</BrowserRouter>);
@@ -24,11 +37,7 @@ describe('LoginPage', () => {
     });
 
     it('renders login form with username field', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 
@@ -38,11 +47,7 @@ describe('LoginPage', () => {
     });
 
     it('hides Discord button when discordConfigured is false', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 
@@ -50,11 +55,7 @@ describe('LoginPage', () => {
     });
 
     it('shows Discord button when discordConfigured is true', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: true },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
 
         renderWithRouter(<LoginPage />);
 
@@ -62,11 +63,7 @@ describe('LoginPage', () => {
     });
 
     it('displays community name from env variable', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 
@@ -75,11 +72,7 @@ describe('LoginPage', () => {
     });
 
     it('shows first-run hint when isFirstRun is true', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: true, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: true, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 
@@ -88,11 +81,7 @@ describe('LoginPage', () => {
     });
 
     it('hides first-run hint when isFirstRun is false', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 
@@ -100,11 +89,7 @@ describe('LoginPage', () => {
     });
 
     it('displays tagline below login card', () => {
-        vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-            data: { isFirstRun: false, discordConfigured: false },
-            isLoading: false,
-            error: null,
-        } as any);
+        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
 

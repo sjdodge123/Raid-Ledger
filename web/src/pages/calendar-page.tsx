@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { CalendarView, MiniCalendar } from '../components/calendar';
+import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
+import { getGameColors } from '../constants/game-colors';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -9,10 +10,48 @@ import '../components/calendar/calendar-styles.css';
  */
 export function CalendarPage() {
     const [currentDate, setCurrentDate] = useState(new Date());
+    const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
+    const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
+
+    // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
+    const hasInitialized = useRef(false);
 
     // Handler for mini-calendar date selection
     const handleDateSelect = (date: Date) => {
         setCurrentDate(date);
+    };
+
+    // Handler for when calendar reports available games
+    const handleGamesAvailable = useCallback((games: GameInfo[]) => {
+        setAvailableGames(games);
+        // Only auto-select all games on FIRST load, not after user clicks "None"
+        if (!hasInitialized.current && games.length > 0) {
+            hasInitialized.current = true;
+            setSelectedGames(new Set(games.map(g => g.slug)));
+        }
+    }, []);
+
+    // Toggle a single game filter
+    const toggleGame = (slug: string) => {
+        setSelectedGames(prev => {
+            const next = new Set(prev);
+            if (next.has(slug)) {
+                next.delete(slug);
+            } else {
+                next.add(slug);
+            }
+            return next;
+        });
+    };
+
+    // Select all games
+    const selectAllGames = () => {
+        setSelectedGames(new Set(availableGames.map(g => g.slug)));
+    };
+
+    // Deselect all games
+    const deselectAllGames = () => {
+        setSelectedGames(new Set());
     };
 
     return (
@@ -32,6 +71,70 @@ export function CalendarPage() {
                         currentDate={currentDate}
                         onDateSelect={handleDateSelect}
                     />
+
+                    {/* Game Filter Section */}
+                    {availableGames.length > 0 && (
+                        <div className="sidebar-section">
+                            <div className="game-filter-header">
+                                <h3 className="sidebar-section-title">Filter by Game</h3>
+                                <div className="game-filter-actions">
+                                    <button
+                                        type="button"
+                                        onClick={selectAllGames}
+                                        className="filter-action-btn"
+                                        title="Select all"
+                                    >
+                                        All
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={deselectAllGames}
+                                        className="filter-action-btn"
+                                        title="Deselect all"
+                                    >
+                                        None
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="game-filter-list">
+                                {availableGames.map((game) => {
+                                    const isSelected = selectedGames.has(game.slug);
+                                    const colors = getGameColors(game.slug);
+                                    return (
+                                        <label
+                                            key={game.slug}
+                                            className={`game-filter-item ${isSelected ? 'selected' : ''}`}
+                                            style={{
+                                                '--game-color': colors.bg,
+                                                '--game-border': colors.border,
+                                            } as React.CSSProperties}
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleGame(game.slug)}
+                                                className="game-filter-checkbox"
+                                            />
+                                            <div className="game-filter-icon">
+                                                {game.coverUrl ? (
+                                                    <img
+                                                        src={game.coverUrl}
+                                                        alt={game.name}
+                                                        className="game-filter-cover"
+                                                    />
+                                                ) : (
+                                                    <span className="game-filter-emoji">
+                                                        {colors.icon}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <span className="game-filter-name">{game.name}</span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Quick Actions */}
                     <div className="sidebar-section">
@@ -55,7 +158,12 @@ export function CalendarPage() {
 
                 {/* Main Calendar */}
                 <main>
-                    <CalendarView currentDate={currentDate} onDateChange={setCurrentDate} />
+                    <CalendarView
+                        currentDate={currentDate}
+                        onDateChange={setCurrentDate}
+                        selectedGames={selectedGames}
+                        onGamesAvailable={handleGamesAvailable}
+                    />
                 </main>
             </div>
         </div>

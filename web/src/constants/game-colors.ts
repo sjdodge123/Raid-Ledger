@@ -18,9 +18,11 @@ export interface GameColorConfig {
 }
 
 /**
- * Color configurations by game slug
+ * Color configurations by game slug.
+ * Supports both short registry slugs (wow, ffxiv) and full IGDB slugs (world-of-warcraft).
  */
 export const GAME_COLORS: Record<string, GameColorConfig> = {
+    // Short registry slugs
     wow: {
         bg: '#9333ea',
         border: '#a855f7',
@@ -42,6 +44,22 @@ export const GAME_COLORS: Record<string, GameColorConfig> = {
         gradient: 'linear-gradient(135deg, #22c55e, #15803d)',
         icon: '🪓',
     },
+    // Full IGDB slugs (map to same colors as short slugs)
+    'world-of-warcraft': {
+        bg: '#9333ea',
+        border: '#a855f7',
+        text: '#ffffff',
+        gradient: 'linear-gradient(135deg, #9333ea, #581c87)',
+        icon: '⚔️',
+    },
+    'final-fantasy-xiv-online': {
+        bg: '#3b82f6',
+        border: '#60a5fa',
+        text: '#ffffff',
+        gradient: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+        icon: '🏠',
+    },
+    // Generic fallback
     generic: {
         bg: '#6b7280',
         border: '#9ca3af',

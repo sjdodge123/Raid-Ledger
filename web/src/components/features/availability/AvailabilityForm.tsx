@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { AvailabilityDto, AvailabilityStatus } from '@raid-ledger/contract';
 import { useCreateAvailability, useUpdateAvailability } from '../../../hooks/use-availability';
 import { toast } from 'sonner';
@@ -23,6 +23,16 @@ function formatDateTimeLocal(isoString: string): string {
     return localDate.toISOString().slice(0, 16);
 }
 
+function getDefaultTimes(): { start: string; end: string } {
+    const now = new Date();
+    now.setMinutes(0, 0, 0);
+    now.setHours(now.getHours() + 1);
+    const start = now.toISOString().slice(0, 16);
+    now.setHours(now.getHours() + 2);
+    const end = now.toISOString().slice(0, 16);
+    return { start, end };
+}
+
 /**
  * Modal form for creating/editing availability windows.
  */
@@ -30,34 +40,50 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
     const createMutation = useCreateAvailability();
     const updateMutation = useUpdateAvailability();
 
+    const isEditing = !!editingAvailability;
+    const isLoading = createMutation.isPending || updateMutation.isPending;
+
+    // Track a session key to reset form on modal open
+    const [sessionKey, setSessionKey] = useState(0);
     const [startTime, setStartTime] = useState('');
     const [endTime, setEndTime] = useState('');
     const [status, setStatus] = useState<AvailabilityStatus>('available');
     const [error, setError] = useState<string | null>(null);
 
-    const isEditing = !!editingAvailability;
-    const isLoading = createMutation.isPending || updateMutation.isPending;
-
-    // Populate form when editing
+    // Increment session key when modal opens to trigger form reset
     useEffect(() => {
-        if (editingAvailability) {
-            setStartTime(formatDateTimeLocal(editingAvailability.timeRange.start));
-            setEndTime(formatDateTimeLocal(editingAvailability.timeRange.end));
-            setStatus(editingAvailability.status);
-        } else {
-            // Default to next hour for new windows
-            const now = new Date();
-            now.setMinutes(0, 0, 0);
-            now.setHours(now.getHours() + 1);
-            const defaultStart = now.toISOString().slice(0, 16);
-            now.setHours(now.getHours() + 2);
-            const defaultEnd = now.toISOString().slice(0, 16);
-            setStartTime(defaultStart);
-            setEndTime(defaultEnd);
-            setStatus('available');
+        if (isOpen) {
+            setSessionKey((k) => k + 1);
         }
-        setError(null);
-    }, [editingAvailability, isOpen]);
+    }, [isOpen]);
+
+    // Compute default values based on editing state
+    const defaultValues = useMemo(() => {
+        if (editingAvailability) {
+            return {
+                startTime: formatDateTimeLocal(editingAvailability.timeRange.start),
+                endTime: formatDateTimeLocal(editingAvailability.timeRange.end),
+                status: editingAvailability.status,
+            };
+        }
+        const defaults = getDefaultTimes();
+        return {
+            startTime: defaults.start,
+            endTime: defaults.end,
+            status: 'available' as AvailabilityStatus,
+        };
+    }, [editingAvailability]);
+
+    // Apply default values when session key changes (modal opens)
+    useEffect(() => {
+        if (sessionKey > 0) {
+            setStartTime(defaultValues.startTime);
+            setEndTime(defaultValues.endTime);
+            setStatus(defaultValues.status);
+            setError(null);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionKey]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -186,8 +212,8 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
                                     type="button"
                                     onClick={() => setStatus(option.value)}
                                     className={`p-3 rounded-lg border text-left transition-all ${status === option.value
-                                            ? 'bg-emerald-500/20 border-emerald-500 text-white'
-                                            : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500'
+                                        ? 'bg-emerald-500/20 border-emerald-500 text-white'
+                                        : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500'
                                         }`}
                                 >
                                     <div className="font-medium text-sm">{option.label}</div>

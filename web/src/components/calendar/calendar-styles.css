@@ -223,12 +223,14 @@
 /* Event Chip Styles - colors inherited from .rbc-event via eventPropGetter */
 .calendar-event-chip {
     /* No background - inherits from parent .rbc-event */
-    padding: 0.125rem 0.5rem;
-    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.375rem;
+    font-size: 0.6875rem;
     color: inherit;
     cursor: pointer;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
 }
 
@@ -236,10 +238,19 @@
     opacity: 0.9;
 }
 
+.event-chip-time {
+    flex-shrink: 0;
+    font-weight: 600;
+    font-size: 0.625rem;
+    opacity: 0.9;
+    min-width: 1.75rem;
+}
+
 .event-chip-title {
-    display: block;
+    flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 0.625rem;
 }
 
 /* RBC Event Overrides - allow inline styles from eventPropGetter */
@@ -324,7 +335,31 @@
 }
 
 .mini-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
     margin-bottom: 0.75rem;
+}
+
+.mini-nav-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.25rem;
+    color: #94a3b8;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.mini-nav-btn:hover {
+    background: rgba(71, 85, 105, 0.6);
+    color: #e2e8f0;
+    border-color: rgba(148, 163, 184, 0.3);
 }
 
 .mini-calendar-title {
@@ -454,4 +489,119 @@
 .sidebar-action-btn:hover {
     background: rgba(71, 85, 105, 0.6);
     border-color: rgba(148, 163, 184, 0.3);
+}
+
+/* ============================================
+   Game Filter Sidebar Styles
+   ============================================ */
+
+.game-filter-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+}
+
+.game-filter-header .sidebar-section-title {
+    margin-bottom: 0;
+}
+
+.game-filter-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.filter-action-btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.625rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    color: #94a3b8;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.filter-action-btn:hover {
+    background: rgba(71, 85, 105, 0.6);
+    color: #e2e8f0;
+}
+
+.game-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.game-filter-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    background: rgba(51, 65, 85, 0.3);
+    border: 1px solid rgba(148, 163, 184, 0.1);
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.game-filter-item:hover {
+    background: rgba(71, 85, 105, 0.4);
+    border-color: rgba(148, 163, 184, 0.2);
+}
+
+.game-filter-item.selected {
+    background: rgba(var(--game-color-rgb, 147, 51, 234), 0.15);
+    border-color: var(--game-border, rgba(148, 163, 184, 0.3));
+}
+
+.game-filter-checkbox {
+    display: none;
+}
+
+.game-filter-icon {
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 0.25rem;
+    overflow: hidden;
+    background: rgba(30, 41, 59, 0.5);
+}
+
+.game-filter-cover {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.game-filter-emoji {
+    font-size: 1rem;
+}
+
+.game-filter-name {
+    flex: 1;
+    font-size: 0.8125rem;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.game-filter-item.selected .game-filter-name {
+    color: #f1f5f9;
+    font-weight: 500;
+}
+
+/* Checkmark indicator for selected games */
+.game-filter-item.selected::after {
+    content: '✓';
+    font-size: 0.75rem;
+    color: var(--game-border, #10b981);
+    margin-left: auto;
+    flex-shrink: 0;
 }

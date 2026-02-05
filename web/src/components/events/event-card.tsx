@@ -107,17 +107,24 @@ function formatEventTime(dateString: string): string {
 }
 
 /**
- * SVG placeholder paths by game slug
+ * SVG placeholder paths by game slug.
+ * Supports both short registry slugs (wow, ffxiv) and full IGDB slugs (world-of-warcraft).
  */
 const GAME_PLACEHOLDER_PATHS: Record<string, string> = {
+    // Short registry slugs
     wow: '/placeholders/wow-placeholder.svg',
     ffxiv: '/placeholders/ffxiv-placeholder.svg',
     valheim: '/placeholders/valheim-placeholder.svg',
+    // Full IGDB slugs
+    'world-of-warcraft': '/placeholders/wow-placeholder.svg',
+    'final-fantasy-xiv-online': '/placeholders/ffxiv-placeholder.svg',
+    // Generic fallback
     generic: '/placeholders/generic-placeholder.svg',
 };
 
 /**
- * Get placeholder SVG path based on game slug
+ * Get placeholder SVG path based on game slug.
+ * Handles both IGDB full slugs and short registry slugs.
  */
 function getPlaceholderPath(slug: string | undefined): string {
     if (slug && GAME_PLACEHOLDER_PATHS[slug]) {

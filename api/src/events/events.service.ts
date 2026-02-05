@@ -35,7 +35,7 @@ export class EventsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly availabilityService: AvailabilityService,
-  ) { }
+  ) {}
 
   /**
    * Create a new event.
@@ -427,7 +427,13 @@ export class EventsService {
     gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
     signupCount: number;
   }): EventResponseDto {
-    const { events: event, users: creator, games: game, gameRegistry: registry, signupCount } = row;
+    const {
+      events: event,
+      users: creator,
+      games: game,
+      gameRegistry: registry,
+      signupCount,
+    } = row;
 
     // Prefer gameRegistry for slug (color coding) but use IGDB game coverUrl for artwork
     // Priority: registry slug/name + game coverUrl > game only > registry only

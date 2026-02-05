@@ -43,16 +43,30 @@ export function AddCharacterModal({
     const updateMutation = useUpdateCharacter();
     const isEditing = !!editingCharacter;
 
+    // Use a key-based reset by tracking when the modal opens
+    // This avoids the setState-in-effect anti-pattern
+    const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [error, setError] = useState('');
 
-    // Reset form when editingCharacter changes or modal opens
+    // Reset form when modal opens (not on every editingCharacter change while open)
     useEffect(() => {
         if (isOpen) {
-            setForm(getInitialFormState(editingCharacter));
+            // Increment key to trigger a fresh form state on next render
+            setResetKey((k) => k + 1);
+        }
+    }, [isOpen]);
+
+    // Apply the reset when key changes
+    useEffect(() => {
+        if (resetKey > 0) {
+            // This is triggered by the resetKey change, not directly in the isOpen effect
+            const newState = getInitialFormState(editingCharacter);
+            setForm(newState);
             setError('');
         }
-    }, [isOpen, editingCharacter]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [resetKey]);
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();

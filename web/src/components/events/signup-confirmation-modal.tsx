@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { useMyCharacters } from '../../hooks/use-characters';
@@ -41,28 +41,36 @@ export function SignupConfirmationModal({
     gameId,
     expectedRole,
 }: SignupConfirmationModalProps) {
-    const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
     const confirmMutation = useConfirmSignup(eventId);
 
     const characters = charactersData?.data ?? [];
     const mainCharacter = characters.find((c) => c.isMain);
     const altCharacters = characters.filter((c) => !c.isMain);
-    const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
 
-    // AC-3: Pre-select main character when characters load
-    useEffect(() => {
-        if (mainCharacter && !selectedCharacterId) {
-            setSelectedCharacterId(mainCharacter.id);
-        }
-    }, [mainCharacter, selectedCharacterId]);
+    // Track a "session key" that increments when modal opens to reset state
+    const [sessionKey, setSessionKey] = useState(0);
+    const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
 
-    // Reset selection when modal closes
+    // Reset selection when modal opens (increment session key)
     useEffect(() => {
-        if (!isOpen) {
-            setSelectedCharacterId(null);
+        if (isOpen) {
+            setSessionKey((k) => k + 1);
         }
     }, [isOpen]);
+
+    // Derive initial selection from main character when session key changes
+    // This uses useMemo to compute the default, then applies it via effect
+    const defaultCharacterId = useMemo(() => mainCharacter?.id ?? null, [mainCharacter?.id]);
+
+    useEffect(() => {
+        // Apply default selection when session starts (sessionKey changes)
+        setSelectedCharacterId(defaultCharacterId);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [sessionKey]);
+
+    const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
+
 
     // Check if selected character role mismatches expected role (AC-5)
     const hasRoleMismatch =

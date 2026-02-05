@@ -13,6 +13,7 @@ import {
 import { enUS } from 'date-fns/locale';
 import { useNavigate } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
+import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
@@ -35,15 +36,32 @@ interface CalendarEvent {
     resource: EventResponseDto;
 }
 
+/** Game info for filter sidebar */
+export interface GameInfo {
+    slug: string;
+    name: string;
+    coverUrl: string | null;
+}
+
 interface CalendarViewProps {
     className?: string;
     /** Controlled current date (optional - defaults to internal state) */
     currentDate?: Date;
     /** Callback when date changes (optional) */
     onDateChange?: (date: Date) => void;
+    /** Games to filter by (optional - shows all if undefined) */
+    selectedGames?: Set<string>;
+    /** Callback when games list is available */
+    onGamesAvailable?: (games: GameInfo[]) => void;
 }
 
-export function CalendarView({ className = '', currentDate: controlledDate, onDateChange }: CalendarViewProps) {
+export function CalendarView({
+    className = '',
+    currentDate: controlledDate,
+    onDateChange,
+    selectedGames,
+    onGamesAvailable,
+}: CalendarViewProps) {
     const navigate = useNavigate();
     const [internalDate, setInternalDate] = useState(new Date());
 
@@ -70,17 +88,48 @@ export function CalendarView({ className = '', currentDate: controlledDate, onDa
         upcoming: false, // Get all events in range, not just upcoming
     });
 
-    // Transform API events to calendar events
+    // Extract unique games from events
+    const uniqueGames = useMemo((): GameInfo[] => {
+        if (!eventsData?.data) return [];
+        const gameMap = new Map<string, GameInfo>();
+        for (const event of eventsData.data) {
+            if (event.game?.slug && !gameMap.has(event.game.slug)) {
+                gameMap.set(event.game.slug, {
+                    slug: event.game.slug,
+                    name: event.game.name,
+                    coverUrl: event.game.coverUrl || null,
+                });
+            }
+        }
+        return Array.from(gameMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }, [eventsData]);
+
+    // Notify parent when games are available
+    useMemo(() => {
+        if (onGamesAvailable && uniqueGames.length > 0) {
+            onGamesAvailable(uniqueGames);
+        }
+    }, [uniqueGames, onGamesAvailable]);
+
+    // Transform API events to calendar events (with optional filtering)
     const calendarEvents: CalendarEvent[] = useMemo(() => {
         if (!eventsData?.data) return [];
-        return eventsData.data.map((event) => ({
-            id: event.id,
-            title: event.title,
-            start: new Date(event.startTime),
-            end: event.endTime ? new Date(event.endTime) : new Date(event.startTime),
-            resource: event,
-        }));
-    }, [eventsData]);
+        return eventsData.data
+            .filter((event) => {
+                // If no filter prop is provided (undefined), show all events
+                if (selectedGames === undefined) return true;
+                // If filter is set (even if empty), respect it
+                // Empty Set = show nothing, populated Set = show matching
+                return event.game?.slug && selectedGames.has(event.game.slug);
+            })
+            .map((event) => ({
+                id: event.id,
+                title: event.title,
+                start: new Date(event.startTime),
+                end: event.endTime ? new Date(event.endTime) : new Date(event.startTime),
+                resource: event,
+            }));
+    }, [eventsData, selectedGames]);
 
     // Navigation handlers
     const handleNavigate = useCallback((date: Date) => {
@@ -107,44 +156,44 @@ export function CalendarView({ className = '', currentDate: controlledDate, onDa
         [navigate]
     );
 
-    // Game color mapping - distinct colors for each game
-    const GAME_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-        wow: { bg: 'rgba(139, 92, 246, 0.8)', border: '#8b5cf6', text: '#fff' },      // Purple (WoW)
-        ffxiv: { bg: 'rgba(59, 130, 246, 0.8)', border: '#3b82f6', text: '#fff' },    // Blue (FFXIV)
-        valheim: { bg: 'rgba(34, 197, 94, 0.8)', border: '#22c55e', text: '#fff' },   // Green (Valheim)
-        generic: { bg: 'rgba(156, 163, 175, 0.8)', border: '#9ca3af', text: '#fff' }, // Gray (Generic)
-        default: { bg: 'rgba(236, 72, 153, 0.8)', border: '#ec4899', text: '#fff' },  // Pink (Fallback)
-    };
-
-    // Style events based on their game
+    // Style events based on their game (using shared constants)
     const eventPropGetter = useCallback(
         (event: CalendarEvent) => {
             const gameSlug = event.resource?.game?.slug || 'default';
-            const colors = GAME_COLORS[gameSlug] || GAME_COLORS.default;
-
             return {
-                style: {
-                    backgroundColor: colors.bg,
-                    border: `1px solid ${colors.border}`,
-                    borderRadius: '4px',
-                    color: colors.text,
-                    padding: '2px 6px',
-                    fontSize: '0.75rem',
-                    fontWeight: '500',
-                    cursor: 'pointer',
-                },
+                style: getCalendarEventStyle(gameSlug),
             };
         },
         []
     );
 
-    // Custom event component for chips
+    // Custom event component with game art background and time
     const EventComponent = useCallback(
-        ({ event }: { event: CalendarEvent }) => (
-            <div className="calendar-event-chip" title={event.title}>
-                <span className="event-chip-title">{event.title}</span>
-            </div>
-        ),
+        ({ event }: { event: CalendarEvent }) => {
+            const gameSlug = event.resource?.game?.slug || 'default';
+            const coverUrl = event.resource?.game?.coverUrl;
+            const colors = getGameColors(gameSlug);
+
+            // Format time compactly (e.g., "10a" or "1p")
+            const timeStr = format(event.start, 'ha').toLowerCase();
+
+            return (
+                <div
+                    className="calendar-event-chip"
+                    title={`${event.title}${event.resource?.game?.name ? ` (${event.resource.game.name})` : ''}`}
+                    style={{
+                        backgroundImage: coverUrl
+                            ? `linear-gradient(135deg, ${colors.bg}dd 50%, ${colors.bg}88 100%), url(${coverUrl})`
+                            : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center right',
+                    }}
+                >
+                    <span className="event-chip-time">{timeStr}</span>
+                    <span className="event-chip-title">{event.title}</span>
+                </div>
+            );
+        },
         []
     );
 
