@@ -44,6 +44,7 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
+      REDIS_URL: redis://redis:6379
       JWT_SECRET: dev-secret-change-in-prod
       CORS_ORIGIN: http://localhost:5173
       # Enable demo mode for seeding sample data (games + events)
@@ -73,7 +74,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:3000
     ports:
-      - "5173:80"
+      - "80:80"
     profiles:
       - test
 

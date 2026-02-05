@@ -63,7 +63,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
-  ) { }
+  ) {}
 
   /**
    * Create a new event.

@@ -12,11 +12,13 @@ import { EventsModule } from './events/events.module';
 import { GameRegistryModule } from './game-registry/game-registry.module';
 import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
+import { RedisModule } from './redis/redis.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     DrizzleModule,
+    RedisModule,
     UsersModule,
     AuthModule,
     AdminModule,

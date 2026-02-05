@@ -2,7 +2,9 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { eq, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { IgdbGameDto } from '@raid-ledger/contract';
 
@@ -16,6 +18,13 @@ interface IgdbApiGame {
   };
 }
 
+/** Search result with source tracking */
+export interface SearchResult {
+  games: IgdbGameDto[];
+  cached: boolean;
+  source: 'redis' | 'database' | 'igdb' | 'local';
+}
+
 /** Constants for IGDB integration */
 const IGDB_CONFIG = {
   /** Buffer time before token expiry (seconds) */
@@ -24,6 +33,12 @@ const IGDB_CONFIG = {
   SEARCH_LIMIT: 20,
   /** IGDB cover image base URL */
   COVER_URL_BASE: 'https://images.igdb.com/igdb/image/upload/t_cover_big',
+  /** Redis cache TTL for search results (24 hours) */
+  SEARCH_CACHE_TTL: 86400,
+  /** Maximum retry attempts for 429 errors */
+  MAX_RETRIES: 3,
+  /** Base delay for exponential backoff (ms) */
+  BASE_RETRY_DELAY: 1000,
 } as const;
 
 @Injectable()
@@ -37,6 +52,8 @@ export class IgdbService {
     private readonly configService: ConfigService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    @Inject(REDIS_CLIENT)
+    private redis: Redis,
   ) {}
 
   /**
@@ -46,6 +63,32 @@ export class IgdbService {
    */
   private escapeLikePattern(input: string): string {
     return input.replace(/[%_\\]/g, '\\$&');
+  }
+
+  /**
+   * Normalize query for consistent cache keys
+   * @param query - Raw search query
+   * @returns Normalized query (lowercase, trimmed)
+   */
+  private normalizeQuery(query: string): string {
+    return query.toLowerCase().trim();
+  }
+
+  /**
+   * Generate Redis cache key for a search query
+   * @param query - Normalized search query
+   * @returns Redis key
+   */
+  private getCacheKey(query: string): string {
+    return `igdb:search:${this.normalizeQuery(query)}`;
+  }
+
+  /**
+   * Delay helper for retry logic
+   * @param ms - Milliseconds to delay
+   */
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   /**
@@ -125,18 +168,38 @@ export class IgdbService {
   }
 
   /**
-   * Search games by name - checks local cache first, then falls back to IGDB API.
-   * Results are cached permanently per NFR-007.
+   * Search games by name with multi-layer caching strategy:
+   * 1. Check Redis cache for this exact query
+   * 2. Check local database
+   * 3. Fetch from IGDB API with retry logic
+   * 4. Fall back to local search on failure
+   *
    * @param query - Search query string
-   * @returns Object containing games array and cache hit status
+   * @returns Object containing games array and source info
    */
-  async searchGames(
-    query: string,
-  ): Promise<{ games: IgdbGameDto[]; cached: boolean }> {
-    // Escape special LIKE characters to prevent injection
-    const escapedQuery = this.escapeLikePattern(query);
+  async searchGames(query: string): Promise<SearchResult> {
+    const normalizedQuery = this.normalizeQuery(query);
+    const cacheKey = this.getCacheKey(query);
 
-    // Check local cache first (case-insensitive search)
+    // Layer 1: Check Redis cache
+    try {
+      const cached = await this.redis.get(cacheKey);
+      if (cached) {
+        this.logger.debug(`Redis cache hit for query: ${query}`);
+        return {
+          games: JSON.parse(cached) as IgdbGameDto[],
+          cached: true,
+          source: 'redis',
+        };
+      }
+      this.logger.debug(`Redis cache miss for query: ${query}`);
+    } catch (redisError) {
+      this.logger.warn(`Redis error, falling back: ${redisError}`);
+      // Continue to next layer if Redis fails
+    }
+
+    // Layer 2: Check local database
+    const escapedQuery = this.escapeLikePattern(normalizedQuery);
     const cachedGames = await this.db
       .select()
       .from(schema.games)
@@ -144,64 +207,169 @@ export class IgdbService {
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
     if (cachedGames.length > 0) {
-      this.logger.debug(`Cache hit for query: ${query}`);
+      this.logger.debug(`Database cache hit for query: ${query}`);
+      const games = cachedGames.map((g) => ({
+        id: g.id,
+        igdbId: g.igdbId,
+        name: g.name,
+        slug: g.slug,
+        coverUrl: g.coverUrl,
+      }));
+
+      // Cache in Redis for future requests
+      await this.cacheToRedis(cacheKey, games);
+
       return {
-        games: cachedGames.map((g) => ({
-          id: g.id,
-          igdbId: g.igdbId,
-          name: g.name,
-          slug: g.slug,
-          coverUrl: g.coverUrl,
-        })),
+        games,
         cached: true,
+        source: 'database',
       };
     }
 
-    // Cache miss - fetch from IGDB
-    this.logger.debug(`Cache miss for query: ${query}, fetching from IGDB`);
-    const igdbGames = await this.fetchFromIgdb(query);
+    // Layer 3: Fetch from IGDB with retry logic
+    try {
+      const igdbGames = await this.fetchWithRetry(normalizedQuery);
 
-    // Batch insert for performance (instead of sequential inserts)
-    if (igdbGames.length > 0) {
-      const gamesToInsert = igdbGames.map((game) => ({
-        igdbId: game.id,
-        name: game.name,
-        slug: game.slug,
-        coverUrl: game.cover
-          ? `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`
-          : null,
+      // Batch insert for performance (instead of sequential inserts)
+      if (igdbGames.length > 0) {
+        const gamesToInsert = igdbGames.map((game) => ({
+          igdbId: game.id,
+          name: game.name,
+          slug: game.slug,
+          coverUrl: game.cover
+            ? `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`
+            : null,
+        }));
+
+        await this.db
+          .insert(schema.games)
+          .values(gamesToInsert)
+          .onConflictDoNothing();
+      }
+
+      // Return freshly cached games
+      const freshGames = await this.db
+        .select()
+        .from(schema.games)
+        .where(ilike(schema.games.name, `%${escapedQuery}%`))
+        .limit(IGDB_CONFIG.SEARCH_LIMIT);
+
+      const games = freshGames.map((g) => ({
+        id: g.id,
+        igdbId: g.igdbId,
+        name: g.name,
+        slug: g.slug,
+        coverUrl: g.coverUrl,
       }));
 
-      await this.db
-        .insert(schema.games)
-        .values(gamesToInsert)
-        .onConflictDoNothing();
-    }
+      // Cache in Redis for future requests
+      await this.cacheToRedis(cacheKey, games);
 
-    // Return freshly cached games
-    const freshGames = await this.db
+      return {
+        games,
+        cached: false,
+        source: 'igdb',
+      };
+    } catch (error) {
+      // Layer 4: Fall back to local search on IGDB failure
+      this.logger.warn(
+        `IGDB fetch failed, falling back to local search: ${error}`,
+      );
+      return this.searchLocalGames(normalizedQuery);
+    }
+  }
+
+  /**
+   * Cache search results to Redis
+   * @param key - Redis cache key
+   * @param games - Games to cache
+   */
+  private async cacheToRedis(key: string, games: IgdbGameDto[]): Promise<void> {
+    try {
+      await this.redis.setex(
+        key,
+        IGDB_CONFIG.SEARCH_CACHE_TTL,
+        JSON.stringify(games),
+      );
+      this.logger.debug(`Cached ${games.length} games to Redis`);
+    } catch (error) {
+      this.logger.warn(`Failed to cache to Redis: ${error}`);
+      // Non-fatal: continue without caching
+    }
+  }
+
+  /**
+   * Search local games database as fallback
+   * @param query - Search query
+   * @returns Local search results
+   */
+  async searchLocalGames(query: string): Promise<SearchResult> {
+    const escapedQuery = this.escapeLikePattern(query);
+
+    const localGames = await this.db
       .select()
       .from(schema.games)
       .where(ilike(schema.games.name, `%${escapedQuery}%`))
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
+    this.logger.debug(`Local search found ${localGames.length} games`);
+
     return {
-      games: freshGames.map((g) => ({
+      games: localGames.map((g) => ({
         id: g.id,
         igdbId: g.igdbId,
         name: g.name,
         slug: g.slug,
         coverUrl: g.coverUrl,
       })),
-      cached: false,
+      cached: true,
+      source: 'local',
     };
+  }
+
+  /**
+   * Fetch games from IGDB API with retry logic for rate limiting (429).
+   * Uses exponential backoff: 1s, 2s, 4s delays.
+   *
+   * @param query - Search query string
+   * @param attempt - Current attempt number (starts at 1)
+   * @returns Array of games from IGDB
+   * @throws Error if all retries exhausted or non-recoverable error
+   */
+  private async fetchWithRetry(
+    query: string,
+    attempt = 1,
+  ): Promise<IgdbApiGame[]> {
+    try {
+      return await this.fetchFromIgdb(query);
+    } catch (error: unknown) {
+      const is429 = error instanceof Error && error.message.includes('429');
+
+      if (is429 && attempt < IGDB_CONFIG.MAX_RETRIES) {
+        const delay = Math.pow(2, attempt - 1) * IGDB_CONFIG.BASE_RETRY_DELAY;
+        this.logger.warn(
+          `IGDB 429 rate limit, retrying in ${delay}ms (attempt ${attempt}/${IGDB_CONFIG.MAX_RETRIES})`,
+        );
+        await this.delay(delay);
+        return this.fetchWithRetry(query, attempt + 1);
+      }
+
+      // Log final failure
+      if (is429) {
+        this.logger.error(
+          `IGDB rate limit: max retries (${IGDB_CONFIG.MAX_RETRIES}) exhausted`,
+        );
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Fetch games from IGDB API.
    * @param query - Search query string
    * @returns Array of games from IGDB
-   * @throws Error if API call fails
+   * @throws Error if API call fails (including 429)
    */
   private async fetchFromIgdb(query: string): Promise<IgdbApiGame[]> {
     const token = await this.getAccessToken();
@@ -223,7 +391,9 @@ export class IgdbService {
     if (!response.ok) {
       const errorText = await response.text();
       this.logger.error(`IGDB API error: ${response.status} ${errorText}`);
-      throw new Error(`IGDB API error: ${response.statusText}`);
+      throw new Error(
+        `IGDB API error ${response.status}: ${response.statusText}`,
+      );
     }
 
     return (await response.json()) as IgdbApiGame[];

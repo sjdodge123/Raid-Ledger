@@ -33,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   /**
    * Sign up a user for an event.
@@ -366,7 +366,9 @@ export class SignupsService {
 
     // Only event creator or admin can update roster
     if (event.creatorId !== userId && !isAdmin) {
-      throw new ForbiddenException('Only event creator or admin can update roster');
+      throw new ForbiddenException(
+        'Only event creator or admin can update roster',
+      );
     }
 
     // Validate all assignments: user must be signed up
@@ -420,7 +422,9 @@ export class SignupsService {
    * @param eventId - Event ID
    * @returns Roster with pool and assignments
    */
-  async getRosterWithAssignments(eventId: number): Promise<RosterWithAssignments> {
+  async getRosterWithAssignments(
+    eventId: number,
+  ): Promise<RosterWithAssignments> {
     // Verify event exists
     const [event] = await this.db
       .select()
@@ -450,7 +454,9 @@ export class SignupsService {
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId));
 
-    const assignmentBySignupId = new Map(assignments.map((a) => [a.signupId, a]));
+    const assignmentBySignupId = new Map(
+      assignments.map((a) => [a.signupId, a]),
+    );
 
     // Build response arrays
     const pool: RosterAssignmentResponse[] = [];
@@ -497,13 +503,12 @@ export class SignupsService {
       isOverride: assignment?.isOverride === 1,
       character: row.characters
         ? {
-          id: row.characters.id,
-          name: row.characters.name,
-          className: row.characters.class,
-          role: row.characters.role,
-        }
+            id: row.characters.id,
+            name: row.characters.name,
+            className: row.characters.class,
+            role: row.characters.role,
+          }
         : null,
     };
   }
 }
-

@@ -13,5 +13,12 @@
         "test": "npm run test --workspaces",
         "db:migrate": "npm run migrate -w api",
         "seed": "npm run seed -w api"
+    },
+    "overrides": {
+        "@nestjs/common": "^11.0.1",
+        "@nestjs/core": "^11.0.1"
+    },
+    "devDependencies": {
+        "@playwright/test": "^1.58.1"
     }
 }

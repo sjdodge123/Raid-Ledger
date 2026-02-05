@@ -43,6 +43,7 @@ export class IgdbController {
         meta: {
           total: result.games.length,
           cached: result.cached,
+          source: result.source,
         },
       };
     } catch (error) {

@@ -78,6 +78,13 @@
       "when": 1770250659043,
       "tag": "0010_clear_nocturne",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1770256000000,
+      "tag": "0011_fix_roster_slot_constraint",
+      "breakpoints": true
     }
   ]
 }

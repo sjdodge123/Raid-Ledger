@@ -24,6 +24,7 @@ export const GameSearchResponseSchema = z.object({
     meta: z.object({
         total: z.number(),
         cached: z.boolean(),
+        source: z.enum(['redis', 'database', 'igdb', 'local']).optional(),
     }),
 });
 

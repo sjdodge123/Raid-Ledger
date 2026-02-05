@@ -42,6 +42,11 @@ if [ -n "$DATABASE_URL" ]; then
     if [ "$DEMO_MODE" = "true" ]; then
         echo "🎮 Demo mode enabled - seeding sample data..."
         
+        # Seed IGDB games cache (enables game search without API keys)
+        node ./dist/scripts/seed-igdb-games.js 2>&1 || {
+            echo "ℹ️ IGDB games seeding skipped (may already exist)"
+        }
+        
         # Seed game registry
         node ./dist/scripts/seed-games.js 2>&1 || {
             echo "ℹ️ Game seeding skipped (may already exist)"

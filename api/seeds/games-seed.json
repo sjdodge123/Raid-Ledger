@@ -1,0 +1,296 @@
+{
+    "version": "1.0.0",
+    "generatedAt": "2026-02-04",
+    "source": "igdb",
+    "description": "Pre-seeded games for Raid-Ledger. IGDB IDs are canonical to prevent duplicates when search is enabled.",
+    "games": [
+        {
+            "igdbId": 136,
+            "name": "World of Warcraft",
+            "slug": "world-of-warcraft",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rgi.jpg"
+        },
+        {
+            "igdbId": 386,
+            "name": "Final Fantasy XIV Online",
+            "slug": "final-fantasy-xiv-online",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1y0x.jpg"
+        },
+        {
+            "igdbId": 1183,
+            "name": "Guild Wars 2",
+            "slug": "guild-wars-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xnb.jpg"
+        },
+        {
+            "igdbId": 1081,
+            "name": "The Elder Scrolls Online",
+            "slug": "the-elder-scrolls-online",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4zay.jpg"
+        },
+        {
+            "igdbId": 26128,
+            "name": "Lost Ark",
+            "slug": "lost-ark",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4g0s.jpg"
+        },
+        {
+            "igdbId": 24654,
+            "name": "New World",
+            "slug": "new-world",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5nso.jpg"
+        },
+        {
+            "igdbId": 6292,
+            "name": "Black Desert Online",
+            "slug": "black-desert-online",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670v.jpg"
+        },
+        {
+            "igdbId": 117294,
+            "name": "Throne and Liberty",
+            "slug": "throne-and-liberty",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7vni.jpg"
+        },
+        {
+            "igdbId": 104967,
+            "name": "Valheim",
+            "slug": "valheim",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2riu.jpg"
+        },
+        {
+            "igdbId": 10239,
+            "name": "ARK: Survival Evolved",
+            "slug": "ark-survival-evolved",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xhm.jpg"
+        },
+        {
+            "igdbId": 3277,
+            "name": "Rust",
+            "slug": "rust",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7cyf.jpg"
+        },
+        {
+            "igdbId": 151665,
+            "name": "Palworld",
+            "slug": "palworld",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co6zdv.jpg"
+        },
+        {
+            "igdbId": 272600,
+            "name": "Soulmask",
+            "slug": "soulmask",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8dhg.jpg"
+        },
+        {
+            "igdbId": 16999,
+            "name": "Conan Exiles",
+            "slug": "conan-exiles",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2dbk.jpg"
+        },
+        {
+            "igdbId": 5574,
+            "name": "7 Days to Die",
+            "slug": "7-days-to-die",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8c57.jpg"
+        },
+        {
+            "igdbId": 90558,
+            "name": "Satisfactory",
+            "slug": "satisfactory",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7b5e.jpg"
+        },
+        {
+            "igdbId": 134830,
+            "name": "Destiny 2",
+            "slug": "destiny-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co74ko.jpg"
+        },
+        {
+            "igdbId": 267925,
+            "name": "Helldivers 2",
+            "slug": "helldivers-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7lzf.jpg"
+        },
+        {
+            "igdbId": 25076,
+            "name": "Deep Rock Galactic",
+            "slug": "deep-rock-galactic",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2qn5.jpg"
+        },
+        {
+            "igdbId": 2903,
+            "name": "Warframe",
+            "slug": "warframe",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2di3.jpg"
+        },
+        {
+            "igdbId": 90099,
+            "name": "Tom Clancy's The Division 2",
+            "slug": "tom-clancys-the-division-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rkj.jpg"
+        },
+        {
+            "igdbId": 119171,
+            "name": "Baldur's Gate 3",
+            "slug": "baldurs-gate-3",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg"
+        },
+        {
+            "igdbId": 154563,
+            "name": "Diablo IV",
+            "slug": "diablo-iv",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5w0a.jpg"
+        },
+        {
+            "igdbId": 36926,
+            "name": "Monster Hunter: World",
+            "slug": "monster-hunter-world",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1wyy.jpg"
+        },
+        {
+            "igdbId": 138950,
+            "name": "Monster Hunter Rise",
+            "slug": "monster-hunter-rise",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co3t9i.jpg"
+        },
+        {
+            "igdbId": 279661,
+            "name": "Monster Hunter Wilds",
+            "slug": "monster-hunter-wilds",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8bur.jpg"
+        },
+        {
+            "igdbId": 1911,
+            "name": "Path of Exile",
+            "slug": "path-of-exile",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1n8t.jpg"
+        },
+        {
+            "igdbId": 95118,
+            "name": "Last Epoch",
+            "slug": "last-epoch",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5wqo.jpg"
+        },
+        {
+            "igdbId": 115,
+            "name": "League of Legends",
+            "slug": "league-of-legends",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co49wj.jpg"
+        },
+        {
+            "igdbId": 126459,
+            "name": "VALORANT",
+            "slug": "valorant",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2mvt.jpg"
+        },
+        {
+            "igdbId": 102602,
+            "name": "Apex Legends",
+            "slug": "apex-legends",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1wl8.jpg"
+        },
+        {
+            "igdbId": 125174,
+            "name": "Overwatch 2",
+            "slug": "overwatch-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5tps.jpg"
+        },
+        {
+            "igdbId": 119133,
+            "name": "Elden Ring",
+            "slug": "elden-ring",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg"
+        },
+        {
+            "igdbId": 11137,
+            "name": "Sea of Thieves",
+            "slug": "sea-of-thieves",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7eix.jpg"
+        },
+        {
+            "igdbId": 135400,
+            "name": "Minecraft",
+            "slug": "minecraft",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co49x5.jpg"
+        },
+        {
+            "igdbId": 256925,
+            "name": "Fortnite",
+            "slug": "fortnite",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co6029.jpg"
+        },
+        {
+            "igdbId": 11198,
+            "name": "Rocket League",
+            "slug": "rocket-league",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5w0w.jpg"
+        },
+        {
+            "igdbId": 7346,
+            "name": "Counter-Strike 2",
+            "slug": "counter-strike-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co6v5x.jpg"
+        },
+        {
+            "igdbId": 1942,
+            "name": "The Witcher 3: Wild Hunt",
+            "slug": "the-witcher-3-wild-hunt",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1tmu.jpg"
+        },
+        {
+            "igdbId": 1020,
+            "name": "Grand Theft Auto V",
+            "slug": "grand-theft-auto-v",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co6a5s.jpg"
+        },
+        {
+            "igdbId": 19164,
+            "name": "PlayerUnknown's Battlegrounds",
+            "slug": "playerunknowns-battlegrounds",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7k37.jpg"
+        },
+        {
+            "igdbId": 114283,
+            "name": "DOTA 2",
+            "slug": "dota-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2ogz.jpg"
+        },
+        {
+            "igdbId": 113360,
+            "name": "Smite 2",
+            "slug": "smite-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7m77.jpg"
+        },
+        {
+            "igdbId": 55199,
+            "name": "Dead by Daylight",
+            "slug": "dead-by-daylight",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4amt.jpg"
+        },
+        {
+            "igdbId": 103303,
+            "name": "Risk of Rain 2",
+            "slug": "risk-of-rain-2",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1pfw.jpg"
+        },
+        {
+            "igdbId": 135752,
+            "name": "Lethal Company",
+            "slug": "lethal-company",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co6ry5.jpg"
+        },
+        {
+            "igdbId": 191837,
+            "name": "Content Warning",
+            "slug": "content-warning",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co87n1.jpg"
+        },
+        {
+            "igdbId": 144109,
+            "name": "Phasmophobia",
+            "slug": "phasmophobia",
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co502b.jpg"
+        }
+    ]
+}

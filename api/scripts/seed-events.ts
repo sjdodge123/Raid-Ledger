@@ -170,10 +170,12 @@ async function bootstrap() {
         console.log('\n📍 View events at: http://localhost:5173/events');
     } catch (err) {
         console.error('❌ Seeding failed:', err);
-        process.exit(1);
-    } finally {
         await app.close();
+        process.exit(1);
     }
+
+    await app.close();
+    process.exit(0);
 }
 
 bootstrap();
