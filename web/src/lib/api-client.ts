@@ -14,6 +14,8 @@ import type {
     CreateAvailabilityInput,
     UpdateAvailabilityDto,
     RosterAvailabilityResponse,
+    RosterWithAssignments,
+    UpdateRosterDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -296,4 +298,30 @@ export async function getRosterAvailability(
     if (params?.to) searchParams.set('to', params.to);
     const query = searchParams.toString();
     return fetchApi(`/events/${eventId}/roster/availability${query ? `?${query}` : ''}`);
+}
+
+// ============================================================
+// Roster Assignments API (ROK-114)
+// ============================================================
+
+/**
+ * Get roster with assignment data (pool and assigned users)
+ */
+export async function getRosterWithAssignments(
+    eventId: number
+): Promise<RosterWithAssignments> {
+    return fetchApi(`/events/${eventId}/roster/assignments`);
+}
+
+/**
+ * Update roster assignments (drag-and-drop changes)
+ */
+export async function updateRoster(
+    eventId: number,
+    dto: UpdateRosterDto
+): Promise<RosterWithAssignments> {
+    return fetchApi(`/events/${eventId}/roster`, {
+        method: 'PATCH',
+        body: JSON.stringify(dto),
+    });
 }

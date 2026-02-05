@@ -17,6 +17,10 @@ import type {
   ConfirmSignupDto,
   SignupCharacterDto,
   ConfirmationStatus,
+  UpdateRosterDto,
+  RosterWithAssignments,
+  RosterAssignmentResponse,
+  RosterRole,
 } from '@raid-ledger/contract';
 
 /**
@@ -29,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) { }
 
   /**
    * Sign up a user for an event.
@@ -329,4 +333,177 @@ export class SignupsService {
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
     };
   }
+
+  // ============================================================
+  // Roster Assignment Methods (ROK-114)
+  // ============================================================
+
+  /**
+   * Update roster assignments for an event (ROK-114 AC-5).
+   * Replaces all current assignments with new ones.
+   * @param eventId - Event ID
+   * @param userId - User making the request (for authorization)
+   * @param isAdmin - Whether user is admin
+   * @param dto - New assignments
+   * @returns Updated roster with assignments
+   */
+  async updateRoster(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: UpdateRosterDto,
+  ): Promise<RosterWithAssignments> {
+    // Verify event exists and user has permission
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Only event creator or admin can update roster
+    if (event.creatorId !== userId && !isAdmin) {
+      throw new ForbiddenException('Only event creator or admin can update roster');
+    }
+
+    // Validate all assignments: user must be signed up
+    const signups = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    const signupByUserId = new Map(signups.map((s) => [s.userId, s]));
+
+    for (const assignment of dto.assignments) {
+      const signup = signupByUserId.get(assignment.userId);
+      if (!signup) {
+        throw new BadRequestException(
+          `User ${assignment.userId} is not signed up for this event`,
+        );
+      }
+    }
+
+    // Delete existing assignments
+    await this.db
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, eventId));
+
+    // Insert new assignments
+    if (dto.assignments.length > 0) {
+      const assignmentValues = dto.assignments.map((a) => {
+        const signup = signupByUserId.get(a.userId)!;
+        return {
+          eventId,
+          signupId: a.signupId ?? signup.id,
+          role: a.slot,
+          position: a.position,
+          isOverride: a.isOverride ? 1 : 0,
+        };
+      });
+
+      await this.db.insert(schema.rosterAssignments).values(assignmentValues);
+    }
+
+    this.logger.log(
+      `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
+    );
+
+    return this.getRosterWithAssignments(eventId);
+  }
+
+  /**
+   * Get roster with assignment data (ROK-114 AC-5).
+   * Returns both unassigned pool and assigned slots.
+   * @param eventId - Event ID
+   * @returns Roster with pool and assignments
+   */
+  async getRosterWithAssignments(eventId: number): Promise<RosterWithAssignments> {
+    // Verify event exists
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Get all signups with user and character data
+    const signups = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+      .leftJoin(
+        schema.characters,
+        eq(schema.eventSignups.characterId, schema.characters.id),
+      )
+      .where(eq(schema.eventSignups.eventId, eventId))
+      .orderBy(schema.eventSignups.signedUpAt);
+
+    // Get all assignments
+    const assignments = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, eventId));
+
+    const assignmentBySignupId = new Map(assignments.map((a) => [a.signupId, a]));
+
+    // Build response arrays
+    const pool: RosterAssignmentResponse[] = [];
+    const assigned: RosterAssignmentResponse[] = [];
+
+    for (const row of signups) {
+      const assignment = assignmentBySignupId.get(row.event_signups.id);
+      const response = this.buildRosterAssignmentResponse(row, assignment);
+
+      if (assignment) {
+        assigned.push(response);
+      } else {
+        pool.push(response);
+      }
+    }
+
+    return {
+      eventId,
+      pool,
+      assignments: assigned,
+      slots: undefined, // TODO: Get from event configuration
+    };
+  }
+
+  /**
+   * Build roster assignment response from signup data.
+   */
+  private buildRosterAssignmentResponse(
+    row: {
+      event_signups: typeof schema.eventSignups.$inferSelect;
+      users: typeof schema.users.$inferSelect | null;
+      characters: typeof schema.characters.$inferSelect | null;
+    },
+    assignment?: typeof schema.rosterAssignments.$inferSelect,
+  ): RosterAssignmentResponse {
+    return {
+      id: assignment?.id ?? 0,
+      signupId: row.event_signups.id,
+      userId: row.users?.id ?? 0,
+      username: row.users?.username ?? 'Unknown',
+      avatar: row.users?.avatar ?? null,
+      slot: (assignment?.role as RosterRole) ?? null,
+      position: assignment?.position ?? 0,
+      isOverride: assignment?.isOverride === 1,
+      character: row.characters
+        ? {
+          id: row.characters.id,
+          name: row.characters.name,
+          className: row.characters.class,
+          role: row.characters.role,
+        }
+        : null,
+    };
+  }
 }
+

@@ -5,9 +5,12 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
 import { useRosterAvailability } from '../hooks/use-roster-availability';
+import { useRoster, useUpdateRoster, buildRosterUpdate } from '../hooks/use-roster';
+import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { RosterList } from '../components/events/roster-list';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { HeatmapGrid } from '../components/features/heatmap';
+import { RosterBuilder } from '../components/roster';
 
 /**
  * Format date/time in user's local timezone
@@ -59,9 +62,9 @@ export function EventDetailPage() {
     const signup = useSignup(eventId);
     const cancelSignup = useCancelSignup(eventId);
 
-    // Modal state for character confirmation (ROK-131 AC-2)
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
+    const [showRosterBuilder, setShowRosterBuilder] = useState(false);
 
     // ROK-156: Roster availability always fetched (no toggle)
     const { data: rosterAvailability, isLoading: availabilityLoading } = useRosterAvailability(
@@ -74,6 +77,26 @@ export function EventDetailPage() {
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
     const isSignedUp = !!userSignup;
     const needsConfirmation = userSignup?.confirmationStatus === 'pending';
+
+    // ROK-114: Roster Builder for event creators/admins
+    const isEventCreator = user?.id === event?.creator?.id;
+    const canManageRoster = isEventCreator;
+    const { data: rosterAssignments } = useRoster(eventId);
+    const updateRoster = useUpdateRoster(eventId);
+
+    // Handler for roster changes from RosterBuilder
+    const handleRosterChange = async (
+        pool: RosterAssignmentResponse[],
+        assignments: RosterAssignmentResponse[],
+    ) => {
+        try {
+            await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments));
+        } catch (err) {
+            toast.error('Failed to update roster', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
 
     const handleSignup = async () => {
         try {
@@ -181,6 +204,37 @@ export function EventDetailPage() {
                                     isLoading={rosterLoading}
                                 />
                             </div>
+
+                            {/* ROK-114: Roster Builder for event creators */}
+                            {canManageRoster && rosterAssignments && (
+                                <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
+                                    <button
+                                        onClick={() => setShowRosterBuilder(!showRosterBuilder)}
+                                        className="w-full p-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+                                    >
+                                        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
+                                            <span>🎯</span> Roster Builder
+                                            <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded text-indigo-100">
+                                                Creator Only
+                                            </span>
+                                        </h2>
+                                        <span className="text-slate-400">
+                                            {showRosterBuilder ? '▼' : '▶'}
+                                        </span>
+                                    </button>
+                                    {showRosterBuilder && (
+                                        <div className="p-4 border-t border-slate-700">
+                                            <RosterBuilder
+                                                pool={rosterAssignments.pool}
+                                                assignments={rosterAssignments.assignments}
+                                                slots={rosterAssignments.slots}
+                                                onRosterChange={handleRosterChange}
+                                                canEdit={canManageRoster}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
                         {/* Sidebar - 40% (2/5) - Event Info & Actions */}

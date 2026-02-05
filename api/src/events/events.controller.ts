@@ -27,6 +27,8 @@ import {
   EventRosterDto,
   RosterAvailabilityResponse,
   RosterAvailabilityQuerySchema,
+  UpdateRosterSchema,
+  RosterWithAssignments,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -61,7 +63,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
-  ) {}
+  ) { }
 
   /**
    * Create a new event.
@@ -195,6 +197,42 @@ export class EventsController {
     @Param('id', ParseIntPipe) eventId: number,
   ): Promise<EventRosterDto> {
     return this.signupsService.getRoster(eventId);
+  }
+
+  /**
+   * Update roster assignments (ROK-114 AC-5).
+   * Requires authentication. Only event creator or admin can update.
+   */
+  @Patch(':id/roster')
+  @UseGuards(AuthGuard('jwt'))
+  async updateRoster(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<RosterWithAssignments> {
+    try {
+      const dto = UpdateRosterSchema.parse(body);
+      return this.signupsService.updateRoster(
+        eventId,
+        req.user.id,
+        req.user.isAdmin,
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Get roster with assignment data (ROK-114 AC-6).
+   * Returns pool and assignments for RosterBuilder component.
+   * Public endpoint.
+   */
+  @Get(':id/roster/assignments')
+  async getRosterWithAssignments(
+    @Param('id', ParseIntPipe) eventId: number,
+  ): Promise<RosterWithAssignments> {
+    return this.signupsService.getRosterWithAssignments(eventId);
   }
 
   /**
