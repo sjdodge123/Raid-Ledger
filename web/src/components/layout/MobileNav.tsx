@@ -55,7 +55,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     // Only use Discord CDN if user has both discordId AND avatar hash
     const avatarUrl = user?.discordId && user?.avatar
         ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
-        : '/default-avatar.png';
+        : '/default-avatar.svg';
 
     const navLinks = [
         { to: '/events', label: 'Events' },
@@ -95,7 +95,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                                 alt={user.username}
                                 className="w-10 h-10 rounded-full bg-slate-700"
                                 onError={(e) => {
-                                    e.currentTarget.src = '/default-avatar.png';
+                                    e.currentTarget.src = '/default-avatar.svg';
                                 }}
                             />
                             <span className="text-white font-medium">{user.username}</span>

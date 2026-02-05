@@ -35,7 +35,7 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
 
     const avatarUrl = hasDiscordLinked && user.avatar
         ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=128`
-        : '/default-avatar.png';
+        : '/default-avatar.svg';
 
     const handleLinkDiscord = () => {
         // Redirect to link endpoint (requires auth, so we'll use fetch with redirect)
@@ -51,7 +51,7 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
                         alt={user.username}
                         className="w-20 h-20 rounded-full bg-slate-700"
                         onError={(e) => {
-                            e.currentTarget.src = '/default-avatar.png';
+                            e.currentTarget.src = '/default-avatar.svg';
                         }}
                     />
                     <div>

@@ -130,11 +130,11 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
                         title={user.username}
                     >
                         <img
-                            src={user.avatar || '/default-avatar.png'}
+                            src={user.avatar || '/default-avatar.svg'}
                             alt={user.username}
                             className="w-6 h-6 rounded-full"
                             onError={(e) => {
-                                e.currentTarget.src = '/default-avatar.png';
+                                e.currentTarget.src = '/default-avatar.svg';
                             }}
                         />
                         <span className="text-xs text-slate-400 truncate max-w-full">

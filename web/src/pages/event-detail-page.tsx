@@ -287,11 +287,11 @@ export function EventDetailPage() {
                                     {/* Creator */}
                                     <div className="mt-6 pt-6 border-t border-slate-700 flex items-center gap-3">
                                         <img
-                                            src={event.creator.avatar || '/default-avatar.png'}
+                                            src={event.creator.avatar || '/default-avatar.svg'}
                                             alt={event.creator.username}
                                             className="w-8 h-8 rounded-full"
                                             onError={(e) => {
-                                                e.currentTarget.src = '/default-avatar.png';
+                                                e.currentTarget.src = '/default-avatar.svg';
                                             }}
                                         />
                                         <div>

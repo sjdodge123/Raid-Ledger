@@ -70,7 +70,7 @@ export function UserMenu() {
     // Only use Discord CDN if user has both discordId AND avatar hash
     const avatarUrl = user.discordId && user.avatar
         ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
-        : '/default-avatar.png';
+        : '/default-avatar.svg';
 
     return (
         <div className="relative" ref={menuRef}>
@@ -85,7 +85,7 @@ export function UserMenu() {
                     alt={user.username}
                     className="w-8 h-8 rounded-full bg-slate-700"
                     onError={(e) => {
-                        e.currentTarget.src = '/default-avatar.png';
+                        e.currentTarget.src = '/default-avatar.svg';
                     }}
                 />
                 <span className="text-white font-medium hidden sm:block">

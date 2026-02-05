@@ -211,11 +211,11 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
 
                     <div className="flex items-center gap-1">
                         <img
-                            src={event.creator.avatar || '/default-avatar.png'}
+                            src={event.creator.avatar || '/default-avatar.svg'}
                             alt={event.creator.username}
                             className="w-6 h-6 rounded-full bg-slate-700"
                             onError={(e) => {
-                                e.currentTarget.src = '/default-avatar.png';
+                                e.currentTarget.src = '/default-avatar.svg';
                             }}
                         />
                         <span className="text-xs text-slate-500">

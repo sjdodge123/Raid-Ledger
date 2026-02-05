@@ -22,12 +22,27 @@ export function CalendarPage() {
     };
 
     // Handler for when calendar reports available games
+    // Show only games from current view, but persist selections
     const handleGamesAvailable = useCallback((games: GameInfo[]) => {
+        // Update available games to show only current view
         setAvailableGames(games);
-        // Only auto-select all games on FIRST load, not after user clicks "None"
+
+        // Auto-select all games on first load
         if (!hasInitialized.current && games.length > 0) {
             hasInitialized.current = true;
             setSelectedGames(new Set(games.map(g => g.slug)));
+        } else {
+            // For subsequent loads, auto-select any NEW games that weren't previously selected
+            setSelectedGames(prev => {
+                const next = new Set(prev);
+                games.forEach(g => {
+                    // Add games that are new (not already in selection)
+                    if (!prev.has(g.slug)) {
+                        next.add(g.slug);
+                    }
+                });
+                return next;
+            });
         }
     }, []);
 
