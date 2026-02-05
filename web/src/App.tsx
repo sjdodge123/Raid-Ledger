@@ -1,14 +1,13 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { Layout } from './components/layout';
 import { ProtectedRoute } from './components/auth';
-import { HomePage } from './pages/home-page';
+import { RootRedirect } from './components/RootRedirect';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
-import { LoginPage } from './pages/login-page';
 import './App.css';
 
 function App() {
@@ -22,8 +21,10 @@ function App() {
       />
       <Layout>
         <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={<LoginPage />} />
+          {/* ROK-175: Root shows login or redirects to events based on auth */}
+          <Route path="/" element={<RootRedirect />} />
+          {/* Legacy /login redirects to root (AC-2) */}
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/new" element={
             <ProtectedRoute>

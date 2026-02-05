@@ -134,6 +134,90 @@ describe('EventsController', () => {
         expect.objectContaining({ page: 2, limit: 10, upcoming: 'true' }),
       );
     });
+
+    // ROK-174: Date Range Filtering Tests
+    describe('date range filtering (ROK-174)', () => {
+      it('should pass startAfter query param to service', async () => {
+        const startAfter = '2026-02-01T00:00:00.000Z';
+        await controller.findAll({ startAfter });
+
+        expect(mockEventsService.findAll).toHaveBeenCalledWith(
+          expect.objectContaining({ startAfter }),
+        );
+      });
+
+      it('should pass endBefore query param to service', async () => {
+        const endBefore = '2026-02-28T23:59:59.000Z';
+        await controller.findAll({ endBefore });
+
+        expect(mockEventsService.findAll).toHaveBeenCalledWith(
+          expect.objectContaining({ endBefore }),
+        );
+      });
+
+      it('should pass both startAfter and endBefore for range queries', async () => {
+        const startAfter = '2026-02-01T00:00:00.000Z';
+        const endBefore = '2026-02-28T23:59:59.000Z';
+        await controller.findAll({ startAfter, endBefore });
+
+        expect(mockEventsService.findAll).toHaveBeenCalledWith(
+          expect.objectContaining({ startAfter, endBefore }),
+        );
+      });
+
+      it('should pass gameId filter to service', async () => {
+        const gameId = '123';
+        await controller.findAll({ gameId });
+
+        expect(mockEventsService.findAll).toHaveBeenCalledWith(
+          expect.objectContaining({ gameId }),
+        );
+      });
+
+      it('should combine date range with other filters', async () => {
+        const query = {
+          startAfter: '2026-02-01T00:00:00.000Z',
+          endBefore: '2026-02-28T23:59:59.000Z',
+          gameId: '123',
+          upcoming: 'true',
+          page: '1',
+          limit: '50',
+        };
+        await controller.findAll(query);
+
+        expect(mockEventsService.findAll).toHaveBeenCalledWith(
+          expect.objectContaining({
+            startAfter: '2026-02-01T00:00:00.000Z',
+            endBefore: '2026-02-28T23:59:59.000Z',
+            gameId: '123',
+            upcoming: 'true',
+            page: 1,
+            limit: 50,
+          }),
+        );
+      });
+
+      it('should throw BadRequestException for invalid startAfter date format', async () => {
+        await expect(
+          controller.findAll({ startAfter: 'not-a-date' }),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should throw BadRequestException for invalid endBefore date format', async () => {
+        await expect(
+          controller.findAll({ endBefore: 'invalid-date' }),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('should throw BadRequestException when startAfter is after endBefore', async () => {
+        await expect(
+          controller.findAll({
+            startAfter: '2026-02-28T00:00:00.000Z',
+            endBefore: '2026-02-01T00:00:00.000Z', // Before startAfter
+          }),
+        ).rejects.toThrow(BadRequestException);
+      });
+    });
   });
 
   describe('findOne', () => {

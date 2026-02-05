@@ -89,11 +89,23 @@ export const EventListResponseSchema = z.object({
 
 export type EventListResponseDto = z.infer<typeof EventListResponseSchema>;
 
-/** Query params for event list */
+/** Query params for event list (ROK-174: Date Range Filtering) */
 export const EventListQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
     upcoming: z.enum(['true', 'false']).optional(), // Filter to upcoming events only
-});
+    startAfter: z.string().datetime({ message: 'startAfter must be a valid ISO8601 datetime' }).optional(),
+    endBefore: z.string().datetime({ message: 'endBefore must be a valid ISO8601 datetime' }).optional(),
+    gameId: z.string().optional(), // Filter by game ID (string, since gameId is stored as text)
+}).refine(
+    (data) => {
+        if (data.startAfter && data.endBefore) {
+            return new Date(data.startAfter) < new Date(data.endBefore);
+        }
+        return true;
+    },
+    { message: 'startAfter must be before endBefore', path: ['startAfter'] }
+);
 
 export type EventListQueryDto = z.infer<typeof EventListQuerySchema>;
+

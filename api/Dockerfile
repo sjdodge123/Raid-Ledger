@@ -49,11 +49,8 @@ COPY --from=builder /app/api/package.json ./package.json
 # Copy drizzle migrations (SQL files only)
 COPY --from=builder /app/api/src/drizzle/migrations ./drizzle/migrations
 
-# Copy production node_modules first (root-level hoisted packages)
+# Copy production node_modules (npm workspaces hoists all to root)
 COPY --from=builder /app/node_modules ./node_modules
-
-# Copy API workspace node_modules (includes @nestjs/core, platform-express, etc)
-COPY --from=builder /app/api/node_modules ./node_modules
 
 # Copy contract package AFTER node_modules to overlay the built version
 COPY --from=builder /app/packages/contract/dist ./node_modules/@raid-ledger/contract/dist

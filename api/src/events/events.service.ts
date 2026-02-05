@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, desc, gte, sql } from 'drizzle-orm';
+import { eq, desc, gte, lte, asc, sql, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -35,7 +35,7 @@ export class EventsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly availabilityService: AvailabilityService,
-  ) {}
+  ) { }
 
   /**
    * Create a new event.
@@ -68,6 +68,7 @@ export class EventsService {
 
   /**
    * Get paginated list of events.
+   * Supports filtering by date range (ROK-174) and game ID.
    * @param query - Pagination and filter options
    * @returns Paginated event list
    */
@@ -79,24 +80,55 @@ export class EventsService {
     );
     const offset = (page - 1) * limit;
 
-    // Build where condition for upcoming filter
-    // Note: postgres driver requires string, not Date object
-    const upcomingCondition =
-      query.upcoming === 'true'
-        ? gte(
-            sql`upper(${schema.events.duration})`,
-            sql`${new Date().toISOString()}::timestamp`,
-          )
-        : undefined;
+    // Build where conditions array (ROK-174: Date Range Filtering)
+    const conditions: ReturnType<typeof gte>[] = [];
+
+    // Existing: upcoming filter (events that haven't ended yet)
+    if (query.upcoming === 'true') {
+      conditions.push(
+        gte(
+          sql`upper(${schema.events.duration})`,
+          sql`${new Date().toISOString()}::timestamp`,
+        ),
+      );
+    }
+
+    // ROK-174: startAfter filter - events starting after this date
+    if (query.startAfter) {
+      conditions.push(
+        gte(
+          sql`lower(${schema.events.duration})`,
+          sql`${query.startAfter}::timestamp`,
+        ),
+      );
+    }
+
+    // ROK-174: endBefore filter - events ending before this date
+    if (query.endBefore) {
+      conditions.push(
+        lte(
+          sql`upper(${schema.events.duration})`,
+          sql`${query.endBefore}::timestamp`,
+        ),
+      );
+    }
+
+    // gameId filter
+    if (query.gameId) {
+      conditions.push(eq(schema.events.gameId, query.gameId));
+    }
+
+    // Combine all conditions with AND
+    const whereCondition =
+      conditions.length > 0 ? and(...conditions) : undefined;
 
     // Get total count (respecting filters)
     const countQuery = this.db
       .select({ count: sql<number>`count(*)` })
       .from(schema.events);
 
-    // Apply filter to count if needed
-    const countResult = upcomingCondition
-      ? await countQuery.where(upcomingCondition)
+    const countResult = whereCondition
+      ? await countQuery.where(whereCondition)
       : await countQuery;
 
     const total = Number(countResult[0].count);
@@ -131,13 +163,14 @@ export class EventsService {
       )
       .$dynamic();
 
-    // Apply filter to events if needed
-    if (upcomingCondition) {
-      eventsQuery = eventsQuery.where(upcomingCondition);
+    // Apply filters to events query
+    if (whereCondition) {
+      eventsQuery = eventsQuery.where(whereCondition);
     }
 
+    // ROK-174 AC-3: Order by start_time ASC for calendar views
     const events = await eventsQuery
-      .orderBy(desc(sql`lower(${schema.events.duration})`))
+      .orderBy(asc(sql`lower(${schema.events.duration})`))
       .limit(limit)
       .offset(offset);
 
@@ -398,11 +431,11 @@ export class EventsService {
       },
       game: game
         ? {
-            id: game.id,
-            name: game.name,
-            slug: game.slug,
-            coverUrl: game.coverUrl,
-          }
+          id: game.id,
+          name: game.name,
+          slug: game.slug,
+          coverUrl: game.coverUrl,
+        }
         : null,
       signupCount: Number(signupCount),
       createdAt: event.createdAt.toISOString(),

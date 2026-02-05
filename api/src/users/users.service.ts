@@ -2,14 +2,14 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 @Injectable()
 export class UsersService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) { }
 
   async findByDiscordId(discordId: string) {
     const result = await this.db.query.users.findFirst({
@@ -96,5 +96,16 @@ export class UsersService {
       .returning();
 
     return updated;
+  }
+
+  /**
+   * Count total users in the database.
+   * Used for first-run detection (ROK-175 AC-4).
+   */
+  async count(): Promise<number> {
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users);
+    return Number(result[0].count);
   }
 }

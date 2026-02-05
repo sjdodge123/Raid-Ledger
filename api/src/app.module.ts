@@ -13,6 +13,7 @@ import { GameRegistryModule } from './game-registry/game-registry.module';
 import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
+import { SystemModule } from './system/system.module';
 
 @Module({
   imports: [
@@ -27,8 +28,9 @@ import { RedisModule } from './redis/redis.module';
     GameRegistryModule,
     CharactersModule,
     AvailabilityModule,
+    SystemModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

@@ -11,7 +11,6 @@ export function Header() {
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
     const navLinks = [
-        { to: '/', label: 'Home' },
         { to: '/events', label: 'Events' },
     ];
 
@@ -35,8 +34,8 @@ export function Header() {
                                 key={to}
                                 to={to}
                                 className={`font-medium transition-colors ${location.pathname === to
-                                        ? 'text-emerald-400'
-                                        : 'text-slate-300 hover:text-white'
+                                    ? 'text-emerald-400'
+                                    : 'text-slate-300 hover:text-white'
                                     }`}
                             >
                                 {label}

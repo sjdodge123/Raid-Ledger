@@ -71,10 +71,19 @@ async function fetchApi<T>(
 // Events API
 // ============================================================
 
+/**
+ * Parameters for event list queries (ROK-174: Date Range Filtering)
+ */
 export interface EventListParams {
     page?: number;
     limit?: number;
     upcoming?: boolean;
+    /** ISO8601 datetime - filter events starting after this date */
+    startAfter?: string;
+    /** ISO8601 datetime - filter events ending before this date */
+    endBefore?: string;
+    /** Filter events by game ID */
+    gameId?: string;
 }
 
 export async function getEvents(params: EventListParams = {}): Promise<EventListResponseDto> {
@@ -82,6 +91,9 @@ export async function getEvents(params: EventListParams = {}): Promise<EventList
     if (params.page) searchParams.set('page', String(params.page));
     if (params.limit) searchParams.set('limit', String(params.limit));
     if (params.upcoming !== undefined) searchParams.set('upcoming', String(params.upcoming));
+    if (params.startAfter) searchParams.set('startAfter', params.startAfter);
+    if (params.endBefore) searchParams.set('endBefore', params.endBefore);
+    if (params.gameId) searchParams.set('gameId', params.gameId);
 
     const query = searchParams.toString();
     const endpoint = `/events${query ? `?${query}` : ''}`;

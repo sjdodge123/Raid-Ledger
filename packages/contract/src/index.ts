@@ -30,3 +30,7 @@ export * from './roster-availability.schema.js';
 
 // Roster Assignments (ROK-114)
 export * from './roster.schema.js';
+
+// System Status (ROK-175)
+export * from './system.schema.js';
+
