@@ -23,6 +23,7 @@ describe('RosterBuilder', () => {
                 name: 'Tanker',
                 className: 'Warrior',
                 role: 'tank',
+                avatarUrl: null,
             },
         },
     ];
@@ -43,6 +44,7 @@ describe('RosterBuilder', () => {
                 name: 'Healy',
                 className: 'Priest',
                 role: 'healer',
+                avatarUrl: null,
             },
         },
     ];

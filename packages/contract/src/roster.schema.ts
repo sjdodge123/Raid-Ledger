@@ -48,12 +48,13 @@ export const RosterAssignmentResponseSchema = z.object({
     slot: RosterRoleSchema.nullable(),
     position: z.number(),
     isOverride: z.boolean(),
-    /** Character info if confirmed */
+    /** Character info if confirmed (ROK-194: includes avatarUrl) */
     character: z.object({
         id: z.string().uuid(),
         name: z.string(),
         className: z.string().nullable(),
         role: z.string().nullable(),
+        avatarUrl: z.string().nullable(),
     }).nullable(),
 });
 export type RosterAssignmentResponse = z.infer<typeof RosterAssignmentResponseSchema>;

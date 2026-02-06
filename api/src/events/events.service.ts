@@ -179,7 +179,7 @@ export class EventsService {
       .limit(limit)
       .offset(offset);
 
-    // ROK-177: Fetch signups preview if requested (prevents N+1)
+    // ROK-177, ROK-194: Fetch signups preview if requested (prevents N+1)
     let signupsPreviewMap: Map<
       number,
       {
@@ -187,6 +187,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     > = new Map();
     if (query.includeSignups === 'true' && events.length > 0) {
@@ -435,11 +436,12 @@ export class EventsService {
   }
 
   /**
-   * Get first N signups for multiple events (ROK-177).
+   * Get first N signups for multiple events (ROK-177, ROK-194).
    * Batched query to avoid N+1 for calendar views.
+   * Includes character data for avatar resolution (ROK-194).
    * @param eventIds - Event IDs to fetch signups for
    * @param limit - Max signups per event (default 5)
-   * @returns Map of eventId -> signups preview array
+   * @returns Map of eventId -> signups preview array with character data
    */
   private async getSignupsPreviewForEvents(
     eventIds: number[],
@@ -452,6 +454,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     >
   > {
@@ -472,6 +475,37 @@ export class EventsService {
       .where(inArray(schema.eventSignups.eventId, eventIds))
       .orderBy(asc(schema.eventSignups.signedUpAt));
 
+    // Get unique user IDs for character lookup (ROK-194)
+    const userIds = [...new Set(signups.map((s) => s.userId))];
+
+    // Fetch characters for all users (ROK-194)
+    const charactersData =
+      userIds.length > 0
+        ? await this.db
+            .select({
+              userId: schema.characters.userId,
+              gameId: schema.characters.gameId,
+              avatarUrl: schema.characters.avatarUrl,
+            })
+            .from(schema.characters)
+            .where(inArray(schema.characters.userId, userIds))
+        : [];
+
+    // Build character map: userId -> characters[]
+    const charactersByUser = new Map<
+      number,
+      { gameId: string; avatarUrl: string | null }[]
+    >();
+    for (const char of charactersData) {
+      if (!charactersByUser.has(char.userId)) {
+        charactersByUser.set(char.userId, []);
+      }
+      charactersByUser.get(char.userId)!.push({
+        gameId: char.gameId,
+        avatarUrl: char.avatarUrl,
+      });
+    }
+
     // Group by event and take first N
     const result = new Map<
       number,
@@ -480,6 +514,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     >();
     for (const signup of signups) {
@@ -488,11 +523,13 @@ export class EventsService {
       }
       const eventSignups = result.get(signup.eventId)!;
       if (eventSignups.length < limit) {
+        const userCharacters = charactersByUser.get(signup.userId);
         eventSignups.push({
           id: signup.userId,
           discordId: signup.discordId ?? '',
           username: signup.username,
           avatar: signup.avatar,
+          characters: userCharacters,
         });
       }
     }
@@ -503,7 +540,7 @@ export class EventsService {
   /**
    * Map database row to response DTO.
    * @param row - Database row with joined tables
-   * @param signupsPreview - Optional signups preview for calendar views (ROK-177)
+   * @param signupsPreview - Optional signups preview for calendar views (ROK-177, ROK-194)
    */
   private mapToResponse(
     row: {
@@ -518,6 +555,7 @@ export class EventsService {
       discordId: string;
       username: string;
       avatar: string | null;
+      characters?: { gameId: string; avatarUrl: string | null }[];
     }[],
   ): EventResponseDto {
     const {
@@ -530,10 +568,12 @@ export class EventsService {
 
     // Prefer gameRegistry for slug (color coding) but use IGDB game coverUrl for artwork
     // Priority: registry slug/name + game coverUrl > game only > registry only
+    // ROK-194: Include registryId (UUID) for character avatar resolution
     let gameData = null;
     if (registry) {
       gameData = {
         id: 0, // No numeric ID for registry
+        registryId: registry.id, // ROK-194: UUID for character matching
         name: registry.name,
         slug: registry.slug,
         // Prefer IGDB coverUrl if available, fallback to registry iconUrl
@@ -542,6 +582,7 @@ export class EventsService {
     } else if (game) {
       gameData = {
         id: game.id,
+        registryId: null, // No registry ID for IGDB-only games
         name: game.name,
         slug: game.slug,
         coverUrl: game.coverUrl,

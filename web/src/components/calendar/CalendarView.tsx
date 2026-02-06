@@ -328,6 +328,7 @@ export function CalendarView({
                                     size={avatarConfig.size}
                                     maxVisible={avatarConfig.max}
                                     accentColor={colors.border}
+                                    gameId={event.resource?.game?.registryId ?? undefined}
                                 />
                             </div>
                         ) : signupCount > 0 ? (
@@ -415,6 +416,7 @@ export function CalendarView({
                                     totalCount={signupCount}
                                     size="md"
                                     accentColor={colors.border}
+                                    gameId={event.resource?.game?.registryId ?? undefined}
                                 />
                             ) : signupCount > 0 ? (
                                 <span className="day-event-signups">

@@ -62,3 +62,6 @@ coverage/
 # Turborepo
 .turbo/
 test-results/
+
+# BMB workflow creations
+bmb-creations/

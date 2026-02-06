@@ -2,6 +2,7 @@ import React from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 
 interface RosterCardProps {
     id: string;
@@ -62,20 +63,11 @@ export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps
         ${isDragging ? 'z-10' : ''}
       `}
         >
-            {/* Avatar */}
-            <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded-full bg-slate-700">
-                {item.avatar ? (
-                    <img
-                        src={item.avatar}
-                        alt={item.username}
-                        className="h-full w-full object-cover"
-                    />
-                ) : (
-                    <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-slate-400">
-                        {item.username.charAt(0).toUpperCase()}
-                    </div>
-                )}
-            </div>
+            {/* Avatar - ROK-194: Use character portrait with Discord fallback */}
+            <AvatarWithFallback
+                avatarUrl={item.character?.avatarUrl ?? item.avatar}
+                username={item.username}
+            />
 
             {/* Info */}
             <div className="min-w-0 flex-1">

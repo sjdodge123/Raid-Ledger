@@ -8,12 +8,17 @@ import { z } from 'zod';
 export const ConfirmationStatusSchema = z.enum(['pending', 'confirmed', 'changed']);
 export type ConfirmationStatus = z.infer<typeof ConfirmationStatusSchema>;
 
-/** Single signup user info with Discord avatar */
+/** Single signup user info with Discord avatar (ROK-194: includes characters for avatar resolution) */
 export const SignupUserSchema = z.object({
     id: z.number(),
     discordId: z.string(),
     username: z.string(),
     avatar: z.string().nullable(),
+    /** Optional characters array for avatar resolution (ROK-194) */
+    characters: z.array(z.object({
+        gameId: z.string().uuid(),
+        avatarUrl: z.string().nullable(),
+    })).optional(),
 });
 
 export type SignupUserDto = z.infer<typeof SignupUserSchema>;

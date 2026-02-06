@@ -54,6 +54,8 @@ export type EventCreatorDto = z.infer<typeof EventCreatorSchema>;
 /** Game info embedded in event response */
 export const EventGameSchema = z.object({
     id: z.number(),
+    /** UUID for game registry matching (ROK-194: for character avatar resolution) */
+    registryId: z.string().uuid().nullable().optional(),
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),

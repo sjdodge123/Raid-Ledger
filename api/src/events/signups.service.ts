@@ -569,6 +569,7 @@ export class SignupsService {
             name: row.characters.name,
             className: row.characters.class,
             role: row.characters.role,
+            avatarUrl: row.characters.avatarUrl,
           }
         : null,
     };

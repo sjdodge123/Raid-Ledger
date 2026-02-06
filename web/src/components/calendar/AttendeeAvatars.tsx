@@ -1,9 +1,12 @@
 import { useMemo } from 'react';
+import { resolveAvatar } from '../../lib/avatar';
 
 interface SignupPreview {
     id: number;
     username: string;
     avatar: string | null;
+    /** Optional characters for avatar resolution (ROK-194) */
+    characters?: Array<{ gameId: string; avatarUrl: string | null }>;
 }
 
 interface AttendeeAvatarsProps {
@@ -17,11 +20,14 @@ interface AttendeeAvatarsProps {
     size?: 'xs' | 'sm' | 'md';
     /** Accent color for avatar borders (from game theme) */
     accentColor?: string;
+    /** Optional game ID for context-aware avatar resolution (ROK-194) */
+    gameId?: string;
 }
 
 /**
- * Displays overlapping attendee avatars for calendar event blocks (ROK-177).
+ * Displays overlapping attendee avatars for calendar event blocks (ROK-177, ROK-194).
  * Shows first N avatars with a "+X" badge for overflow.
+ * Uses character portraits in game contexts (ROK-194).
  */
 export function AttendeeAvatars({
     signups,
@@ -29,6 +35,7 @@ export function AttendeeAvatars({
     maxVisible = 5,
     size = 'sm',
     accentColor = '#6366f1', // Default indigo
+    gameId,
 }: AttendeeAvatarsProps) {
     // Calculate visible signups and overflow
     const visibleSignups = useMemo(
@@ -85,10 +92,15 @@ export function AttendeeAvatars({
         >
             {/* Avatar stack */}
             <div className="flex items-center">
-                {visibleSignups.map((signup, index) => (
-                    <div
-                        key={signup.id}
-                        className={`
+                {visibleSignups.map((signup, index) => {
+                    // ROK-194: Resolve avatar based on game context
+                    const resolved = resolveAvatar(signup, gameId);
+                    const avatarUrl = resolved.url;
+
+                    return (
+                        <div
+                            key={signup.id}
+                            className={`
                             attendee-avatar 
                             ${sizeClasses[size]} 
                             rounded-full 
@@ -97,29 +109,30 @@ export function AttendeeAvatars({
                             flex-shrink-0
                             flex items-center justify-center
                             font-semibold text-white
-                            ${!signup.avatar ? getInitialsBg(signup.username) : ''}
+                            ${!avatarUrl ? getInitialsBg(signup.username) : ''}
                         `}
-                        style={{
-                            marginLeft: index > 0 ? `-${sizePx / 3}px` : 0,
-                            zIndex: visibleSignups.length - index,
-                            boxShadow: `0 0 0 2px ${accentColor}`,
-                        }}
-                        title={signup.username}
-                    >
-                        {signup.avatar ? (
-                            <img
-                                src={signup.avatar}
-                                alt={signup.username}
-                                className="w-full h-full object-cover"
-                                loading="lazy"
-                            />
-                        ) : (
-                            <span className="select-none">
-                                {getInitials(signup.username)}
-                            </span>
-                        )}
-                    </div>
-                ))}
+                            style={{
+                                marginLeft: index > 0 ? `-${sizePx / 3}px` : 0,
+                                zIndex: visibleSignups.length - index,
+                                boxShadow: `0 0 0 2px ${accentColor}`,
+                            }}
+                            title={signup.username}
+                        >
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt={signup.username}
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                />
+                            ) : (
+                                <span className="select-none">
+                                    {getInitials(signup.username)}
+                                </span>
+                            )}
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Overflow badge */}
