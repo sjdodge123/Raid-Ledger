@@ -56,10 +56,17 @@ export const EventRosterSchema = z.object({
 
 export type EventRosterDto = z.infer<typeof EventRosterSchema>;
 
-/** Create signup request (optional note) */
+/** Create signup request - optional note and slot preference (ROK-183) */
 export const CreateSignupSchema = z.object({
     note: z.string().max(200).optional(),
-});
+    /** ROK-183: Optional slot preference for direct assignment */
+    slotRole: z.enum(['tank', 'healer', 'dps', 'flex', 'player', 'bench']).optional(),
+    slotPosition: z.number().min(1).optional(),
+}).refine(
+    // Both or neither must be provided
+    (data) => (data.slotRole === undefined) === (data.slotPosition === undefined),
+    { message: 'slotRole and slotPosition must both be provided or both be omitted' }
+);
 
 export type CreateSignupDto = z.infer<typeof CreateSignupSchema>;
 

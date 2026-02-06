@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { RosterCard } from './RosterCard';
@@ -9,27 +10,64 @@ interface RosterSlotProps {
     item?: RosterAssignmentResponse;
     color: string;
     isDraggable: boolean;
+    /** ROK-183: Called when user double-clicks empty slot to join */
+    onJoinClick?: (role: RosterRole, position: number) => void;
 }
 
 /**
- * RosterSlot - A droppable slot for role-based roster positions (ROK-114).
+ * RosterSlot - A droppable slot for role-based roster positions (ROK-114, ROK-183).
+ * Supports double-click to join for regular users on empty slots.
+ * First click: shows "Join?" confirmation state
+ * Second click: triggers the join action
  */
-export function RosterSlot({ id, role, position, item, color, isDraggable }: RosterSlotProps) {
+export function RosterSlot({ id, role, position, item, color, isDraggable, onJoinClick }: RosterSlotProps) {
     const { isOver, setNodeRef } = useDroppable({
         id,
         data: { role, position },
     });
 
+    // ROK-183: Double-click confirmation state
+    const [isPending, setIsPending] = useState(false);
+
+    // Auto-reset pending state after 3 seconds
+    useEffect(() => {
+        if (isPending) {
+            const timeout = setTimeout(() => setIsPending(false), 3000);
+            return () => clearTimeout(timeout);
+        }
+    }, [isPending]);
+
+    const handleClick = () => {
+        if (!item && onJoinClick) {
+            if (isPending) {
+                // Second click - confirm the join
+                onJoinClick(role, position);
+                setIsPending(false);
+            } else {
+                // First click - show confirmation state
+                setIsPending(true);
+            }
+        }
+    };
+
+    const isClickable = !item && !!onJoinClick;
+
     return (
         <div
             ref={setNodeRef}
+            onClick={handleClick}
             className={`
         relative min-h-[60px] rounded-lg border-2 border-dashed transition-all
-        ${isOver
-                    ? 'border-indigo-500 bg-indigo-500/10'
-                    : item
-                        ? 'border-transparent bg-slate-800/50'
-                        : 'border-slate-600 bg-slate-800/30'
+        ${isClickable ? 'cursor-pointer' : ''}
+        ${isPending
+                    ? 'border-green-500 bg-green-500/20'
+                    : isOver
+                        ? 'border-indigo-500 bg-indigo-500/10'
+                        : item
+                            ? 'border-transparent bg-slate-800/50'
+                            : isClickable
+                                ? 'border-slate-600 bg-slate-800/30 hover:border-indigo-400 hover:bg-indigo-500/10'
+                                : 'border-slate-600 bg-slate-800/30'
                 }
       `}
         >
@@ -37,7 +75,7 @@ export function RosterSlot({ id, role, position, item, color, isDraggable }: Ros
             <span
                 className={`
           absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold
-          ${color} text-white
+          ${isPending ? 'bg-green-600' : color} text-white
         `}
             >
                 {position}
@@ -54,9 +92,19 @@ export function RosterSlot({ id, role, position, item, color, isDraggable }: Ros
                 </div>
             ) : (
                 <div className="flex h-full min-h-[60px] items-center justify-center">
-                    <span className="text-xs text-slate-500">
-                        Drop {role} here
-                    </span>
+                    {isPending ? (
+                        <span className="flex items-center gap-1 text-sm font-medium text-green-400 animate-pulse">
+                            Join?
+                        </span>
+                    ) : isClickable ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-indigo-400">
+                            <span className="text-lg">+</span> Join
+                        </span>
+                    ) : (
+                        <span className="text-xs text-slate-500">
+                            Drop {role} here
+                        </span>
+                    )}
                 </div>
             )}
 

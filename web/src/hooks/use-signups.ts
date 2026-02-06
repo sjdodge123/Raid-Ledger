@@ -3,15 +3,19 @@ import { signupForEvent, cancelSignup, confirmSignup } from '../lib/api-client';
 
 /**
  * Hook for signing up to an event
+ * ROK-183: Supports optional slot preference for direct assignment
  */
 export function useSignup(eventId: number) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (note?: string) => signupForEvent(eventId, note),
+        mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number }) =>
+            signupForEvent(eventId, options),
         onSuccess: () => {
             // Invalidate roster query to refetch updated roster
             queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+            // Also invalidate roster assignments for RosterBuilder
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
         },
     });
 }

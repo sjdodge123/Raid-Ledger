@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import type { IgdbGameDto, CreateEventDto } from '@raid-ledger/contract';
 import { createEvent } from '../../lib/api-client';
 import { GameSearchInput } from './game-search-input';
+import { TeamAvailabilityPicker } from '../features/heatmap';
 
 interface FormState {
     title: string;
@@ -272,6 +273,15 @@ export function CreateEventForm() {
             {/* Datetime Error */}
             {errors.datetime && (
                 <p className="text-sm text-red-400">{errors.datetime}</p>
+            )}
+
+            {/* Your Availability (ROK-182) */}
+            {form.startDate && form.startTime && form.endDate && form.endTime && (
+                <TeamAvailabilityPicker
+                    eventStartTime={new Date(`${form.startDate}T${form.startTime}`).toISOString()}
+                    eventEndTime={new Date(`${form.endDate}T${form.endTime}`).toISOString()}
+                    gameId={form.game?.id?.toString()}
+                />
             )}
 
             {/* Submit */}

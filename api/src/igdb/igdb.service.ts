@@ -16,6 +16,8 @@ interface IgdbApiGame {
   cover?: {
     image_id: string;
   };
+  /** ROK-183: Genre IDs array */
+  genres?: { id: number }[];
 }
 
 /** Search result with source tracking */
@@ -54,7 +56,7 @@ export class IgdbService {
     private db: PostgresJsDatabase<typeof schema>,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
-  ) {}
+  ) { }
 
   /**
    * Escape special characters in LIKE/ILIKE patterns to prevent injection
@@ -239,6 +241,7 @@ export class IgdbService {
           coverUrl: game.cover
             ? `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`
             : null,
+          genres: game.genres?.map((g) => g.id) ?? [],
         }));
 
         await this.db
@@ -385,7 +388,7 @@ export class IgdbService {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'text/plain',
       },
-      body: `search "${sanitizedQuery}"; fields name, slug, cover.image_id; limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
+      body: `search "${sanitizedQuery}"; fields name, slug, cover.image_id, genres.id; limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
     });
 
     if (!response.ok) {

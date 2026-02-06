@@ -29,6 +29,8 @@ interface RosterBuilderProps {
         healer?: number;
         dps?: number;
         flex?: number;
+        player?: number;  // ROK-183: Generic player slots
+        bench?: number;   // ROK-183: Overflow slots
     };
     /** Called when roster changes */
     onRosterChange: (
@@ -37,18 +39,32 @@ interface RosterBuilderProps {
     ) => void;
     /** Whether the user can edit (creator/admin) */
     canEdit: boolean;
+    /** ROK-183: Called when non-admin clicks empty slot to join */
+    onSlotClick?: (role: RosterRole, position: number) => void;
+    /** ROK-183: Whether current user can click to join (authenticated + not signed up) */
+    canJoin?: boolean;
 }
 
-const ROLE_SLOTS: { role: RosterRole; count: number; label: string; color: string }[] = [
+// MMO-style role slots
+const MMO_ROLE_SLOTS: { role: RosterRole; count: number; label: string; color: string }[] = [
     { role: 'tank', count: 2, label: 'Tank', color: 'bg-blue-600' },
     { role: 'healer', count: 4, label: 'Healer', color: 'bg-green-600' },
     { role: 'dps', count: 14, label: 'DPS', color: 'bg-red-600' },
     { role: 'flex', count: 5, label: 'Flex', color: 'bg-purple-600' },
 ];
 
+// ROK-183: Generic game slots
+const GENERIC_ROLE_SLOTS: { role: RosterRole; count: number; label: string; color: string }[] = [
+    { role: 'player', count: 4, label: 'Player', color: 'bg-indigo-600' },
+];
+
+// Bench slot config
+const BENCH_SLOT: { role: RosterRole; count: number; label: string; color: string } =
+    { role: 'bench', count: 0, label: 'Bench', color: 'bg-slate-600' };
+
 /**
- * RosterBuilder - Drag-and-drop roster assignment component (ROK-114).
- * Allows raid leaders to assign signed-up users to role slots.
+ * RosterBuilder - Drag-and-drop roster assignment component (ROK-114, ROK-183).
+ * Supports MMO-style role slots and generic player slots.
  */
 export function RosterBuilder({
     pool,
@@ -56,8 +72,29 @@ export function RosterBuilder({
     slots,
     onRosterChange,
     canEdit,
+    onSlotClick,
+    canJoin = false,
 }: RosterBuilderProps) {
     const [activeId, setActiveId] = React.useState<string | null>(null);
+
+    // ROK-183: Detect if this is a generic game (has player slots, no MMO roles)
+    const isGenericGame = React.useMemo(() => {
+        if (!slots) return false;
+        const hasPlayerSlots = (slots.player ?? 0) > 0;
+        const hasMMORoles = (slots.tank ?? 0) > 0 || (slots.healer ?? 0) > 0 ||
+            (slots.dps ?? 0) > 0 || (slots.flex ?? 0) > 0;
+        return hasPlayerSlots && !hasMMORoles;
+    }, [slots]);
+
+    // Get role slots to render based on game type
+    const roleSlots = React.useMemo(() => {
+        const result = isGenericGame ? [...GENERIC_ROLE_SLOTS] : [...MMO_ROLE_SLOTS];
+        // Add bench if configured
+        if (slots?.bench && slots.bench > 0) {
+            result.push({ ...BENCH_SLOT, count: slots.bench });
+        }
+        return result;
+    }, [isGenericGame, slots?.bench]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {
@@ -159,7 +196,7 @@ export function RosterBuilder({
     // Get slot counts (use default or custom)
     const getSlotCount = (role: RosterRole): number => {
         if (slots?.[role] !== undefined) return slots[role]!;
-        return ROLE_SLOTS.find((s) => s.role === role)?.count ?? 0;
+        return roleSlots.find((s) => s.role === role)?.count ?? 0;
     };
 
     return (
@@ -203,15 +240,18 @@ export function RosterBuilder({
 
                 {/* Role Slots */}
                 <div className="space-y-4">
-                    {ROLE_SLOTS.map(({ role, label, color }) => {
+                    {roleSlots.map(({ role, label, color }) => {
                         const count = getSlotCount(role);
                         const assigned = assignments.filter((a) => a.slot === role);
+                        // Skip roles with 0 slots
+                        if (count === 0) return null;
 
                         return (
                             <div key={role} className="rounded-lg border border-slate-700 bg-slate-900/50 p-4">
                                 <h4 className={`mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300`}>
                                     <span className={`inline-block h-3 w-3 rounded ${color}`} />
-                                    {label} ({assigned.length}/{count})
+                                    {/* ROK-183: For generic games show "Player 1" instead of just "Player" */}
+                                    {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})
                                 </h4>
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3">
                                     {Array.from({ length: count }, (_, i) => {
@@ -227,6 +267,7 @@ export function RosterBuilder({
                                                 item={assignedItem}
                                                 color={color}
                                                 isDraggable={canEdit}
+                                                onJoinClick={canJoin && !assignedItem ? onSlotClick : undefined}
                                             />
                                         );
                                     })}

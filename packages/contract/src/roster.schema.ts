@@ -1,9 +1,12 @@
 import { z } from 'zod';
 
 /**
- * Valid role types for roster slots (ROK-114).
+ * Valid role types for roster slots (ROK-114, ROK-183).
+ * - tank/healer/dps/flex: MMO-style role-based games
+ * - player: Generic numbered slots for non-role games
+ * - bench: Overflow/waitlist slots
  */
-export const RosterRoleSchema = z.enum(['tank', 'healer', 'dps', 'flex']);
+export const RosterRoleSchema = z.enum(['tank', 'healer', 'dps', 'flex', 'player', 'bench']);
 export type RosterRole = z.infer<typeof RosterRoleSchema>;
 
 /**
@@ -64,12 +67,14 @@ export const RosterWithAssignmentsSchema = z.object({
     pool: z.array(RosterAssignmentResponseSchema),
     /** Users assigned to roster slots */
     assignments: z.array(RosterAssignmentResponseSchema),
-    /** Slot configuration for the event */
+    /** Slot configuration for the event (ROK-183: supports generic games) */
     slots: z.object({
         tank: z.number().optional(),
         healer: z.number().optional(),
         dps: z.number().optional(),
         flex: z.number().optional(),
+        player: z.number().optional(),  // Generic numbered slots
+        bench: z.number().optional(),   // Overflow/waitlist
     }).optional(),
 });
 export type RosterWithAssignments = z.infer<typeof RosterWithAssignmentsSchema>;

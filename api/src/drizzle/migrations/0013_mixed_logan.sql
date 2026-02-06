@@ -1,0 +1,1 @@
+ALTER TABLE "games" ADD COLUMN "genres" jsonb DEFAULT '[]'::jsonb;

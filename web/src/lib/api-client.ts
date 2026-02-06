@@ -151,12 +151,19 @@ export async function searchGames(query: string): Promise<GameSearchResponseDto>
 // Signups API
 // ============================================================
 
-export async function signupForEvent(eventId: number, note?: string): Promise<SignupResponseDto> {
+/** ROK-183: Signup options with optional slot preference */
+interface SignupOptions {
+    note?: string;
+    slotRole?: string;
+    slotPosition?: number;
+}
+
+export async function signupForEvent(eventId: number, options?: SignupOptions): Promise<SignupResponseDto> {
     return fetchApi(
         `/events/${eventId}/signup`,
         {
             method: 'POST',
-            body: JSON.stringify({ note }),
+            body: JSON.stringify(options ?? {}),
         },
         SignupResponseSchema
     );

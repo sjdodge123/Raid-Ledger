@@ -33,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) { }
 
   /**
    * Sign up a user for an event.
@@ -80,6 +80,19 @@ export class SignupsService {
         .returning();
 
       this.logger.log(`User ${userId} signed up for event ${eventId}`);
+
+      // ROK-183: If slot preference provided, create roster assignment immediately
+      if (dto?.slotRole && dto?.slotPosition) {
+        await this.db.insert(schema.rosterAssignments).values({
+          eventId,
+          signupId: signup.id,
+          role: dto.slotRole,
+          position: dto.slotPosition,
+          isOverride: 0,
+        });
+        this.logger.log(`Assigned user ${userId} to ${dto.slotRole} slot ${dto.slotPosition}`);
+      }
+
       return this.buildSignupResponse(signup, user, null);
     } catch (error: unknown) {
       // Handle unique constraint violation (concurrent signup or already signed up)
@@ -479,7 +492,49 @@ export class SignupsService {
       eventId,
       pool,
       assignments: assigned,
-      slots: undefined, // TODO: Get from event configuration
+      slots: await this.getSlotConfig(event.gameId),
+    };
+  }
+
+  /**
+   * ROK-183: Get slot configuration based on game type.
+   * Uses IGDB genre data to detect MMO games (genre 36 = MMORPG).
+   * MMO games use role-based slots (tank/healer/dps/flex).
+   * Other games use generic player slots.
+   */
+  private async getSlotConfig(gameId: string | null): Promise<RosterWithAssignments['slots']> {
+    // IGDB genre ID for "Massively Multiplayer Online (MMO)"
+    const MMO_GENRE_ID = 36;
+
+    if (!gameId) {
+      // No game specified - default to generic slots
+      return { player: 10, bench: 5 };
+    }
+
+    // Query game genres from database
+    const [game] = await this.db
+      .select({ genres: schema.games.genres })
+      .from(schema.games)
+      .where(eq(schema.games.igdbId, parseInt(gameId, 10)))
+      .limit(1);
+
+    const genres = (game?.genres as number[]) ?? [];
+    const isMMO = genres.includes(MMO_GENRE_ID);
+
+    if (isMMO) {
+      // MMO: role-based slots
+      return {
+        tank: 2,
+        healer: 4,
+        dps: 14,
+        flex: 5,
+      };
+    }
+
+    // Generic games: player slots
+    return {
+      player: 10,
+      bench: 5,
     };
   }
 
@@ -506,11 +561,11 @@ export class SignupsService {
       isOverride: assignment?.isOverride === 1,
       character: row.characters
         ? {
-            id: row.characters.id,
-            name: row.characters.name,
-            className: row.characters.class,
-            role: row.characters.role,
-          }
+          id: row.characters.id,
+          name: row.characters.name,
+          className: row.characters.class,
+          role: row.characters.role,
+        }
         : null,
     };
   }

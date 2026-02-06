@@ -4,12 +4,10 @@ import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
-import { useRosterAvailability } from '../hooks/use-roster-availability';
 import { useRoster, useUpdateRoster, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { RosterList } from '../components/events/roster-list';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
-import { HeatmapGrid } from '../components/features/heatmap';
 import { RosterBuilder } from '../components/roster';
 
 /**
@@ -46,9 +44,10 @@ function formatDuration(start: string, end: string): string {
 /**
  * Event Detail Page - shows full event info, roster, and signup actions
  * 
- * Layout (ROK-156): 60/40 split on desktop
- * - Main (60%): Heatmap + Roster (always visible)
+ * Layout (ROK-156->ROK-182): 60/40 split on desktop
+ * - Main (60%): Roster and Roster Builder
  * - Sidebar (40%): Event Info + Actions
+ * Note: Team Availability heatmap moved to Event Create/Edit forms per ROK-182
  */
 export function EventDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -66,24 +65,26 @@ export function EventDetailPage() {
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
     const [showRosterBuilder, setShowRosterBuilder] = useState(false);
 
-    // ROK-156: Roster availability always fetched (no toggle)
-    const { data: rosterAvailability, isLoading: availabilityLoading } = useRosterAvailability(
-        eventId,
-        undefined,
-        true // Always fetch - heatmap is always visible
-    );
-
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
     const isSignedUp = !!userSignup;
     const needsConfirmation = userSignup?.confirmationStatus === 'pending';
 
     // ROK-114: Roster Builder for event creators/admins
+    // ROK-183: Show to all authenticated users for click-to-join
     const isEventCreator = user?.id === event?.creator?.id;
     const isAdmin = user?.isAdmin === true;
     const canManageRoster = isEventCreator || isAdmin;
+    const canJoinSlot = isAuthenticated && !isSignedUp; // ROK-183: Can join if authenticated and not already signed up
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
+
+    // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
+    const isMMOGame = Boolean(
+        rosterAssignments?.slots?.tank ||
+        rosterAssignments?.slots?.healer ||
+        rosterAssignments?.slots?.dps
+    );
 
     // Handler for roster changes from RosterBuilder
     const handleRosterChange = async (
@@ -102,13 +103,17 @@ export function EventDetailPage() {
     const handleSignup = async () => {
         try {
             const result = await signup.mutateAsync(undefined);
-            toast.success('Successfully signed up!', {
-                description: 'Now confirm which character you\'re bringing.',
-            });
-            // Open character confirmation modal (AC-2)
-            if (event?.game?.id) {
+            // ROK-183: Only require character confirmation for MMO games
+            if (isMMOGame && event?.game?.id) {
+                toast.success('Successfully signed up!', {
+                    description: 'Now confirm which character you\'re bringing.',
+                });
                 setPendingSignupId(result.id);
                 setShowConfirmModal(true);
+            } else {
+                toast.success('Successfully signed up!', {
+                    description: 'You\'re on the roster!',
+                });
             }
         } catch (err) {
             toast.error('Failed to sign up', {
@@ -125,6 +130,31 @@ export function EventDetailPage() {
             });
         } catch (err) {
             toast.error('Failed to cancel signup', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-183: Handle double-click to join on an empty slot - assigns directly to that slot
+    const handleSlotClick = async (role: RosterRole, position: number) => {
+        if (!isAuthenticated || isSignedUp) return;
+        try {
+            // Pass slot preference to assign directly to the clicked slot
+            const result = await signup.mutateAsync({ slotRole: role, slotPosition: position });
+            // ROK-183: Only require character confirmation for MMO games
+            if (isMMOGame) {
+                toast.success(`Joined ${role} slot ${position}!`, {
+                    description: 'Now confirm your character.',
+                });
+                setPendingSignupId(result.id);
+                setShowConfirmModal(true);
+            } else {
+                toast.success('Joined!', {
+                    description: `You're in ${role} slot ${position}.`,
+                });
+            }
+        } catch (err) {
+            toast.error('Failed to sign up', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -164,37 +194,8 @@ export function EventDetailPage() {
                     <EventDetailSkeleton />
                 ) : event ? (
                     <div className="grid lg:grid-cols-5 gap-8">
-                        {/* Main Content - 60% (3/5) - Heatmap & Roster */}
+                        {/* Main Content - 60% (3/5) - Roster (ROK-182: Heatmap removed) */}
                         <div className="lg:col-span-3 space-y-6">
-                            {/* Team Availability Heatmap (ROK-156: Always visible) */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                                <h2 className="text-lg font-semibold text-white mb-4">
-                                    Team Availability
-                                </h2>
-                                {availabilityLoading ? (
-                                    <div className="space-y-3">
-                                        <div className="h-8 bg-slate-800 rounded animate-pulse" />
-                                        <div className="h-32 bg-slate-800 rounded animate-pulse" />
-                                    </div>
-                                ) : roster?.count === 0 ? (
-                                    <div className="text-center py-8">
-                                        <div className="text-4xl mb-3">👥</div>
-                                        <p className="text-slate-400">
-                                            No signups yet. Be the first to join!
-                                        </p>
-                                    </div>
-                                ) : rosterAvailability ? (
-                                    <HeatmapGrid data={rosterAvailability} />
-                                ) : (
-                                    <div className="text-center py-8">
-                                        <div className="text-4xl mb-3">📅</div>
-                                        <p className="text-slate-400">
-                                            No availability data from signed-up users
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
                             {/* Roster List */}
                             <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
                                 <h2 className="text-lg font-semibold text-white mb-4">
@@ -206,18 +207,25 @@ export function EventDetailPage() {
                                 />
                             </div>
 
-                            {/* ROK-114: Roster Builder for event creators */}
-                            {canManageRoster && rosterAssignments && (
+                            {/* ROK-114: Roster Builder for event creators, ROK-183: visible to all authenticated for click-to-join */}
+                            {rosterAssignments && isAuthenticated && (
                                 <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
                                     <button
                                         onClick={() => setShowRosterBuilder(!showRosterBuilder)}
                                         className="w-full p-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
                                     >
                                         <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                            <span>🎯</span> Roster Builder
-                                            <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded text-indigo-100">
-                                                Creator Only
-                                            </span>
+                                            <span>🎯</span> Roster Slots
+                                            {canManageRoster && (
+                                                <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded text-indigo-100">
+                                                    Creator
+                                                </span>
+                                            )}
+                                            {canJoinSlot && (
+                                                <span className="text-xs bg-green-600 px-2 py-0.5 rounded text-green-100">
+                                                    Click to Join
+                                                </span>
+                                            )}
                                         </h2>
                                         <span className="text-slate-400">
                                             {showRosterBuilder ? '▼' : '▶'}
@@ -231,6 +239,8 @@ export function EventDetailPage() {
                                                 slots={rosterAssignments.slots}
                                                 onRosterChange={handleRosterChange}
                                                 canEdit={canManageRoster}
+                                                onSlotClick={handleSlotClick}
+                                                canJoin={canJoinSlot}
                                             />
                                         </div>
                                     )}
@@ -387,16 +397,12 @@ export function EventDetailPage() {
 function EventDetailSkeleton() {
     return (
         <div className="grid lg:grid-cols-5 gap-8 animate-pulse">
-            {/* Main - Heatmap & Roster skeletons */}
+            {/* Main - Roster skeleton (ROK-182: Heatmap removed) */}
             <div className="lg:col-span-3 space-y-6">
-                <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                    <div className="h-6 bg-slate-800 rounded w-1/3 mb-4" />
-                    <div className="h-8 bg-slate-800 rounded mb-3" />
-                    <div className="h-32 bg-slate-800 rounded" />
-                </div>
                 <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
                     <div className="h-6 bg-slate-800 rounded w-1/4 mb-4" />
                     <div className="space-y-2">
+                        <div className="h-10 bg-slate-800 rounded" />
                         <div className="h-10 bg-slate-800 rounded" />
                         <div className="h-10 bg-slate-800 rounded" />
                     </div>
