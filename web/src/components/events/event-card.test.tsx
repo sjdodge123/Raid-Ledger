@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { EventCard, EventCardSkeleton, getEventStatus, getRelativeTime } from './event-card';
+import { EventCard, EventCardSkeleton } from './event-card';
+import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 // Mock current date for consistent testing
