@@ -5,7 +5,7 @@ import { RosterList } from './roster-list';
 const mockSignups = [
     {
         id: 1,
-        user: { id: 123, username: 'Player1', avatar: null },
+        user: { id: 123, discordId: '123456789', username: 'Player1', avatar: null },
         signedUpAt: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // 30 mins ago
         characterId: null,
         character: null,
@@ -13,7 +13,7 @@ const mockSignups = [
     },
     {
         id: 2,
-        user: { id: 456, username: 'Player2', avatar: 'abc123' },
+        user: { id: 456, discordId: '987654321', username: 'Player2', avatar: 'abc123' },
         signedUpAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(), // 2 hours ago
         characterId: 'char-uuid-1',
         character: {
@@ -75,8 +75,8 @@ describe('RosterList', () => {
         render(<RosterList signups={mockSignups} />);
         const avatars = screen.getAllByRole('img');
         expect(avatars).toHaveLength(2);
-        // Player2 has custom avatar hash
-        expect(avatars[1]).toHaveAttribute('src', expect.stringContaining('456'));
+        // Player2 has custom avatar hash - URL should use discordId
+        expect(avatars[1]).toHaveAttribute('src', expect.stringContaining('987654321'));
     });
 
     it('shows item level for confirmed characters', () => {

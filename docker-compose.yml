@@ -31,7 +31,10 @@ services:
       timeout: 5s
       retries: 5
 
-  # API service with health check
+  # =============================================================================
+  # API service (NestJS)
+  # Profile: test - Full stack for UI testing with DEMO_MODE seeding
+  # =============================================================================
   api:
     build:
       context: .
@@ -46,9 +49,11 @@ services:
       DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
       REDIS_URL: redis://redis:6379
       JWT_SECRET: dev-secret-change-in-prod
-      CORS_ORIGIN: http://localhost:5173
-      # Enable demo mode for seeding sample data (games + events)
-      DEMO_MODE: "true"
+      CLIENT_URL: http://localhost:80
+      CORS_ORIGIN: http://localhost:80
+      # DEMO_MODE seeds games, events, admin user, signups, and availability
+      # Override with: DEMO_MODE=false docker compose --profile test up -d
+      DEMO_MODE: "${DEMO_MODE:-true}"
     ports:
       - "3000:3000"
     healthcheck:
@@ -58,10 +63,12 @@ services:
       retries: 5
       start_period: 30s
     profiles:
-      - full
       - test
 
-  # Web service (Vite preview mode for testing)
+  # =============================================================================
+  # Web service (Nginx serving production build)
+  # Profile: test - Serves on port 80 for Playwright verification
+  # =============================================================================
   web:
     build:
       context: .

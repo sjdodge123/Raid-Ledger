@@ -39,6 +39,7 @@ export const RosterAssignmentResponseSchema = z.object({
     id: z.number(),
     signupId: z.number(),
     userId: z.number(),
+    discordId: z.string(),
     username: z.string(),
     avatar: z.string().nullable(),
     slot: RosterRoleSchema.nullable(),

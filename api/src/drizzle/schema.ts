@@ -8,3 +8,4 @@ export * from './schema/characters';
 export * from './schema/local-admins';
 export * from './schema/availability';
 export * from './schema/roster-assignments';
+export * from './schema/app-settings';

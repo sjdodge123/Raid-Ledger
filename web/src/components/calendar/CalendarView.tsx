@@ -280,6 +280,12 @@ export function CalendarView({
             const startTime = format(event.start, 'h:mm a');
             const endTime = event.end ? format(event.end, 'h:mm a') : '';
 
+            // Calculate event duration in hours - only show avatars for events 2+ hours
+            const durationHours = event.end
+                ? (event.end.getTime() - event.start.getTime()) / (1000 * 60 * 60)
+                : 0;
+            const showAvatars = durationHours >= 2;
+
             return (
                 <div
                     className="week-event-block"
@@ -303,8 +309,8 @@ export function CalendarView({
                         {creatorName && (
                             <span className="week-event-creator">by {creatorName}</span>
                         )}
-                        {/* ROK-177: Attendee avatars with signup preview */}
-                        {signupsPreview && signupsPreview.length > 0 ? (
+                        {/* ROK-177: Attendee avatars with signup preview - only for events 2+ hours */}
+                        {showAvatars && signupsPreview && signupsPreview.length > 0 ? (
                             <div className="week-event-attendees">
                                 <AttendeeAvatars
                                     signups={signupsPreview}

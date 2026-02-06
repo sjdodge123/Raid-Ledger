@@ -1,0 +1,120 @@
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { API_BASE_URL } from '../lib/config';
+import { getAuthToken } from './use-auth';
+
+interface OAuthStatusResponse {
+    configured: boolean;
+    callbackUrl: string | null;
+}
+
+interface OAuthConfigDto {
+    clientId: string;
+    clientSecret: string;
+    callbackUrl: string;
+}
+
+interface OAuthTestResponse {
+    success: boolean;
+    message: string;
+}
+
+interface ApiResponse {
+    success: boolean;
+    message: string;
+}
+
+/**
+ * Hook for admin settings API operations.
+ */
+export function useAdminSettings() {
+    const queryClient = useQueryClient();
+
+    // Helper to get fresh headers with current token
+    const getHeaders = () => ({
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${getAuthToken() || ''}`,
+    });
+
+    // Get OAuth status
+    const oauthStatus = useQuery<OAuthStatusResponse>({
+        queryKey: ['admin', 'settings', 'oauth'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/oauth`, {
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch OAuth status');
+            }
+
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    // Update OAuth config
+    const updateOAuth = useMutation<ApiResponse, Error, OAuthConfigDto>({
+        mutationFn: async (config) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/oauth`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(config),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update OAuth configuration' }));
+                throw new Error(error.message || 'Failed to update OAuth configuration');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'oauth'] });
+            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        },
+    });
+
+    // Test OAuth credentials
+    const testOAuth = useMutation<OAuthTestResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/oauth/test`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to test OAuth configuration');
+            }
+
+            return response.json();
+        },
+    });
+
+    // Clear OAuth config
+    const clearOAuth = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/oauth/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to clear OAuth configuration');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'oauth'] });
+            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        },
+    });
+
+    return {
+        oauthStatus,
+        updateOAuth,
+        testOAuth,
+        clearOAuth,
+    };
+}

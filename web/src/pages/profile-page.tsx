@@ -18,7 +18,7 @@ const DEFAULT_GAME = {
  * User profile page with character and availability management.
  */
 export function ProfilePage() {
-    const { user, isLoading: authLoading, isAuthenticated } = useAuth();
+    const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
     const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
     const { data: availabilityData, isLoading: availabilityLoading } = useAvailability({ enabled: isAuthenticated });
     const deleteAvailability = useDeleteAvailability();
@@ -87,7 +87,7 @@ export function ProfilePage() {
                 </div>
 
                 {/* User Info Card */}
-                <UserInfoCard user={user} />
+                <UserInfoCard user={user} onRefresh={refetch} />
 
                 {/* Availability Section (ROK-112) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">

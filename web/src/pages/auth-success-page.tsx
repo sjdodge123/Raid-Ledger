@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAuth } from '../hooks/use-auth';
@@ -16,12 +16,17 @@ export function AuthSuccessPage() {
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { login } = useAuth();
+    const hasProcessedRef = useRef(false);
 
     useEffect(() => {
+        // Prevent duplicate processing in React Strict Mode
+        if (hasProcessedRef.current) return;
+
         const token = searchParams.get('token');
         const error = searchParams.get('error');
 
         if (error) {
+            hasProcessedRef.current = true;
             // OAuth failed - show error and redirect home
             const errorMessages: Record<string, string> = {
                 'access_denied': 'Discord login was cancelled.',
@@ -35,14 +40,25 @@ export function AuthSuccessPage() {
         }
 
         if (token) {
-            // Store the token and update auth state
-            login(token);
+            hasProcessedRef.current = true;
+            // Use async IIFE since useEffect callback can't be async
+            (async () => {
+                try {
+                    // Store the token and wait for auth state to update
+                    await login(token);
 
-            // Check for saved redirect destination (ROK-175: default to calendar)
-            const redirectTo = consumeAuthRedirect() || '/calendar';
-            toast.success('Logged in successfully!');
-            navigate(redirectTo, { replace: true });
+                    // Check for saved redirect destination (ROK-175: default to calendar)
+                    const redirectTo = consumeAuthRedirect() || '/calendar';
+                    toast.success('Logged in successfully!');
+                    navigate(redirectTo, { replace: true });
+                } catch (error) {
+                    console.error('Login failed:', error);
+                    toast.error('Login failed. Please try again.');
+                    navigate('/', { replace: true });
+                }
+            })();
         } else {
+            hasProcessedRef.current = true;
             // No token and no error - unexpected, redirect home
             toast.error('Something went wrong. Please try again.');
             navigate('/', { replace: true });

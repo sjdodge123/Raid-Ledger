@@ -17,7 +17,7 @@ if [ -n "$DATABASE_URL" ]; then
       async function runMigrations() {
         const sql = postgres(process.env.DATABASE_URL);
         const db = drizzle(sql);
-        await migrate(db, { migrationsFolder: './drizzle/migrations' });
+        await migrate(db, { migrationsFolder: '/app/drizzle/migrations' });
         await sql.end();
         console.log('✅ Migrations completed');
       }
@@ -38,19 +38,24 @@ if [ -n "$DATABASE_URL" ]; then
         echo "ℹ️ Bootstrap skipped (may already exist or failed)"
     }
 
-    # Demo mode: Seed sample data for demos/testing
+    # Always seed games (needed for event creation, even without IGDB keys)
+    echo "🎮 Seeding games cache..."
+    
+    # Seed IGDB games cache (enables game search without API keys)
+    node ./dist/scripts/seed-igdb-games.js 2>&1 || {
+        echo "ℹ️ IGDB games seeding skipped (may already exist)"
+    }
+    
+    # Seed game registry
+    node ./dist/scripts/seed-games.js 2>&1 || {
+        echo "ℹ️ Game seeding skipped (may already exist)"
+    }
+    
+    echo "✅ Games seeded"
+
+    # Demo mode: Seed sample events and test data for demos/testing
     if [ "$DEMO_MODE" = "true" ]; then
-        echo "🎮 Demo mode enabled - seeding sample data..."
-        
-        # Seed IGDB games cache (enables game search without API keys)
-        node ./dist/scripts/seed-igdb-games.js 2>&1 || {
-            echo "ℹ️ IGDB games seeding skipped (may already exist)"
-        }
-        
-        # Seed game registry
-        node ./dist/scripts/seed-games.js 2>&1 || {
-            echo "ℹ️ Game seeding skipped (may already exist)"
-        }
+        echo "🎭 Demo mode enabled - seeding sample events and users..."
         
         # Seed sample events
         node ./dist/scripts/seed-events.js 2>&1 || {

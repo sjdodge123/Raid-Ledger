@@ -26,26 +26,28 @@ const ROLE_ICONS: Record<string, string> = {
 };
 
 /**
- * Build Discord avatar URL from user ID and avatar hash
+ * Build Discord avatar URL from discord ID and avatar hash
  */
-function getAvatarUrl(userId: number, avatar: string | null): string {
-    if (!avatar) {
-        // Discord default avatar based on user ID
-        return `https://cdn.discordapp.com/embed/avatars/${userId % 5}.png`;
+function getAvatarUrl(discordId: string, avatar: string | null): string {
+    if (!avatar || !discordId) {
+        // Discord default avatar based on discordId hash
+        const defaultIndex = discordId ? parseInt(discordId.slice(-1), 10) % 5 : 0;
+        return `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
     }
     // The avatar is already a URL or hash
     if (avatar.startsWith('http')) {
         return avatar;
     }
-    return `https://cdn.discordapp.com/avatars/${userId}/${avatar}.png`;
+    return `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png`;
 }
 
 /**
  * Handle avatar load errors with fallback
  */
-function handleAvatarError(e: React.SyntheticEvent<HTMLImageElement>, userId: number) {
+function handleAvatarError(e: React.SyntheticEvent<HTMLImageElement>, discordId: string) {
     // Fall back to Discord default avatar
-    e.currentTarget.src = `https://cdn.discordapp.com/embed/avatars/${userId % 5}.png`;
+    const defaultIndex = discordId ? parseInt(discordId.slice(-1), 10) % 5 : 0;
+    e.currentTarget.src = `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
 }
 
 /**
@@ -131,10 +133,10 @@ function RosterItem({ signup }: RosterItemProps) {
             {/* Avatar */}
             <div className="relative">
                 <img
-                    src={getAvatarUrl(user.id, user.avatar)}
+                    src={getAvatarUrl(user.discordId, user.avatar)}
                     alt={user.username}
                     className="w-10 h-10 rounded-full bg-slate-700"
-                    onError={(e) => handleAvatarError(e, user.id)}
+                    onError={(e) => handleAvatarError(e, user.discordId)}
                 />
                 {/* Pending confirmation badge (AC-7) */}
                 {isPending && (

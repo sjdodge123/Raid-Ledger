@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DrizzleModule } from './drizzle/drizzle.module';
@@ -14,10 +15,12 @@ import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
 import { SystemModule } from './system/system.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    EventEmitterModule.forRoot(),
     DrizzleModule,
     RedisModule,
     UsersModule,
@@ -29,8 +32,10 @@ import { SystemModule } from './system/system.module';
     CharactersModule,
     AvailabilityModule,
     SystemModule,
+    SettingsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
+

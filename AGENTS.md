@@ -30,19 +30,29 @@ This file provides configuration and guidance for AI agents working on this code
 ./scripts/test-ui.sh --down
 ```
 
-> **Docker Demo Mode**: When running builds in Docker containers, always use **demo mode = true** to ensure proper seeding and configuration.
+> **Docker Demo Mode**: Containers use `DEMO_MODE=true` which seeds games, events, admin user, signups, and availability.
 
-### Browser Testing - Use Playwright MCP
+### Browser Testing
 
-> **RECOMMENDED**: Use **Playwright MCP** instead of `browser_subagent` for browser testing.
-> The browser_subagent frequently causes timeout and connection reset issues.
-> 
-> Playwright MCP is more reliable. Use `read_resource` to list available tools from the Playwright MCP server.
+> [!CAUTION]
+> **NEVER use `browser_subagent`** — It causes system hangs and timeouts.
+> This is a **hard ban**, no exceptions.
 
-If you must use `browser_subagent`, kill Chrome processes first:
+**Always use Playwright CLI:**
 ```bash
-pkill -f "Google Chrome" || true
+npx playwright test --reporter=list
 ```
+
+### Two Testing Paths
+
+| Script | Mode | Purpose |
+|--------|------|---------|
+| `./scripts/test-ui.sh` | Demo (DEMO_MODE=true) | UI testing with seeded data |
+| `./scripts/test-production.sh` | Production (DEMO_MODE=false) | Bootstrap flow testing |
+
+**Demo Mode** (default): Seeds games, events, admin user, signups, and availability. Use for UI verification.
+
+**Production Mode**: Empty database, no seed data. Use to test the full bootstrap experience users will see on first deployment.
 
 ### Verification Workflow
 

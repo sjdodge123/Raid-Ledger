@@ -732,6 +732,9 @@
 .rbc-time-view .rbc-event-content {
     height: 100%;
     padding: 0;
+    overflow: hidden;
+    /* Prevent any content from escaping event bounds */
+    position: relative;
 }
 
 /* Week event block component */
@@ -740,9 +743,12 @@
     flex-direction: column;
     height: 100%;
     width: 100%;
-    padding: 0.5rem;
+    /* Extra bottom padding to contain attendee avatars */
+    padding: 0.5rem 0.5rem 0.75rem 0.5rem;
     border-radius: 0.5rem;
     overflow: hidden;
+    /* Use clip-path for strict content clipping (more reliable than overflow) */
+    clip-path: inset(0 round 0.5rem);
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
@@ -806,6 +812,16 @@
     color: rgba(255, 255, 255, 0.7);
     font-style: italic;
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Attendee avatars container - positioned at bottom, contained within event */
+.week-event-attendees {
+    margin-top: auto;
+    padding-top: 0.25rem;
+    overflow: hidden;
+    flex-shrink: 0;
+    max-height: 2rem;
+    /* Constrain to single row of avatars */
 }
 
 /* Events label in header */

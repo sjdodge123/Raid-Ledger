@@ -1,10 +1,11 @@
-import { Controller, Get, Req, UseGuards, Res, Query } from '@nestjs/common';
+import { Controller, Get, Req, UseGuards, Res, Query, HttpException, HttpStatus } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { UsersService } from '../users/users.service';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { SettingsService } from '../settings/settings.service';
 import * as crypto from 'crypto';
 
 interface RequestWithUser extends Request {
@@ -18,7 +19,8 @@ export class AuthController {
     private usersService: UsersService,
     private configService: ConfigService,
     private jwtService: JwtService,
-  ) {}
+    private settingsService: SettingsService,
+  ) { }
 
   /**
    * Sign OAuth state parameter to prevent tampering
@@ -87,27 +89,44 @@ export class AuthController {
 
   /**
    * GET /auth/discord/link
-   * Protected endpoint - user must be logged in
-   * Initiates Discord OAuth with signed state containing user ID for linking
+   * Initiates Discord OAuth with signed state containing user ID for linking.
+   * Note: Uses token query param since browser redirects can't send Authorization headers.
    */
   @Get('discord/link')
-  @UseGuards(AuthGuard('jwt'))
-  async discordLink(@Req() req: RequestWithUser, @Res() res: Response) {
-    const userId = req.user.id;
+  async discordLink(
+    @Query('token') token: string,
+    @Res() res: Response,
+  ) {
+    // Verify JWT from query param (browser redirects can't send headers)
+    if (!token) {
+      throw new HttpException('Authentication token required', HttpStatus.UNAUTHORIZED);
+    }
 
-    // Create SIGNED state with user ID and action for callback
+    let userId: number;
+    try {
+      const payload = this.jwtService.verify(token);
+      userId = payload.sub;
+    } catch {
+      throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+    }
+
+    // Get OAuth config from database settings (ROK-146)
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      throw new HttpException('Discord OAuth is not configured', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    // Create SIGNED state with user ID and action for linking
     const state = this.signState({
       userId,
       action: 'link',
       timestamp: Date.now(), // Prevent replay attacks
     });
 
-    const clientId = this.configService.get<string>('DISCORD_CLIENT_ID');
-    const redirectUri = this.configService
-      .get<string>('DISCORD_CALLBACK_URL')
-      ?.replace('/callback', '/link/callback');
+    // Use /link/callback endpoint - separate from login /callback to avoid Passport guard
+    const redirectUri = oauthConfig.callbackUrl.replace('/callback', '/link/callback');
 
-    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri!)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
 
     res.redirect(discordAuthUrl);
   }
@@ -125,6 +144,12 @@ export class AuthController {
     const clientUrl = this.configService.get<string>('CLIENT_URL');
 
     try {
+      // Get OAuth config from database settings (ROK-146)
+      const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+      if (!oauthConfig) {
+        throw new Error('Discord OAuth is not configured');
+      }
+
       // Verify signed state to get user ID
       const stateData = this.verifyState(state);
       if (!stateData) {
@@ -137,6 +162,9 @@ export class AuthController {
         throw new Error('Invalid state action');
       }
 
+      // Use /link/callback - must match what was sent to Discord
+      const redirectUri = oauthConfig.callbackUrl.replace('/callback', '/link/callback');
+
       // Exchange code for access token
       const tokenResponse = await fetch(
         'https://discord.com/api/oauth2/token',
@@ -146,15 +174,11 @@ export class AuthController {
             'Content-Type': 'application/x-www-form-urlencoded',
           },
           body: new URLSearchParams({
-            client_id: this.configService.get<string>('DISCORD_CLIENT_ID')!,
-            client_secret: this.configService.get<string>(
-              'DISCORD_CLIENT_SECRET',
-            )!,
+            client_id: oauthConfig.clientId,
+            client_secret: oauthConfig.clientSecret,
             grant_type: 'authorization_code',
             code,
-            redirect_uri: this.configService
-              .get<string>('DISCORD_CALLBACK_URL')
-              ?.replace('/callback', '/link/callback')!,
+            redirect_uri: redirectUri,
           }),
         },
       );
@@ -198,7 +222,19 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
-  getProfile(@Req() req: RequestWithUser) {
-    return req.user;
+  async getProfile(@Req() req: RequestWithUser) {
+    // Fetch fresh user data from database instead of returning cached JWT payload
+    // This ensures the UI reflects updated info (e.g., after Discord linking)
+    const user = await this.usersService.findById(req.user.id);
+    if (!user) {
+      return req.user; // Fallback to JWT payload if user not found
+    }
+    return {
+      id: user.id,
+      discordId: user.discordId,
+      username: user.username,
+      avatar: user.avatar,
+      isAdmin: user.isAdmin,
+    };
   }
 }

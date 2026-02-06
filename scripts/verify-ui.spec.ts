@@ -32,10 +32,14 @@ test.describe('UI Verification', () => {
     test('Login page renders correctly', async ({ page }) => {
         await page.goto('/login');
 
-        // Verify Discord OAuth button
-        const discordButton = page.getByRole('link', { name: /discord/i })
-            .or(page.getByRole('button', { name: /discord/i }));
-        await expect(discordButton.first()).toBeVisible();
+        // Verify login form elements (ROK-176: Local auth with centered card design)
+        await expect(page.getByLabel(/username/i)).toBeVisible();
+        // Use textbox role to avoid matching "Show password" button
+        await expect(page.getByRole('textbox', { name: /password/i })).toBeVisible();
+
+        // Verify Sign In button
+        const signInButton = page.getByRole('button', { name: /sign in/i });
+        await expect(signInButton).toBeVisible();
 
         // Verify centered layout (check main container exists)
         await expect(page.locator('main').first()).toBeVisible();
@@ -77,8 +81,12 @@ test.describe('UI Verification', () => {
         await page.goto('/profile');
 
         // Either shows profile content OR redirects to login
-        const profileOrLogin = page.getByText(/profile|my characters|discord|login/i);
-        await expect(profileOrLogin.first()).toBeVisible();
+        // After ROK-176: Login page has "Sign In" button, not Discord
+        const profileHeading = page.getByRole('heading', { name: /profile|my characters/i });
+        const signInButton = page.getByRole('button', { name: /sign in/i });
+
+        // Wait for either profile content or login redirect
+        await expect(profileHeading.or(signInButton).first()).toBeVisible();
     });
 
     // ROK-178: Calendar Day View Tests
@@ -146,5 +154,21 @@ test.describe('UI Verification', () => {
         } else {
             console.log('⚠️ Only fallback text is showing - signupsPreview may not be populating frontend');
         }
+    });
+
+    // ROK-146: Admin Settings Page Tests
+    test('Admin Settings route exists and protects content', async ({ page }) => {
+        const response = await page.goto('/admin/settings');
+
+        // Route should return 200 (SPA serves index.html for all routes)
+        expect(response?.status()).toBe(200);
+
+        // Wait for page to settle
+        await page.waitForTimeout(2000);
+
+        // The actual admin settings form should NOT be visible without auth
+        // (Either shows loading, login form, or access denied)
+        const discordOAuthHeading = page.getByRole('heading', { name: /discord oauth/i });
+        await expect(discordOAuthHeading).not.toBeVisible();
     });
 });

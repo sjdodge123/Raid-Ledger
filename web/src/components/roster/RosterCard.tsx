@@ -83,8 +83,11 @@ export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps
                     <span className="truncate font-medium text-slate-200">{item.username}</span>
                     {roleBadge}
                     {item.isOverride && (
-                        <span className="rounded bg-yellow-600/30 px-1 py-0.5 text-xs text-yellow-400">
-                            Off-spec
+                        <span
+                            className="rounded bg-yellow-600/30 px-1 py-0.5 text-xs text-yellow-400"
+                            title="Playing off-spec"
+                        >
+                            ⚠️
                         </span>
                     )}
                 </div>

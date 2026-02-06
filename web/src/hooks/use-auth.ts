@@ -8,6 +8,7 @@ export interface User {
     discordId: string;
     username: string;
     avatar: string | null;
+    isAdmin?: boolean;
 }
 
 /**
@@ -65,10 +66,17 @@ export function useAuth() {
         retry: false, // Don't retry auth failures
     });
 
-    const login = (token: string) => {
+    const login = async (token: string): Promise<boolean> => {
         localStorage.setItem(TOKEN_KEY, token);
-        // Invalidate the auth query to trigger a refetch
-        queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        try {
+            // Refetch user data - invalidateQueries triggers refetch automatically
+            await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+            return true;
+        } catch (error) {
+            // If refetch fails, token is already stored so user will be fetched on next page load
+            console.error('Failed to fetch user after login:', error);
+            return false;
+        }
     };
 
     const logout = () => {

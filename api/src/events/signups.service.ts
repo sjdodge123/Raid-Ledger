@@ -33,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) {}
+  ) { }
 
   /**
    * Sign up a user for an event.
@@ -258,6 +258,7 @@ export class SignupsService {
       eventId: row.event_signups.eventId,
       user: {
         id: row.users?.id ?? 0,
+        discordId: row.users?.discordId ?? '',
         username: row.users?.username ?? 'Unknown',
         avatar: row.users?.avatar ?? null,
       },
@@ -323,6 +324,7 @@ export class SignupsService {
       eventId: signup.eventId,
       user: {
         id: user?.id ?? 0,
+        discordId: user?.discordId ?? '',
         username: user?.username ?? 'Unknown',
         avatar: user?.avatar ?? null,
       },
@@ -496,6 +498,7 @@ export class SignupsService {
       id: assignment?.id ?? 0,
       signupId: row.event_signups.id,
       userId: row.users?.id ?? 0,
+      discordId: row.users?.discordId ?? '',
       username: row.users?.username ?? 'Unknown',
       avatar: row.users?.avatar ?? null,
       slot: (assignment?.role as RosterRole) ?? null,
@@ -503,11 +506,11 @@ export class SignupsService {
       isOverride: assignment?.isOverride === 1,
       character: row.characters
         ? {
-            id: row.characters.id,
-            name: row.characters.name,
-            className: row.characters.class,
-            role: row.characters.role,
-          }
+          id: row.characters.id,
+          name: row.characters.name,
+          className: row.characters.class,
+          role: row.characters.role,
+        }
         : null,
     };
   }

@@ -80,7 +80,8 @@ export function EventDetailPage() {
 
     // ROK-114: Roster Builder for event creators/admins
     const isEventCreator = user?.id === event?.creator?.id;
-    const canManageRoster = isEventCreator;
+    const isAdmin = user?.isAdmin === true;
+    const canManageRoster = isEventCreator || isAdmin;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
 
@@ -314,7 +315,7 @@ export function EventDetailPage() {
                                     isSignedUp ? (
                                         <div className="space-y-2">
                                             {/* Confirm character button for pending signups (ROK-131 AC-2) */}
-                                            {needsConfirmation && event?.game?.id && userSignup && (
+                                            {needsConfirmation && !!event?.game?.id && userSignup && (
                                                 <button
                                                     onClick={() => {
                                                         setPendingSignupId(userSignup.id);

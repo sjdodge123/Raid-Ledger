@@ -15,7 +15,7 @@ describe('EventsController', () => {
     description: 'Description',
     startTime: '2026-02-10T18:00:00.000Z',
     endTime: '2026-02-10T20:00:00.000Z',
-    creator: { id: 1, username: 'testuser', avatar: null },
+    creator: { id: 1, discordId: '123456789', username: 'testuser', avatar: null },
     game: null,
     createdAt: '2026-02-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
@@ -24,7 +24,7 @@ describe('EventsController', () => {
   const mockSignup = {
     id: 1,
     eventId: 1,
-    user: { id: 1, username: 'testuser', avatar: null },
+    user: { id: 1, discordId: '123456789', username: 'testuser', avatar: null },
     note: null,
     signedUpAt: '2026-02-01T00:00:00.000Z',
   };

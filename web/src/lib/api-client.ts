@@ -27,6 +27,7 @@ import {
     CharacterSchema,
 } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
+import { getAuthToken } from '../hooks/use-auth';
 
 /**
  * Generic fetch wrapper with Zod validation
@@ -38,10 +39,18 @@ async function fetchApi<T>(
 ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
 
+    // Include Authorization header if token exists
+    const token = getAuthToken();
+    const authHeaders: Record<string, string> = {};
+    if (token) {
+        authHeaders['Authorization'] = `Bearer ${token}`;
+    }
+
     const response = await fetch(url, {
         ...options,
         headers: {
             'Content-Type': 'application/json',
+            ...authHeaders,
             ...options.headers,
         },
         credentials: 'include', // Include cookies for auth

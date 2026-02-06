@@ -85,6 +85,13 @@
       "when": 1770256000000,
       "tag": "0011_fix_roster_slot_constraint",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1770331088049,
+      "tag": "0012_handy_gorgon",
+      "breakpoints": true
     }
   ]
 }

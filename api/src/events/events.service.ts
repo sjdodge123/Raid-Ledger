@@ -35,7 +35,7 @@ export class EventsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly availabilityService: AvailabilityService,
-  ) {}
+  ) { }
 
   /**
    * Create a new event.
@@ -182,7 +182,7 @@ export class EventsService {
     // ROK-177: Fetch signups preview if requested (prevents N+1)
     let signupsPreviewMap: Map<
       number,
-      { id: number; username: string; avatar: string | null }[]
+      { id: number; discordId: string; username: string; avatar: string | null }[]
     > = new Map();
     if (query.includeSignups === 'true' && events.length > 0) {
       const eventIds = events.map((e) => e.events.id);
@@ -440,7 +440,7 @@ export class EventsService {
     eventIds: number[],
     limit = 5,
   ): Promise<
-    Map<number, { id: number; username: string; avatar: string | null }[]>
+    Map<number, { id: number; discordId: string; username: string; avatar: string | null }[]>
   > {
     if (eventIds.length === 0) return new Map();
 
@@ -449,6 +449,7 @@ export class EventsService {
       .select({
         eventId: schema.eventSignups.eventId,
         userId: schema.users.id,
+        discordId: schema.users.discordId,
         username: schema.users.username,
         avatar: schema.users.avatar,
         signedUpAt: schema.eventSignups.signedUpAt,
@@ -461,7 +462,7 @@ export class EventsService {
     // Group by event and take first N
     const result = new Map<
       number,
-      { id: number; username: string; avatar: string | null }[]
+      { id: number; discordId: string; username: string; avatar: string | null }[]
     >();
     for (const signup of signups) {
       if (!result.has(signup.eventId)) {
@@ -471,6 +472,7 @@ export class EventsService {
       if (eventSignups.length < limit) {
         eventSignups.push({
           id: signup.userId,
+          discordId: signup.discordId ?? '',
           username: signup.username,
           avatar: signup.avatar,
         });
@@ -493,7 +495,7 @@ export class EventsService {
       gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
       signupCount: number;
     },
-    signupsPreview?: { id: number; username: string; avatar: string | null }[],
+    signupsPreview?: { id: number; discordId: string; username: string; avatar: string | null }[],
   ): EventResponseDto {
     const {
       events: event,

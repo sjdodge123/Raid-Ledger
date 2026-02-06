@@ -11,6 +11,7 @@ export type ConfirmationStatus = z.infer<typeof ConfirmationStatusSchema>;
 /** Single signup user info with Discord avatar */
 export const SignupUserSchema = z.object({
     id: z.number(),
+    discordId: z.string(),
     username: z.string(),
     avatar: z.string().nullable(),
 });

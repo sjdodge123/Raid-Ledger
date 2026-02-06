@@ -6,13 +6,14 @@ import { API_BASE_URL } from '../../lib/config';
 
 interface UserInfoCardProps {
     user: User;
+    onRefresh?: () => void;
 }
 
 /**
  * Displays user profile information: avatar, username.
  * Shows "Link Discord" button for local-only users.
  */
-export function UserInfoCard({ user }: UserInfoCardProps) {
+export function UserInfoCard({ user, onRefresh }: UserInfoCardProps) {
     const [searchParams, setSearchParams] = useSearchParams();
 
     // Check for Discord link result on mount
@@ -24,11 +25,13 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
             toast.success('Discord account linked successfully!');
             // Clear query params
             setSearchParams({});
+            // Refetch user data to update UI with Discord info
+            onRefresh?.();
         } else if (linked === 'error') {
             toast.error(message || 'Failed to link Discord account');
             setSearchParams({});
         }
-    }, [searchParams, setSearchParams]);
+    }, [searchParams, setSearchParams, onRefresh]);
 
     // Check if user has Discord linked (discordId doesn't start with 'local:')
     const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
@@ -38,8 +41,13 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
         : '/default-avatar.svg';
 
     const handleLinkDiscord = () => {
-        // Redirect to link endpoint (requires auth, so we'll use fetch with redirect)
-        window.location.href = `${API_BASE_URL}/auth/discord/link`;
+        // Get auth token from localStorage and pass as query param (browser redirects can't send headers)
+        const token = localStorage.getItem('raid_ledger_token');
+        if (!token) {
+            toast.error('Please log in again to link Discord');
+            return;
+        }
+        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
     };
 
     return (
@@ -55,7 +63,14 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
                         }}
                     />
                     <div>
-                        <h2 className="text-2xl font-bold text-white">{user.username}</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-2xl font-bold text-white">{user.username}</h2>
+                            {user.isAdmin && (
+                                <span className="px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
+                                    Admin
+                                </span>
+                            )}
+                        </div>
                         {hasDiscordLinked ? (
                             <p className="text-slate-400 flex items-center gap-2">
                                 <svg className="w-4 h-4 text-[#5865F2]" fill="currentColor" viewBox="0 0 24 24">

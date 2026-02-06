@@ -9,6 +9,7 @@ import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { CalendarPage } from './pages/calendar-page';
+import { AdminSettingsPage } from './pages/admin-settings-page';
 import './App.css';
 
 function App() {
@@ -39,6 +40,12 @@ function App() {
               <ProfilePage />
             </ProtectedRoute>
           } />
+          {/* ROK-146: Admin Settings Page */}
+          <Route path="/admin/settings" element={
+            <ProtectedRoute>
+              <AdminSettingsPage />
+            </ProtectedRoute>
+          } />
           <Route path="/auth/success" element={<AuthSuccessPage />} />
         </Routes>
       </Layout>
@@ -47,5 +54,3 @@ function App() {
 }
 
 export default App;
-
-
