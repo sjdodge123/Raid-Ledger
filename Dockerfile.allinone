@@ -1,0 +1,247 @@
+# ====================
+# Raid Ledger All-In-One Docker Image
+# ====================
+# Complete stack: PostgreSQL + Redis + API + Nginx
+# Usage: docker run -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
+#
+# Environment Variables:
+#   PORT      - External port (default: 80)
+#   DEMO_MODE - Set "true" to seed sample data (default: false)
+# ====================
+
+# ====================
+# Stage 1: Dependencies
+# ====================
+FROM node:20-alpine AS deps
+
+WORKDIR /app
+
+COPY package*.json ./
+COPY api/package*.json ./api/
+COPY web/package*.json ./web/
+COPY packages/contract/package*.json ./packages/contract/
+
+RUN npm ci
+
+# ====================
+# Stage 2: Build
+# ====================
+FROM deps AS builder
+
+WORKDIR /app
+
+COPY . .
+
+# Build contract, API, and Web
+RUN npm run build -w @raid-ledger/contract
+RUN npm run build -w @raid-ledger/api
+ENV VITE_API_URL=/api
+RUN npm run build -w @raid-ledger/web
+
+# ====================
+# Stage 3: Production Runtime
+# ====================
+FROM node:20-alpine AS production
+
+# Install all required services
+RUN apk add --no-cache \
+  nginx \
+  postgresql16 \
+  postgresql16-contrib \
+  redis \
+  supervisor \
+  bash \
+  su-exec
+
+# Create app user and directories
+RUN addgroup -g 1001 -S app && \
+  adduser -S -D -H -u 1001 -G app app
+
+WORKDIR /app
+
+# ==================
+# PostgreSQL Setup
+# ==================
+ENV PGDATA=/var/lib/postgresql/data
+RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
+  chown -R postgres:postgres /var/lib/postgresql /run/postgresql
+
+# ==================
+# Redis Setup
+# ==================
+RUN mkdir -p /var/lib/redis /run/redis && \
+  chown -R redis:redis /var/lib/redis /run/redis
+
+# ==================
+# Nginx Setup
+# ==================
+RUN mkdir -p /run/nginx && \
+  chown -R app:app /run/nginx /var/lib/nginx /var/log/nginx
+
+# Copy built Web static files
+COPY --from=builder /app/web/dist /usr/share/nginx/html
+
+# Nginx config for all-in-one (API on localhost:3000)
+COPY nginx/monolith.conf /etc/nginx/http.d/default.conf
+
+# ==================
+# API Setup
+# ==================
+COPY --from=builder /app/api/dist ./dist
+COPY --from=builder /app/api/package.json ./package.json
+COPY --from=builder /app/api/src/drizzle/migrations ./drizzle/migrations
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/packages/contract/dist ./node_modules/@raid-ledger/contract/dist
+COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-ledger/contract/package.json
+
+# Copy seed scripts and data
+COPY --from=builder /app/api/dist/scripts ./dist/scripts
+COPY --from=builder /app/api/seeds ./dist/seeds
+
+# Copy entrypoint
+COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# ==================
+# Supervisor Config
+# ==================
+RUN mkdir -p /etc/supervisor.d
+
+# Create all-in-one supervisor config
+COPY <<'EOF' /etc/supervisor.d/raid-ledger.ini
+[supervisord]
+nodaemon=true
+user=root
+logfile=/dev/stdout
+logfile_maxbytes=0
+pidfile=/run/supervisord.pid
+
+[program:postgres]
+command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data
+autostart=true
+autorestart=true
+priority=10
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:redis]
+command=/usr/bin/redis-server --dir /var/lib/redis --daemonize no
+user=redis
+autostart=true
+autorestart=true
+priority=20
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:nginx]
+command=/usr/sbin/nginx -g "daemon off;"
+autostart=true
+autorestart=true
+priority=30
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+
+[program:api]
+command=/app/start-api.sh
+directory=/app
+autostart=true
+autorestart=true
+priority=40
+startsecs=15
+startretries=5
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+EOF
+
+# Create API startup script (waits for PostgreSQL + Redis)
+COPY <<'EOF' /app/start-api.sh
+#!/bin/bash
+set -e
+
+# Wait for PostgreSQL to be ready
+echo "⏳ Waiting for PostgreSQL..."
+until /sbin/su-exec postgres pg_isready -q; do
+  sleep 1
+done
+echo "✅ PostgreSQL is ready"
+
+# Wait for Redis to be ready
+echo "⏳ Waiting for Redis..."
+until redis-cli ping > /dev/null 2>&1; do
+  sleep 1
+done
+echo "✅ Redis is ready"
+
+# Run entrypoint (migrations, admin bootstrap, seeding)
+cd /app
+exec /usr/local/bin/docker-entrypoint.sh node /app/dist/src/main.js
+EOF
+RUN chmod +x /app/start-api.sh
+
+# Create init script to set up PostgreSQL on first run
+COPY <<'EOF' /app/init-db.sh
+#!/bin/bash
+set -e
+
+# Initialize PostgreSQL if not already done
+if [ ! -s "${PGDATA}/PG_VERSION" ]; then
+  echo "📦 Initializing PostgreSQL database..."
+  /sbin/su-exec postgres initdb -D "${PGDATA}" --auth-local=trust --auth-host=trust
+  
+  # Start PostgreSQL temporarily to create database
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -o "-k /run/postgresql" -w start
+  
+  # Create user and database
+  /sbin/su-exec postgres psql -c "CREATE USER raid_ledger WITH PASSWORD 'raid_ledger';"
+  /sbin/su-exec postgres psql -c "CREATE DATABASE raid_ledger OWNER raid_ledger;"
+  /sbin/su-exec postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE raid_ledger TO raid_ledger;"
+  
+  # Stop PostgreSQL (supervisor will start it)
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop
+  
+  echo "✅ PostgreSQL initialized"
+fi
+EOF
+RUN chmod +x /app/init-db.sh
+
+# Create main entrypoint
+COPY <<'EOF' /app/entrypoint.sh
+#!/bin/bash
+set -e
+
+# Initialize database on first run
+/app/init-db.sh
+
+# Start all services via supervisor
+exec supervisord -c /etc/supervisord.conf
+EOF
+RUN chmod +x /app/entrypoint.sh
+
+# ==================
+# Environment Defaults
+# ==================
+ENV NODE_ENV=production
+ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
+ENV REDIS_URL=redis://localhost:6379
+ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
+ENV CORS_ORIGIN=*
+ENV CLIENT_URL=http://localhost
+ENV DEMO_MODE=false
+
+# Expose port (nginx)
+EXPOSE 80
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost/api/health || exit 1
+
+# Start everything
+ENTRYPOINT ["/app/entrypoint.sh"]

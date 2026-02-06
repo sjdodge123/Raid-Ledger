@@ -4,25 +4,15 @@ A unified dashboard for gaming communities—plan raids and events, track schedu
 
 ## 🚀 Quick Deploy
 
-### Requirements
-- Docker
-- PostgreSQL database
-- Redis instance
-
-### Run
-
 ```bash
-docker run -d \
-  -p 80:80 \
-  -e DATABASE_URL=postgresql://user:pass@host:5432/raid_ledger \
-  -e REDIS_URL=redis://host:6379 \
-  -e JWT_SECRET=$(openssl rand -base64 32) \
-  ghcr.io/sjdodge123/raid-ledger:main
+docker run -d -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
 ```
+
+That's it! The container includes PostgreSQL, Redis, and the full application.
 
 ### Get Admin Password
 
-Check the container logs for your initial credentials:
+Check container logs for your initial credentials:
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -45,33 +35,34 @@ Check the container logs for your initial credentials:
 
 ## Configuration
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `DATABASE_URL` | Yes | PostgreSQL connection string |
-| `REDIS_URL` | Yes | Redis connection string |
-| `JWT_SECRET` | Yes | Secret for JWT signing |
-| `DEMO_MODE` | No | Set `true` to seed sample data |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `80` | Port to expose the application |
+| `DEMO_MODE` | `false` | Set `true` to seed sample events |
+
+**Example with custom port and demo data:**
+```bash
+docker run -d -p 8080:80 -e DEMO_MODE=true ghcr.io/sjdodge123/raid-ledger:main
+```
 
 ---
 
-## Health Checks
+## Health Check
 
-- **API:** http://localhost/api/health
-- **Nginx:** http://localhost/nginx-health
+```
+http://localhost/api/health
+```
 
 ---
 
 ## Development
 
+For local development with separate services:
+
 ```bash
-# Start local infrastructure
-docker compose up -d
-
-# Install dependencies
+docker compose up -d          # Start db + redis
 npm install
-
-# Run API + Web dev servers
-npm run dev
+npm run dev                   # Run API + Web
 ```
 
 ---

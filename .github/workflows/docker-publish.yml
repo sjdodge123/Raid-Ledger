@@ -36,8 +36,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
+      - name: Extract metadata for All-In-One image
+        id: meta-allinone
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
@@ -48,16 +48,16 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=sha,prefix=
 
-      - name: Build and push
+      - name: Build and push All-In-One image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./Dockerfile
+          file: ./Dockerfile.allinone
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ steps.meta-allinone.outputs.tags }}
+          labels: ${{ steps.meta-allinone.outputs.labels }}
+          cache-from: type=gha,scope=allinone
+          cache-to: type=gha,mode=max,scope=allinone
           platforms: linux/amd64,linux/arm64
 
   # Create GitHub Release on version tags
@@ -80,12 +80,14 @@ jobs:
             ## Quick Deploy
             
             ```bash
-            docker run -d \
-              -p 80:80 \
-              -e DATABASE_URL=postgresql://user:pass@host:5432/db \
-              -e REDIS_URL=redis://host:6379 \
-              -e JWT_SECRET=your-secret \
-              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker run -d -p 80:80 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ```
+            
+            Check container logs for admin credentials.
+            
+            **Optional:**
+            ```bash
+            docker run -d -p 8080:80 -e DEMO_MODE=true ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ```
             
             See [README](https://github.com/${{ github.repository }}#readme) for full setup.
