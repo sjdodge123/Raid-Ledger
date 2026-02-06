@@ -97,7 +97,7 @@ export function RosterBuilder({
             result.push({ ...BENCH_SLOT, count: slots.bench });
         }
         return result;
-    }, [isGenericGame, slots?.bench]);
+    }, [isGenericGame, slots]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, {

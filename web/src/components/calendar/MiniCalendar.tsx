@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState } from 'react';
 import {
     format,
     startOfMonth,
@@ -27,17 +27,17 @@ interface MiniCalendarProps {
  * Clicking a day navigates the main calendar to that date.
  */
 export function MiniCalendar({ currentDate, onDateSelect, className = '' }: MiniCalendarProps) {
-    // Mini calendar has its own month navigation (independent of main calendar)
-    const [displayedMonth, setDisplayedMonth] = useState(() => startOfMonth(currentDate));
+    // Track month offset from currentDate for independent navigation
+    const [monthOffset, setMonthOffset] = useState(0);
 
-    // Only sync when the main calendar's month actually changes (user navigated main calendar)
-    // This allows independent browsing in mini calendar while still syncing on main nav
-    useEffect(() => {
-        const mainMonth = startOfMonth(currentDate);
-        // Don't sync if we're already showing a different month intentionally
-        // Only sync if the currentDate month changed from what we last synced to
-        setDisplayedMonth(mainMonth);
-    }, [currentDate.getMonth(), currentDate.getFullYear()]);
+    // Compute displayed month: currentDate + offset
+    const displayedMonth = useMemo(() => {
+        const baseMonth = startOfMonth(currentDate);
+        if (monthOffset === 0) return baseMonth;
+        return monthOffset > 0
+            ? addMonths(baseMonth, monthOffset)
+            : subMonths(baseMonth, Math.abs(monthOffset));
+    }, [currentDate, monthOffset]);
 
     // Generate all days to display (including padding from prev/next months)
     const calendarDays = useMemo(() => {
@@ -49,11 +49,11 @@ export function MiniCalendar({ currentDate, onDateSelect, className = '' }: Mini
     }, [displayedMonth]);
 
     const handlePrevMonth = () => {
-        setDisplayedMonth((prev) => subMonths(prev, 1));
+        setMonthOffset((prev) => prev - 1);
     };
 
     const handleNextMonth = () => {
-        setDisplayedMonth((prev) => addMonths(prev, 1));
+        setMonthOffset((prev) => prev + 1);
     };
 
     const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];

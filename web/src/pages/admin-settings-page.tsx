@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
@@ -17,29 +17,24 @@ export function AdminSettingsPage() {
 
     const [clientId, setClientId] = useState('');
     const [clientSecret, setClientSecret] = useState('');
-    const [callbackUrl, setCallbackUrl] = useState('');
-    const [linkCallbackUrl, setLinkCallbackUrl] = useState('');
     const [showSecret, setShowSecret] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
-    // Detect if running on localhost (requires two callback URLs)
-    // Both callback URLs are always shown to user
-
-    useEffect(() => {
-        // Always compute callback URL dynamically based on environment
-        // Don't use cached value - this ensures correct URL for current setup
+    // Compute callback URLs using useMemo instead of useEffect to avoid setState in effect
+    const callbackUrl = useMemo(() => {
         const apiPath = API_BASE_URL.startsWith('/') ? API_BASE_URL : '';
-        let baseCallbackUrl: string;
         if (apiPath) {
-            // Production/Docker: goes through nginx proxy (e.g., https://yourdomain.com/api/auth/discord/callback)
-            baseCallbackUrl = `${window.location.origin}${apiPath}/auth/discord/callback`;
+            // Production/Docker: goes through nginx proxy
+            return `${window.location.origin}${apiPath}/auth/discord/callback`;
         } else {
-            // Development: direct API access (e.g., http://localhost:3000/auth/discord/callback)
-            baseCallbackUrl = `${API_BASE_URL}/auth/discord/callback`;
+            // Development: direct API access
+            return `${API_BASE_URL}/auth/discord/callback`;
         }
-        setCallbackUrl(baseCallbackUrl);
-        setLinkCallbackUrl(baseCallbackUrl.replace('/callback', '/link/callback'));
     }, []);
+
+    const linkCallbackUrl = useMemo(() => {
+        return callbackUrl.replace('/callback', '/link/callback');
+    }, [callbackUrl]);
 
     // Show loading state while auth is being checked
     if (authLoading) {
