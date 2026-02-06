@@ -33,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   /**
    * Sign up a user for an event.
@@ -506,11 +506,11 @@ export class SignupsService {
       isOverride: assignment?.isOverride === 1,
       character: row.characters
         ? {
-          id: row.characters.id,
-          name: row.characters.name,
-          className: row.characters.class,
-          role: row.characters.role,
-        }
+            id: row.characters.id,
+            name: row.characters.name,
+            className: row.characters.class,
+            role: row.characters.role,
+          }
         : null,
     };
   }

@@ -13,117 +13,124 @@ import type { DiscordOAuthConfig } from '../settings/settings.service';
  */
 @Injectable()
 export class DynamicDiscordStrategy
-    extends PassportStrategy(Strategy, 'discord')
-    implements OnModuleInit {
-    private readonly logger = new Logger(DynamicDiscordStrategy.name);
-    private isConfigured = false;
+  extends PassportStrategy(Strategy, 'discord')
+  implements OnModuleInit
+{
+  private readonly logger = new Logger(DynamicDiscordStrategy.name);
+  private isConfigured = false;
 
-    constructor(
-        private authService: AuthService,
-        private settingsService: SettingsService,
-    ) {
-        // Initialize with placeholder config - will be updated in onModuleInit
-        super({
-            clientID: 'placeholder',
-            clientSecret: 'placeholder',
-            callbackURL: 'http://localhost:3000/auth/discord/callback',
-            scope: ['identify'],
-        });
+  constructor(
+    private authService: AuthService,
+    private settingsService: SettingsService,
+  ) {
+    // Initialize with placeholder config - will be updated in onModuleInit
+    super({
+      clientID: 'placeholder',
+      clientSecret: 'placeholder',
+      callbackURL: 'http://localhost:3000/auth/discord/callback',
+      scope: ['identify'],
+    });
+  }
+
+  async onModuleInit() {
+    await this.reloadConfig();
+  }
+
+  /**
+   * Reload OAuth configuration from database.
+   * Called on startup and when settings are updated.
+   */
+  async reloadConfig(): Promise<boolean> {
+    try {
+      const config = await this.settingsService.getDiscordOAuthConfig();
+
+      if (!config) {
+        this.logger.warn('Discord OAuth not configured - strategy disabled');
+        this.isConfigured = false;
+        return false;
+      }
+
+      // Update the passport strategy options
+      this.updateStrategyOptions(config);
+      this.isConfigured = true;
+      this.logger.log('Discord OAuth strategy reloaded with new configuration');
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to reload Discord OAuth config:', error);
+      this.isConfigured = false;
+      return false;
+    }
+  }
+
+  /**
+   * Update passport strategy options dynamically.
+   * This is a workaround since passport doesn't officially support hot-reload.
+   * We update the internal OAuth2 client directly since the strategy is already registered.
+   */
+  private updateStrategyOptions(config: DiscordOAuthConfig): void {
+    // Access the internal strategy and update its options
+    const strategy = this as unknown as { _oauth2: any; _callbackURL: string };
+
+    this.logger.log(`Updating callback URL to: ${config.callbackUrl}`);
+
+    if (strategy._oauth2) {
+      strategy._oauth2._clientId = config.clientId;
+      strategy._oauth2._clientSecret = config.clientSecret;
+      this.logger.log(`Updated OAuth2 client credentials`);
     }
 
-    async onModuleInit() {
-        await this.reloadConfig();
+    strategy._callbackURL = config.callbackUrl;
+    this.logger.log(`_callbackURL is now: ${strategy._callbackURL}`);
+  }
+
+  /**
+   * Handle settings update event for hot-reload.
+   */
+  @OnEvent(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED)
+  async handleOAuthUpdate(_config: DiscordOAuthConfig) {
+    this.logger.log('Discord OAuth settings updated, reloading strategy...');
+    await this.reloadConfig();
+  }
+
+  /**
+   * Check if the strategy is currently configured and usable.
+   */
+  isEnabled(): boolean {
+    return this.isConfigured;
+  }
+
+  /**
+   * Override authenticate to ensure we have the latest callback URL.
+   * Passport caches options, so we need to force-update before each attempt.
+   */
+  authenticate(req: any, options?: any): void {
+    // Ensure callback URL is current before authenticating
+    if (this.isConfigured) {
+      const strategy = this as unknown as { _callbackURL: string };
+      // The callbackURL stored in the strategy should already be up to date
+      // via reloadConfig, but we log for debugging
+      this.logger.debug(
+        `Authenticating with callback URL: ${strategy._callbackURL}`,
+      );
+    }
+    super.authenticate(req, options);
+  }
+
+  async validate(
+    accessToken: string,
+    refreshToken: string,
+    profile: Profile,
+  ): Promise<any> {
+    if (!this.isConfigured) {
+      throw new Error('Discord OAuth is not configured');
     }
 
-    /**
-     * Reload OAuth configuration from database.
-     * Called on startup and when settings are updated.
-     */
-    async reloadConfig(): Promise<boolean> {
-        try {
-            const config = await this.settingsService.getDiscordOAuthConfig();
-
-            if (!config) {
-                this.logger.warn('Discord OAuth not configured - strategy disabled');
-                this.isConfigured = false;
-                return false;
-            }
-
-            // Update the passport strategy options
-            this.updateStrategyOptions(config);
-            this.isConfigured = true;
-            this.logger.log('Discord OAuth strategy reloaded with new configuration');
-            return true;
-        } catch (error) {
-            this.logger.error('Failed to reload Discord OAuth config:', error);
-            this.isConfigured = false;
-            return false;
-        }
-    }
-
-    /**
-     * Update passport strategy options dynamically.
-     * This is a workaround since passport doesn't officially support hot-reload.
-     * We update the internal OAuth2 client directly since the strategy is already registered.
-     */
-    private updateStrategyOptions(config: DiscordOAuthConfig): void {
-        // Access the internal strategy and update its options
-        const strategy = this as unknown as { _oauth2: any; _callbackURL: string };
-
-        this.logger.log(`Updating callback URL to: ${config.callbackUrl}`);
-
-        if (strategy._oauth2) {
-            strategy._oauth2._clientId = config.clientId;
-            strategy._oauth2._clientSecret = config.clientSecret;
-            this.logger.log(`Updated OAuth2 client credentials`);
-        }
-
-        strategy._callbackURL = config.callbackUrl;
-        this.logger.log(`_callbackURL is now: ${strategy._callbackURL}`);
-    }
-
-    /**
-     * Handle settings update event for hot-reload.
-     */
-    @OnEvent(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED)
-    async handleOAuthUpdate(_config: DiscordOAuthConfig) {
-        this.logger.log('Discord OAuth settings updated, reloading strategy...');
-        await this.reloadConfig();
-    }
-
-    /**
-     * Check if the strategy is currently configured and usable.
-     */
-    isEnabled(): boolean {
-        return this.isConfigured;
-    }
-
-    /**
-     * Override authenticate to ensure we have the latest callback URL.
-     * Passport caches options, so we need to force-update before each attempt.
-     */
-    authenticate(req: any, options?: any): void {
-        // Ensure callback URL is current before authenticating
-        if (this.isConfigured) {
-            const strategy = this as unknown as { _callbackURL: string };
-            // The callbackURL stored in the strategy should already be up to date
-            // via reloadConfig, but we log for debugging
-            this.logger.debug(`Authenticating with callback URL: ${strategy._callbackURL}`);
-        }
-        super.authenticate(req, options);
-    }
-
-    async validate(
-        accessToken: string,
-        refreshToken: string,
-        profile: Profile,
-    ): Promise<any> {
-        if (!this.isConfigured) {
-            throw new Error('Discord OAuth is not configured');
-        }
-
-        const { id, username, avatar } = profile;
-        const user = await this.authService.validateDiscordUser(id, username, avatar ?? undefined);
-        return user;
-    }
+    const { id, username, avatar } = profile;
+    const user = await this.authService.validateDiscordUser(
+      id,
+      username,
+      avatar ?? undefined,
+    );
+    return user;
+  }
 }

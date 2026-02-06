@@ -12,5 +12,4 @@ import { SettingsModule } from '../settings/settings.module';
   imports: [UsersModule, SettingsModule],
   controllers: [SystemController],
 })
-export class SystemModule { }
-
+export class SystemModule {}

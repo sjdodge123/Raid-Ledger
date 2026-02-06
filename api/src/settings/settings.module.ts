@@ -3,10 +3,8 @@ import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsService } from './settings.service';
 
 @Module({
-    imports: [
-        DrizzleModule,
-    ],
-    providers: [SettingsService],
-    exports: [SettingsService],
+  imports: [DrizzleModule],
+  providers: [SettingsService],
+  exports: [SettingsService],
 })
-export class SettingsModule { }
+export class SettingsModule {}

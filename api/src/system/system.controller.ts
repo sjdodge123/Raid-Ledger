@@ -13,7 +13,7 @@ export class SystemController {
   constructor(
     private readonly usersService: UsersService,
     private readonly settingsService: SettingsService,
-  ) { }
+  ) {}
 
   /**
    * Get system status for first-run detection (AC-4).
@@ -32,4 +32,3 @@ export class SystemController {
     };
   }
 }
-

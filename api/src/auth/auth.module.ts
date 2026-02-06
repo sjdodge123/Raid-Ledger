@@ -43,5 +43,4 @@ import { SettingsModule } from '../settings/settings.module';
   ],
   exports: [AuthService, LocalAuthService, DynamicDiscordStrategy],
 })
-export class AuthModule { }
-
+export class AuthModule {}

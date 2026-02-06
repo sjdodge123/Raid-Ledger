@@ -8,5 +8,4 @@ import { AuthModule } from '../auth/auth.module';
   imports: [SettingsModule, AuthModule],
   controllers: [AdminController, AdminSettingsController],
 })
-export class AdminModule { }
-
+export class AdminModule {}
