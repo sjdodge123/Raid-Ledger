@@ -16,6 +16,7 @@ import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
+import { NotificationModule } from './notifications/notification.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SettingsModule } from './settings/settings.module';
     AvailabilityModule,
     SystemModule,
     SettingsModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

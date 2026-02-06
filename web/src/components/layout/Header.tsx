@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { MobileNav } from './MobileNav';
+import { NotificationBell } from '../notifications';
 
 /**
  * Site header with logo, navigation, and user menu.
@@ -44,9 +45,10 @@ export function Header() {
                         ))}
                     </nav>
 
-                    {/* Right side: User menu (desktop) + Hamburger (mobile) */}
+                    {/* Right side: Notification Bell + User menu (desktop) + Hamburger (mobile) */}
                     <div className="flex items-center gap-4">
-                        <div className="hidden md:block">
+                        <div className="hidden md:flex items-center gap-4">
+                            <NotificationBell />
                             <UserMenu />
                         </div>
 

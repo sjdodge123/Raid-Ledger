@@ -9,3 +9,5 @@ export * from './schema/local-admins';
 export * from './schema/availability';
 export * from './schema/roster-assignments';
 export * from './schema/app-settings';
+export * from './schema/notifications';
+export * from './schema/notification-preferences';

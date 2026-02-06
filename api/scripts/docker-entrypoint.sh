@@ -67,6 +67,11 @@ if [ -n "$DATABASE_URL" ]; then
             echo "ℹ️ Test fixture seeding skipped (may already exist)"
         }
         
+        # Seed sample notifications
+        node ./dist/scripts/seed-notifications.js 2>&1 || {
+            echo "ℹ️ Notification seeding skipped (may already exist)"
+        }
+        
         echo "✅ Demo data seeded"
     fi
 fi

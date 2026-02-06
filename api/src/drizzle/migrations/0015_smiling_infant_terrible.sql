@@ -1,0 +1,1 @@
+CREATE INDEX "notifications_user_unread_idx" ON "notifications" USING btree ("user_id","read_at");
