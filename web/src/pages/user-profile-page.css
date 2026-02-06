@@ -1,0 +1,248 @@
+.user-profile-page {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+}
+
+/* Profile Card */
+.user-profile-card {
+    background: rgba(30, 30, 40, 0.8);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 2rem;
+}
+
+/* Header */
+.user-profile-header {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.user-profile-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(139, 92, 246, 0.5);
+    box-shadow: 0 4px 24px rgba(139, 92, 246, 0.2);
+}
+
+.user-profile-info {
+    flex: 1;
+}
+
+.user-profile-name {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: #fff;
+    margin: 0 0 0.25rem;
+}
+
+.user-profile-meta {
+    color: #a1a1aa;
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+/* Sections */
+.user-profile-section {
+    margin-top: 1.5rem;
+}
+
+.user-profile-section-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #a1a1aa;
+    margin: 0 0 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* Characters */
+.user-profile-characters {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.character-game-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.character-card {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.15s ease;
+}
+
+.character-card:hover {
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.character-card-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.375rem;
+    object-fit: cover;
+}
+
+.character-card-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+    min-width: 0;
+}
+
+.character-card-name {
+    font-weight: 600;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.character-card-main {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #fbbf24;
+    background: rgba(251, 191, 36, 0.15);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+}
+
+.character-card-class,
+.character-card-realm {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+}
+
+.character-card-role {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: capitalize;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.character-card-role.role-tank {
+    color: #60a5fa;
+    background: rgba(96, 165, 250, 0.15);
+}
+
+.character-card-role.role-healer {
+    color: #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+}
+
+.character-card-role.role-dps {
+    color: #f87171;
+    background: rgba(248, 113, 113, 0.15);
+}
+
+/* Empty state */
+.user-profile-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #71717a;
+}
+
+/* Error state */
+.user-profile-error {
+    text-align: center;
+    padding: 3rem;
+}
+
+.user-profile-error h2 {
+    font-size: 1.5rem;
+    color: #fff;
+    margin-bottom: 0.5rem;
+}
+
+.user-profile-error p {
+    color: #a1a1aa;
+    margin-bottom: 1.5rem;
+}
+
+/* Skeleton Loading */
+.user-profile-skeleton {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    padding: 3rem;
+}
+
+.skeleton {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+    border-radius: 0.5rem;
+}
+
+.skeleton-avatar {
+    width: 96px;
+    height: 96px;
+    border-radius: 50%;
+}
+
+.skeleton-text {
+    height: 1rem;
+}
+
+.skeleton-text--lg {
+    width: 200px;
+    height: 1.5rem;
+}
+
+.skeleton-text--sm {
+    width: 120px;
+}
+
+@keyframes skeleton-pulse {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* Button */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: #fff;
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+    transform: translateY(-1px);
+}

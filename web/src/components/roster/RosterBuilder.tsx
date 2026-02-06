@@ -43,6 +43,8 @@ interface RosterBuilderProps {
     onSlotClick?: (role: RosterRole, position: number) => void;
     /** ROK-183: Whether current user can click to join (authenticated + not signed up) */
     canJoin?: boolean;
+    /** ROK-184: Current user ID for highlighting their slot */
+    currentUserId?: number;
 }
 
 // MMO-style role slots
@@ -74,6 +76,7 @@ export function RosterBuilder({
     canEdit,
     onSlotClick,
     canJoin = false,
+    currentUserId,
 }: RosterBuilderProps) {
     const [activeId, setActiveId] = React.useState<string | null>(null);
 
@@ -268,6 +271,7 @@ export function RosterBuilder({
                                                 color={color}
                                                 isDraggable={canEdit}
                                                 onJoinClick={canJoin && !assignedItem ? onSlotClick : undefined}
+                                                isCurrentUser={assignedItem?.userId === currentUserId}
                                             />
                                         );
                                     })}

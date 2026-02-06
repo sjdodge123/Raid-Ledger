@@ -13,8 +13,8 @@ interface AttendeeAvatarsProps {
     totalCount: number;
     /** Maximum avatars to show (default 5) */
     maxVisible?: number;
-    /** Avatar size: sm=20px, md=24px (default md) */
-    size?: 'sm' | 'md';
+    /** Avatar size: xs=16px, sm=20px, md=24px (default sm) */
+    size?: 'xs' | 'sm' | 'md';
     /** Accent color for avatar borders (from game theme) */
     accentColor?: string;
 }
@@ -27,7 +27,7 @@ export function AttendeeAvatars({
     signups,
     totalCount,
     maxVisible = 5,
-    size = 'md',
+    size = 'sm',
     accentColor = '#6366f1', // Default indigo
 }: AttendeeAvatarsProps) {
     // Calculate visible signups and overflow
@@ -37,12 +37,13 @@ export function AttendeeAvatars({
     );
     const overflowCount = totalCount - visibleSignups.length;
 
-    // Size classes
+    // Size classes - ROK-186: Added xs for short events
     const sizeClasses = {
+        xs: 'w-4 h-4 text-[7px]',
         sm: 'w-5 h-5 text-[8px]',
         md: 'w-6 h-6 text-[10px]',
     };
-    const sizePx = size === 'sm' ? 20 : 24;
+    const sizePx = size === 'xs' ? 16 : size === 'sm' ? 20 : 24;
 
     // Generate initials from username
     const getInitials = (username: string): string => {

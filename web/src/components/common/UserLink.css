@@ -1,0 +1,57 @@
+.user-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: var(--color-text-secondary, #a1a1aa);
+    text-decoration: none;
+    transition: color 0.15s ease;
+    font-weight: 500;
+}
+
+.user-link:hover {
+    color: var(--color-primary, #8b5cf6);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 2px;
+}
+
+.user-link:focus-visible {
+    outline: 2px solid var(--color-primary, #8b5cf6);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Size variants */
+.user-link--sm {
+    font-size: 0.875rem;
+}
+
+.user-link--sm .user-link__avatar {
+    width: 18px;
+    height: 18px;
+}
+
+.user-link--md {
+    font-size: 1rem;
+}
+
+.user-link--md .user-link__avatar {
+    width: 24px;
+    height: 24px;
+}
+
+/* Avatar */
+.user-link__avatar {
+    border-radius: 50%;
+    object-fit: cover;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
+}
+
+/* Username text */
+.user-link__name {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}

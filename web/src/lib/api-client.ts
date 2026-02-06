@@ -356,3 +356,17 @@ export async function updateRoster(
         body: JSON.stringify(dto),
     });
 }
+
+// ============================================================
+// User Profiles API (ROK-181)
+// ============================================================
+
+import type { UserProfileDto } from '@raid-ledger/contract';
+
+/**
+ * Fetch a user's public profile by ID
+ */
+export async function getUserProfile(userId: number): Promise<UserProfileDto> {
+    const response = await fetchApi<{ data: UserProfileDto }>(`/users/${userId}/profile`);
+    return response.data;
+}

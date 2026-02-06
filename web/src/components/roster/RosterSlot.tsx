@@ -12,6 +12,8 @@ interface RosterSlotProps {
     isDraggable: boolean;
     /** ROK-183: Called when user double-clicks empty slot to join */
     onJoinClick?: (role: RosterRole, position: number) => void;
+    /** ROK-184: Whether this slot belongs to the current user (for glow effect) */
+    isCurrentUser?: boolean;
 }
 
 /**
@@ -19,8 +21,9 @@ interface RosterSlotProps {
  * Supports double-click to join for regular users on empty slots.
  * First click: shows "Join?" confirmation state
  * Second click: triggers the join action
+ * ROK-184: Adds glow effect for current user's slot
  */
-export function RosterSlot({ id, role, position, item, color, isDraggable, onJoinClick }: RosterSlotProps) {
+export function RosterSlot({ id, role, position, item, color, isDraggable, onJoinClick, isCurrentUser = false }: RosterSlotProps) {
     const { isOver, setNodeRef } = useDroppable({
         id,
         data: { role, position },
@@ -52,6 +55,11 @@ export function RosterSlot({ id, role, position, item, color, isDraggable, onJoi
 
     const isClickable = !item && !!onJoinClick;
 
+    // ROK-184: Glow effect classes for current user's slot
+    const glowClass = isCurrentUser
+        ? 'ring-2 ring-emerald-400/60 shadow-[0_0_15px_rgba(52,211,153,0.4)] animate-pulse-subtle'
+        : '';
+
     return (
         <div
             ref={setNodeRef}
@@ -59,12 +67,15 @@ export function RosterSlot({ id, role, position, item, color, isDraggable, onJoi
             className={`
         relative min-h-[60px] rounded-lg border-2 border-dashed transition-all
         ${isClickable ? 'cursor-pointer' : ''}
+        ${glowClass}
         ${isPending
                     ? 'border-green-500 bg-green-500/20'
                     : isOver
                         ? 'border-indigo-500 bg-indigo-500/10'
                         : item
-                            ? 'border-transparent bg-slate-800/50'
+                            ? isCurrentUser
+                                ? 'border-emerald-400/50 bg-emerald-900/20'
+                                : 'border-transparent bg-slate-800/50'
                             : isClickable
                                 ? 'border-slate-600 bg-slate-800/30 hover:border-indigo-400 hover:bg-indigo-500/10'
                                 : 'border-slate-600 bg-slate-800/30'

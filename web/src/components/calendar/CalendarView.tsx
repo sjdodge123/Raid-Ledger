@@ -280,11 +280,21 @@ export function CalendarView({
             const startTime = format(event.start, 'h:mm a');
             const endTime = event.end ? format(event.end, 'h:mm a') : '';
 
-            // Calculate event duration in hours - only show avatars for events 2+ hours
-            const durationHours = event.end
-                ? (event.end.getTime() - event.start.getTime()) / (1000 * 60 * 60)
+            // ROK-186: Calculate avatar config based on event duration
+            const durationMins = event.end
+                ? (event.end.getTime() - event.start.getTime()) / (1000 * 60)
                 : 0;
-            const showAvatars = durationHours >= 2;
+
+            // Duration-based avatar display:
+            // < 60 min: hide avatars
+            // 60-120 min: xs size (16px), max 3 avatars
+            // > 120 min: sm size (20px), max 5 avatars
+            const getAvatarConfig = () => {
+                if (durationMins < 60) return { show: false, size: 'sm' as const, max: 3 };
+                if (durationMins < 120) return { show: true, size: 'xs' as const, max: 3 };
+                return { show: true, size: 'sm' as const, max: 5 };
+            };
+            const avatarConfig = getAvatarConfig();
 
             return (
                 <div
@@ -309,13 +319,14 @@ export function CalendarView({
                         {creatorName && (
                             <span className="week-event-creator">by {creatorName}</span>
                         )}
-                        {/* ROK-177: Attendee avatars with signup preview - only for events 2+ hours */}
-                        {showAvatars && signupsPreview && signupsPreview.length > 0 ? (
+                        {/* ROK-186: Duration-based avatar sizing */}
+                        {avatarConfig.show && signupsPreview && signupsPreview.length > 0 ? (
                             <div className="week-event-attendees">
                                 <AttendeeAvatars
                                     signups={signupsPreview}
                                     totalCount={signupCount}
-                                    size="sm"
+                                    size={avatarConfig.size}
+                                    maxVisible={avatarConfig.max}
                                     accentColor={colors.border}
                                 />
                             </div>

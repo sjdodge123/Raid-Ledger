@@ -1,0 +1,350 @@
+.event-detail-page {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem 3rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.event-detail-page--error {
+    min-height: 60vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Back button */
+.event-detail-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: #71717a;
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    transition: color 0.15s ease;
+}
+
+.event-detail-back:hover {
+    color: #a1a1aa;
+}
+
+/* Error state */
+.event-detail-error {
+    text-align: center;
+    padding: 2rem;
+}
+
+.event-detail-error h2 {
+    font-size: 1.5rem;
+    color: #f87171;
+    margin-bottom: 0.5rem;
+}
+
+.event-detail-error p {
+    color: #a1a1aa;
+    margin-bottom: 1.5rem;
+}
+
+/* Description */
+.event-detail-description {
+    padding: 1rem 1.25rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    color: #a1a1aa;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+}
+
+/* Slots Section */
+.event-detail-slots {
+    background: rgba(30, 30, 40, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    padding: 1.5rem;
+}
+
+.event-detail-slots__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.event-detail-slots__header h2 {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #fff;
+    margin: 0;
+}
+
+/* Roster Section */
+.event-detail-roster {
+    background: rgba(30, 30, 40, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 1rem;
+    padding: 1.5rem;
+}
+
+.event-detail-roster h2 {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #a1a1aa;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 0 0 1rem;
+}
+
+.event-detail-roster__group {
+    margin-bottom: 1.25rem;
+}
+
+.event-detail-roster__group:last-child {
+    margin-bottom: 0;
+}
+
+.event-detail-roster__group h3 {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #71717a;
+    margin: 0 0 0.625rem;
+}
+
+.event-detail-roster__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.event-detail-roster__item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.event-detail-roster__item--pending {
+    opacity: 0.7;
+    border-style: dashed;
+}
+
+.event-detail-roster__character {
+    font-size: 0.75rem;
+    color: #71717a;
+}
+
+.event-detail-roster__empty {
+    text-align: center;
+    color: #52525b;
+    padding: 1rem;
+    font-size: 0.875rem;
+}
+
+/* Signup fallback */
+.event-detail-signup-fallback {
+    text-align: center;
+    padding: 1.5rem;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+}
+
+/* Badge */
+.badge {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    letter-spacing: 0.025em;
+}
+
+.badge--green {
+    background: rgba(34, 197, 94, 0.15);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.375rem;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    border: none;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.15s ease;
+}
+
+.btn-sm {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.8125rem;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+    color: #fff;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+    transform: translateY(-1px);
+}
+
+.btn-secondary {
+    background: rgba(255, 255, 255, 0.1);
+    color: #d4d4d8;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.btn-danger {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+.btn-warning {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.2);
+}
+
+.btn-warning:hover {
+    background: rgba(245, 158, 11, 0.25);
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Skeleton Loading */
+.event-detail-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.skeleton {
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+    border-radius: 0.75rem;
+}
+
+.skeleton-banner {
+    height: 140px;
+}
+
+.skeleton-slots {
+    height: 200px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+}
+
+.skeleton-slots-header {
+    height: 24px;
+    width: 40%;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.25rem;
+}
+
+.skeleton-slots-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 0.5rem;
+}
+
+.skeleton-slots-grid::before,
+.skeleton-slots-grid::after {
+    content: '';
+    height: 60px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+}
+
+.skeleton-roster {
+    height: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+}
+
+.skeleton-roster-header {
+    height: 20px;
+    width: 30%;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 0.25rem;
+}
+
+.skeleton-roster-items {
+    flex: 1;
+    display: flex;
+    gap: 0.5rem;
+}
+
+.skeleton-roster-items::before,
+.skeleton-roster-items::after {
+    content: '';
+    height: 40px;
+    width: 120px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.5rem;
+}
+
+@keyframes skeleton-pulse {
+    0% {
+        background-position: 200% 0;
+    }
+
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* ROK-184: Subtle pulse animation for user's slot glow */
+@keyframes pulse-subtle {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.animate-pulse-subtle {
+    animation: pulse-subtle 2s ease-in-out infinite;
+}

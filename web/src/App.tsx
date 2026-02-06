@@ -7,6 +7,7 @@ import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { ProfilePage } from './pages/profile-page';
+import { UserProfilePage } from './pages/user-profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { CalendarPage } from './pages/calendar-page';
 import { AdminSettingsPage } from './pages/admin-settings-page';
@@ -35,6 +36,8 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/events/:id" element={<EventDetailPage />} />
+          {/* ROK-181: Public user profiles */}
+          <Route path="/users/:userId" element={<UserProfilePage />} />
           <Route path="/profile" element={
             <ProtectedRoute>
               <ProfilePage />

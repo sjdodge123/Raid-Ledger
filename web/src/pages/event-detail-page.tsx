@@ -6,85 +6,55 @@ import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
-import { RosterList } from '../components/events/roster-list';
+import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
+import { UserLink } from '../components/common/UserLink';
+import { AUTH_DISCORD_URL } from '../constants/api';
+import { isMMOSlotConfig } from '../utils/game-utils';
+import './event-detail-page.css';
 
 /**
- * Format date/time in user's local timezone
- */
-function formatDateTime(dateString: string): string {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZoneName: 'short',
-    }).format(date);
-}
-
-/**
- * Format event duration
- */
-function formatDuration(start: string, end: string): string {
-    const startDate = new Date(start);
-    const endDate = new Date(end);
-    const diffMs = endDate.getTime() - startDate.getTime();
-    const hours = Math.floor(diffMs / (1000 * 60 * 60));
-    const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-
-    if (hours === 0) return `${minutes}m`;
-    if (minutes === 0) return `${hours}h`;
-    return `${hours}h ${minutes}m`;
-}
-
-/**
- * Event Detail Page - shows full event info, roster, and signup actions
+ * Event Detail Page - ROK-184 Redesign
  * 
- * Layout (ROK-156->ROK-182): 60/40 split on desktop
- * - Main (60%): Roster and Roster Builder
- * - Sidebar (40%): Event Info + Actions
- * Note: Team Availability heatmap moved to Event Create/Edit forms per ROK-182
+ * Layout (Desktop):
+ * - Full-width EventBanner at top
+ * - Full-width Slot Grid (primary focus, above fold)
+ * - Roster List below (grouped by status)
+ * - Action buttons integrated
+ * 
+ * Removed: Team Availability (moved per ROK-182), sidebar layout
  */
 export function EventDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
     const eventId = Number(id);
 
-    const { user, isAuthenticated, isLoading: authLoading } = useAuth();
+    const { user, isAuthenticated } = useAuth();
     const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
-    const { data: roster, isLoading: rosterLoading } = useEventRoster(eventId);
+    const { data: roster } = useEventRoster(eventId);
 
     const signup = useSignup(eventId);
     const cancelSignup = useCancelSignup(eventId);
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
-    const [showRosterBuilder, setShowRosterBuilder] = useState(false);
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
     const isSignedUp = !!userSignup;
     const needsConfirmation = userSignup?.confirmationStatus === 'pending';
 
-    // ROK-114: Roster Builder for event creators/admins
-    // ROK-183: Show to all authenticated users for click-to-join
+    // ROK-114/183: Roster management
     const isEventCreator = user?.id === event?.creator?.id;
     const isAdmin = user?.isAdmin === true;
     const canManageRoster = isEventCreator || isAdmin;
-    const canJoinSlot = isAuthenticated && !isSignedUp; // ROK-183: Can join if authenticated and not already signed up
+    const canJoinSlot = isAuthenticated && !isSignedUp;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
-    const isMMOGame = Boolean(
-        rosterAssignments?.slots?.tank ||
-        rosterAssignments?.slots?.healer ||
-        rosterAssignments?.slots?.dps
-    );
+    const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
 
     // Handler for roster changes from RosterBuilder
     const handleRosterChange = async (
@@ -103,7 +73,6 @@ export function EventDetailPage() {
     const handleSignup = async () => {
         try {
             const result = await signup.mutateAsync(undefined);
-            // ROK-183: Only require character confirmation for MMO games
             if (isMMOGame && event?.game?.id) {
                 toast.success('Successfully signed up!', {
                     description: 'Now confirm which character you\'re bringing.',
@@ -135,13 +104,11 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-183: Handle double-click to join on an empty slot - assigns directly to that slot
+    // ROK-183/184: Handle slot click to join directly
     const handleSlotClick = async (role: RosterRole, position: number) => {
         if (!isAuthenticated || isSignedUp) return;
         try {
-            // Pass slot preference to assign directly to the clicked slot
             const result = await signup.mutateAsync({ slotRole: role, slotPosition: position });
-            // ROK-183: Only require character confirmation for MMO games
             if (isMMOGame) {
                 toast.success(`Joined ${role} slot ${position}!`, {
                     description: 'Now confirm your character.',
@@ -162,267 +129,215 @@ export function EventDetailPage() {
 
     if (eventError) {
         return (
-            <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-                <div className="text-center">
-                    <h2 className="text-xl font-semibold text-red-400 mb-2">
-                        Event not found
-                    </h2>
-                    <p className="text-slate-400 mb-4">{eventError.message}</p>
-                    <button
-                        onClick={() => navigate('/events')}
-                        className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
-                    >
-                        Back to Events
+            <div className="event-detail-page event-detail-page--error">
+                <div className="event-detail-error">
+                    <h2>Event not found</h2>
+                    <p>{eventError.message}</p>
+                    <button onClick={() => navigate('/calendar')} className="btn btn-secondary">
+                        Back to Calendar
                     </button>
                 </div>
             </div>
         );
     }
 
+    if (eventLoading) {
+        return (
+            <div className="event-detail-page">
+                <EventDetailSkeleton />
+            </div>
+        );
+    }
+
+    if (!event) return null;
+
+    // Group signups by status for roster display
+    const confirmedSignups = roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || [];
+    const pendingSignups = roster?.signups.filter(s => s.confirmationStatus === 'pending') || [];
+
     return (
-        <div className="min-h-screen bg-slate-950 py-8 px-4">
-            <div className="max-w-6xl mx-auto">
-                {/* Back button */}
-                <button
-                    onClick={() => navigate('/events')}
-                    className="mb-6 text-slate-400 hover:text-white transition-colors flex items-center gap-2"
-                >
-                    ← Back to Events
-                </button>
+        <div className="event-detail-page">
+            {/* Back button */}
+            <button
+                onClick={() => navigate(-1)}
+                className="event-detail-back"
+                aria-label="Go back to previous page"
+            >
+                ← Back
+            </button>
 
-                {eventLoading ? (
-                    <EventDetailSkeleton />
-                ) : event ? (
-                    <div className="grid lg:grid-cols-5 gap-8">
-                        {/* Main Content - 60% (3/5) - Roster (ROK-182: Heatmap removed) */}
-                        <div className="lg:col-span-3 space-y-6">
-                            {/* Roster List */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                                <h2 className="text-lg font-semibold text-white mb-4">
-                                    Roster ({roster?.count ?? 0})
-                                </h2>
-                                <RosterList
-                                    signups={roster?.signups ?? []}
-                                    isLoading={rosterLoading}
-                                />
-                            </div>
+            {/* AC-1: Full-width Banner Header */}
+            <EventBanner
+                title={event.title}
+                game={event.game}
+                startTime={event.startTime}
+                endTime={event.endTime}
+                creator={event.creator}
+            />
 
-                            {/* ROK-114: Roster Builder for event creators, ROK-183: visible to all authenticated for click-to-join */}
-                            {rosterAssignments && isAuthenticated && (
-                                <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-                                    <button
-                                        onClick={() => setShowRosterBuilder(!showRosterBuilder)}
-                                        className="w-full p-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
-                                    >
-                                        <h2 className="text-lg font-semibold text-white flex items-center gap-2">
-                                            <span>🎯</span> Roster Slots
-                                            {canManageRoster && (
-                                                <span className="text-xs bg-indigo-600 px-2 py-0.5 rounded text-indigo-100">
-                                                    Creator
-                                                </span>
-                                            )}
-                                            {canJoinSlot && (
-                                                <span className="text-xs bg-green-600 px-2 py-0.5 rounded text-green-100">
-                                                    Click to Join
-                                                </span>
-                                            )}
-                                        </h2>
-                                        <span className="text-slate-400">
-                                            {showRosterBuilder ? '▼' : '▶'}
-                                        </span>
-                                    </button>
-                                    {showRosterBuilder && (
-                                        <div className="p-4 border-t border-slate-700">
-                                            <RosterBuilder
-                                                pool={rosterAssignments.pool}
-                                                assignments={rosterAssignments.assignments}
-                                                slots={rosterAssignments.slots}
-                                                onRosterChange={handleRosterChange}
-                                                canEdit={canManageRoster}
-                                                onSlotClick={handleSlotClick}
-                                                canJoin={canJoinSlot}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
+            {/* Description (if any) */}
+            {event.description && (
+                <div className="event-detail-description">
+                    <p>{event.description}</p>
+                </div>
+            )}
+
+            {/* AC-2: Slot Grid - Primary Focus (Full Width) */}
+            {rosterAssignments && (
+                <div className="event-detail-slots">
+                    <div className="event-detail-slots__header">
+                        <h2>
+                            <span role="img" aria-hidden="true">🎯</span> Roster Slots
+                            {canJoinSlot && (
+                                <span className="badge badge--green">Double-click to Join</span>
                             )}
-                        </div>
+                        </h2>
+                        {!isAuthenticated && (
+                            <a
+                                href={AUTH_DISCORD_URL}
+                                className="btn btn-primary btn-sm"
+                            >
+                                Login to Join
+                            </a>
+                        )}
+                        {isSignedUp && !needsConfirmation && (
+                            <button
+                                onClick={handleCancel}
+                                disabled={cancelSignup.isPending}
+                                className="btn btn-danger btn-sm"
+                            >
+                                {cancelSignup.isPending ? 'Leaving...' : 'Leave Event'}
+                            </button>
+                        )}
+                        {needsConfirmation && userSignup && (
+                            <button
+                                onClick={() => {
+                                    setPendingSignupId(userSignup.id);
+                                    setShowConfirmModal(true);
+                                }}
+                                className="btn btn-warning btn-sm"
+                            >
+                                ❓ Confirm Character
+                            </button>
+                        )}
+                    </div>
 
-                        {/* Sidebar - 40% (2/5) - Event Info & Actions */}
-                        <div className="lg:col-span-2 space-y-6">
-                            {/* Event Header */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-                                {event.game?.coverUrl && (
-                                    <div className="h-48 relative overflow-hidden">
-                                        <img
-                                            src={event.game.coverUrl}
-                                            alt={event.game.name}
-                                            className="w-full h-full object-cover"
-                                            onError={(e) => {
-                                                e.currentTarget.style.display = 'none';
-                                            }}
-                                        />
-                                        <div className="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent" />
-                                        <div className="absolute bottom-4 left-4">
-                                            <span className="px-3 py-1 bg-slate-800/90 rounded-full text-sm text-slate-300">
-                                                {event.game.name}
-                                            </span>
-                                        </div>
-                                    </div>
-                                )}
+                    <RosterBuilder
+                        pool={rosterAssignments.pool}
+                        assignments={rosterAssignments.assignments}
+                        slots={rosterAssignments.slots}
+                        onRosterChange={handleRosterChange}
+                        canEdit={canManageRoster}
+                        onSlotClick={handleSlotClick}
+                        canJoin={canJoinSlot}
+                        currentUserId={user?.id}
+                    />
+                </div>
+            )}
 
-                                <div className="p-6">
-                                    <h1 className="text-2xl font-bold text-white mb-4">
-                                        {event.title}
-                                    </h1>
+            {/* Fallback signup button if no roster slots */}
+            {!rosterAssignments && isAuthenticated && !isSignedUp && (
+                <div className="event-detail-signup-fallback">
+                    <button
+                        onClick={handleSignup}
+                        disabled={signup.isPending}
+                        className="btn btn-primary"
+                    >
+                        {signup.isPending ? 'Signing up...' : 'Sign Up for Event'}
+                    </button>
+                </div>
+            )}
 
-                                    {/* Time Info */}
-                                    <div className="space-y-2 mb-6">
-                                        <div className="flex items-center gap-2 text-slate-300">
-                                            <span className="text-emerald-400">📅</span>
-                                            {formatDateTime(event.startTime)}
-                                        </div>
-                                        <div className="flex items-center gap-2 text-slate-400">
-                                            <span>⏱️</span>
-                                            Duration: {formatDuration(event.startTime, event.endTime)}
-                                        </div>
-                                    </div>
+            {/* AC-8: Roster List - grouped by status */}
+            <div className="event-detail-roster">
+                <h2>Attendees ({roster?.count ?? 0})</h2>
 
-                                    {/* Description */}
-                                    {event.description && (
-                                        <div className="prose prose-invert max-w-none">
-                                            <p className="text-slate-300">{event.description}</p>
-                                        </div>
+                {confirmedSignups.length > 0 && (
+                    <div className="event-detail-roster__group">
+                        <h3><span role="img" aria-hidden="true">✓</span> Confirmed ({confirmedSignups.length})</h3>
+                        <div className="event-detail-roster__list">
+                            {confirmedSignups.map(signup => (
+                                <div key={signup.id} className="event-detail-roster__item">
+                                    <UserLink
+                                        userId={signup.user.id}
+                                        username={signup.user.username}
+                                        avatarUrl={signup.user.avatar}
+                                        showAvatar
+                                        size="md"
+                                    />
+                                    {signup.character && (
+                                        <span className="event-detail-roster__character">
+                                            as {signup.character.name}
+                                        </span>
                                     )}
-
-                                    {/* Creator */}
-                                    <div className="mt-6 pt-6 border-t border-slate-700 flex items-center gap-3">
-                                        <img
-                                            src={event.creator.avatar || '/default-avatar.svg'}
-                                            alt={event.creator.username}
-                                            className="w-8 h-8 rounded-full"
-                                            onError={(e) => {
-                                                e.currentTarget.src = '/default-avatar.svg';
-                                            }}
-                                        />
-                                        <div>
-                                            <p className="text-sm text-slate-400">Created by</p>
-                                            <p className="text-white">{event.creator.username}</p>
-                                        </div>
-                                    </div>
                                 </div>
-                            </div>
-
-                            {/* Signup Action */}
-                            <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                                <h2 className="text-lg font-semibold text-white mb-4">
-                                    Join this Event
-                                </h2>
-
-                                {authLoading ? (
-                                    <div className="h-12 bg-slate-800 rounded-lg animate-pulse" />
-                                ) : isAuthenticated ? (
-                                    isSignedUp ? (
-                                        <div className="space-y-2">
-                                            {/* Confirm character button for pending signups (ROK-131 AC-2) */}
-                                            {needsConfirmation && !!event?.game?.id && userSignup && (
-                                                <button
-                                                    onClick={() => {
-                                                        setPendingSignupId(userSignup.id);
-                                                        setShowConfirmModal(true);
-                                                    }}
-                                                    className="w-full py-3 px-4 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors min-h-[44px] flex items-center justify-center gap-2"
-                                                >
-                                                    <span>❓</span>
-                                                    <span>Confirm Character</span>
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={handleCancel}
-                                                disabled={cancelSignup.isPending}
-                                                className="w-full py-3 px-4 bg-red-900/50 border border-red-700 text-red-400 rounded-lg hover:bg-red-900/70 disabled:opacity-50 transition-colors min-h-[44px]"
-                                            >
-                                                {cancelSignup.isPending ? 'Canceling...' : 'Cancel Signup'}
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <button
-                                            onClick={handleSignup}
-                                            disabled={signup.isPending}
-                                            className="w-full py-3 px-4 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 disabled:opacity-50 transition-colors min-h-[44px]"
-                                        >
-                                            {signup.isPending ? 'Signing up...' : 'Sign Up'}
-                                        </button>
-                                    )
-                                ) : (
-                                    <a
-                                        href={`${import.meta.env.VITE_API_URL || 'http://localhost:3000'}/auth/discord`}
-                                        className="block w-full py-3 px-4 bg-indigo-600 text-white text-center rounded-lg hover:bg-indigo-500 transition-colors min-h-[44px]"
-                                    >
-                                        Login with Discord
-                                    </a>
-                                )}
-                            </div>
+                            ))}
                         </div>
                     </div>
-                ) : null}
+                )}
 
-                {/* Character Confirmation Modal (ROK-131 AC-2) */}
-                {/* 
-                  Note: Events use game.id (number) from games table,
-                  but characters use gameId (UUID) from game_registry.
-                  For now, we pass undefined to load all characters.
-                  TODO: Add proper game mapping once data model is unified.
-                */}
-                {pendingSignupId && (
-                    <SignupConfirmationModal
-                        isOpen={showConfirmModal}
-                        onClose={() => {
-                            setShowConfirmModal(false);
-                            setPendingSignupId(null);
-                        }}
-                        eventId={eventId}
-                        signupId={pendingSignupId}
-                        gameId={undefined}
-                    />
+                {pendingSignups.length > 0 && (
+                    <div className="event-detail-roster__group">
+                        <h3><span role="img" aria-hidden="true">⏳</span> Pending ({pendingSignups.length})</h3>
+                        <div className="event-detail-roster__list">
+                            {pendingSignups.map(signup => (
+                                <div key={signup.id} className="event-detail-roster__item event-detail-roster__item--pending">
+                                    <UserLink
+                                        userId={signup.user.id}
+                                        username={signup.user.username}
+                                        avatarUrl={signup.user.avatar}
+                                        showAvatar
+                                        size="md"
+                                    />
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {roster?.signups.length === 0 && (
+                    <p className="event-detail-roster__empty">
+                        No one has signed up yet. Be the first!
+                    </p>
                 )}
             </div>
+
+            {/* Character Confirmation Modal */}
+            {pendingSignupId && (
+                <SignupConfirmationModal
+                    isOpen={showConfirmModal}
+                    onClose={() => {
+                        setShowConfirmModal(false);
+                        setPendingSignupId(null);
+                    }}
+                    eventId={eventId}
+                    signupId={pendingSignupId}
+                    gameId={event.game?.id?.toString()}
+                />
+            )}
         </div>
     );
 }
 
 /**
- * Skeleton loader for event detail page (ROK-156: 60/40 layout)
+ * Skeleton loader for event detail page
  */
 function EventDetailSkeleton() {
     return (
-        <div className="grid lg:grid-cols-5 gap-8 animate-pulse">
-            {/* Main - Roster skeleton (ROK-182: Heatmap removed) */}
-            <div className="lg:col-span-3 space-y-6">
-                <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                    <div className="h-6 bg-slate-800 rounded w-1/4 mb-4" />
-                    <div className="space-y-2">
-                        <div className="h-10 bg-slate-800 rounded" />
-                        <div className="h-10 bg-slate-800 rounded" />
-                        <div className="h-10 bg-slate-800 rounded" />
-                    </div>
-                </div>
+        <div className="event-detail-skeleton">
+            {/* Banner skeleton */}
+            <div className="skeleton skeleton-banner" />
+
+            {/* Slots skeleton */}
+            <div className="skeleton skeleton-slots">
+                <div className="skeleton skeleton-slots-header" />
+                <div className="skeleton skeleton-slots-grid" />
             </div>
-            {/* Sidebar - Event Info skeleton */}
-            <div className="lg:col-span-2 space-y-6">
-                <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden">
-                    <div className="h-48 bg-slate-800" />
-                    <div className="p-6 space-y-4">
-                        <div className="h-8 bg-slate-800 rounded w-3/4" />
-                        <div className="h-4 bg-slate-800 rounded w-1/2" />
-                        <div className="h-4 bg-slate-800 rounded w-1/3" />
-                        <div className="h-24 bg-slate-800 rounded" />
-                    </div>
-                </div>
-                <div className="bg-slate-900 rounded-lg border border-slate-700 p-6">
-                    <div className="h-6 bg-slate-800 rounded w-1/2 mb-4" />
-                    <div className="h-12 bg-slate-800 rounded" />
-                </div>
+
+            {/* Roster skeleton */}
+            <div className="skeleton skeleton-roster">
+                <div className="skeleton skeleton-roster-header" />
+                <div className="skeleton skeleton-roster-items" />
             </div>
         </div>
     );

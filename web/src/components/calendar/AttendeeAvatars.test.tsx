@@ -78,4 +78,12 @@ describe('AttendeeAvatars', () => {
         expect(avatar.className).toContain('w-6');
         expect(avatar.className).toContain('h-6');
     });
+
+    it('applies correct size classes for xs size', () => {
+        render(<AttendeeAvatars signups={mockSignups.slice(0, 1)} totalCount={1} size="xs" />);
+
+        const avatar = screen.getByTitle('Player1');
+        expect(avatar.className).toContain('w-4');
+        expect(avatar.className).toContain('h-4');
+    });
 });

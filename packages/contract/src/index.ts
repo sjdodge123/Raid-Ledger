@@ -34,3 +34,5 @@ export * from './roster.schema.js';
 // System Status (ROK-175)
 export * from './system.schema.js';
 
+// Users (ROK-181)
+export * from './users.schema.js';
