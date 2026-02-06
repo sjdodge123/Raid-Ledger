@@ -34,11 +34,7 @@ This file provides configuration and guidance for AI agents working on this code
 
 ### Browser Testing
 
-> [!CAUTION]
-> **NEVER use `browser_subagent`** — It causes system hangs and timeouts.
-> This is a **hard ban**, no exceptions.
-
-**Always use Playwright CLI:**
+**Use Playwright CLI for E2E testing:**
 ```bash
 npx playwright test --reporter=list
 ```

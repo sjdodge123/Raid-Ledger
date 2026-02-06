@@ -33,7 +33,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   /**
    * Sign up a user for an event.
@@ -90,7 +90,9 @@ export class SignupsService {
           position: dto.slotPosition,
           isOverride: 0,
         });
-        this.logger.log(`Assigned user ${userId} to ${dto.slotRole} slot ${dto.slotPosition}`);
+        this.logger.log(
+          `Assigned user ${userId} to ${dto.slotRole} slot ${dto.slotPosition}`,
+        );
       }
 
       return this.buildSignupResponse(signup, user, null);
@@ -502,7 +504,9 @@ export class SignupsService {
    * MMO games use role-based slots (tank/healer/dps/flex).
    * Other games use generic player slots.
    */
-  private async getSlotConfig(gameId: string | null): Promise<RosterWithAssignments['slots']> {
+  private async getSlotConfig(
+    gameId: string | null,
+  ): Promise<RosterWithAssignments['slots']> {
     // IGDB genre ID for "Massively Multiplayer Online (MMO)"
     const MMO_GENRE_ID = 36;
 
@@ -561,11 +565,11 @@ export class SignupsService {
       isOverride: assignment?.isOverride === 1,
       character: row.characters
         ? {
-          id: row.characters.id,
-          name: row.characters.name,
-          className: row.characters.class,
-          role: row.characters.role,
-        }
+            id: row.characters.id,
+            name: row.characters.name,
+            className: row.characters.class,
+            role: row.characters.role,
+          }
         : null,
     };
   }

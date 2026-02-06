@@ -56,7 +56,7 @@ export class IgdbService {
     private db: PostgresJsDatabase<typeof schema>,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
-  ) { }
+  ) {}
 
   /**
    * Escape special characters in LIKE/ILIKE patterns to prevent injection

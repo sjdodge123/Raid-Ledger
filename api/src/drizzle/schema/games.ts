@@ -1,4 +1,11 @@
-import { pgTable, serial, text, timestamp, integer, jsonb } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  serial,
+  text,
+  timestamp,
+  integer,
+  jsonb,
+} from 'drizzle-orm/pg-core';
 
 /**
  * Games table - caches IGDB game data locally.
