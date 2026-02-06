@@ -9,8 +9,7 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: raid_ledger
-    ports:
-      - "5432:5432"
+    # Internal only - not exposed to host
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -23,8 +22,7 @@ services:
     image: redis:alpine
     container_name: raid-ledger-redis
     restart: always
-    ports:
-      - "6379:6379"
+    # Internal only - not exposed to host
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -51,11 +49,11 @@ services:
       JWT_SECRET: dev-secret-change-in-prod
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
-      # DEMO_MODE seeds games, events, admin user, signups, and availability
-      # Override with: DEMO_MODE=false docker compose --profile test up -d
-      DEMO_MODE: "${DEMO_MODE:-true}"
+      # DEMO_MODE seeds sample events and test data
+      # Set to true for development/testing: DEMO_MODE=true docker compose --profile test up -d
+      DEMO_MODE: "${DEMO_MODE:-false}"
     ports:
-      - "3000:3000"
+      - "${API_PORT:-3000}:3000"
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health" ]
       interval: 10s
@@ -81,7 +79,7 @@ services:
     environment:
       VITE_API_URL: http://localhost:3000
     ports:
-      - "80:80"
+      - "${PORT:-80}:80"
     profiles:
       - test
 

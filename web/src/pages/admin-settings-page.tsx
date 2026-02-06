@@ -18,20 +18,27 @@ export function AdminSettingsPage() {
     const [clientId, setClientId] = useState('');
     const [clientSecret, setClientSecret] = useState('');
     const [callbackUrl, setCallbackUrl] = useState('');
+    const [linkCallbackUrl, setLinkCallbackUrl] = useState('');
     const [showSecret, setShowSecret] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    // Detect if running on localhost (requires two callback URLs)
+    const isLocalhost = ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
 
     useEffect(() => {
         // Always compute callback URL dynamically based on environment
         // Don't use cached value - this ensures correct URL for current setup
         const apiPath = API_BASE_URL.startsWith('/') ? API_BASE_URL : '';
+        let baseCallbackUrl: string;
         if (apiPath) {
             // Production/Docker: goes through nginx proxy (e.g., https://yourdomain.com/api/auth/discord/callback)
-            setCallbackUrl(`${window.location.origin}${apiPath}/auth/discord/callback`);
+            baseCallbackUrl = `${window.location.origin}${apiPath}/auth/discord/callback`;
         } else {
             // Development: direct API access (e.g., http://localhost:3000/auth/discord/callback)
-            setCallbackUrl(`${API_BASE_URL}/auth/discord/callback`);
+            baseCallbackUrl = `${API_BASE_URL}/auth/discord/callback`;
         }
+        setCallbackUrl(baseCallbackUrl);
+        setLinkCallbackUrl(baseCallbackUrl.replace('/callback', '/link/callback'));
     }, []);
 
     // Show loading state while auth is being checked
@@ -221,16 +228,20 @@ export function AdminSettingsPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                            Callback URLs <span className="text-slate-500">(add both to Discord)</span>
+                            {isLocalhost ? (
+                                <>Callback URLs <span className="text-slate-500">(add both to Discord)</span></>
+                            ) : (
+                                <>Callback URL <span className="text-slate-500">(add to Discord)</span></>
+                            )}
                         </label>
 
-                        {/* Login callback URL */}
+                        {/* Login callback URL (always shown) */}
                         <div
-                            className="relative cursor-pointer group mb-2"
+                            className={`relative cursor-pointer group ${isLocalhost ? 'mb-2' : ''}`}
                             onClick={async () => {
                                 try {
                                     await navigator.clipboard.writeText(callbackUrl);
-                                    toast.success('Login callback copied!');
+                                    toast.success('Callback URL copied!');
                                 } catch {
                                     toast.error('Failed to copy');
                                 }
@@ -249,34 +260,39 @@ export function AdminSettingsPage() {
                             </div>
                         </div>
 
-                        {/* Link callback URL */}
-                        <div
-                            className="relative cursor-pointer group"
-                            onClick={async () => {
-                                try {
-                                    const linkUrl = callbackUrl.replace('/callback', '/link/callback');
-                                    await navigator.clipboard.writeText(linkUrl);
-                                    toast.success('Link callback copied!');
-                                } catch {
-                                    toast.error('Failed to copy');
-                                }
-                            }}
-                        >
-                            <input
-                                type="text"
-                                value={callbackUrl.replace('/callback', '/link/callback')}
-                                readOnly
-                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white cursor-pointer select-all focus:outline-none group-hover:border-slate-500 transition-all text-sm"
-                            />
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-white transition-colors">
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                </svg>
+                        {/* Link callback URL (only shown for localhost) */}
+                        {isLocalhost && (
+                            <div
+                                className="relative cursor-pointer group"
+                                onClick={async () => {
+                                    try {
+                                        await navigator.clipboard.writeText(linkCallbackUrl);
+                                        toast.success('Link callback copied!');
+                                    } catch {
+                                        toast.error('Failed to copy');
+                                    }
+                                }}
+                            >
+                                <input
+                                    type="text"
+                                    value={linkCallbackUrl}
+                                    readOnly
+                                    className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white cursor-pointer select-all focus:outline-none group-hover:border-slate-500 transition-all text-sm"
+                                />
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-white transition-colors">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <p className="text-xs text-slate-500 mt-1.5">
-                            Click to copy. Add <strong>both</strong> URLs to Discord → OAuth2 → Redirects.
+                            {isLocalhost ? (
+                                <>Click to copy. Add <strong>both</strong> URLs to Discord → OAuth2 → Redirects.</>
+                            ) : (
+                                <>Click to copy. Add this URL to Discord → OAuth2 → Redirects.</>
+                            )}
                         </p>
                     </div>
 
