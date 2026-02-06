@@ -70,14 +70,16 @@ export class DynamicDiscordStrategy
         // Access the internal strategy and update its options
         const strategy = this as unknown as { _oauth2: any; _callbackURL: string };
 
+        this.logger.log(`Updating callback URL to: ${config.callbackUrl}`);
+
         if (strategy._oauth2) {
             strategy._oauth2._clientId = config.clientId;
             strategy._oauth2._clientSecret = config.clientSecret;
+            this.logger.log(`Updated OAuth2 client credentials`);
         }
 
         strategy._callbackURL = config.callbackUrl;
-        // Note: Strategy is already registered with passport by @nestjs/passport
-        // No need to call passport.use() again
+        this.logger.log(`_callbackURL is now: ${strategy._callbackURL}`);
     }
 
     /**
