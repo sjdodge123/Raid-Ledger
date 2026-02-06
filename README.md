@@ -2,19 +2,27 @@
 
 A unified dashboard for gaming communities—plan raids and events, track schedules and attendance, and boost engagement.
 
-## 🚀 Deploy with Docker
+## 🚀 Quick Deploy
 
-### 1. Clone & Start
+### Requirements
+- Docker
+- PostgreSQL database
+- Redis instance
+
+### Run
 
 ```bash
-git clone https://github.com/sjdodge123/raid-ledger.git
-cd raid-ledger
-docker compose --profile test up -d
+docker run -d \
+  -p 80:80 \
+  -e DATABASE_URL=postgresql://user:pass@host:5432/raid_ledger \
+  -e REDIS_URL=redis://host:6379 \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  ghcr.io/sjdodge123/raid-ledger:main
 ```
 
-### 2. Get Admin Password
+### Get Admin Password
 
-On first startup, check the **API container logs** for your initial credentials:
+Check the container logs for your initial credentials:
 
 ```
 ╔════════════════════════════════════════════════════════════╗
@@ -27,25 +35,22 @@ On first startup, check the **API container logs** for your initial credentials:
 ╚════════════════════════════════════════════════════════════╝
 ```
 
-### 3. Configure Discord OAuth
+### Configure Discord OAuth
 
-1. Log in at http://localhost (or your configured PORT)
+1. Log in at http://localhost
 2. Go to **Admin Settings** → **Discord OAuth**
-3. Follow the in-app instructions to connect Discord
+3. Follow the in-app instructions
 
 ---
 
 ## Configuration
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `80` | Web UI port |
-| `DEMO_MODE` | `false` | Set `true` to seed sample data |
-
-**Example:**
-```bash
-PORT=8080 docker compose --profile test up -d
-```
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `REDIS_URL` | Yes | Redis connection string |
+| `JWT_SECRET` | Yes | Secret for JWT signing |
+| `DEMO_MODE` | No | Set `true` to seed sample data |
 
 ---
 
@@ -59,9 +64,14 @@ PORT=8080 docker compose --profile test up -d
 ## Development
 
 ```bash
-docker compose up -d          # Start database only
+# Start local infrastructure
+docker compose up -d
+
+# Install dependencies
 npm install
-npm run dev                   # Run API + Web
+
+# Run API + Web dev servers
+npm run dev
 ```
 
 ---
