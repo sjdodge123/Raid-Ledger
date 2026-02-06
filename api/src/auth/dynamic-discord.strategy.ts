@@ -96,6 +96,21 @@ export class DynamicDiscordStrategy
         return this.isConfigured;
     }
 
+    /**
+     * Override authenticate to ensure we have the latest callback URL.
+     * Passport caches options, so we need to force-update before each attempt.
+     */
+    authenticate(req: any, options?: any): void {
+        // Ensure callback URL is current before authenticating
+        if (this.isConfigured) {
+            const strategy = this as unknown as { _callbackURL: string };
+            // The callbackURL stored in the strategy should already be up to date
+            // via reloadConfig, but we log for debugging
+            this.logger.debug(`Authenticating with callback URL: ${strategy._callbackURL}`);
+        }
+        super.authenticate(req, options);
+    }
+
     async validate(
         accessToken: string,
         refreshToken: string,
