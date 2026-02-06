@@ -66,6 +66,24 @@ export class AuthController {
     }
   }
 
+  /**
+   * Derive client URL from the stored callback URL.
+   * e.g., https://raid.gamernight.net/api/auth/discord/callback -> https://raid.gamernight.net
+   */
+  private async getClientUrl(): Promise<string> {
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (oauthConfig?.callbackUrl) {
+      try {
+        const url = new URL(oauthConfig.callbackUrl);
+        return `${url.protocol}//${url.host}`;
+      } catch {
+        // Fall through to default
+      }
+    }
+    // Fallback to env var or localhost
+    return this.configService.get<string>('CLIENT_URL') || 'http://localhost';
+  }
+
   @Get('discord')
   @UseGuards(AuthGuard('discord'))
   async discordLogin() {
@@ -81,8 +99,8 @@ export class AuthController {
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = await this.authService.login(req.user);
 
-    // Redirect to frontend with token
-    const clientUrl = this.configService.get<string>('CLIENT_URL');
+    // Redirect to frontend with token (derive URL from callback URL in settings)
+    const clientUrl = await this.getClientUrl();
     // Using query param for simplicity in MVP. Secure httpOnly cookie is better for prod.
     res.redirect(`${clientUrl}/auth/success?token=${access_token}`);
   }
@@ -141,7 +159,7 @@ export class AuthController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const clientUrl = this.configService.get<string>('CLIENT_URL');
+    const clientUrl = await this.getClientUrl();
 
     try {
       // Get OAuth config from database settings (ROK-146)
