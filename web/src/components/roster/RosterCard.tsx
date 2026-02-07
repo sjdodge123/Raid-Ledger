@@ -1,38 +1,17 @@
-import React from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 
 interface RosterCardProps {
-    id: string;
     item: RosterAssignmentResponse;
-    isDraggable: boolean;
-    isOverlay?: boolean;
+    /** Optional: admin remove button handler */
+    onRemove?: () => void;
 }
 
 /**
- * RosterCard - A draggable card representing a user in the roster (ROK-114).
+ * RosterCard - Static display card for a user in the roster (ROK-208).
+ * Simplified from dnd-kit sortable to pure display.
  */
-export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps) {
-    const {
-        attributes,
-        listeners,
-        setNodeRef,
-        transform,
-        transition,
-        isDragging,
-    } = useSortable({
-        id,
-        disabled: !isDraggable,
-    });
-
-    const style: React.CSSProperties = {
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging && !isOverlay ? 0.5 : 1,
-    };
-
+export function RosterCard({ item, onRemove }: RosterCardProps) {
     // Role badge colors
     const roleBadge = item.character?.role ? (
         <span
@@ -49,19 +28,7 @@ export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps
 
     return (
         <div
-            ref={setNodeRef}
-            style={style}
-            {...attributes}
-            {...listeners}
-            className={`
-        flex items-center gap-3 rounded-lg border p-2 transition-all
-        ${isDraggable
-                    ? 'cursor-grab border-slate-600 bg-slate-800 hover:border-slate-500 active:cursor-grabbing'
-                    : 'cursor-default border-slate-700 bg-slate-800/50'
-                }
-        ${isOverlay ? 'shadow-xl ring-2 ring-indigo-500' : ''}
-        ${isDragging ? 'z-10' : ''}
-      `}
+            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-2 transition-all"
         >
             {/* Avatar - ROK-194: Use character portrait with Discord fallback */}
             <AvatarWithFallback
@@ -74,14 +41,6 @@ export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps
                 <div className="flex items-center gap-2">
                     <span className="truncate font-medium text-slate-200">{item.username}</span>
                     {roleBadge}
-                    {item.isOverride && (
-                        <span
-                            className="rounded bg-yellow-600/30 px-1 py-0.5 text-xs text-yellow-400"
-                            title="Playing off-spec"
-                        >
-                            ⚠️
-                        </span>
-                    )}
                 </div>
                 {item.character && (
                     <p className="truncate text-xs text-slate-400">
@@ -90,6 +49,20 @@ export function RosterCard({ id, item, isDraggable, isOverlay }: RosterCardProps
                     </p>
                 )}
             </div>
+
+            {/* Quick remove button for admins */}
+            {onRemove && (
+                <button
+                    onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                    className="rounded p-1 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    aria-label={`Remove ${item.username} from slot`}
+                    title="Remove from slot"
+                >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            )}
         </div>
     );
 }

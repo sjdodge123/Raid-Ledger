@@ -1,296 +1,507 @@
 {
-    "version": "1.0.0",
-    "generatedAt": "2026-02-05",
+    "version": "1.1.0",
+    "generatedAt": "2026-02-07",
     "source": "igdb",
-    "description": "Pre-seeded games for Raid-Ledger. IGDB IDs are canonical to prevent duplicates when search is enabled.",
+    "description": "Pre-seeded games for Raid-Ledger. IGDB IDs are canonical to prevent duplicates when search is enabled. Genre 36 = MMORPG (enables Tank/Healer/DPS slot layout).",
     "games": [
         {
             "igdbId": 123,
             "name": "World of Warcraft",
             "slug": "world-of-warcraft",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2l7z.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2l7z.jpg",
+            "genres": [
+                12,
+                15,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 14729,
             "name": "Final Fantasy XIV Online",
             "slug": "final-fantasy-xiv-online",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob1vd.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob1vd.jpg",
+            "genres": [
+                12,
+                15,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 1183,
             "name": "Guild Wars 2",
             "slug": "guild-wars-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co54tr.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co54tr.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 1081,
             "name": "The Elder Scrolls Online",
             "slug": "the-elder-scrolls-online",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co9nt3.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co9nt3.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 26128,
             "name": "Lost Ark",
             "slug": "lost-ark",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4w4j.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4w4j.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 24654,
             "name": "New World",
             "slug": "new-world-aeternum--1",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaoc1.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaoc1.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 6292,
             "name": "Black Desert Online",
             "slug": "black-desert",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coay9v.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coay9v.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 117294,
             "name": "Throne and Liberty",
             "slug": "throne-and-liberty",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajo3.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajo3.jpg",
+            "genres": [
+                12,
+                31,
+                36
+            ]
         },
         {
             "igdbId": 104967,
             "name": "Valheim",
             "slug": "valheim",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob24q.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob24q.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 10239,
             "name": "ARK: Survival Evolved",
             "slug": "ark-survival-evolved",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co493k.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co493k.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 3277,
             "name": "Rust",
             "slug": "rust",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajjj.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajjj.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 151665,
             "name": "Palworld",
             "slug": "palworld",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7n02.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7n02.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 272600,
             "name": "Soulmask",
             "slug": "soulmask",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaz9.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaz9.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 16999,
             "name": "Conan Exiles",
             "slug": "conan-exiles",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa90l.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa90l.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 5574,
             "name": "7 Days to Die",
             "slug": "7-days-to-die",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaqz.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaqz.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 90558,
             "name": "Satisfactory",
             "slug": "satisfactory",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8tfy.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8tfy.jpg",
+            "genres": [
+                12,
+                13,
+                31
+            ]
         },
         {
             "igdbId": 25657,
             "name": "Destiny 2",
             "slug": "destiny-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa8q3.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa8q3.jpg",
+            "genres": [
+                5,
+                12,
+                31
+            ]
         },
         {
             "igdbId": 250616,
             "name": "Helldivers 2",
             "slug": "helldivers-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coabbf.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coabbf.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 27134,
             "name": "Deep Rock Galactic",
             "slug": "deep-rock-galactic",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaat4.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaat4.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 2903,
             "name": "Warframe",
             "slug": "warframe",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob9an.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob9an.jpg",
+            "genres": [
+                5,
+                12,
+                31
+            ]
         },
         {
             "igdbId": 90099,
             "name": "Tom Clancy's The Division 2",
             "slug": "tom-clancys-the-division-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xrm.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xrm.jpg",
+            "genres": [
+                5,
+                12,
+                31
+            ]
         },
         {
             "igdbId": 119171,
             "name": "Baldur's Gate 3",
             "slug": "baldurs-gate-iii",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg",
+            "genres": [
+                12,
+                15,
+                16,
+                24,
+                31
+            ]
         },
         {
             "igdbId": 125165,
             "name": "Diablo IV",
             "slug": "diablo-iv",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co69sm.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co69sm.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 36926,
             "name": "Monster Hunter: World",
             "slug": "monster-hunter-world",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rst.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rst.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 138950,
             "name": "Monster Hunter Rise",
             "slug": "monster-hunter-rise",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co3uzk.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co3uzk.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 279661,
             "name": "Monster Hunter Wilds",
             "slug": "monster-hunter-wilds",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co904o.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co904o.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 1911,
             "name": "Path of Exile",
             "slug": "path-of-exile",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1n6w.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1n6w.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 95118,
             "name": "Last Epoch",
             "slug": "last-epoch",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7p46.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7p46.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 115,
             "name": "League of Legends",
             "slug": "league-of-legends",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobf3m.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobf3m.jpg",
+            "genres": [
+                15,
+                36
+            ]
         },
         {
             "igdbId": 126459,
             "name": "VALORANT",
             "slug": "valorant",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coau39.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coau39.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 114795,
             "name": "Apex Legends",
             "slug": "apex-legends",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa93z.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa93z.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 125174,
             "name": "Overwatch 2",
             "slug": "overwatch--1",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfow.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfow.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 119133,
             "name": "Elden Ring",
             "slug": "elden-ring",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 11137,
             "name": "Sea of Thieves",
             "slug": "sea-of-thieves",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2558.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2558.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 121,
             "name": "Minecraft",
             "slug": "minecraft-java-edition",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa77e.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa77e.jpg",
+            "genres": [
+                12,
+                13,
+                31
+            ]
         },
         {
             "igdbId": 1905,
             "name": "Fortnite",
             "slug": "fortnite",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaxt6.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaxt6.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 11198,
             "name": "Rocket League",
             "slug": "rocket-league",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaiyq.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaiyq.jpg",
+            "genres": [
+                10,
+                14
+            ]
         },
         {
             "igdbId": 242408,
             "name": "Counter-Strike 2",
             "slug": "counter-strike-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaczd.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaczd.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 1942,
             "name": "The Witcher 3: Wild Hunt",
             "slug": "the-witcher-3-wild-hunt",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaarl.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaarl.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 1020,
             "name": "Grand Theft Auto V",
             "slug": "grand-theft-auto-v",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2lbd.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2lbd.jpg",
+            "genres": [
+                5,
+                12,
+                31
+            ]
         },
         {
             "igdbId": 27789,
             "name": "PUBG: Battlegrounds",
             "slug": "pubg-battlegrounds",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaam4.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaam4.jpg",
+            "genres": [
+                5,
+                31
+            ]
         },
         {
             "igdbId": 2963,
             "name": "DOTA 2",
             "slug": "dota-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfk4.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfk4.jpg",
+            "genres": [
+                15,
+                36
+            ]
         },
         {
             "igdbId": 282566,
             "name": "Smite 2",
             "slug": "smite-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7m9c.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7m9c.jpg",
+            "genres": [
+                15,
+                36
+            ]
         },
         {
             "igdbId": 18866,
             "name": "Dead by Daylight",
             "slug": "dead-by-daylight",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5zky.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5zky.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 28512,
             "name": "Risk of Rain 2",
             "slug": "risk-of-rain-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaavb.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaavb.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 212089,
             "name": "Lethal Company",
             "slug": "lethal-company",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5ive.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5ive.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 294661,
             "name": "Content Warning",
             "slug": "content-warning",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8086.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8086.jpg",
+            "genres": [
+                12,
+                31
+            ]
         },
         {
             "igdbId": 132516,
             "name": "Phasmophobia",
             "slug": "phasmophobia",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coamcz.jpg"
+            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coamcz.jpg",
+            "genres": [
+                12,
+                31
+            ]
         }
     ]
 }

@@ -1,0 +1,314 @@
+/* AssignmentPopup.css — ROK-208 */
+
+.assignment-popup {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Search */
+.assignment-popup__search-wrapper {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-slate-900, #0f172a);
+    padding-bottom: 0.5rem;
+}
+
+.assignment-popup__search {
+    width: 100%;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(100, 116, 139, 0.5);
+    background: rgba(30, 41, 59, 0.8);
+    color: #e2e8f0;
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+.assignment-popup__search::placeholder {
+    color: #64748b;
+}
+
+.assignment-popup__search:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+}
+
+/* Sections */
+.assignment-popup__section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.375rem;
+}
+
+.assignment-popup__section-title {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid rgba(51, 65, 85, 0.6);
+    margin-bottom: 0.25rem;
+}
+
+.assignment-popup__section-title--remove {
+    color: #f87171;
+}
+
+/* Player rows */
+.assignment-popup__player-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    transition: background-color 0.15s;
+}
+
+.assignment-popup__player-row:hover {
+    background: rgba(51, 65, 85, 0.4);
+}
+
+.assignment-popup__player-row--current {
+    background: rgba(239, 68, 68, 0.08);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.assignment-popup__player-info {
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.assignment-popup__player-details {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.assignment-popup__player-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #e2e8f0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.assignment-popup__player-character {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Role badge */
+.assignment-popup__role-badge {
+    flex-shrink: 0;
+    font-size: 0.6875rem;
+    font-weight: 500;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    white-space: nowrap;
+}
+
+.assignment-popup__role-badge--tank {
+    background: rgba(37, 99, 235, 0.2);
+    color: #93c5fd;
+}
+
+.assignment-popup__role-badge--healer {
+    background: rgba(22, 163, 74, 0.2);
+    color: #86efac;
+}
+
+.assignment-popup__role-badge--dps {
+    background: rgba(220, 38, 38, 0.2);
+    color: #fca5a5;
+}
+
+/* Buttons */
+.assignment-popup__assign-btn {
+    flex-shrink: 0;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    background: #6366f1;
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s, transform 0.1s;
+}
+
+.assignment-popup__assign-btn:hover {
+    background: #4f46e5;
+}
+
+.assignment-popup__assign-btn:active {
+    transform: scale(0.97);
+}
+
+.assignment-popup__remove-btn {
+    flex-shrink: 0;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    cursor: pointer;
+    transition: background-color 0.15s;
+}
+
+.assignment-popup__remove-btn:hover {
+    background: rgba(239, 68, 68, 0.25);
+}
+
+/* Empty state */
+.assignment-popup__empty {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: #64748b;
+    font-size: 0.875rem;
+}
+
+.assignment-popup__self-assign-btn {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+    border: 1px solid rgba(99, 102, 241, 0.4);
+    border-radius: 0.5rem;
+    color: #a5b4fc;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.assignment-popup__self-assign-btn:hover {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.35), rgba(139, 92, 246, 0.35));
+    border-color: rgba(99, 102, 241, 0.6);
+    color: #c7d2fe;
+    transform: translateY(-1px);
+}
+
+/* Back button for slot picker */
+.assignment-popup__back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: none;
+    border: none;
+    color: #94a3b8;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    transition: color 0.15s;
+}
+
+.assignment-popup__back-btn:hover {
+    color: #e2e8f0;
+}
+
+/* Selected player card in slot picker */
+.assignment-popup__selected-player {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: rgba(51, 65, 85, 0.3);
+    border: 1px solid rgba(51, 65, 85, 0.5);
+    border-radius: 0.5rem;
+}
+
+/* Slot picker grid */
+.assignment-popup__slot-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 0.5rem;
+}
+
+.assignment-popup__slot-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.125rem;
+    padding: 0.625rem 0.75rem;
+    border-radius: 0.5rem;
+    background: var(--slot-bg);
+    border: 1px solid var(--slot-border);
+    color: var(--slot-text);
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-align: center;
+}
+
+.assignment-popup__slot-btn:hover:not(:disabled) {
+    filter: brightness(1.3);
+    transform: translateY(-1px);
+}
+
+.assignment-popup__slot-btn--match {
+    box-shadow: 0 0 0 2px var(--slot-border);
+    font-weight: 700;
+}
+
+.assignment-popup__slot-btn--locked {
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.assignment-popup__slot-label {
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.assignment-popup__slot-occupant {
+    font-size: 0.625rem;
+    font-weight: 400;
+    opacity: 0.8;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Mobile: Bottom sheet */
+@media (max-width: 767px) {
+
+    /* Override Modal positioning for bottom sheet */
+    .assignment-popup-wrapper .relative {
+        position: fixed !important;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        top: auto !important;
+        max-height: 75vh;
+        border-radius: 1rem 1rem 0 0;
+        margin: 0 !important;
+        max-width: 100% !important;
+        animation: assignment-popup-slide-up 0.3s ease-out;
+    }
+
+    @keyframes assignment-popup-slide-up {
+        from {
+            transform: translateY(100%);
+        }
+
+        to {
+            transform: translateY(0);
+        }
+    }
+}

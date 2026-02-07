@@ -23,6 +23,7 @@ interface GameSeed {
     name: string;
     slug: string;
     coverUrl: string | null;
+    genres?: number[];
 }
 
 interface GamesSeedFile {
@@ -74,6 +75,7 @@ async function bootstrap() {
                         name: game.name,
                         slug: game.slug,
                         coverUrl: game.coverUrl,
+                        genres: game.genres ?? [],
                     })
                     .onConflictDoUpdate({
                         target: schema.games.igdbId,
@@ -81,6 +83,7 @@ async function bootstrap() {
                             name: game.name,
                             slug: game.slug,
                             coverUrl: game.coverUrl,
+                            genres: game.genres ?? [],
                             cachedAt: new Date(),
                         },
                     })

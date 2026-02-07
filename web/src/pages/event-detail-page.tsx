@@ -65,7 +65,8 @@ export function EventDetailPage() {
     const isEventCreator = user?.id === event?.creator?.id;
     const isAdmin = user?.isAdmin === true;
     const canManageRoster = isEventCreator || isAdmin;
-    const canJoinSlot = isAuthenticated && !isSignedUp;
+    // ROK-208: Admins use assignment popup, not click-to-join
+    const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
 
@@ -212,8 +213,11 @@ export function EventDetailPage() {
                     <div className="event-detail-slots__header">
                         <h2>
                             <span role="img" aria-hidden="true">🎯</span> Roster Slots
+                            {canManageRoster && (
+                                <span className="badge badge--indigo">Click slot to assign</span>
+                            )}
                             {canJoinSlot && (
-                                <span className="badge badge--green">Double-click to Join</span>
+                                <span className="badge badge--green">Click to Join</span>
                             )}
                         </h2>
                         {!isAuthenticated && (

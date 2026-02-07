@@ -1,10 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { RosterBuilder } from './RosterBuilder';
 import type { RosterRole } from '@raid-ledger/contract';
 
-// Mock dnd-kit because it relies on browser APIs not fully present in jsdom
-// However, RosterBuilder uses DndContext internally, so we test basic rendering first.
+// Mock sonner toast
+vi.mock('sonner', () => ({
+    toast: { success: vi.fn(), error: vi.fn() },
+}));
 
 describe('RosterBuilder', () => {
     const mockPool = [
@@ -51,7 +53,7 @@ describe('RosterBuilder', () => {
 
     const mockOnRosterChange = vi.fn();
 
-    it('renders pool and assignments', () => {
+    it('renders assigned players in slots', () => {
         render(
             <RosterBuilder
                 pool={mockPool}
@@ -61,13 +63,9 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // Check if pool item is rendered
-        expect(screen.getByText('PlayerOne')).toBeInTheDocument();
-        expect(screen.getByText(/Tanker/)).toBeInTheDocument();
-
         // Check if assigned item is rendered
         expect(screen.getByText('HealerOne')).toBeInTheDocument();
-        expect(screen.getByText('Healer')).toBeInTheDocument(); // Role label
+        expect(screen.getByText('Healer (1/4)')).toBeInTheDocument();
     });
 
     it('renders correct number of slots', () => {
@@ -90,16 +88,98 @@ describe('RosterBuilder', () => {
         expect(screen.getByText('DPS (0/14)')).toBeInTheDocument();
     });
 
-    it('shows "Drop [role] here" for empty slots', () => {
+    it('renders UnassignedBar with pool count', () => {
         render(
             <RosterBuilder
-                pool={[]}
+                pool={mockPool}
                 assignments={[]}
                 onRosterChange={mockOnRosterChange}
                 canEdit={true}
             />
         );
 
-        expect(screen.getAllByText('Drop tank here').length).toBeGreaterThan(0);
+        expect(screen.getByText('Unassigned')).toBeInTheDocument();
+        // Count badge in the unassigned bar
+        const countBadge = document.querySelector('.unassigned-bar__count');
+        expect(countBadge).toHaveTextContent('1');
+    });
+
+    it('shows "All players assigned ✓" when pool is empty', () => {
+        render(
+            <RosterBuilder
+                pool={[]}
+                assignments={mockAssignments}
+                onRosterChange={mockOnRosterChange}
+                canEdit={true}
+            />
+        );
+
+        expect(screen.getByText('All players assigned ✓')).toBeInTheDocument();
+    });
+
+    it('shows "+ Join" for regular users on empty slots', () => {
+        const mockSlotClick = vi.fn();
+        render(
+            <RosterBuilder
+                pool={[]}
+                assignments={[]}
+                onRosterChange={mockOnRosterChange}
+                canEdit={false}
+                canJoin={true}
+                onSlotClick={mockSlotClick}
+            />
+        );
+
+        // All empty slots should show "+ Join" text
+        const joinButtons = screen.getAllByText('Join');
+        expect(joinButtons.length).toBeGreaterThan(0);
+    });
+
+    it('shows "Empty" text for non-interactive empty slots', () => {
+        render(
+            <RosterBuilder
+                pool={[]}
+                assignments={[]}
+                onRosterChange={mockOnRosterChange}
+                canEdit={false}
+                canJoin={false}
+            />
+        );
+
+        // Empty slots without click handler show "Empty"
+        const emptySlots = screen.getAllByText('Empty');
+        expect(emptySlots.length).toBeGreaterThan(0);
+    });
+
+    it('opens assignment popup when admin clicks slot', () => {
+        render(
+            <RosterBuilder
+                pool={mockPool}
+                assignments={[]}
+                onRosterChange={mockOnRosterChange}
+                canEdit={true}
+            />
+        );
+
+        // Click first tank slot
+        const slotElements = screen.getAllByText('Join');
+        fireEvent.click(slotElements[0].closest('div[class*="min-h"]')!);
+
+        // Assignment popup should appear
+        expect(screen.getByText(/Assign to/)).toBeInTheDocument();
+    });
+
+    it('renders generic player slots for non-MMO games', () => {
+        render(
+            <RosterBuilder
+                pool={[]}
+                assignments={[]}
+                slots={{ player: 8 }}
+                onRosterChange={mockOnRosterChange}
+                canEdit={false}
+            />
+        );
+
+        expect(screen.getByText('Players (0/8)')).toBeInTheDocument();
     });
 });
