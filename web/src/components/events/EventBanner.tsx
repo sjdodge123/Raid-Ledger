@@ -15,13 +15,25 @@ interface EventBannerProps {
         username: string;
         avatar?: string | null;
     };
+    description?: string | null;
+    isCollapsed?: boolean;
 }
 
 /**
  * Full-width horizontal banner for event details (ROK-184 AC-1).
- * Replaces the sidebar event card with a compact, informative header.
+ * Supports two modes:
+ *   - Full banner: cinematic header with game art, title, meta, and optional description
+ *   - Collapsed banner: slim sticky bar with condensed info (ROK-192)
  */
-export function EventBanner({ title, game, startTime, endTime, creator }: EventBannerProps) {
+export function EventBanner({
+    title,
+    game,
+    startTime,
+    endTime,
+    creator,
+    description,
+    isCollapsed = false,
+}: EventBannerProps) {
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
 
@@ -41,6 +53,41 @@ export function EventBanner({ title, game, startTime, endTime, creator }: EventB
 
     // Calculate duration using shared utility
     const duration = formatDuration(startDate, endDate);
+
+    if (isCollapsed) {
+        return (
+            <div className="event-banner event-banner--collapsed" role="banner">
+                {/* Game icon */}
+                {game && (
+                    <span className="event-banner--collapsed__game" aria-label={game.name}>
+                        🎮
+                    </span>
+                )}
+
+                {/* Title (truncated) */}
+                <span className="event-banner--collapsed__title">{title}</span>
+
+                {/* Date (tablet+) */}
+                <span className="event-banner--collapsed__date">
+                    📅 {dateStr}
+                </span>
+
+                {/* Time + Creator (desktop only) */}
+                <span className="event-banner--collapsed__time">
+                    ⏱️ {timeStr} ({duration})
+                </span>
+                <span className="event-banner--collapsed__creator">
+                    👤 <UserLink
+                        userId={creator.id}
+                        username={creator.username}
+                        avatarUrl={creator.avatar}
+                        showAvatar
+                        size="sm"
+                    />
+                </span>
+            </div>
+        );
+    }
 
     return (
         <div className="event-banner">
@@ -82,6 +129,11 @@ export function EventBanner({ title, game, startTime, endTime, creator }: EventB
                         />
                     </span>
                 </div>
+
+                {/* AC-4: Inline description (ROK-192) */}
+                {description && (
+                    <p className="event-banner__description">{description}</p>
+                )}
             </div>
         </div>
     );

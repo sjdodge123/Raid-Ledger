@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
@@ -30,9 +30,25 @@ export function EventDetailPage() {
     const navigate = useNavigate();
     const eventId = Number(id);
 
+    // ROK-192: IntersectionObserver for collapsible banner
+    const bannerRef = useRef<HTMLDivElement>(null);
+    const [isBannerCollapsed, setIsBannerCollapsed] = useState(false);
+
     const { user, isAuthenticated } = useAuth();
     const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
     const { data: roster } = useEventRoster(eventId);
+
+    useEffect(() => {
+        const el = bannerRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => setIsBannerCollapsed(!entry.isIntersecting),
+            { threshold: 0, rootMargin: '-64px 0px 0px 0px' }, // offset for header height (h-16)
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [event]); // re-attach when event loads (ref is null during skeleton)
+
 
     const signup = useSignup(eventId);
     const cancelSignup = useCancelSignup(eventId);
@@ -166,20 +182,28 @@ export function EventDetailPage() {
                 ← Back
             </button>
 
-            {/* AC-1: Full-width Banner Header */}
-            <EventBanner
-                title={event.title}
-                game={event.game}
-                startTime={event.startTime}
-                endTime={event.endTime}
-                creator={event.creator}
-            />
+            {/* ROK-192: Full banner (in-flow, observed for scroll detection) */}
+            <div ref={bannerRef}>
+                <EventBanner
+                    title={event.title}
+                    game={event.game}
+                    startTime={event.startTime}
+                    endTime={event.endTime}
+                    creator={event.creator}
+                    description={event.description}
+                />
+            </div>
 
-            {/* Description (if any) */}
-            {event.description && (
-                <div className="event-detail-description">
-                    <p>{event.description}</p>
-                </div>
+            {/* ROK-192: Collapsed banner (fixed, only visible when scrolled past full banner) */}
+            {isBannerCollapsed && (
+                <EventBanner
+                    title={event.title}
+                    game={event.game}
+                    startTime={event.startTime}
+                    endTime={event.endTime}
+                    creator={event.creator}
+                    isCollapsed
+                />
             )}
 
             {/* AC-2: Slot Grid - Primary Focus (Full Width) */}

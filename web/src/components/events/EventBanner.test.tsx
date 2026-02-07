@@ -63,4 +63,44 @@ describe('EventBanner', () => {
         expect(bgElement).toBeInTheDocument();
         expect(bgElement).toHaveStyle({ backgroundImage: 'url(https://example.com/wow-cover.jpg)' });
     });
+
+    // ROK-192: Collapsed variant tests
+    describe('collapsed variant (ROK-192)', () => {
+        it('renders collapsed variant with title and slim layout', () => {
+            const { container } = renderWithRouter(<EventBanner {...mockProps} isCollapsed />);
+            const banner = container.querySelector('.event-banner--collapsed');
+            expect(banner).toBeInTheDocument();
+            expect(screen.getByText('Mythic+ Push Night')).toBeInTheDocument();
+        });
+
+        it('collapsed variant omits description', () => {
+            const { container } = renderWithRouter(
+                <EventBanner {...mockProps} description="Team strategy session" isCollapsed />,
+            );
+            expect(container.querySelector('.event-banner__description')).not.toBeInTheDocument();
+        });
+
+        it('collapsed variant includes game icon', () => {
+            renderWithRouter(<EventBanner {...mockProps} isCollapsed />);
+            expect(screen.getByLabelText('World of Warcraft')).toBeInTheDocument();
+        });
+    });
+
+    // ROK-192: Description tests
+    describe('inline description (ROK-192)', () => {
+        it('renders inline description when provided', () => {
+            renderWithRouter(<EventBanner {...mockProps} description="Pushing keys tonight!" />);
+            expect(screen.getByText('Pushing keys tonight!')).toBeInTheDocument();
+        });
+
+        it('omits description element when not provided', () => {
+            const { container } = renderWithRouter(<EventBanner {...mockProps} />);
+            expect(container.querySelector('.event-banner__description')).not.toBeInTheDocument();
+        });
+
+        it('omits description element when null', () => {
+            const { container } = renderWithRouter(<EventBanner {...mockProps} description={null} />);
+            expect(container.querySelector('.event-banner__description')).not.toBeInTheDocument();
+        });
+    });
 });

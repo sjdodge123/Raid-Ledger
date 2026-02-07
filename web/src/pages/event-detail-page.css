@@ -4,7 +4,7 @@
     padding: 1.5rem 1rem 3rem;
     display: flex;
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 0.75rem;
 }
 
 .event-detail-page--error {
@@ -48,17 +48,6 @@
 .event-detail-error p {
     color: #a1a1aa;
     margin-bottom: 1.5rem;
-}
-
-/* Description */
-.event-detail-description {
-    padding: 1rem 1.25rem;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 0.75rem;
-    color: #a1a1aa;
-    font-size: 0.9375rem;
-    line-height: 1.6;
 }
 
 /* Slots Section */

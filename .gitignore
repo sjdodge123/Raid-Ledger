@@ -25,6 +25,7 @@ _bmad-output/
 .cursor/
 .windsurf/
 .claude/
+CLAUDE.md
 planning-artifacts/
 implementation-artifacts/
 scripts/

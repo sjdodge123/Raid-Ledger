@@ -84,7 +84,23 @@
     color: #8b5cf6;
 }
 
-/* Responsive adjustments */
+/* ROK-192: Inline description */
+.event-banner__description {
+    margin: 0.5rem 0 0;
+    font-size: 0.875rem;
+    font-style: italic;
+    color: #71717a;
+    line-height: 1.5;
+    max-height: 3rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    -webkit-box-orient: vertical;
+}
+
+/* Responsive: full banner */
 @media (max-width: 640px) {
     .event-banner {
         padding: 1rem 1.25rem;
@@ -102,5 +118,131 @@
 
     .event-banner__separator {
         display: none;
+    }
+}
+
+/* ==================================== */
+/* ROK-192: Collapsed Banner (Sticky)   */
+/* ==================================== */
+
+.event-banner--collapsed {
+    position: fixed;
+    top: 64px;
+    /* below the app header (h-16 = 64px) */
+    left: 0;
+    right: 0;
+    z-index: 30;
+    height: 44px;
+    padding: 0 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    animation: banner-slide-down 0.2s ease-out;
+    /* Reset full-banner styles */
+    border-radius: 0;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    overflow: visible;
+}
+
+@keyframes banner-slide-down {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Collapsed: Game icon */
+.event-banner--collapsed__game {
+    font-size: 1rem;
+    flex-shrink: 0;
+}
+
+/* Collapsed: Title */
+.event-banner--collapsed__title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+/* Collapsed: Date */
+.event-banner--collapsed__date {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Collapsed: Time */
+.event-banner--collapsed__time {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Collapsed: Creator */
+.event-banner--collapsed__creator {
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.event-banner--collapsed__creator .user-link {
+    color: #a1a1aa;
+}
+
+.event-banner--collapsed__creator .user-link:hover {
+    color: #8b5cf6;
+}
+
+/* ==================================== */
+/* Responsive: Collapsed Banner         */
+/* ==================================== */
+
+/* Mobile: game icon + truncated title only */
+@media (max-width: 767px) {
+
+    .event-banner--collapsed__date,
+    .event-banner--collapsed__time,
+    .event-banner--collapsed__creator {
+        display: none;
+    }
+
+    .event-banner--collapsed__title {
+        flex: 1;
+    }
+}
+
+/* Tablet: add date */
+@media (min-width: 768px) and (max-width: 1023px) {
+
+    .event-banner--collapsed__time,
+    .event-banner--collapsed__creator {
+        display: none;
+    }
+}
+
+/* Desktop: show everything */
+@media (min-width: 1024px) {
+    .event-banner--collapsed__title {
+        max-width: 300px;
     }
 }
