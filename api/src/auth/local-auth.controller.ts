@@ -1,12 +1,20 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
+  Param,
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  ForbiddenException,
+  UseGuards,
+  Request,
+  ParseIntPipe,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { LocalAuthService } from './local-auth.service';
+import { AdminGuard } from './admin.guard';
 import { z } from 'zod';
 
 // Email regex that accepts local emails (admin@local) and standard emails
@@ -28,9 +36,18 @@ const LocalLoginSchema = z
 
 type LocalLoginDto = z.infer<typeof LocalLoginSchema>;
 
+interface AuthenticatedRequest {
+  user: {
+    id: number;
+    username: string;
+    isAdmin: boolean;
+    impersonatedBy: number | null;
+  };
+}
+
 @Controller('auth')
 export class LocalAuthController {
-  constructor(private localAuthService: LocalAuthService) {}
+  constructor(private localAuthService: LocalAuthService) { }
 
   /**
    * POST /auth/local
@@ -58,5 +75,57 @@ export class LocalAuthController {
 
     // Generate JWT
     return this.localAuthService.login(user);
+  }
+
+  /**
+   * POST /auth/impersonate/:userId
+   * Admin-only. Issue a JWT as the target user for testing/debugging.
+   * Returns both the impersonated token and the original admin token.
+   */
+  @Post('impersonate/:userId')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  @HttpCode(HttpStatus.OK)
+  async impersonate(
+    @Param('userId', ParseIntPipe) userId: number,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    // Build a minimal user object for the service
+    const adminUser = {
+      id: req.user.id,
+      username: req.user.username,
+      isAdmin: req.user.isAdmin,
+    } as any;
+
+    return this.localAuthService.impersonate(adminUser, userId);
+  }
+
+  /**
+   * POST /auth/impersonate/exit
+   * Exit impersonation and restore admin session.
+   */
+  @Post('impersonate/exit')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(HttpStatus.OK)
+  async exitImpersonation(@Request() req: AuthenticatedRequest) {
+    if (!req.user.impersonatedBy) {
+      throw new ForbiddenException('Not currently impersonating');
+    }
+
+    // Return a message — the frontend handles token swap
+    // using the original_token it stored when starting impersonation
+    return {
+      message: 'Impersonation ended',
+      adminUserId: req.user.impersonatedBy,
+    };
+  }
+
+  /**
+   * GET /auth/users
+   * Admin-only. List non-admin users for the impersonation dropdown.
+   */
+  @Get('users')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async listUsers() {
+    return this.localAuthService.listNonAdminUsers();
   }
 }

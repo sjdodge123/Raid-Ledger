@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { MobileNav } from './MobileNav';
 import { NotificationBell } from '../notifications';
+import { useAuth } from '../../hooks/use-auth';
 
 /**
  * Site header with logo, navigation, and user menu.
@@ -10,6 +11,7 @@ import { NotificationBell } from '../notifications';
 export function Header() {
     const location = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const { user } = useAuth();
 
     const navLinks = [
         { to: '/calendar', label: 'Calendar' },
@@ -48,8 +50,19 @@ export function Header() {
                     {/* Right side: Notification Bell + User menu (desktop) + Hamburger (mobile) */}
                     <div className="flex items-center gap-4">
                         <div className="hidden md:flex items-center gap-4">
-                            <NotificationBell />
-                            <UserMenu />
+                            {user ? (
+                                <>
+                                    <NotificationBell />
+                                    <UserMenu />
+                                </>
+                            ) : (
+                                <Link
+                                    to="/login"
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
+                                >
+                                    Login
+                                </Link>
+                            )}
                         </div>
 
                         {/* Mobile hamburger button */}

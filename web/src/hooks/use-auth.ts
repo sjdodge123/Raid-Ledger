@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 
 const TOKEN_KEY = 'raid_ledger_token';
+const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
 
 export interface User {
     id: number;
@@ -16,6 +17,13 @@ export interface User {
  */
 export function getAuthToken(): string | null {
     return localStorage.getItem(TOKEN_KEY);
+}
+
+/**
+ * Check if currently in impersonation mode
+ */
+export function isImpersonating(): boolean {
+    return !!localStorage.getItem(ORIGINAL_TOKEN_KEY);
 }
 
 /**
@@ -39,6 +47,7 @@ async function fetchCurrentUser(): Promise<User | null> {
             // 401 means token is invalid/expired - clear it
             if (response.status === 401) {
                 localStorage.removeItem(TOKEN_KEY);
+                localStorage.removeItem(ORIGINAL_TOKEN_KEY);
                 // Note: Don't show toast here - this runs on every page load
                 // Session expiry feedback is handled by ProtectedRoute redirecting to login
                 return null;
@@ -81,16 +90,73 @@ export function useAuth() {
 
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(ORIGINAL_TOKEN_KEY);
         queryClient.setQueryData(['auth', 'me'], null);
+    };
+
+    /**
+     * Impersonate a user (admin-only).
+     * Stores the original admin token for later restoration.
+     */
+    const impersonate = async (userId: number): Promise<boolean> => {
+        const token = getAuthToken();
+        if (!token) return false;
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // Store original admin token for exit
+            localStorage.setItem(ORIGINAL_TOKEN_KEY, data.original_token);
+            // Set impersonated user's token
+            localStorage.setItem(TOKEN_KEY, data.access_token);
+
+            // Refetch user data
+            await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+            return true;
+        } catch (error) {
+            console.error('Failed to impersonate:', error);
+            return false;
+        }
+    };
+
+    /**
+     * Exit impersonation and restore admin session.
+     */
+    const exitImpersonation = async (): Promise<boolean> => {
+        const originalToken = localStorage.getItem(ORIGINAL_TOKEN_KEY);
+        if (!originalToken) return false;
+
+        // Restore original admin token
+        localStorage.setItem(TOKEN_KEY, originalToken);
+        localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+
+        // Refetch user data
+        await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        return true;
     };
 
     return {
         user: user ?? null,
         isLoading,
         isAuthenticated: !!user,
+        isImpersonating: isImpersonating(),
         error,
         refetch,
         login,
         logout,
+        impersonate,
+        exitImpersonation,
     };
 }

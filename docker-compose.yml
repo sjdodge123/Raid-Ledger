@@ -49,8 +49,6 @@ services:
       JWT_SECRET: dev-secret-change-in-prod
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
-      # DEMO_MODE seeds sample events and test data
-      # Set to true for development/testing: DEMO_MODE=true docker compose --profile test up -d
       DEMO_MODE: "${DEMO_MODE:-false}"
     ports:
       - "${API_PORT:-3000}:3000"

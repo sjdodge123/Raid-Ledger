@@ -2,7 +2,7 @@
 /**
  * Bootstrap Admin Script
  * 
- * Creates an initial admin account on first run if no local admins exist.
+ * Creates an initial admin account on first run if no local credentials exist.
  * Password can be set via ADMIN_PASSWORD environment variable, otherwise generated.
  * 
  * Usage: npx ts-node scripts/bootstrap-admin.ts
@@ -29,14 +29,14 @@ async function bootstrapAdmin() {
     const db = drizzle(sql, { schema });
 
     try {
-        // Check if any local admins exist
+        // Check if any local credentials exist
         const existingAdmins = await db
             .select()
-            .from(schema.localAdmins)
+            .from(schema.localCredentials)
             .limit(1);
 
         if (existingAdmins.length > 0) {
-            console.log('ℹ️  Local admin already exists, skipping bootstrap');
+            console.log('ℹ️  Local credentials already exist, skipping bootstrap');
             await sql.end();
             return;
         }
@@ -55,9 +55,9 @@ async function bootstrapAdmin() {
             })
             .returning();
 
-        // Create local admin linked to user
+        // Create local credential linked to user
         await db
-            .insert(schema.localAdmins)
+            .insert(schema.localCredentials)
             .values({
                 email: DEFAULT_EMAIL,
                 passwordHash,

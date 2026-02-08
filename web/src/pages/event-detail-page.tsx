@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
@@ -10,7 +10,6 @@ import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
-import { AUTH_DISCORD_URL } from '../constants/api';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import './event-detail-page.css';
 
@@ -221,12 +220,12 @@ export function EventDetailPage() {
                             )}
                         </h2>
                         {!isAuthenticated && (
-                            <a
-                                href={AUTH_DISCORD_URL}
+                            <Link
+                                to="/login"
                                 className="btn btn-primary btn-sm"
                             >
                                 Login to Join
-                            </a>
+                            </Link>
                         )}
                         {isSignedUp && !needsConfirmation && (
                             <button

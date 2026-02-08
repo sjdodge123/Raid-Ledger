@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.provider';
-import { localAdmins, users } from '../drizzle/schema';
+import { localCredentials, users } from '../drizzle/schema';
 
 const SALT_ROUNDS = 12;
 
@@ -12,7 +12,7 @@ export class LocalAuthService {
   constructor(
     @Inject(DrizzleAsyncProvider) private db: any,
     @Inject(JwtService) private jwtService: JwtService,
-  ) {}
+  ) { }
 
   /**
    * Hash a password using bcrypt
@@ -29,11 +29,11 @@ export class LocalAuthService {
     email: string,
     password: string,
   ): Promise<typeof users.$inferSelect> {
-    // Find local admin by email
+    // Find local credential by email
     const [localAdmin] = await this.db
       .select()
-      .from(localAdmins)
-      .where(eq(localAdmins.email, email.toLowerCase()))
+      .from(localCredentials)
+      .where(eq(localCredentials.email, email.toLowerCase()))
       .limit(1);
 
     if (!localAdmin) {
@@ -48,7 +48,7 @@ export class LocalAuthService {
 
     // Get linked user record
     if (!localAdmin.userId) {
-      throw new UnauthorizedException('Admin account not linked to user');
+      throw new UnauthorizedException('Credential not linked to user');
     }
 
     const [user] = await this.db
@@ -65,7 +65,7 @@ export class LocalAuthService {
   }
 
   /**
-   * Create a local admin account with hashed password
+   * Create a local credential with hashed password
    * Uses a transaction to ensure atomicity
    */
   async createLocalAdmin(
@@ -73,7 +73,7 @@ export class LocalAuthService {
     password: string,
     username?: string,
   ): Promise<{
-    localAdmin: typeof localAdmins.$inferSelect;
+    localAdmin: typeof localCredentials.$inferSelect;
     user: typeof users.$inferSelect;
   }> {
     const passwordHash = await this.hashPassword(password);
@@ -90,9 +90,9 @@ export class LocalAuthService {
         })
         .returning();
 
-      // Create local admin linked to user
+      // Create local credential linked to user
       const [localAdmin] = await tx
-        .insert(localAdmins)
+        .insert(localCredentials)
         .values({
           email: email.toLowerCase(),
           passwordHash,
@@ -105,12 +105,12 @@ export class LocalAuthService {
   }
 
   /**
-   * Check if any local admin accounts exist
+   * Check if any local credentials exist
    */
   async hasLocalAdmins(): Promise<boolean> {
     const [result] = await this.db
-      .select({ count: localAdmins.id })
-      .from(localAdmins)
+      .select({ count: localCredentials.id })
+      .from(localCredentials)
       .limit(1);
     return !!result;
   }
@@ -134,4 +134,109 @@ export class LocalAuthService {
       },
     };
   }
+
+  /**
+   * Create a local login for an existing user (non-admin).
+   * Links an existing user to a local_credentials entry with password credentials.
+   * Does NOT create a new user or modify isAdmin status.
+   */
+  async createLocalUser(
+    email: string,
+    password: string,
+    userId: number,
+  ): Promise<void> {
+    const passwordHash = await this.hashPassword(password);
+
+    await this.db
+      .insert(localCredentials)
+      .values({
+        email: email.toLowerCase(),
+        passwordHash,
+        userId,
+      });
+  }
+
+  /**
+   * Impersonate a target user (admin-only).
+   * Returns a JWT for the target user with an impersonatedBy claim,
+   * plus a token to restore the admin session.
+   */
+  async impersonate(
+    adminUser: typeof users.$inferSelect,
+    targetUserId: number,
+  ): Promise<{
+    access_token: string;
+    original_token: string;
+    user: {
+      id: number;
+      username: string;
+      avatar: string | null;
+      isAdmin: boolean;
+    };
+  }> {
+    // Look up target user
+    const [target] = await this.db
+      .select()
+      .from(users)
+      .where(eq(users.id, targetUserId))
+      .limit(1);
+
+    if (!target) {
+      throw new UnauthorizedException('Target user not found');
+    }
+
+    if (target.isAdmin) {
+      throw new UnauthorizedException('Cannot impersonate admin users');
+    }
+
+    console.log(
+      `🔄 IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) → "${target.username}" (id:${target.id})`,
+    );
+
+    // Issue JWT for target user with impersonatedBy claim (1hr expiry)
+    const impersonatedPayload = {
+      username: target.username,
+      sub: target.id,
+      isAdmin: target.isAdmin,
+      impersonatedBy: adminUser.id,
+    };
+
+    const originalPayload = {
+      username: adminUser.username,
+      sub: adminUser.id,
+      isAdmin: adminUser.isAdmin,
+    };
+
+    return {
+      access_token: this.jwtService.sign(impersonatedPayload, {
+        expiresIn: '1h',
+      }),
+      original_token: this.jwtService.sign(originalPayload),
+      user: {
+        id: target.id,
+        username: target.username,
+        avatar: target.avatar,
+        isAdmin: target.isAdmin,
+      },
+    };
+  }
+
+  /**
+   * List all non-admin users for the impersonation dropdown.
+   */
+  async listNonAdminUsers(): Promise<
+    { id: number; username: string; avatar: string | null }[]
+  > {
+    const result = await this.db
+      .select({
+        id: users.id,
+        username: users.username,
+        avatar: users.avatar,
+      })
+      .from(users)
+      .where(eq(users.isAdmin, false));
+
+    return result;
+  }
 }
+

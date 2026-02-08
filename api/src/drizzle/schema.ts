@@ -5,7 +5,7 @@ export * from './schema/games';
 export * from './schema/event-signups';
 export * from './schema/game-registry';
 export * from './schema/characters';
-export * from './schema/local-admins';
+export * from './schema/local-credentials';
 export * from './schema/availability';
 export * from './schema/roster-assignments';
 export * from './schema/app-settings';
