@@ -24,7 +24,8 @@ _bmad-output/
 .gemini/
 .cursor/
 .windsurf/
-.claude/
+.claude/*
+!.claude/skills/
 CLAUDE.md
 planning-artifacts/
 implementation-artifacts/

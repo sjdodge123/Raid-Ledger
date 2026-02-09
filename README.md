@@ -28,7 +28,7 @@ Check container logs for your initial credentials:
 ### Reset Admin Password
 
 ```bash
-docker run -e RESET_PWD=true -e ADMIN_PASSWORD=mynewpassword -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
+docker run -e ADMIN_PASSWORD=mynewpassword -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
 ```
 
 ### Configure Discord OAuth
@@ -45,8 +45,7 @@ docker run -e RESET_PWD=true -e ADMIN_PASSWORD=mynewpassword -p 80:80 ghcr.io/sj
 |----------|---------|-------------|
 | `PORT` | `80` | Port to expose the application |
 | `DEMO_MODE` | `false` | Set `true` to seed sample events |
-| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password on first run |
-| `RESET_PWD` | `false` | Set `true` to reset admin password on next startup |
+| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
 
 **Example with custom port and demo data:**
 ```bash

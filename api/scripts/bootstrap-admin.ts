@@ -40,37 +40,41 @@ async function bootstrapAdmin() {
             .where(eq(schema.localCredentials.email, DEFAULT_EMAIL))
             .limit(1);
 
-        if (existingCreds.length > 0 && !resetMode) {
-            console.log('ℹ️  Local credentials already exist, skipping bootstrap');
+        if (existingCreds.length > 0) {
+            // Admin exists — check if we need to update the password
+            const explicitPassword = process.env.ADMIN_PASSWORD;
+
+            if (resetMode || explicitPassword) {
+                // --reset flag or ADMIN_PASSWORD env var: update password
+                const password = explicitPassword || crypto.randomBytes(16).toString('base64');
+                const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+                await db
+                    .update(schema.localCredentials)
+                    .set({ passwordHash })
+                    .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
+
+                console.log('');
+                console.log('╔════════════════════════════════════════════════════════════╗');
+                console.log('║          🔐 ADMIN PASSWORD RESET                           ║');
+                console.log('╠════════════════════════════════════════════════════════════╣');
+                console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
+                console.log(`║  Password: ${password.padEnd(46)} ║`);
+                console.log('╠════════════════════════════════════════════════════════════╣');
+                console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
+                console.log('╚════════════════════════════════════════════════════════════╝');
+                console.log('');
+            } else {
+                console.log('ℹ️  Local credentials already exist, skipping bootstrap');
+            }
+
             await sql.end();
             return;
         }
 
-        // Generate or use provided password
+        // No admin exists — create one
         const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(16).toString('base64');
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-        if (existingCreds.length > 0 && resetMode) {
-            // Reset existing admin password
-            await db
-                .update(schema.localCredentials)
-                .set({ passwordHash })
-                .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
-
-            console.log('');
-            console.log('╔════════════════════════════════════════════════════════════╗');
-            console.log('║          🔐 ADMIN PASSWORD RESET                           ║');
-            console.log('╠════════════════════════════════════════════════════════════╣');
-            console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
-            console.log(`║  Password: ${password.padEnd(46)} ║`);
-            console.log('╠════════════════════════════════════════════════════════════╣');
-            console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
-            console.log('╚════════════════════════════════════════════════════════════╝');
-            console.log('');
-
-            await sql.end();
-            return;
-        }
 
         // Create user record first
         const [user] = await db
