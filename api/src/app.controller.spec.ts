@@ -39,13 +39,15 @@ describe('AppController', () => {
         json: jest.fn(),
       };
 
-      await appController.getHealth(mockRes as any);
+      await appController.getHealth(
+        mockRes as unknown as import('express').Response,
+      );
 
       expect(mockRes.status).toHaveBeenCalledWith(200);
       expect(mockRes.json).toHaveBeenCalledWith(
         expect.objectContaining({
           status: 'ok',
-          db: expect.objectContaining({ connected: true }),
+          db: expect.objectContaining({ connected: true }) as unknown,
         }),
       );
     });

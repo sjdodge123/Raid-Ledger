@@ -97,10 +97,10 @@ export function RosterBuilder({
     }, [isGenericGame, slots]);
 
     // Get slot counts (use default or custom)
-    const getSlotCount = (role: RosterRole): number => {
+    const getSlotCount = React.useCallback((role: RosterRole): number => {
         if (slots?.[role] !== undefined) return slots[role]!;
         return roleSlots.find((s) => s.role === role)?.count ?? 0;
-    };
+    }, [slots, roleSlots]);
 
     // ROK-208: Admin clicks a slot to open assignment popup
     const handleAdminSlotClick = (role: RosterRole, position: number) => {

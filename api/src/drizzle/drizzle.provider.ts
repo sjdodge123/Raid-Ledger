@@ -10,7 +10,7 @@ export const drizzleProvider = [
   {
     provide: DrizzleAsyncProvider,
     inject: [ConfigService],
-    useFactory: async (configService: ConfigService) => {
+    useFactory: (configService: ConfigService) => {
       const connectionString = configService.get<string>('DATABASE_URL')!;
       const client = postgres(connectionString);
       const db = drizzle(client, { schema });

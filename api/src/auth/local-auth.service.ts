@@ -2,17 +2,19 @@ import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.provider';
 import { localCredentials, users } from '../drizzle/schema';
+import * as schema from '../drizzle/schema';
 
 const SALT_ROUNDS = 12;
 
 @Injectable()
 export class LocalAuthService {
   constructor(
-    @Inject(DrizzleAsyncProvider) private db: any,
+    @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
-  ) { }
+  ) {}
 
   /**
    * Hash a password using bcrypt
@@ -79,7 +81,7 @@ export class LocalAuthService {
     const passwordHash = await this.hashPassword(password);
 
     // Use transaction to ensure atomicity
-    return await this.db.transaction(async (tx: any) => {
+    return await this.db.transaction(async (tx) => {
       // Create user record first (with a placeholder discordId for local-only users)
       const [user] = await tx
         .insert(users)
@@ -118,7 +120,7 @@ export class LocalAuthService {
   /**
    * Generate JWT for authenticated user
    */
-  async login(user: typeof users.$inferSelect) {
+  login(user: typeof users.$inferSelect) {
     const payload = {
       username: user.username,
       sub: user.id,
@@ -147,13 +149,11 @@ export class LocalAuthService {
   ): Promise<void> {
     const passwordHash = await this.hashPassword(password);
 
-    await this.db
-      .insert(localCredentials)
-      .values({
-        email: email.toLowerCase(),
-        passwordHash,
-        userId,
-      });
+    await this.db.insert(localCredentials).values({
+      email: email.toLowerCase(),
+      passwordHash,
+      userId,
+    });
   }
 
   /**
@@ -162,7 +162,7 @@ export class LocalAuthService {
    * plus a token to restore the admin session.
    */
   async impersonate(
-    adminUser: typeof users.$inferSelect,
+    adminUser: { id: number; username: string; isAdmin: boolean },
     targetUserId: number,
   ): Promise<{
     access_token: string;
@@ -239,4 +239,3 @@ export class LocalAuthService {
     return result;
   }
 }
-

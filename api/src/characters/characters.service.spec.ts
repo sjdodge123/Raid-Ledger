@@ -95,25 +95,27 @@ describe('CharactersService', () => {
     mockDb.delete.mockReturnValue(deleteChain);
 
     // Transaction mock
-    mockDb.transaction.mockImplementation(async (callback) => {
-      const tx = {
-        update: jest.fn().mockReturnValue({
-          set: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              returning: jest
-                .fn()
-                .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+    mockDb.transaction.mockImplementation(
+      (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+        const tx = {
+          update: jest.fn().mockReturnValue({
+            set: jest.fn().mockReturnValue({
+              where: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+              }),
             }),
           }),
-        }),
-        insert: jest.fn().mockReturnValue({
-          values: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue([mockCharacter]),
+          insert: jest.fn().mockReturnValue({
+            values: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([mockCharacter]),
+            }),
           }),
-        }),
-      };
-      return callback(tx);
-    });
+        };
+        return callback(tx);
+      },
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -220,18 +222,20 @@ describe('CharactersService', () => {
       });
 
       // Mock transaction to throw unique constraint error
-      mockDb.transaction.mockImplementationOnce(async (callback) => {
-        const tx = {
-          insert: jest.fn().mockReturnValue({
-            values: jest.fn().mockReturnValue({
-              returning: jest
-                .fn()
-                .mockRejectedValue(new Error('unique_user_game_character')),
+      mockDb.transaction.mockImplementationOnce(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            insert: jest.fn().mockReturnValue({
+              values: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockRejectedValue(new Error('unique_user_game_character')),
+              }),
             }),
-          }),
-        };
-        return callback(tx);
-      });
+          };
+          return callback(tx);
+        },
+      );
 
       const dto = {
         gameId: 'game-uuid-1',
@@ -253,23 +257,25 @@ describe('CharactersService', () => {
       });
 
       // Mock transaction
-      mockDb.transaction.mockImplementation(async (callback) => {
-        const tx = {
-          update: jest.fn().mockReturnValue({
-            set: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue(undefined),
+      mockDb.transaction.mockImplementation(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            update: jest.fn().mockReturnValue({
+              set: jest.fn().mockReturnValue({
+                where: jest.fn().mockResolvedValue(undefined),
+              }),
             }),
-          }),
-          insert: jest.fn().mockReturnValue({
-            values: jest.fn().mockReturnValue({
-              returning: jest
-                .fn()
-                .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+            insert: jest.fn().mockReturnValue({
+              values: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+              }),
             }),
-          }),
-        };
-        return callback(tx);
-      });
+          };
+          return callback(tx);
+        },
+      );
 
       const dto = {
         gameId: 'game-uuid-1',

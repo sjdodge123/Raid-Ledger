@@ -7,9 +7,9 @@ import { users } from './users';
  * Discord OAuth users do not use this table.
  */
 export const localCredentials = pgTable('local_credentials', {
-    id: serial('id').primaryKey(),
-    email: text('email').unique().notNull(),
-    passwordHash: text('password_hash').notNull(),
-    userId: integer('user_id').references(() => users.id),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
+  id: serial('id').primaryKey(),
+  email: text('email').unique().notNull(),
+  passwordHash: text('password_hash').notNull(),
+  userId: integer('user_id').references(() => users.id),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 });

@@ -126,7 +126,7 @@ export class NotificationService {
       )
       .orderBy(desc(schema.notifications.createdAt));
 
-    return notifications.map(this.mapToDto);
+    return notifications.map((row) => this.mapToDto(row));
   }
 
   /**

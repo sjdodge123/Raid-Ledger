@@ -141,11 +141,7 @@ export class UsersService {
    * Re-link a previously unlinked Discord account.
    * Strips 'unlinked:' prefix and restores Discord info.
    */
-  async relinkDiscord(
-    userId: number,
-    username: string,
-    avatar?: string,
-  ) {
+  async relinkDiscord(userId: number, username: string, avatar?: string) {
     const user = await this.findById(userId);
     if (!user?.discordId?.startsWith('unlinked:')) return user;
 

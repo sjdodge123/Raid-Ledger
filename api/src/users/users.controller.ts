@@ -36,7 +36,7 @@ export class UsersController {
     private readonly usersService: UsersService,
     private readonly preferencesService: PreferencesService,
     private readonly charactersService: CharactersService,
-  ) { }
+  ) {}
 
   /**
    * Get a user's public profile by ID.
@@ -73,13 +73,18 @@ export class UsersController {
   @Get('me/preferences')
   @UseGuards(AuthGuard('jwt'))
   async getMyPreferences(@Request() req: AuthenticatedRequest) {
-    const preferences = await this.preferencesService.getUserPreferences(req.user.id);
+    const preferences = await this.preferencesService.getUserPreferences(
+      req.user.id,
+    );
 
     // Convert array to key-value object for easier frontend consumption
-    const preferencesMap = preferences.reduce((acc, pref) => {
-      acc[pref.key] = pref.value;
-      return acc;
-    }, {} as Record<string, unknown>);
+    const preferencesMap = preferences.reduce(
+      (acc, pref) => {
+        acc[pref.key] = pref.value;
+        return acc;
+      },
+      {} as Record<string, unknown>,
+    );
 
     return { data: preferencesMap };
   }

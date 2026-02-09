@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import type { User } from '../../hooks/use-auth';
@@ -25,17 +25,13 @@ interface IntegrationHubProps {
 
 /** Reactive mobile breakpoint check */
 function useIsMobile(breakpoint = MOBILE_BREAKPOINT) {
-    const [mobile, setMobile] = useState(() =>
-        typeof window !== 'undefined' && window.innerWidth <= breakpoint,
-    );
-    useEffect(() => {
+    const getSnapshot = () => window.matchMedia(`(max-width: ${breakpoint}px)`).matches;
+    const subscribe = (onStoreChange: () => void) => {
         const mq = window.matchMedia(`(max-width: ${breakpoint}px)`);
-        setMobile(mq.matches);
-        const handler = (e: MediaQueryListEvent) => setMobile(e.matches);
-        mq.addEventListener('change', handler);
-        return () => mq.removeEventListener('change', handler);
-    }, [breakpoint]);
-    return mobile;
+        mq.addEventListener('change', onStoreChange);
+        return () => mq.removeEventListener('change', onStoreChange);
+    };
+    return React.useSyncExternalStore(subscribe, getSnapshot, () => false);
 }
 
 /** Build the list of avatar options from user data and characters */
@@ -151,7 +147,9 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
     const [searchParams, setSearchParams] = useSearchParams();
     const [showAvatarModal, setShowAvatarModal] = useState(false);
     const [showDiscordModal, setShowDiscordModal] = useState(false);
-    const [activatePulse, setActivatePulse] = useState(false);
+    const [activatePulse, setActivatePulse] = useState(
+        () => searchParams.get('linked') === 'success',
+    );
 
     // Avatar preference from localStorage
     const [avatarIndex, setAvatarIndex] = useState(() => {
@@ -160,16 +158,19 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
     });
 
     // Check for Discord link result on mount
+    const processedRef = useRef(false);
     useEffect(() => {
+        if (processedRef.current) return;
         const linked = searchParams.get('linked');
         const message = searchParams.get('message');
 
         if (linked === 'success') {
+            processedRef.current = true;
             toast.success('Discord account linked successfully!');
-            setActivatePulse(true);
             setSearchParams({});
             onRefresh?.();
         } else if (linked === 'error') {
+            processedRef.current = true;
             toast.error(message || 'Failed to link Discord account');
             setSearchParams({});
         }

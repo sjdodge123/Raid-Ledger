@@ -51,14 +51,6 @@ describe('EventsService', () => {
       count: 0,
       eventId: 1,
     };
-    const subqueryChain = {
-      from: jest.fn().mockReturnValue({
-        groupBy: jest.fn().mockReturnValue({
-          as: jest.fn().mockReturnValue(subqueryMock),
-        }),
-      }),
-    };
-
     const selectChain = {
       from: jest.fn().mockReturnValue({
         leftJoin: jest.fn().mockReturnValue({

@@ -13,7 +13,7 @@ export const DrizzleAsyncProvider = 'drizzleProvider';
     {
       provide: DrizzleAsyncProvider,
       inject: [ConfigService],
-      useFactory: async (configService: ConfigService) => {
+      useFactory: (configService: ConfigService) => {
         const connectionString = configService.get<string>('DATABASE_URL');
         if (!connectionString) {
           throw new Error('DATABASE_URL is undefined');

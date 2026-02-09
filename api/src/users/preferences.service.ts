@@ -10,54 +10,54 @@ import { eq, and } from 'drizzle-orm';
  */
 @Injectable()
 export class PreferencesService {
-    constructor(
-        @Inject(DrizzleAsyncProvider)
-        private db: PostgresJsDatabase<typeof schema>,
-    ) { }
+  constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
+  ) {}
 
-    /**
-     * Get a single preference by key for a user
-     */
-    async getUserPreference(userId: number, key: string) {
-        const result = await this.db.query.userPreferences.findFirst({
-            where: and(
-                eq(schema.userPreferences.userId, userId),
-                eq(schema.userPreferences.key, key),
-            ),
-        });
-        return result;
-    }
+  /**
+   * Get a single preference by key for a user
+   */
+  async getUserPreference(userId: number, key: string) {
+    const result = await this.db.query.userPreferences.findFirst({
+      where: and(
+        eq(schema.userPreferences.userId, userId),
+        eq(schema.userPreferences.key, key),
+      ),
+    });
+    return result;
+  }
 
-    /**
-     * Get all preferences for a user
-     */
-    async getUserPreferences(userId: number) {
-        return this.db.query.userPreferences.findMany({
-            where: eq(schema.userPreferences.userId, userId),
-        });
-    }
+  /**
+   * Get all preferences for a user
+   */
+  async getUserPreferences(userId: number) {
+    return this.db.query.userPreferences.findMany({
+      where: eq(schema.userPreferences.userId, userId),
+    });
+  }
 
-    /**
-     * Set (upsert) a preference for a user.
-     * Uses ON CONFLICT for atomic insert-or-update.
-     */
-    async setUserPreference(userId: number, key: string, value: unknown) {
-        const [result] = await this.db
-            .insert(schema.userPreferences)
-            .values({
-                userId,
-                key,
-                value,
-            })
-            .onConflictDoUpdate({
-                target: [schema.userPreferences.userId, schema.userPreferences.key],
-                set: {
-                    value,
-                    updatedAt: new Date(),
-                },
-            })
-            .returning();
+  /**
+   * Set (upsert) a preference for a user.
+   * Uses ON CONFLICT for atomic insert-or-update.
+   */
+  async setUserPreference(userId: number, key: string, value: unknown) {
+    const [result] = await this.db
+      .insert(schema.userPreferences)
+      .values({
+        userId,
+        key,
+        value,
+      })
+      .onConflictDoUpdate({
+        target: [schema.userPreferences.userId, schema.userPreferences.key],
+        set: {
+          value,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
 
-        return result;
-    }
+    return result;
+  }
 }

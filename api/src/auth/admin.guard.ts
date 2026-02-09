@@ -6,12 +6,16 @@ import {
 } from '@nestjs/common';
 import { Observable } from 'rxjs';
 
+interface RequestWithUser {
+  user?: { id: number; username: string; isAdmin: boolean };
+}
+
 @Injectable()
 export class AdminGuard implements CanActivate {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
-    const request = context.switchToHttp().getRequest();
+    const request = context.switchToHttp().getRequest<RequestWithUser>();
     const user = request.user;
 
     if (!user) {

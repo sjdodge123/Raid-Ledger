@@ -52,7 +52,7 @@ export class CharactersService {
       .orderBy(asc(schema.characters.displayOrder));
 
     return {
-      data: chars.map(this.mapToDto),
+      data: chars.map((row) => this.mapToDto(row)),
       meta: { total: chars.length },
     };
   }

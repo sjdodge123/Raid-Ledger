@@ -18,7 +18,12 @@ import { SettingsService } from '../settings/settings.service';
 import * as crypto from 'crypto';
 
 interface RequestWithUser extends Request {
-  user: any;
+  user: {
+    id: number;
+    username: string;
+    isAdmin: boolean;
+    impersonatedBy?: number | null;
+  };
 }
 
 @Controller('auth')
@@ -53,7 +58,7 @@ export class AuthController {
     try {
       const { data, signature } = JSON.parse(
         Buffer.from(state, 'base64').toString(),
-      );
+      ) as { data: string; signature: string };
       const secret = this.configService.get<string>('JWT_SECRET')!;
       const expectedSignature = crypto
         .createHmac('sha256', secret)
@@ -69,7 +74,7 @@ export class AuthController {
         return null; // Signature mismatch - state was tampered with
       }
 
-      return JSON.parse(data);
+      return JSON.parse(data) as { userId: number; action: string };
     } catch {
       return null;
     }
@@ -106,7 +111,7 @@ export class AuthController {
     @Res() res: Response,
   ) {
     // User is validated and attached to req.user by DiscordStrategy
-    const { access_token } = await this.authService.login(req.user);
+    const { access_token } = this.authService.login(req.user);
 
     // Redirect to frontend with token (derive URL from callback URL in settings)
     const clientUrl = await this.getClientUrl();
@@ -131,8 +136,8 @@ export class AuthController {
 
     let userId: number;
     try {
-      const payload = this.jwtService.verify(token);
-      userId = payload.sub;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
+      userId = this.jwtService.verify(token).sub;
     } catch {
       throw new HttpException(
         'Invalid or expired token',
@@ -226,7 +231,7 @@ export class AuthController {
         throw new Error('Failed to exchange code for token');
       }
 
-      const tokens = await tokenResponse.json();
+      const tokens = (await tokenResponse.json()) as { access_token: string };
 
       // Get Discord user profile
       const userResponse = await fetch('https://discord.com/api/users/@me', {
@@ -239,7 +244,11 @@ export class AuthController {
         throw new Error('Failed to fetch Discord profile');
       }
 
-      const discordProfile = await userResponse.json();
+      const discordProfile = (await userResponse.json()) as {
+        id: string;
+        username: string;
+        avatar?: string;
+      };
 
       // Check if this Discord account is already linked (including unlinked) to a different user
       const existingUser =

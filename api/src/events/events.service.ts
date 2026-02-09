@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, desc, gte, lte, asc, sql, and, inArray } from 'drizzle-orm';
+import { eq, gte, lte, asc, sql, and, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';

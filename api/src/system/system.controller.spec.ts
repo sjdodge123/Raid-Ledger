@@ -1,19 +1,27 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SystemController } from './system.controller';
 import { UsersService } from '../users/users.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('SystemController', () => {
   let controller: SystemController;
   let mockUsersService: Partial<UsersService>;
+  let mockSettingsService: Partial<SettingsService>;
 
   beforeEach(async () => {
     mockUsersService = {
       count: jest.fn(),
     };
+    mockSettingsService = {
+      isDiscordConfigured: jest.fn(),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SystemController],
-      providers: [{ provide: UsersService, useValue: mockUsersService }],
+      providers: [
+        { provide: UsersService, useValue: mockUsersService },
+        { provide: SettingsService, useValue: mockSettingsService },
+      ],
     }).compile();
 
     controller = module.get<SystemController>(SystemController);
@@ -26,6 +34,7 @@ describe('SystemController', () => {
   describe('getStatus', () => {
     it('should return isFirstRun: true when no users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
 
       const result = await controller.getStatus();
 
@@ -35,6 +44,7 @@ describe('SystemController', () => {
 
     it('should return isFirstRun: false when users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(5);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
 
       const result = await controller.getStatus();
 
@@ -42,31 +52,18 @@ describe('SystemController', () => {
       expect(mockUsersService.count).toHaveBeenCalled();
     });
 
-    it('should return discordConfigured based on env vars (AC-4)', async () => {
+    it('should return discordConfigured based on settings service (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);
 
-      // Save original env
-      const originalClientId = process.env.DISCORD_CLIENT_ID;
-      const originalClientSecret = process.env.DISCORD_CLIENT_SECRET;
-
       // Test when Discord is configured
-      process.env.DISCORD_CLIENT_ID = 'test-client-id';
-      process.env.DISCORD_CLIENT_SECRET = 'test-client-secret';
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(true);
       let result = await controller.getStatus();
       expect(result.discordConfigured).toBe(true);
 
       // Test when Discord is not configured
-      delete process.env.DISCORD_CLIENT_ID;
-      delete process.env.DISCORD_CLIENT_SECRET;
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
       result = await controller.getStatus();
       expect(result.discordConfigured).toBe(false);
-
-      // Restore original env
-      if (originalClientId) process.env.DISCORD_CLIENT_ID = originalClientId;
-      else delete process.env.DISCORD_CLIENT_ID;
-      if (originalClientSecret)
-        process.env.DISCORD_CLIENT_SECRET = originalClientSecret;
-      else delete process.env.DISCORD_CLIENT_SECRET;
     });
   });
 });

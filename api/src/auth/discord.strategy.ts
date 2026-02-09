@@ -1,4 +1,4 @@
-import { Strategy } from 'passport-discord';
+import { Strategy, Profile } from 'passport-discord';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -14,16 +14,12 @@ export class DiscordStrategy extends PassportStrategy(Strategy, 'discord') {
     });
   }
 
-  async validate(
-    accessToken: string,
-    refreshToken: string,
-    profile: any,
-  ): Promise<any> {
+  async validate(accessToken: string, refreshToken: string, profile: Profile) {
     const { id, username, avatar } = profile;
     const user = await this.authService.validateDiscordUser(
       id,
       username,
-      avatar,
+      avatar ?? undefined,
     );
     return user;
   }

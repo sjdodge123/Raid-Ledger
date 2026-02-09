@@ -76,7 +76,7 @@ export class AvailabilityService {
       .orderBy(asc(schema.availability.createdAt));
 
     return {
-      data: windows.map(this.mapToDto),
+      data: windows.map((row) => this.mapToDto(row)),
       meta: { total: windows.length },
     };
   }

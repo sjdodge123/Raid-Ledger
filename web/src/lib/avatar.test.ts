@@ -199,7 +199,7 @@ describe('resolveAvatar', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [
-                    { gameId: 'game-123', avatarUrl: '' as any },
+                    { gameId: 'game-123', avatarUrl: '' },
                 ],
             };
 

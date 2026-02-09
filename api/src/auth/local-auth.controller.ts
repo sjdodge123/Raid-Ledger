@@ -47,7 +47,7 @@ interface AuthenticatedRequest {
 
 @Controller('auth')
 export class LocalAuthController {
-  constructor(private localAuthService: LocalAuthService) { }
+  constructor(private localAuthService: LocalAuthService) {}
 
   /**
    * POST /auth/local
@@ -89,14 +89,7 @@ export class LocalAuthController {
     @Param('userId', ParseIntPipe) userId: number,
     @Request() req: AuthenticatedRequest,
   ) {
-    // Build a minimal user object for the service
-    const adminUser = {
-      id: req.user.id,
-      username: req.user.username,
-      isAdmin: req.user.isAdmin,
-    } as any;
-
-    return this.localAuthService.impersonate(adminUser, userId);
+    return this.localAuthService.impersonate(req.user, userId);
   }
 
   /**
@@ -106,7 +99,7 @@ export class LocalAuthController {
   @Post('impersonate/exit')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(HttpStatus.OK)
-  async exitImpersonation(@Request() req: AuthenticatedRequest) {
+  exitImpersonation(@Request() req: AuthenticatedRequest) {
     if (!req.user.impersonatedBy) {
       throw new ForbiddenException('Not currently impersonating');
     }

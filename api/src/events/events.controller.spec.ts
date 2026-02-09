@@ -4,6 +4,10 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 
+interface AuthenticatedRequest {
+  user: { id: number; isAdmin: boolean };
+}
+
 describe('EventsController', () => {
   let controller: EventsController;
   let mockEventsService: Partial<EventsService>;
@@ -79,7 +83,10 @@ describe('EventsController', () => {
         endTime: '2026-02-10T20:00:00.000Z',
       };
 
-      const result = await controller.create({ user: mockUser } as any, body);
+      const result = await controller.create(
+        { user: mockUser } as AuthenticatedRequest,
+        body,
+      );
 
       expect(result.id).toBe(mockEvent.id);
       expect(mockEventsService.create).toHaveBeenCalledWith(
@@ -95,7 +102,7 @@ describe('EventsController', () => {
         endTime: '2026-02-10T20:00:00.000Z',
       };
 
-      await controller.create({ user: mockUser } as any, body);
+      await controller.create({ user: mockUser } as AuthenticatedRequest, body);
 
       expect(mockSignupsService.signup).toHaveBeenCalledWith(
         mockEvent.id,
@@ -107,7 +114,7 @@ describe('EventsController', () => {
       const body = { title: '' }; // Missing required times
 
       await expect(
-        controller.create({ user: mockUser } as any, body),
+        controller.create({ user: mockUser } as AuthenticatedRequest, body),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -119,7 +126,7 @@ describe('EventsController', () => {
       };
 
       await expect(
-        controller.create({ user: mockUser } as any, body),
+        controller.create({ user: mockUser } as AuthenticatedRequest, body),
       ).rejects.toThrow(BadRequestException);
     });
   });
@@ -240,7 +247,7 @@ describe('EventsController', () => {
 
       const result = await controller.update(
         1,
-        { user: mockUser } as any,
+        { user: mockUser } as AuthenticatedRequest,
         body,
       );
 
@@ -256,7 +263,9 @@ describe('EventsController', () => {
 
   describe('delete', () => {
     it('should delete event', async () => {
-      const result = await controller.delete(1, { user: mockUser } as any);
+      const result = await controller.delete(1, {
+        user: mockUser,
+      } as AuthenticatedRequest);
 
       expect(result.message).toBe('Event deleted successfully');
       expect(mockEventsService.delete).toHaveBeenCalledWith(
@@ -297,7 +306,7 @@ describe('EventsController', () => {
       const result = await controller.confirmSignup(
         1,
         1,
-        { user: mockUser } as any,
+        { user: mockUser } as AuthenticatedRequest,
         body,
       );
 
@@ -315,7 +324,12 @@ describe('EventsController', () => {
       const body = { characterId: 'not-a-uuid' };
 
       await expect(
-        controller.confirmSignup(1, 1, { user: mockUser } as any, body),
+        controller.confirmSignup(
+          1,
+          1,
+          { user: mockUser } as AuthenticatedRequest,
+          body,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
@@ -323,7 +337,12 @@ describe('EventsController', () => {
       const body = {};
 
       await expect(
-        controller.confirmSignup(1, 1, { user: mockUser } as any, body),
+        controller.confirmSignup(
+          1,
+          1,
+          { user: mockUser } as AuthenticatedRequest,
+          body,
+        ),
       ).rejects.toThrow(BadRequestException);
     });
   });

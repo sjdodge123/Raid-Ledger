@@ -2,6 +2,7 @@ import { Strategy, Profile } from 'passport-discord';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
 import type { DiscordOAuthConfig } from '../settings/settings.service';
@@ -69,7 +70,10 @@ export class DynamicDiscordStrategy
    */
   private updateStrategyOptions(config: DiscordOAuthConfig): void {
     // Access the internal strategy and update its options
-    const strategy = this as unknown as { _oauth2: any; _callbackURL: string };
+    const strategy = this as unknown as {
+      _oauth2: { _clientId: string; _clientSecret: string } | undefined;
+      _callbackURL: string;
+    };
 
     this.logger.log(`Updating callback URL to: ${config.callbackUrl}`);
 
@@ -87,7 +91,7 @@ export class DynamicDiscordStrategy
    * Handle settings update event for hot-reload.
    */
   @OnEvent(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED)
-  async handleOAuthUpdate(_config: DiscordOAuthConfig) {
+  async handleOAuthUpdate() {
     this.logger.log('Discord OAuth settings updated, reloading strategy...');
     await this.reloadConfig();
   }
@@ -103,7 +107,7 @@ export class DynamicDiscordStrategy
    * Override authenticate to ensure we have the latest callback URL.
    * Passport caches options, so we need to force-update before each attempt.
    */
-  authenticate(req: any, options?: any): void {
+  authenticate(req: Request, options?: object): void {
     // Ensure callback URL is current before authenticating
     if (this.isConfigured) {
       const strategy = this as unknown as { _callbackURL: string };

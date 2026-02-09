@@ -129,7 +129,7 @@ export class AdminSettingsController {
       });
 
       // Discord returns 400 for invalid grant type but with proper error codes
-      const data = await response.json();
+      const data = (await response.json()) as { error?: string };
 
       if (response.status === 401) {
         return {

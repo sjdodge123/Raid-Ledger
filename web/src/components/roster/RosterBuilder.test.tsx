@@ -161,8 +161,8 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // Click first tank slot
-        const slotElements = screen.getAllByText('Join');
+        // Click first tank slot (admin sees "Assign" text, not "Join")
+        const slotElements = screen.getAllByText('Assign');
         fireEvent.click(slotElements[0].closest('div[class*="min-h"]')!);
 
         // Assignment popup should appear
