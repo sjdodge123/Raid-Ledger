@@ -81,21 +81,13 @@ export class AuthController {
   }
 
   /**
-   * Derive client URL from the stored callback URL.
-   * e.g., https://raid.gamernight.net/api/auth/discord/callback -> https://raid.gamernight.net
+   * Get the frontend client URL for post-auth redirects.
+   * Uses CLIENT_URL env var (frontend origin), NOT the OAuth callback URL (API origin).
    */
-  private async getClientUrl(): Promise<string> {
-    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
-    if (oauthConfig?.callbackUrl) {
-      try {
-        const url = new URL(oauthConfig.callbackUrl);
-        return `${url.protocol}//${url.host}`;
-      } catch {
-        // Fall through to default
-      }
-    }
-    // Fallback to env var or localhost
-    return this.configService.get<string>('CLIENT_URL') || 'http://localhost';
+  private getClientUrl(): string {
+    return (
+      this.configService.get<string>('CLIENT_URL') || 'http://localhost:5173'
+    );
   }
 
   @Get('discord')
@@ -106,15 +98,12 @@ export class AuthController {
 
   @Get('discord/callback')
   @UseGuards(AuthGuard('discord'))
-  async discordLoginCallback(
-    @Req() req: RequestWithUser,
-    @Res() res: Response,
-  ) {
+  discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
 
     // Redirect to frontend with token (derive URL from callback URL in settings)
-    const clientUrl = await this.getClientUrl();
+    const clientUrl = this.getClientUrl();
     // Using query param for simplicity in MVP. Secure httpOnly cookie is better for prod.
     res.redirect(`${clientUrl}/auth/success?token=${access_token}`);
   }
@@ -182,7 +171,7 @@ export class AuthController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const clientUrl = await this.getClientUrl();
+    const clientUrl = this.getClientUrl();
 
     try {
       // Get OAuth config from database settings (ROK-146)

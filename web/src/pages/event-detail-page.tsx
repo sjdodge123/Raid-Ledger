@@ -11,6 +11,7 @@ import { SignupConfirmationModal } from '../components/events/signup-confirmatio
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
 import { isMMOSlotConfig } from '../utils/game-utils';
+import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import './event-detail-page.css';
 
 /**
@@ -258,6 +259,24 @@ export function EventDetailPage() {
                         onSlotClick={handleSlotClick}
                         canJoin={canJoinSlot}
                         currentUserId={user?.id}
+                        stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
+                            <GameTimeWidget
+                                eventStartTime={event.startTime}
+                                eventEndTime={event.endTime}
+                                eventTitle={event.title}
+                                gameName={event.game?.name}
+                                gameSlug={event.game?.slug}
+                                coverUrl={event.game?.coverUrl}
+                                description={event.description}
+                                creatorUsername={event.creator?.username}
+                                attendees={roster?.signups.slice(0, 6).map(s => ({
+                                    id: s.id,
+                                    username: s.user.username,
+                                    avatar: s.user.avatar ?? null,
+                                }))}
+                                attendeeCount={roster?.count}
+                            />
+                        ) : undefined}
                     />
                 </div>
             )}
@@ -273,6 +292,26 @@ export function EventDetailPage() {
                         {signup.isPending ? 'Signing up...' : 'Sign Up for Event'}
                     </button>
                 </div>
+            )}
+
+            {/* Game Time widget fallback when no roster slots */}
+            {!rosterAssignments && isAuthenticated && event.startTime && event.endTime && (
+                <GameTimeWidget
+                    eventStartTime={event.startTime}
+                    eventEndTime={event.endTime}
+                    eventTitle={event.title}
+                    gameName={event.game?.name}
+                    gameSlug={event.game?.slug}
+                    coverUrl={event.game?.coverUrl}
+                    description={event.description}
+                    creatorUsername={event.creator?.username}
+                    attendees={roster?.signups.slice(0, 6).map(s => ({
+                        id: s.id,
+                        username: s.user.username,
+                        avatar: s.user.avatar ?? null,
+                    }))}
+                    attendeeCount={roster?.count}
+                />
             )}
 
             {/* AC-8: Roster List - grouped by status */}

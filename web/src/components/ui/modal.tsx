@@ -1,17 +1,20 @@
 import { useEffect, useCallback, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 interface ModalProps {
     isOpen: boolean;
     onClose: () => void;
     title: string;
     children: ReactNode;
+    /** Override the default max-width (default: 'max-w-md') */
+    maxWidth?: string;
 }
 
 /**
  * Simple modal component for dialogs.
  * Uses portal pattern for proper z-index stacking.
  */
-export function Modal({ isOpen, onClose, title, children }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }: ModalProps) {
     // Close on Escape key
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -35,7 +38,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
     if (!isOpen) return null;
 
-    return (
+    return createPortal(
         <div className="fixed inset-0 z-50 flex items-center justify-center">
             {/* Backdrop */}
             <div
@@ -46,7 +49,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
 
             {/* Modal Content */}
             <div
-                className="relative bg-slate-900 border border-slate-700 rounded-xl shadow-2xl max-w-md w-full mx-4 max-h-[90vh] overflow-hidden"
+                className={`relative bg-slate-900 border border-slate-700 rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="modal-title"
@@ -82,6 +85,7 @@ export function Modal({ isOpen, onClose, title, children }: ModalProps) {
                     {children}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body,
     );
 }

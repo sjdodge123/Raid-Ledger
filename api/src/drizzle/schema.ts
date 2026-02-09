@@ -12,3 +12,5 @@ export * from './schema/app-settings';
 export * from './schema/notifications';
 export * from './schema/notification-preferences';
 export * from './schema/user-preferences';
+export * from './schema/game-time-templates';
+export * from './schema/game-time-overrides';

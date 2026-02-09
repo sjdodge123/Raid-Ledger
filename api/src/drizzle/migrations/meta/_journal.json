@@ -127,6 +127,20 @@
       "when": 1770614729080,
       "tag": "0017_tan_the_call",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1770662141437,
+      "tag": "0018_equal_red_wolf",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1770671100384,
+      "tag": "0019_sharp_doctor_octopus",
+      "breakpoints": true
     }
   ]
 }

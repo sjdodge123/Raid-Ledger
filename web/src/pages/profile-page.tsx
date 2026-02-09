@@ -1,14 +1,12 @@
-import { useState } from 'react';
-import { Navigate } from 'react-router-dom';
-import type { CharacterDto, AvailabilityDto } from '@raid-ledger/contract';
+import { useState, useEffect } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import type { CharacterDto } from '@raid-ledger/contract';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
-import { useAvailability, useDeleteAvailability } from '../hooks/use-availability';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { IntegrationHub } from '../components/profile/IntegrationHub';
 import { CharacterList, AddCharacterModal } from '../components/profile';
-import { AvailabilityList, AvailabilityForm } from '../components/features/availability';
-import { toast } from 'sonner';
+import { GameTimePanel } from '../components/features/game-time';
 import '../components/profile/integration-hub.css';
 
 /**
@@ -18,16 +16,23 @@ import '../components/profile/integration-hub.css';
 export function ProfilePage() {
     const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
     const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
-    const { data: availabilityData, isLoading: availabilityLoading } = useAvailability({ enabled: isAuthenticated });
-    const deleteAvailability = useDeleteAvailability();
     const { games } = useGameRegistry();
+    const location = useLocation();
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingCharacter, setEditingCharacter] = useState<CharacterDto | null>(null);
     const [selectedGameId, setSelectedGameId] = useState<string>('');
 
-    const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
-    const [editingAvailability, setEditingAvailability] = useState<AvailabilityDto | null>(null);
+    // Scroll to hash anchor (e.g., #game-time from modal link)
+    useEffect(() => {
+        if (location.hash) {
+            const el = document.querySelector(location.hash);
+            if (el) {
+                // Small delay to let the page render fully
+                setTimeout(() => el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+            }
+        }
+    }, [location.hash]);
 
     // Show loading state while checking auth
     if (authLoading) {
@@ -44,7 +49,6 @@ export function ProfilePage() {
     }
 
     const characters = charactersData?.data ?? [];
-    const availabilities = availabilityData?.data ?? [];
 
     // Default to first game in registry if no game selected
     const defaultGame = games[0];
@@ -71,25 +75,6 @@ export function ProfilePage() {
         setSelectedGameId('');
     }
 
-    function handleEditAvailability(availability: AvailabilityDto) {
-        setEditingAvailability(availability);
-        setShowAvailabilityModal(true);
-    }
-
-    function handleCloseAvailabilityModal() {
-        setShowAvailabilityModal(false);
-        setEditingAvailability(null);
-    }
-
-    async function handleDeleteAvailability(id: string) {
-        try {
-            await deleteAvailability.mutateAsync(id);
-            toast.success('Availability deleted');
-        } catch {
-            toast.error('Failed to delete availability');
-        }
-    }
-
     return (
         <div className="profile-page relative min-h-screen py-8 px-4">
             {/* Full-page space background (future theme candidate) */}
@@ -101,7 +86,7 @@ export function ProfilePage() {
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-2">My Profile</h1>
                     <p className="text-slate-400">
-                        Manage your characters, availability, and preferences
+                        Manage your characters, game time, and preferences
                     </p>
                 </div>
 
@@ -112,31 +97,12 @@ export function ProfilePage() {
                     onRefresh={refetch}
                 />
 
-                {/* Availability Section (ROK-112) */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-                    <div className="flex items-center justify-between mb-6">
-                        <div>
-                            <h2 className="text-xl font-semibold text-white">My Availability</h2>
-                            <p className="text-slate-400 text-sm mt-1">
-                                Set when you're free to help raid leaders schedule events
-                            </p>
-                        </div>
-                        <button
-                            onClick={() => setShowAvailabilityModal(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors"
-                        >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                            </svg>
-                            Add Availability
-                        </button>
-                    </div>
-
-                    <AvailabilityList
-                        availabilities={availabilities}
-                        isLoading={availabilityLoading}
-                        onEdit={handleEditAvailability}
-                        onDelete={handleDeleteAvailability}
+                {/* Game Time Section (ROK-189) — unified panel */}
+                <div id="game-time" className="bg-slate-900 border border-slate-800 rounded-xl p-6 scroll-mt-8">
+                    <GameTimePanel
+                        mode="profile"
+                        rolling
+                        enabled={isAuthenticated}
                     />
                 </div>
 
@@ -179,13 +145,6 @@ export function ProfilePage() {
                     editingCharacter={editingCharacter}
                 />
             )}
-
-            {/* Add/Edit Availability Modal (ROK-112) */}
-            <AvailabilityForm
-                isOpen={showAvailabilityModal}
-                onClose={handleCloseAvailabilityModal}
-                editingAvailability={editingAvailability}
-            />
         </div>
     );
 }

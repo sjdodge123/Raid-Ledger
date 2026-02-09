@@ -59,7 +59,7 @@ export function DiscordDetailsModal({
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={handleClose} title="Discord Integration">
+        <Modal isOpen={isOpen} onClose={handleClose} title="Discord Auth Module">
             <div className="space-y-5">
                 {/* Discord profile info */}
                 <div className="flex items-center gap-4">

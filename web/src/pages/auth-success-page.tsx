@@ -7,7 +7,7 @@ import { consumeAuthRedirect } from '../components/auth';
 /**
  * Handles OAuth callback - extracts token from URL and logs user in.
  * This page is redirected to by the API after successful Discord OAuth.
- * 
+ *
  * Supports:
  * - ?token=xyz → successful login
  * - ?error=xyz → OAuth error (denied, expired, etc.)
@@ -41,18 +41,15 @@ export function AuthSuccessPage() {
 
         if (token) {
             hasProcessedRef.current = true;
-            // Use async IIFE since useEffect callback can't be async
             (async () => {
                 try {
-                    // Store the token and wait for auth state to update
+                    // Store token and wait for auth state to update (refetchQueries awaits)
                     await login(token);
-
-                    // Check for saved redirect destination (ROK-175: default to calendar)
                     const redirectTo = consumeAuthRedirect() || '/calendar';
                     toast.success('Logged in successfully!');
                     navigate(redirectTo, { replace: true });
-                } catch (error) {
-                    console.error('Login failed:', error);
+                } catch (err) {
+                    console.error('Login failed:', err);
                     toast.error('Login failed. Please try again.');
                     navigate('/', { replace: true });
                 }

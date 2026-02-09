@@ -80,6 +80,25 @@ export function getGameColors(slug: string | undefined): GameColorConfig {
 }
 
 /**
+ * Get game time block styling (shared between GameTimeGrid overlays and CalendarView).
+ * Extracts the gradient pattern from WeekEventComponent for reuse.
+ */
+export function getGameTimeBlockStyle(
+    slug: string | undefined,
+    coverUrl: string | null | undefined,
+): React.CSSProperties {
+    const colors = getGameColors(slug);
+    return {
+        backgroundImage: coverUrl
+            ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
+            : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        borderLeft: `3px solid ${colors.border}`,
+    };
+}
+
+/**
  * Get calendar event styling props for a game
  */
 export function getCalendarEventStyle(slug: string | undefined): React.CSSProperties {

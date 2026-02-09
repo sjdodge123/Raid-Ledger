@@ -34,7 +34,9 @@ describe('SystemController', () => {
   describe('getStatus', () => {
     it('should return isFirstRun: true when no users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);
-      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
 
       const result = await controller.getStatus();
 
@@ -44,7 +46,9 @@ describe('SystemController', () => {
 
     it('should return isFirstRun: false when users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(5);
-      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
 
       const result = await controller.getStatus();
 
@@ -56,12 +60,16 @@ describe('SystemController', () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);
 
       // Test when Discord is configured
-      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(true);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
       let result = await controller.getStatus();
       expect(result.discordConfigured).toBe(true);
 
       // Test when Discord is not configured
-      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(false);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
       result = await controller.getStatus();
       expect(result.discordConfigured).toBe(false);
     });

@@ -1,10 +1,13 @@
 import {
   Controller,
   Get,
+  Put,
+  Post,
   Patch,
   Delete,
   Body,
   Param,
+  Query,
   ParseIntPipe,
   NotFoundException,
   BadRequestException,
@@ -16,8 +19,15 @@ import { AuthGuard } from '@nestjs/passport';
 import { ZodError } from 'zod';
 import { UsersService } from './users.service';
 import { PreferencesService } from './preferences.service';
+import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
-import { UserProfileDto, UpdatePreferenceSchema } from '@raid-ledger/contract';
+import {
+  UserProfileDto,
+  UpdatePreferenceSchema,
+  GameTimeTemplateInputSchema,
+  GameTimeOverrideInputSchema,
+  GameTimeAbsenceInputSchema,
+} from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
   user: {
@@ -35,6 +45,7 @@ export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly preferencesService: PreferencesService,
+    private readonly gameTimeService: GameTimeService,
     private readonly charactersService: CharactersService,
   ) {}
 
@@ -98,6 +109,140 @@ export class UsersController {
   @HttpCode(204)
   async unlinkDiscord(@Request() req: AuthenticatedRequest) {
     await this.usersService.unlinkDiscord(req.user.id);
+  }
+
+  /**
+   * Get current user's game time (composite view: template + event commitments).
+   * Optional `week` query param (ISO date of Sunday) defaults to current week.
+   */
+  @Get('me/game-time')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyGameTime(
+    @Request() req: AuthenticatedRequest,
+    @Query('week') week?: string,
+    @Query('tzOffset') tzOffsetStr?: string,
+  ) {
+    let weekStart: Date;
+    if (week) {
+      weekStart = new Date(week);
+      if (isNaN(weekStart.getTime())) {
+        throw new BadRequestException('Invalid week parameter');
+      }
+    } else {
+      // Default to Sunday of the current week
+      weekStart = new Date();
+      const day = weekStart.getDay(); // 0=Sun, 1=Mon, ...
+      weekStart.setDate(weekStart.getDate() - day);
+      weekStart.setHours(0, 0, 0, 0);
+    }
+
+    // Parse timezone offset (minutes from UTC, e.g., -480 for PST)
+    const tzOffset = tzOffsetStr ? parseInt(tzOffsetStr, 10) : 0;
+
+    const result = await this.gameTimeService.getCompositeView(
+      req.user.id,
+      weekStart,
+      isNaN(tzOffset) ? 0 : tzOffset,
+    );
+    return { data: result };
+  }
+
+  /**
+   * Save current user's game time template (replaces all slots).
+   */
+  @Put('me/game-time')
+  @UseGuards(AuthGuard('jwt'))
+  async saveMyGameTime(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    try {
+      const dto = GameTimeTemplateInputSchema.parse(body);
+      const result = await this.gameTimeService.saveTemplate(
+        req.user.id,
+        dto.slots,
+      );
+      return { data: result };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Save per-hour date-specific overrides.
+   */
+  @Put('me/game-time/overrides')
+  @UseGuards(AuthGuard('jwt'))
+  async saveMyOverrides(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    try {
+      const dto = GameTimeOverrideInputSchema.parse(body);
+      await this.gameTimeService.saveOverrides(req.user.id, dto.overrides);
+      return { data: { success: true } };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Create an absence range.
+   */
+  @Post('me/game-time/absences')
+  @UseGuards(AuthGuard('jwt'))
+  async createAbsence(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    try {
+      const dto = GameTimeAbsenceInputSchema.parse(body);
+      const result = await this.gameTimeService.createAbsence(req.user.id, dto);
+      return { data: result };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Delete an absence.
+   */
+  @Delete('me/game-time/absences/:id')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async deleteAbsence(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.gameTimeService.deleteAbsence(req.user.id, id);
+  }
+
+  /**
+   * List all absences for current user.
+   */
+  @Get('me/game-time/absences')
+  @UseGuards(AuthGuard('jwt'))
+  async getAbsences(@Request() req: AuthenticatedRequest) {
+    const absences = await this.gameTimeService.getAbsences(req.user.id);
+    return { data: absences };
   }
 
   /**

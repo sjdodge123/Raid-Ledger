@@ -33,6 +33,8 @@ interface RosterBuilderProps {
     canJoin?: boolean;
     /** ROK-184: Current user ID for highlighting their slot */
     currentUserId?: number;
+    /** Optional extra content rendered alongside the UnassignedBar in a shared sticky row */
+    stickyExtra?: React.ReactNode;
 }
 
 // MMO-style role slots
@@ -66,6 +68,7 @@ export function RosterBuilder({
     onSlotClick,
     canJoin = false,
     currentUserId,
+    stickyExtra,
 }: RosterBuilderProps) {
     // ROK-208: Assignment popup state
     const [assignmentTarget, setAssignmentTarget] = React.useState<{
@@ -213,11 +216,26 @@ export function RosterBuilder({
 
     return (
         <div className="space-y-4">
-            {/* ROK-208: Unassigned Bar */}
-            <UnassignedBar
-                pool={pool}
-                onBarClick={() => setBrowseAll(true)}
-            />
+            {/* ROK-208: Unassigned Bar + optional sticky extra (e.g., GameTimeWidget) */}
+            {stickyExtra ? (
+                <div className="flex gap-2 items-stretch" style={{ position: 'sticky', top: '7rem', zIndex: 20 }}>
+                    <div className="flex-1 min-w-0">
+                        <UnassignedBar
+                            pool={pool}
+                            onBarClick={() => setBrowseAll(true)}
+                            inline
+                        />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        {stickyExtra}
+                    </div>
+                </div>
+            ) : (
+                <UnassignedBar
+                    pool={pool}
+                    onBarClick={() => setBrowseAll(true)}
+                />
+            )}
 
             {/* Role Slots */}
             <div className="space-y-4">

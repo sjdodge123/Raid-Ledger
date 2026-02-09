@@ -18,6 +18,8 @@ import type {
     RosterWithAssignments,
     UpdateRosterDto,
     UserProfileDto,
+    GameTimeResponse,
+    GameTimeTemplateInput,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -386,5 +388,78 @@ export async function unlinkDiscord(): Promise<void> {
  */
 export async function getUserProfile(userId: number): Promise<UserProfileDto> {
     const response = await fetchApi<{ data: UserProfileDto }>(`/users/${userId}/profile`);
+    return response.data;
+}
+
+// ============================================================
+// Game Time API (ROK-189)
+// ============================================================
+
+/**
+ * Fetch current user's game time (composite view: template + event commitments).
+ * Automatically sends browser timezone offset so event overlays render in local time.
+ */
+export async function getMyGameTime(week?: string): Promise<GameTimeResponse> {
+    const searchParams = new URLSearchParams();
+    if (week) searchParams.set('week', week);
+    // Send browser timezone offset so backend converts UTC event times to local grid cells
+    searchParams.set('tzOffset', String(new Date().getTimezoneOffset()));
+    const query = searchParams.toString();
+    const response = await fetchApi<{ data: GameTimeResponse }>(`/users/me/game-time?${query}`);
+    return response.data;
+}
+
+/**
+ * Save current user's game time template (replaces all slots)
+ */
+export async function saveMyGameTime(
+    slots: GameTimeTemplateInput['slots'],
+): Promise<GameTimeResponse> {
+    const response = await fetchApi<{ data: GameTimeResponse }>('/users/me/game-time', {
+        method: 'PUT',
+        body: JSON.stringify({ slots }),
+    });
+    return response.data;
+}
+
+/**
+ * Save per-hour date-specific overrides
+ */
+export async function saveMyGameTimeOverrides(
+    overrides: Array<{ date: string; hour: number; status: string }>,
+): Promise<void> {
+    await fetchApi('/users/me/game-time/overrides', {
+        method: 'PUT',
+        body: JSON.stringify({ overrides }),
+    });
+}
+
+/**
+ * Create an absence range
+ */
+export async function createGameTimeAbsence(
+    input: { startDate: string; endDate: string; reason?: string },
+): Promise<{ id: number; startDate: string; endDate: string; reason: string | null }> {
+    const response = await fetchApi<{ data: { id: number; startDate: string; endDate: string; reason: string | null } }>(
+        '/users/me/game-time/absences',
+        { method: 'POST', body: JSON.stringify(input) },
+    );
+    return response.data;
+}
+
+/**
+ * Delete an absence
+ */
+export async function deleteGameTimeAbsence(id: number): Promise<void> {
+    await fetchApi(`/users/me/game-time/absences/${id}`, { method: 'DELETE' });
+}
+
+/**
+ * List all absences for current user
+ */
+export async function getGameTimeAbsences(): Promise<Array<{ id: number; startDate: string; endDate: string; reason: string | null }>> {
+    const response = await fetchApi<{ data: Array<{ id: number; startDate: string; endDate: string; reason: string | null }> }>(
+        '/users/me/game-time/absences',
+    );
     return response.data;
 }

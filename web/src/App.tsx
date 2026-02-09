@@ -21,6 +21,7 @@ function App() {
         theme="dark"
         richColors
         closeButton
+        offset="72px"
       />
       <Layout>
         <Routes>

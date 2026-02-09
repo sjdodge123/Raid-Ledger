@@ -369,17 +369,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
     // ── Desktop orbital layout ─────────────────────────────────────
     return (
         <div>
-            {/* Section header */}
-            <div className="px-6 pt-5 pb-0">
-                <h2 className="text-xl font-semibold text-white">Integration Modules</h2>
-                <p className="text-slate-400 text-sm mt-1">
-                    Link your platforms to sync authentication, gaming data, and notifications
-                </p>
-            </div>
             <div className="integration-hub" ref={orbitRef}>
-                {/* Nebula + star particle background */}
-                <div className="integration-hub__nebula" />
-                <div className="integration-hub__stars" />
 
                 {/* Power conduits between active modules */}
                 <LightningArcs
@@ -409,8 +399,8 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                         label="Discord"
                         statusText=""
                         tooltipText={hasDiscordLinked
-                            ? 'Discord — Authentication linked'
-                            : 'Click to link Discord for authentication'}
+                            ? 'Discord Auth Module — Linked'
+                            : 'Discord Auth Module — Click to link'}
                         angle={0}
                         onLink={handleLinkDiscord}
                         onViewDetails={() => setShowDiscordModal(true)}
@@ -425,7 +415,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                         status="placeholder"
                         label="Battle.net"
                         statusText=""
-                        tooltipText="Click to link Battle.net for character data"
+                        tooltipText="Battle.net Gaming Module — Coming Soon"
                         angle={120}
                     />
                     <IntegrationSpoke
@@ -433,7 +423,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                         status="placeholder"
                         label="Steam"
                         statusText=""
-                        tooltipText="Click to link Steam for game ownership & wishlist data"
+                        tooltipText="Steam Gaming Module — Coming Soon"
                         angle={240}
                     />
                 </OrbitRing>

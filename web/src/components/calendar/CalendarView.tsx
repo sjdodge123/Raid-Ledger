@@ -62,6 +62,8 @@ interface CalendarViewProps {
     selectedGames?: Set<string>;
     /** Callback when games list is available */
     onGamesAvailable?: (games: GameInfo[]) => void;
+    /** Game time template slots for overlap indicator (Set of "dayOfWeek:hour") */
+    gameTimeSlots?: Set<string>;
 }
 
 export function CalendarView({
@@ -70,6 +72,7 @@ export function CalendarView({
     onDateChange,
     selectedGames,
     onGamesAvailable,
+    gameTimeSlots,
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -235,12 +238,31 @@ export function CalendarView({
         []
     );
 
+    // Helper: check if an event overlaps with game time slots
+    const eventOverlapsGameTime = useCallback(
+        (start: Date, end: Date): boolean => {
+            if (!gameTimeSlots) return false;
+            const cursor = new Date(start);
+            cursor.setMinutes(0, 0, 0);
+            if (cursor < start) cursor.setHours(cursor.getHours() + 1);
+            while (cursor < end) {
+                // Grid convention is now 0=Sun (matches JS getDay())
+                const gridDay = cursor.getDay();
+                if (gameTimeSlots.has(`${gridDay}:${cursor.getHours()}`)) return true;
+                cursor.setHours(cursor.getHours() + 1);
+            }
+            return false;
+        },
+        [gameTimeSlots],
+    );
+
     // Custom event component for MONTH view (compact chip)
     const MonthEventComponent = useCallback(
         ({ event }: { event: CalendarEvent }) => {
             const gameSlug = event.resource?.game?.slug || 'default';
             const coverUrl = event.resource?.game?.coverUrl;
             const colors = getGameColors(gameSlug);
+            const overlaps = eventOverlapsGameTime(event.start, event.end);
 
             // Format time compactly (e.g., "10a" or "1p")
             const timeStr = format(event.start, 'ha').toLowerCase();
@@ -257,12 +279,19 @@ export function CalendarView({
                         backgroundPosition: 'center right',
                     }}
                 >
+                    {overlaps && (
+                        <span
+                            className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 mr-0.5"
+                            style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }}
+                            title="Overlaps with your game time"
+                        />
+                    )}
                     <span className="event-chip-time">{timeStr}</span>
                     <span className="event-chip-title">{event.title}</span>
                 </div>
             );
         },
-        []
+        [eventOverlapsGameTime]
     );
 
     // Custom event component for WEEK view (full block with details)
@@ -275,6 +304,7 @@ export function CalendarView({
             const signupsPreview = event.resource?.signupsPreview;
             const creatorName = event.resource?.creator?.username;
             const colors = getGameColors(gameSlug);
+            const overlaps = eventOverlapsGameTime(event.start, event.end);
 
             // Format time range (e.g., "7:00 AM - 10:00 AM")
             const startTime = format(event.start, 'h:mm a');
@@ -308,8 +338,15 @@ export function CalendarView({
                         borderLeft: `3px solid ${colors.border}`,
                     }}
                 >
-                    <div className="week-event-header">
+                    <div className="week-event-header" style={{ position: 'relative' }}>
                         <span className="week-event-title">{event.title}</span>
+                        {overlaps && (
+                            <span
+                                className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400"
+                                style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }}
+                                title="Overlaps with your game time"
+                            />
+                        )}
                     </div>
                     <div className="week-event-details">
                         <span className="week-event-game">{gameName}</span>
@@ -343,7 +380,7 @@ export function CalendarView({
                 </div>
             );
         },
-        []
+        [eventOverlapsGameTime]
     );
 
     // Custom event component for DAY view (expanded with centered art + description)
@@ -357,6 +394,7 @@ export function CalendarView({
             const description = event.resource?.description || '';
             const creatorName = event.resource?.creator?.username;
             const colors = getGameColors(gameSlug);
+            const overlaps = eventOverlapsGameTime(event.start, event.end);
 
 
 
@@ -392,9 +430,16 @@ export function CalendarView({
                     }}
                 >
                     <div className="day-event-content">
-                        <div className="day-event-header">
+                        <div className="day-event-header" style={{ position: 'relative' }}>
                             <span className="day-event-duration">{durationStr}</span>
                             <span className="day-event-title">{event.title}</span>
+                            {overlaps && (
+                                <span
+                                    className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400"
+                                    style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }}
+                                    title="Overlaps with your game time"
+                                />
+                            )}
                         </div>
                         <div className="day-event-meta">
                             <span className="day-event-game">{gameName}</span>
@@ -431,7 +476,7 @@ export function CalendarView({
                 </div>
             );
         },
-        []
+        [eventOverlapsGameTime]
     );
 
     return (

@@ -1,7 +1,9 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
 import { getGameColors } from '../constants/game-colors';
+import { useGameTime } from '../hooks/use-game-time';
+import { useAuth } from '../hooks/use-auth';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -15,6 +17,20 @@ export function CalendarPage() {
 
     // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
     const hasInitialized = useRef(false);
+
+    // Game time overlay for calendar indicator
+    const { isAuthenticated } = useAuth();
+    const { data: gameTimeData } = useGameTime({ enabled: isAuthenticated });
+    const gameTimeSlots = useMemo(() => {
+        if (!gameTimeData?.slots) return undefined;
+        const set = new Set<string>();
+        for (const s of gameTimeData.slots) {
+            if (s.status === 'available' || !s.status) {
+                set.add(`${s.dayOfWeek}:${s.hour}`);
+            }
+        }
+        return set.size > 0 ? set : undefined;
+    }, [gameTimeData]);
 
     // Handler for mini-calendar date selection
     const handleDateSelect = (date: Date) => {
@@ -178,6 +194,7 @@ export function CalendarPage() {
                         onDateChange={setCurrentDate}
                         selectedGames={selectedGames}
                         onGamesAvailable={handleGamesAvailable}
+                        gameTimeSlots={gameTimeSlots}
                     />
                 </main>
             </div>
