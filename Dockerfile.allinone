@@ -5,8 +5,10 @@
 # Usage: docker run -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
 #
 # Environment Variables:
-#   PORT      - External port (default: 80)
-#   DEMO_MODE - Set "true" to seed sample data (default: false)
+#   PORT           - External port (default: 80)
+#   DEMO_MODE      - Set "true" to seed sample data (default: false)
+#   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
+#   RESET_PWD      - Set "true" to reset admin password on next startup (default: false)
 # ====================
 
 # ====================
@@ -235,6 +237,8 @@ ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV CORS_ORIGIN=*
 ENV CLIENT_URL=http://localhost
 ENV DEMO_MODE=false
+ENV ADMIN_PASSWORD=
+ENV RESET_PWD=false
 
 # Expose port (nginx)
 EXPOSE 80

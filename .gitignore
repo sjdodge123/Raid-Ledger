@@ -28,7 +28,9 @@ _bmad-output/
 CLAUDE.md
 planning-artifacts/
 implementation-artifacts/
-scripts/
+scripts/*
+!scripts/deploy_prod.sh
+!scripts/deploy_dev.sh
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
@@ -51,6 +53,10 @@ yarn-error.log*
 .env.docker
 *.pem
 *.key
+
+# Dev environment
+.dev-logs/
+.dev-pids
 
 # Project state
 task.md

@@ -9,7 +9,8 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: raid_ledger
-    # Internal only - not exposed to host
+    ports:
+      - "5432:5432"
     volumes:
       - db_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +23,8 @@ services:
     image: redis:alpine
     container_name: raid-ledger-redis
     restart: always
-    # Internal only - not exposed to host
+    ports:
+      - "6379:6379"
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -50,6 +52,8 @@ services:
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
       DEMO_MODE: "${DEMO_MODE:-false}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      RESET_PWD: "${RESET_PWD:-false}"
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:

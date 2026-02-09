@@ -1,14 +1,17 @@
 #!/usr/bin/env ts-node
 /**
  * Bootstrap Admin Script
- * 
+ *
  * Creates an initial admin account on first run if no local credentials exist.
  * Password can be set via ADMIN_PASSWORD environment variable, otherwise generated.
- * 
- * Usage: npx ts-node scripts/bootstrap-admin.ts
+ *
+ * Usage:
+ *   npx ts-node scripts/bootstrap-admin.ts           # Create admin if none exists
+ *   npx ts-node scripts/bootstrap-admin.ts --reset   # Reset existing admin password
  */
 
 import { drizzle } from 'drizzle-orm/postgres-js';
+import { eq } from 'drizzle-orm';
 import postgres from 'postgres';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
@@ -19,6 +22,7 @@ const DEFAULT_EMAIL = 'admin@local';
 
 async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
+    const resetMode = process.argv.includes('--reset');
 
     if (!databaseUrl) {
         console.error('❌ DATABASE_URL environment variable is required');
@@ -30,12 +34,13 @@ async function bootstrapAdmin() {
 
     try {
         // Check if any local credentials exist
-        const existingAdmins = await db
+        const existingCreds = await db
             .select()
             .from(schema.localCredentials)
+            .where(eq(schema.localCredentials.email, DEFAULT_EMAIL))
             .limit(1);
 
-        if (existingAdmins.length > 0) {
+        if (existingCreds.length > 0 && !resetMode) {
             console.log('ℹ️  Local credentials already exist, skipping bootstrap');
             await sql.end();
             return;
@@ -44,6 +49,28 @@ async function bootstrapAdmin() {
         // Generate or use provided password
         const password = process.env.ADMIN_PASSWORD || crypto.randomBytes(16).toString('base64');
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+
+        if (existingCreds.length > 0 && resetMode) {
+            // Reset existing admin password
+            await db
+                .update(schema.localCredentials)
+                .set({ passwordHash })
+                .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
+
+            console.log('');
+            console.log('╔════════════════════════════════════════════════════════════╗');
+            console.log('║          🔐 ADMIN PASSWORD RESET                           ║');
+            console.log('╠════════════════════════════════════════════════════════════╣');
+            console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
+            console.log(`║  Password: ${password.padEnd(46)} ║`);
+            console.log('╠════════════════════════════════════════════════════════════╣');
+            console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
+            console.log('╚════════════════════════════════════════════════════════════╝');
+            console.log('');
+
+            await sql.end();
+            return;
+        }
 
         // Create user record first
         const [user] = await db

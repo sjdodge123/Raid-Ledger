@@ -1,0 +1,325 @@
+#!/bin/bash
+# =============================================================================
+# deploy_dev.sh - Local Development Environment
+# =============================================================================
+# Runs native API (watch mode) + Vite dev server against Docker DB + Redis.
+# Shares the same DB volume as deploy_prod.sh — admin password stays in sync.
+#
+# Usage:
+#   ./scripts/deploy_dev.sh                  # Start dev environment
+#   ./scripts/deploy_dev.sh --rebuild        # Rebuild contract package, then start
+#   ./scripts/deploy_dev.sh --fresh          # Reset DB, new admin password, restart
+#   ./scripts/deploy_dev.sh --reset-password # Reset admin password (no data loss)
+#   ./scripts/deploy_dev.sh --down           # Stop everything
+#   ./scripts/deploy_dev.sh --status         # Show process/container status
+#   ./scripts/deploy_dev.sh --logs           # Tail API and web logs
+# =============================================================================
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+COMPOSE_FILE="$PROJECT_DIR/docker-compose.yml"
+ENV_FILE="$PROJECT_DIR/.env"
+LOG_DIR="$PROJECT_DIR/.dev-logs"
+PID_FILE="$PROJECT_DIR/.dev-pids"
+
+cd "$PROJECT_DIR"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+print_header() {
+    echo -e "\n${BLUE}═══════════════════════════════════════════════════════════════${NC}"
+    echo -e "${BLUE}  $1${NC}"
+    echo -e "${BLUE}═══════════════════════════════════════════════════════════════${NC}\n"
+}
+
+print_success() {
+    echo -e "${GREEN}✓ $1${NC}"
+}
+
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+print_error() {
+    echo -e "${RED}✗ $1${NC}"
+}
+
+# Source .env file to get ADMIN_PASSWORD
+load_env() {
+    if [ -f "$ENV_FILE" ]; then
+        set -a
+        source "$ENV_FILE"
+        set +a
+    fi
+}
+
+# Generate a new admin password and update .env
+generate_password() {
+    local password
+    password=$(openssl rand -base64 16)
+
+    if [ -f "$ENV_FILE" ]; then
+        if grep -q "^ADMIN_PASSWORD=" "$ENV_FILE"; then
+            sed -i.bak "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$password|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
+        else
+            echo "ADMIN_PASSWORD=$password" >> "$ENV_FILE"
+        fi
+    else
+        echo "ADMIN_PASSWORD=$password" > "$ENV_FILE"
+    fi
+
+    export ADMIN_PASSWORD="$password"
+    echo "$password"
+}
+
+show_credentials() {
+    load_env
+    if [ -n "$ADMIN_PASSWORD" ]; then
+        echo -e "  ${GREEN}Admin Email:${NC}    admin@local"
+        echo -e "  ${GREEN}Admin Password:${NC} $ADMIN_PASSWORD"
+    fi
+}
+
+# Stop Docker API/Web containers if running (they'd conflict on ports)
+stop_docker_app() {
+    local running
+    running=$(docker compose -f "$COMPOSE_FILE" --profile test ps --format '{{.Name}}' 2>/dev/null || true)
+    if echo "$running" | grep -q "raid-ledger-api\|raid-ledger-web"; then
+        print_warning "Stopping Docker API/Web containers (would conflict with native dev)..."
+        docker compose -f "$COMPOSE_FILE" --profile test stop api web 2>/dev/null || true
+    fi
+}
+
+# Kill previously started dev processes
+kill_dev_processes() {
+    if [ -f "$PID_FILE" ]; then
+        while IFS= read -r pid; do
+            if kill -0 "$pid" 2>/dev/null; then
+                kill "$pid" 2>/dev/null || true
+            fi
+        done < "$PID_FILE"
+        rm -f "$PID_FILE"
+    fi
+
+    # Also kill any processes holding dev ports
+    local pids
+    pids=$(lsof -ti:3000,5173 2>/dev/null || true)
+    if [ -n "$pids" ]; then
+        echo "$pids" | xargs kill 2>/dev/null || true
+        sleep 1
+    fi
+}
+
+wait_for_db() {
+    echo "Waiting for database to be ready..."
+    local max_wait=30
+    local waited=0
+    while [ $waited -lt $max_wait ]; do
+        if docker compose -f "$COMPOSE_FILE" ps db 2>/dev/null | grep -q "healthy"; then
+            break
+        fi
+        sleep 2
+        waited=$((waited + 2))
+        echo -n "."
+    done
+    echo ""
+
+    if [ $waited -ge $max_wait ]; then
+        print_error "Timeout waiting for database"
+        exit 1
+    fi
+    print_success "Database is ready"
+}
+
+show_status() {
+    print_header "Dev Environment Status"
+
+    echo -e "${BLUE}Docker Containers:${NC}"
+    docker compose -f "$COMPOSE_FILE" ps db redis 2>/dev/null || echo "  No containers running"
+    echo ""
+
+    echo -e "${BLUE}Native Processes:${NC}"
+    if [ -f "$PID_FILE" ]; then
+        while IFS= read -r pid; do
+            if kill -0 "$pid" 2>/dev/null; then
+                ps -p "$pid" -o pid,command= 2>/dev/null || true
+            fi
+        done < "$PID_FILE"
+    else
+        echo "  No dev processes tracked"
+    fi
+}
+
+show_logs() {
+    print_header "Dev Logs (Ctrl+C to exit)"
+    if [ -d "$LOG_DIR" ]; then
+        tail -f "$LOG_DIR"/*.log
+    else
+        print_warning "No log files found. Is the dev environment running?"
+    fi
+}
+
+stop_dev() {
+    print_header "Stopping Dev Environment"
+
+    kill_dev_processes
+    print_success "Native processes stopped"
+
+    docker compose -f "$COMPOSE_FILE" stop db redis 2>/dev/null || true
+    print_success "Database and Redis stopped"
+
+    rm -rf "$LOG_DIR" "$PID_FILE"
+}
+
+reset_password() {
+    print_header "Resetting Admin Password"
+
+    # Ensure db is running
+    if ! docker compose -f "$COMPOSE_FILE" ps db 2>/dev/null | grep -q "running"; then
+        print_warning "Starting database container..."
+        docker compose -f "$COMPOSE_FILE" up -d db
+        wait_for_db
+    fi
+
+    local password
+    password=$(generate_password)
+
+    load_env
+    ADMIN_PASSWORD="$password" npx ts-node api/scripts/bootstrap-admin.ts --reset
+
+    print_success "Admin password has been reset and saved to .env"
+}
+
+start_dev() {
+    local rebuild=$1
+    local fresh=$2
+
+    # Stop conflicting Docker app containers
+    stop_docker_app
+
+    # Kill any existing dev processes
+    kill_dev_processes
+
+    print_header "Starting Dev Environment"
+
+    # Fresh start: wipe volumes, generate new password
+    if [ "$fresh" = "true" ]; then
+        print_warning "Fresh start: wiping database volume..."
+        docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+
+        local password
+        password=$(generate_password)
+        print_success "New admin password generated and saved to .env"
+    fi
+
+    # Start infrastructure containers
+    echo "Starting database and Redis..."
+    docker compose -f "$COMPOSE_FILE" up -d db redis
+    wait_for_db
+
+    # Build contract (required before api/web)
+    if [ "$rebuild" = "true" ] || [ "$fresh" = "true" ]; then
+        print_warning "Building contract package..."
+        npm run build -w packages/contract
+    else
+        # Quick check: build contract only if dist is missing
+        if [ ! -d "$PROJECT_DIR/packages/contract/dist" ]; then
+            print_warning "Contract not built yet, building..."
+            npm run build -w packages/contract
+        fi
+    fi
+
+    # Load env for DATABASE_URL and ADMIN_PASSWORD
+    load_env
+
+    # Run migrations
+    echo "Running database migrations..."
+    npm run db:migrate -w api 2>&1 || print_warning "Migrations may have already been applied"
+
+    # Bootstrap admin
+    echo "Checking admin account..."
+    npx ts-node api/scripts/bootstrap-admin.ts 2>&1 || true
+
+    # Seed games
+    echo "Seeding game data..."
+    npm run db:seed:games -w api 2>&1 || true
+
+    # Create log directory
+    mkdir -p "$LOG_DIR"
+    > "$PID_FILE"
+
+    # Start native API in background
+    echo "Starting API server (watch mode)..."
+    npm run start:dev -w api > "$LOG_DIR/api.log" 2>&1 &
+    echo $! >> "$PID_FILE"
+    print_success "API starting on http://localhost:3000 (PID: $!)"
+
+    # Start native Web in background
+    echo "Starting Vite dev server..."
+    npm run dev -w web > "$LOG_DIR/web.log" 2>&1 &
+    echo $! >> "$PID_FILE"
+    print_success "Web starting on http://localhost:5173 (PID: $!)"
+
+    # Wait a moment for servers to initialize
+    sleep 3
+
+    # Final status
+    print_header "Dev Environment Ready"
+    echo -e "  ${GREEN}Web UI:${NC}     http://localhost:5173  (Vite HMR)"
+    echo -e "  ${GREEN}API:${NC}        http://localhost:3000  (NestJS watch mode)"
+    echo -e "  ${GREEN}API Health:${NC} http://localhost:3000/health"
+    echo ""
+    show_credentials
+    echo ""
+    echo -e "  ${BLUE}Commands:${NC}"
+    echo "    ./scripts/deploy_dev.sh --status          # Show process status"
+    echo "    ./scripts/deploy_dev.sh --logs            # Tail API + web logs"
+    echo "    ./scripts/deploy_dev.sh --reset-password  # Reset admin password"
+    echo "    ./scripts/deploy_dev.sh --down            # Stop everything"
+    echo ""
+}
+
+# Parse arguments
+case "${1:-}" in
+    --down|-d)
+        stop_dev
+        ;;
+    --rebuild|-r)
+        start_dev true false
+        ;;
+    --status|-s)
+        show_status
+        ;;
+    --logs|-l)
+        show_logs
+        ;;
+    --fresh|-f)
+        start_dev true true
+        ;;
+    --reset-password)
+        reset_password
+        ;;
+    --help|-h)
+        echo "Usage: $0 [OPTIONS]"
+        echo ""
+        echo "Options:"
+        echo "  (none)            Start dev environment (native API + Vite)"
+        echo "  --rebuild         Rebuild contract package, then start"
+        echo "  --fresh           Reset DB, new admin password, restart"
+        echo "  --reset-password  Reset admin password without losing data"
+        echo "  --down            Stop native processes + DB/Redis containers"
+        echo "  --status          Show process/container status"
+        echo "  --logs            Tail API and web logs"
+        echo "  --help            Show this help message"
+        ;;
+    *)
+        start_dev false false
+        ;;
+esac

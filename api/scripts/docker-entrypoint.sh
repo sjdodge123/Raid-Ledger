@@ -34,9 +34,15 @@ if [ -n "$DATABASE_URL" ]; then
 
     # Bootstrap admin account on first run using compiled JS
     echo "👤 Checking for initial admin account..."
-    node ./dist/scripts/bootstrap-admin.js 2>&1 || {
-        echo "ℹ️ Bootstrap skipped (may already exist or failed)"
-    }
+    if [ "$RESET_PWD" = "true" ]; then
+        node ./dist/scripts/bootstrap-admin.js --reset 2>&1 || {
+            echo "ℹ️ Password reset failed"
+        }
+    else
+        node ./dist/scripts/bootstrap-admin.js 2>&1 || {
+            echo "ℹ️ Bootstrap skipped (may already exist or failed)"
+        }
+    fi
 
     # Always seed games (needed for event creation, even without IGDB keys)
     echo "🎮 Seeding games cache..."
