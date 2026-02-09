@@ -614,7 +614,7 @@
 .rbc-time-view {
     border: 1px solid rgba(148, 163, 184, 0.1);
     border-radius: 0.5rem;
-    overflow: hidden;
+    overflow: visible;
 }
 
 /* Time header (day column headers) */
@@ -644,6 +644,7 @@
 /* Time content area */
 .rbc-time-content {
     border-top: 1px solid rgba(148, 163, 184, 0.1);
+    overflow: visible !important;
 }
 
 .rbc-time-content>*+*>* {
@@ -657,7 +658,7 @@
 
 .rbc-timeslot-group {
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
-    min-height: 60px;
+    min-height: 40px;
 }
 
 .rbc-time-slot {
@@ -847,7 +848,7 @@
     }
 
     .rbc-timeslot-group {
-        min-height: 48px;
+        min-height: 36px;
     }
 
     .week-event-title {

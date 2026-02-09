@@ -535,6 +535,7 @@ export function CalendarView({
             {/* Calendar Grid */}
             <div className="calendar-grid-wrapper">
                 <Calendar
+                    key={view}
                     localizer={localizer}
                     events={calendarEvents}
                     date={currentDate}
@@ -552,9 +553,10 @@ export function CalendarView({
                     }}
                     popup
                     selectable={false}
+                    scrollToTime={new Date(0, 0, 0, 8, 0)} // Scroll to 8 AM on mount
                     min={new Date(0, 0, 0, 6, 0)}   // 6 AM
                     max={new Date(0, 0, 0, 23, 0)}  // 11 PM
-                    style={{ height: 'calc(100vh - 200px)', minHeight: '500px' }}
+                    style={{ minHeight: '500px' }}
                 />
             </div>
 
