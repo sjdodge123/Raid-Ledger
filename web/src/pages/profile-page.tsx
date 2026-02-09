@@ -4,27 +4,26 @@ import type { CharacterDto, AvailabilityDto } from '@raid-ledger/contract';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
 import { useAvailability, useDeleteAvailability } from '../hooks/use-availability';
-import { UserInfoCard, CharacterList, AddCharacterModal } from '../components/profile';
+import { useGameRegistry } from '../hooks/use-game-registry';
+import { IntegrationHub } from '../components/profile/IntegrationHub';
+import { CharacterList, AddCharacterModal } from '../components/profile';
 import { AvailabilityList, AvailabilityForm } from '../components/features/availability';
 import { toast } from 'sonner';
 
-// Hardcoded default game for demo - in a real app this would come from game-registry
-const DEFAULT_GAME = {
-    id: '00000000-0000-0000-0000-000000000001',
-    name: 'World of Warcraft',
-};
-
 /**
  * User profile page with character and availability management.
+ * ROK-195: Uses IntegrationHub (Hub & Spoke) instead of UserInfoCard.
  */
 export function ProfilePage() {
     const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
     const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
     const { data: availabilityData, isLoading: availabilityLoading } = useAvailability({ enabled: isAuthenticated });
     const deleteAvailability = useDeleteAvailability();
+    const { games } = useGameRegistry();
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingCharacter, setEditingCharacter] = useState<CharacterDto | null>(null);
+    const [selectedGameId, setSelectedGameId] = useState<string>('');
 
     const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
     const [editingAvailability, setEditingAvailability] = useState<AvailabilityDto | null>(null);
@@ -46,14 +45,29 @@ export function ProfilePage() {
     const characters = charactersData?.data ?? [];
     const availabilities = availabilityData?.data ?? [];
 
+    // Default to first game in registry if no game selected
+    const defaultGame = games[0];
+    const activeGameId = editingCharacter?.gameId ?? (selectedGameId || (defaultGame?.id ?? ''));
+    const activeGameName = games.find(g => g.id === activeGameId)?.name || 'Unknown Game';
+
+    function handleAddCharacter() {
+        setEditingCharacter(null);
+        if (games.length === 1) {
+            setSelectedGameId(games[0].id);
+        }
+        setShowAddModal(true);
+    }
+
     function handleEditCharacter(character: CharacterDto) {
         setEditingCharacter(character);
+        setSelectedGameId(character.gameId);
         setShowAddModal(true);
     }
 
     function handleCloseCharacterModal() {
         setShowAddModal(false);
         setEditingCharacter(null);
+        setSelectedGameId('');
     }
 
     function handleEditAvailability(availability: AvailabilityDto) {
@@ -86,8 +100,12 @@ export function ProfilePage() {
                     </p>
                 </div>
 
-                {/* User Info Card */}
-                <UserInfoCard user={user} onRefresh={refetch} />
+                {/* Integration Hub (ROK-195) — replaces old UserInfoCard */}
+                <IntegrationHub
+                    user={user}
+                    characters={characters}
+                    onRefresh={refetch}
+                />
 
                 {/* Availability Section (ROK-112) */}
                 <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
@@ -122,8 +140,9 @@ export function ProfilePage() {
                     <div className="flex items-center justify-between mb-6">
                         <h2 className="text-xl font-semibold text-white">My Characters</h2>
                         <button
-                            onClick={() => setShowAddModal(true)}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors"
+                            onClick={handleAddCharacter}
+                            disabled={games.length === 0}
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white font-medium rounded-lg transition-colors"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -146,13 +165,15 @@ export function ProfilePage() {
             </div>
 
             {/* Add/Edit Character Modal */}
-            <AddCharacterModal
-                isOpen={showAddModal}
-                onClose={handleCloseCharacterModal}
-                gameId={editingCharacter?.gameId ?? DEFAULT_GAME.id}
-                gameName={DEFAULT_GAME.name}
-                editingCharacter={editingCharacter}
-            />
+            {activeGameId && (
+                <AddCharacterModal
+                    isOpen={showAddModal}
+                    onClose={handleCloseCharacterModal}
+                    gameId={activeGameId}
+                    gameName={activeGameName}
+                    editingCharacter={editingCharacter}
+                />
+            )}
 
             {/* Add/Edit Availability Modal (ROK-112) */}
             <AvailabilityForm

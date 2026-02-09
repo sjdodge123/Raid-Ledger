@@ -5,6 +5,7 @@ import type {
     SignupResponseDto,
     CharacterListResponseDto,
     GameSearchResponseDto,
+    GameRegistryListResponseDto,
     CreateEventDto,
     CreateCharacterDto,
     UpdateCharacterDto,
@@ -16,6 +17,7 @@ import type {
     RosterAvailabilityResponse,
     RosterWithAssignments,
     UpdateRosterDto,
+    UserProfileDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -145,6 +147,13 @@ export async function createEvent(dto: CreateEventDto): Promise<EventResponseDto
 export async function searchGames(query: string): Promise<GameSearchResponseDto> {
     const params = new URLSearchParams({ q: query });
     return fetchApi(`/games/search?${params}`, {}, GameSearchResponseSchema);
+}
+
+/**
+ * Fetch all registered games from the game registry
+ */
+export async function fetchGameRegistry(): Promise<GameRegistryListResponseDto> {
+    return fetchApi('/game-registry');
 }
 
 // ============================================================
@@ -360,8 +369,6 @@ export async function updateRoster(
 // ============================================================
 // User Profiles API (ROK-181)
 // ============================================================
-
-import type { UserProfileDto } from '@raid-ledger/contract';
 
 /**
  * Fetch a user's public profile by ID

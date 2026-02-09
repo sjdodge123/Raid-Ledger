@@ -36,3 +36,6 @@ export * from './system.schema.js';
 
 // Users (ROK-181)
 export * from './users.schema.js';
+
+// User Preferences (ROK-195)
+export * from './preferences.schema.js';

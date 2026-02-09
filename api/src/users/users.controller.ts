@@ -1,24 +1,40 @@
 import {
   Controller,
   Get,
+  Patch,
+  Body,
   Param,
   ParseIntPipe,
   NotFoundException,
+  BadRequestException,
+  UseGuards,
+  Request,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ZodError } from 'zod';
 import { UsersService } from './users.service';
+import { PreferencesService } from './preferences.service';
 import { CharactersService } from '../characters/characters.service';
-import { UserProfileDto } from '@raid-ledger/contract';
+import { UserProfileDto, UpdatePreferenceSchema } from '@raid-ledger/contract';
+
+interface AuthenticatedRequest {
+  user: {
+    id: number;
+    isAdmin: boolean;
+  };
+}
 
 /**
- * Controller for public user profile endpoints (ROK-181).
- * No authentication required - these are public profiles.
+ * Controller for user endpoints (ROK-181, ROK-195).
+ * Public profile endpoint + authenticated preference management.
  */
 @Controller('users')
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
+    private readonly preferencesService: PreferencesService,
     private readonly charactersService: CharactersService,
-  ) {}
+  ) { }
 
   /**
    * Get a user's public profile by ID.
@@ -46,5 +62,52 @@ export class UsersController {
         characters: charactersResult.data,
       },
     };
+  }
+
+  /**
+   * Get current user's preferences (ROK-195).
+   * Requires JWT authentication.
+   */
+  @Get('me/preferences')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyPreferences(@Request() req: AuthenticatedRequest) {
+    const preferences = await this.preferencesService.getUserPreferences(req.user.id);
+
+    // Convert array to key-value object for easier frontend consumption
+    const preferencesMap = preferences.reduce((acc, pref) => {
+      acc[pref.key] = pref.value;
+      return acc;
+    }, {} as Record<string, unknown>);
+
+    return { data: preferencesMap };
+  }
+
+  /**
+   * Update a user preference (ROK-195).
+   * Requires JWT authentication. Validates input with Zod.
+   */
+  @Patch('me/preferences')
+  @UseGuards(AuthGuard('jwt'))
+  async updateMyPreference(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    try {
+      const dto = UpdatePreferenceSchema.parse(body);
+      const updated = await this.preferencesService.setUserPreference(
+        req.user.id,
+        dto.key,
+        dto.value,
+      );
+      return { data: updated };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
   }
 }

@@ -1,0 +1,688 @@
+/* ============================================
+   Integration Hub — Orbital Ring Power Core
+   ROK-195: 3-Ring Hub & Spoke Model
+   ============================================ */
+
+/* Hub Container */
+.integration-hub {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+    min-height: 600px;
+    overflow: hidden;
+}
+
+/* Star particle background — fixed positions */
+.integration-hub__stars {
+    position: absolute;
+    inset: 0;
+    background-image:
+        /* Large bright stars */
+        radial-gradient(3px 3px at 15% 25%, rgba(255, 255, 255, 0.85), transparent),
+        radial-gradient(3px 3px at 85% 15%, rgba(255, 255, 255, 0.8), transparent),
+        radial-gradient(3px 3px at 25% 75%, rgba(255, 255, 255, 0.75), transparent),
+        radial-gradient(3px 3px at 72% 82%, rgba(255, 255, 255, 0.8), transparent),
+        /* Colored accent stars (subtle blue/green tint) */
+        radial-gradient(2px 2px at 42% 12%, rgba(147, 197, 253, 0.7), transparent),
+        radial-gradient(2px 2px at 88% 68%, rgba(110, 231, 183, 0.6), transparent),
+        radial-gradient(2px 2px at 8% 88%, rgba(147, 197, 253, 0.55), transparent),
+        /* Medium white stars */
+        radial-gradient(2px 2px at 20% 30%, rgba(255, 255, 255, 0.65), transparent),
+        radial-gradient(2px 2px at 60% 70%, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(2px 2px at 40% 50%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(2px 2px at 90% 42%, rgba(255, 255, 255, 0.65), transparent),
+        radial-gradient(2px 2px at 70% 20%, rgba(255, 255, 255, 0.6), transparent),
+        radial-gradient(2px 2px at 33% 92%, rgba(255, 255, 255, 0.58), transparent),
+        radial-gradient(2px 2px at 78% 38%, rgba(255, 255, 255, 0.62), transparent),
+        /* Small dim stars */
+        radial-gradient(1px 1px at 50% 50%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 80% 10%, rgba(255, 255, 255, 0.55), transparent),
+        radial-gradient(1px 1px at 30% 60%, rgba(255, 255, 255, 0.45), transparent),
+        radial-gradient(1px 1px at 65% 85%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 10% 40%, rgba(255, 255, 255, 0.48), transparent),
+        radial-gradient(1px 1px at 95% 45%, rgba(255, 255, 255, 0.52), transparent),
+        radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.45), transparent),
+        radial-gradient(1px 1px at 55% 90%, rgba(255, 255, 255, 0.5), transparent),
+        radial-gradient(1px 1px at 5% 55%, rgba(255, 255, 255, 0.42), transparent),
+        radial-gradient(1px 1px at 52% 5%, rgba(255, 255, 255, 0.47), transparent),
+        radial-gradient(1px 1px at 97% 78%, rgba(255, 255, 255, 0.44), transparent);
+    pointer-events: none;
+    filter: drop-shadow(0 0 2px rgba(255, 255, 255, 0.6));
+}
+
+/* Hover-pause handled by JS hook via isHoveredRef */
+
+/* ============================================
+   Power Core Avatar (Center Hub)
+   ============================================ */
+
+.power-core {
+    position: relative;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+.power-core__ring {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Inner neon ring */
+.power-core__ring::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    background: transparent;
+    border: 2px solid rgba(16, 185, 129, 0.8);
+    box-shadow:
+        0 0 8px rgba(16, 185, 129, 0.5),
+        0 0 16px rgba(16, 185, 129, 0.3),
+        inset 0 0 8px rgba(16, 185, 129, 0.2);
+    animation: core-breathe 4s ease-in-out infinite;
+    z-index: -1;
+}
+
+/* Outer neon ring glow */
+.power-core__ring::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: transparent;
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    box-shadow:
+        0 0 6px rgba(16, 185, 129, 0.4),
+        0 0 12px rgba(16, 185, 129, 0.2);
+    animation: core-breathe 4s ease-in-out infinite reverse;
+    z-index: -2;
+}
+
+.power-core__avatar {
+    width: 148px;
+    height: 148px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(16, 185, 129, 0.9);
+    background: rgba(30, 41, 59, 0.9);
+    box-shadow:
+        0 0 10px rgba(16, 185, 129, 0.4),
+        0 0 20px rgba(16, 185, 129, 0.15);
+}
+
+.power-core__edit {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.95);
+    border: 2px solid rgba(148, 163, 184, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #94a3b8;
+    transition: all 0.3s ease;
+    z-index: 10;
+}
+
+.power-core__edit:hover {
+    background: rgba(16, 185, 129, 0.3);
+    border-color: rgba(16, 185, 129, 0.7);
+    color: #10b981;
+    transform: scale(1.1);
+}
+
+.power-core__nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.power-core__nav-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(30, 41, 59, 0.9);
+    border: 2px solid rgba(148, 163, 184, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: #94a3b8;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.power-core__nav-btn:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.5);
+    color: #10b981;
+}
+
+.power-core__username {
+    font-size: 1.375rem;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.power-core__badges {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* ============================================
+   Orbital Rings
+   ============================================ */
+
+.orbit-ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+/* Elliptical ring track with 3D tilt */
+.orbit-ring__track {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: calc(var(--orbit-radius) * 2);
+    height: calc(var(--orbit-radius) * 2);
+    transform: translate(-50%, -50%) rotateX(15deg);
+    border: 2px solid var(--ring-color);
+    border-radius: 50%;
+    box-shadow:
+        0 0 20px var(--ring-color),
+        inset 0 0 20px var(--ring-color);
+    opacity: 0.6;
+}
+
+/* Ring label */
+.orbit-ring__label {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: var(--ring-color);
+    text-shadow: 0 0 10px var(--ring-color);
+    z-index: 15;
+    pointer-events: none;
+}
+
+/* Point container for nodes — JS positions children via translate */
+.orbit-ring__rotation {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    transform: translate(-50%, -50%);
+}
+
+/* ============================================
+   Integration Spoke (Hexagonal Platform Node)
+   ============================================ */
+
+.spoke-node {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    pointer-events: auto;
+    /* Fallback — JS overrides with trig position */
+    transform: translate(-50%, -50%);
+    z-index: 10;
+}
+
+.spoke-node:hover .spoke-node__hex-frame {
+    transform: scale(1.15);
+}
+
+/* Circular frame (changed from hexagonal) */
+.spoke-node__hex-frame {
+    position: relative;
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    /* Circular instead of hexagonal */
+    background: rgba(15, 23, 42, 0.9);
+    border: 3px solid rgba(148, 163, 184, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+/* Active spoke — emerald glow */
+.spoke-node--active .spoke-node__hex-frame {
+    border-color: rgba(16, 185, 129, 0.8);
+    background: rgba(16, 185, 129, 0.15);
+    box-shadow:
+        0 0 20px rgba(16, 185, 129, 0.5),
+        inset 0 0 15px rgba(16, 185, 129, 0.2);
+    animation: power-pulse 2.5s ease-in-out infinite;
+}
+
+/* Dormant spoke */
+.spoke-node--dormant .spoke-node__hex-frame {
+    border-color: rgba(148, 163, 184, 0.4);
+    opacity: 0.8;
+}
+
+.spoke-node--dormant:hover .spoke-node__hex-frame {
+    border-color: rgba(148, 163, 184, 0.6);
+    opacity: 1;
+}
+
+/* Placeholder spoke */
+.spoke-node--placeholder .spoke-node__hex-frame {
+    border-color: rgba(148, 163, 184, 0.2);
+    opacity: 0.4;
+    cursor: default;
+}
+
+.spoke-node--placeholder {
+    cursor: default;
+}
+
+.spoke-node--placeholder:hover .spoke-node__hex-frame {
+    transform: scale(1.15);
+}
+
+/* Icon container */
+.spoke-node__icon-container {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.spoke-node__icon {
+    width: 32px;
+    height: 32px;
+    color: #94a3b8;
+    /* Removed transition - interferes with JS counter-rotation */
+}
+
+/* Active icons: full color */
+.spoke-node--active .spoke-node__icon {
+    color: #34d399;
+    opacity: 1;
+}
+
+/* Dormant/placeholder icons: grey and faded */
+.spoke-node--dormant .spoke-node__icon,
+.spoke-node--placeholder .spoke-node__icon {
+    filter: grayscale(100%);
+    opacity: 0.4;
+}
+
+.spoke-node__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #cbd5e1;
+    text-align: center;
+    white-space: nowrap;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.spoke-node--active .spoke-node__label {
+    color: #34d399;
+}
+
+.spoke-node__status {
+    font-size: 0.625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.spoke-node--active .spoke-node__status {
+    color: #10b981;
+}
+
+/* Status overlays */
+.spoke-node__plus {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.3);
+    border: 2px solid rgba(16, 185, 129, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #10b981;
+}
+
+.spoke-node__lock {
+    position: absolute;
+    bottom: -4px;
+    right: -4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: rgba(51, 65, 85, 0.9);
+    border: 2px solid rgba(148, 163, 184, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    color: #64748b;
+}
+
+/* ============================================
+   Tractor Beam (Active Spokes Only)
+   ============================================ */
+
+.tractor-beam {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200%;
+    height: 4px;
+    transform: translate(-50%, -50%) rotate(var(--beam-angle, 0deg));
+    transform-origin: center;
+    pointer-events: none;
+    z-index: -1;
+}
+
+.tractor-beam__gradient {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(to right,
+            rgba(16, 185, 129, 0.8) 0%,
+            rgba(16, 185, 129, 0.6) 30%,
+            rgba(16, 185, 129, 0.3) 60%,
+            transparent 100%);
+    filter: blur(2px);
+    animation: beam-pulse 2s ease-in-out infinite;
+}
+
+.tractor-beam__particles {
+    position: absolute;
+    top: -2px;
+    left: 0;
+    right: 0;
+    bottom: -2px;
+    background-image:
+        radial-gradient(circle, rgba(52, 211, 153, 0.8) 1px, transparent 1px),
+        radial-gradient(circle, rgba(52, 211, 153, 0.6) 1px, transparent 1px);
+    background-size: 20px 8px, 30px 8px;
+    background-position: 0 0, 10px 0;
+    animation: beam-particles 3s linear infinite;
+}
+
+/* Purple tractor beam variant for ghost nodes */
+.tractor-beam--purple .tractor-beam__gradient {
+    background: linear-gradient(to right,
+            rgba(139, 92, 246, 0.8) 0%,
+            rgba(139, 92, 246, 0.6) 30%,
+            rgba(139, 92, 246, 0.3) 60%,
+            transparent 100%);
+}
+
+.tractor-beam--purple .tractor-beam__particles {
+    background-image:
+        radial-gradient(circle, rgba(167, 139, 250, 0.8) 1px, transparent 1px),
+        radial-gradient(circle, rgba(167, 139, 250, 0.6) 1px, transparent 1px);
+}
+
+/* ============================================
+   Ghost Node (Discord Echo on COMMS Ring)
+   ============================================ */
+
+.ghost-node {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    opacity: 0.3;
+    pointer-events: none;
+    /* Fallback — JS overrides with trig position */
+    transform: translate(-50%, -50%);
+}
+
+/* Active ghost node when Discord is linked */
+.ghost-node--active {
+    opacity: 0.6;
+    pointer-events: auto;
+}
+
+.ghost-node__icon-ring {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: rgba(139, 92, 246, 0.2);
+    border: 3px solid rgba(139, 92, 246, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.ghost-node__icon {
+    width: 32px;
+    height: 32px;
+    color: rgba(167, 139, 250, 0.6);
+}
+
+.ghost-node__label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: rgba(167, 139, 250, 0.7);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+/* AC-5: Sympathetic glow when primary Discord is hovered */
+.ghost-node--glowing {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.ghost-node--glowing .ghost-node__icon-ring {
+    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
+}
+
+.ghost-node--glowing .ghost-node__icon {
+    color: rgba(167, 139, 250, 0.9);
+}
+
+/* ============================================
+   Tooltip
+   ============================================ */
+
+.spoke-tooltip {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    padding: 0.5rem 0.75rem;
+    background: rgba(15, 23, 42, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    border-radius: 0.5rem;
+    font-size: 0.75rem;
+    color: #e2e8f0;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 30;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    /* Use margin for centering */
+    margin-left: -50%;
+}
+
+.spoke-node:hover .spoke-tooltip {
+    opacity: 1;
+}
+
+/* ============================================
+   Keyframe Animations
+   ============================================ */
+
+@keyframes core-breathe {
+
+    0%,
+    100% {
+        opacity: 0.6;
+        transform: scale(1);
+    }
+
+    50% {
+        opacity: 1;
+        transform: scale(1.05);
+    }
+}
+
+@keyframes power-pulse {
+
+    0%,
+    100% {
+        box-shadow:
+            0 0 15px rgba(16, 185, 129, 0.4),
+            inset 0 0 10px rgba(16, 185, 129, 0.15);
+    }
+
+    50% {
+        box-shadow:
+            0 0 30px rgba(16, 185, 129, 0.7),
+            inset 0 0 20px rgba(16, 185, 129, 0.3);
+    }
+}
+
+@keyframes beam-pulse {
+
+    0%,
+    100% {
+        opacity: 0.7;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes beam-particles {
+    from {
+        background-position: 0 0, 10px 0;
+    }
+
+    to {
+        background-position: -60px 0, -50px 0;
+    }
+}
+
+/* ============================================
+   Avatar Selector Modal
+   ============================================ */
+
+.avatar-selector-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+.avatar-selector-option {
+    position: relative;
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    overflow: hidden;
+    cursor: pointer;
+    border: 3px solid transparent;
+    transition: all 0.3s ease;
+    background: rgba(30, 41, 59, 0.7);
+}
+
+.avatar-selector-option:hover {
+    border-color: rgba(148, 163, 184, 0.5);
+    transform: scale(1.08);
+}
+
+.avatar-selector-option--selected {
+    border-color: rgba(16, 185, 129, 0.8);
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+}
+
+.avatar-selector-option img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-selector-option__label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: 0.25rem;
+    font-size: 0.625rem;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.8);
+    color: #cbd5e1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* ============================================
+   Responsive: Flatten on mobile
+   ============================================ */
+
+@media (max-width: 640px) {
+    .integration-hub {
+        min-height: auto;
+        padding: 2rem 1rem;
+    }
+
+    .orbit-ring__track {
+        transform: translate(-50%, -50%) rotateX(75deg) scale(0.7);
+    }
+
+    .power-core__ring {
+        width: 120px;
+        height: 120px;
+    }
+
+    .power-core__avatar {
+        width: 108px;
+        height: 108px;
+    }
+}

@@ -122,8 +122,8 @@ export function useAuth() {
             // Set impersonated user's token
             localStorage.setItem(TOKEN_KEY, data.access_token);
 
-            // Refetch user data
-            await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+            // Invalidate ALL queries — switching user context means all cached data is stale
+            await queryClient.invalidateQueries();
             return true;
         } catch (error) {
             console.error('Failed to impersonate:', error);
@@ -142,8 +142,8 @@ export function useAuth() {
         localStorage.setItem(TOKEN_KEY, originalToken);
         localStorage.removeItem(ORIGINAL_TOKEN_KEY);
 
-        // Refetch user data
-        await queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        // Invalidate ALL queries — returning to admin context, all cached data is stale
+        await queryClient.invalidateQueries();
         return true;
     };
 
