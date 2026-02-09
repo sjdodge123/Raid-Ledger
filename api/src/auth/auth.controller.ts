@@ -241,6 +241,18 @@ export class AuthController {
 
       const discordProfile = await userResponse.json();
 
+      // Check if this Discord account is already linked (including unlinked) to a different user
+      const existingUser =
+        await this.usersService.findByDiscordIdIncludingUnlinked(
+          discordProfile.id,
+        );
+
+      if (existingUser && existingUser.id !== userId) {
+        throw new Error(
+          'This Discord account is already linked to another user',
+        );
+      }
+
       // Link Discord account to user
       await this.usersService.linkDiscord(
         userId,

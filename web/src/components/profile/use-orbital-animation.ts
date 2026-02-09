@@ -77,6 +77,15 @@ export function useOrbitalAnimation(enabled = true) {
             // Set --beam-angle for tractor beams (points toward center)
             const beamDeg = (Math.atan2(-y, -x) * 180) / Math.PI;
             node.el.style.setProperty('--beam-angle', `${beamDeg}deg`);
+
+            // Point tooltip outward from center so it never overlaps the avatar
+            const ax = Math.abs(x);
+            const ay = Math.abs(y);
+            if (ax > ay) {
+                node.el.dataset.tooltipPos = x > 0 ? 'right' : 'left';
+            } else {
+                node.el.dataset.tooltipPos = y > 0 ? 'below' : 'above';
+            }
         };
 
         // Compute initial positions synchronously to avoid flash

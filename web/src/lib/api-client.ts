@@ -367,6 +367,17 @@ export async function updateRoster(
 }
 
 // ============================================================
+// Discord Integration API (ROK-195)
+// ============================================================
+
+/**
+ * Unlink Discord from the current user's account
+ */
+export async function unlinkDiscord(): Promise<void> {
+    return fetchApi('/users/me/discord', { method: 'DELETE' });
+}
+
+// ============================================================
 // User Profiles API (ROK-181)
 // ============================================================
 

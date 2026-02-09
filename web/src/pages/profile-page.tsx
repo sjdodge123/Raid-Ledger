@@ -9,6 +9,7 @@ import { IntegrationHub } from '../components/profile/IntegrationHub';
 import { CharacterList, AddCharacterModal } from '../components/profile';
 import { AvailabilityList, AvailabilityForm } from '../components/features/availability';
 import { toast } from 'sonner';
+import '../components/profile/integration-hub.css';
 
 /**
  * User profile page with character and availability management.
@@ -90,8 +91,12 @@ export function ProfilePage() {
     }
 
     return (
-        <div className="py-8 px-4">
-            <div className="max-w-3xl mx-auto space-y-8">
+        <div className="profile-page relative min-h-screen py-8 px-4">
+            {/* Full-page space background (future theme candidate) */}
+            <div className="profile-page__nebula" />
+            <div className="profile-page__stars" />
+
+            <div className="relative z-10 max-w-3xl mx-auto space-y-8">
                 {/* Page Header */}
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-2">My Profile</h1>

@@ -14,6 +14,20 @@ export class AuthService {
     username: string,
     avatar?: string,
   ) {
+    // Check for previously unlinked account first
+    const unlinked =
+      await this.usersService.findByDiscordIdIncludingUnlinked(discordId);
+
+    if (unlinked && unlinked.discordId?.startsWith('unlinked:')) {
+      // Re-link the previously unlinked account
+      const relinked = await this.usersService.relinkDiscord(
+        unlinked.id,
+        username,
+        avatar,
+      );
+      return relinked;
+    }
+
     const user = await this.usersService.createOrUpdate({
       discordId,
       username,

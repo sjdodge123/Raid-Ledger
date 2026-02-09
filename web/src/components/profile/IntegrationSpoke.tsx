@@ -67,6 +67,7 @@ export function IntegrationSpoke({
     return (
         <div
             className={`spoke-node spoke-node--${status}`}
+            data-platform={platform}
             style={{
                 '--node-angle': `${angle}deg`,
             } as React.CSSProperties}

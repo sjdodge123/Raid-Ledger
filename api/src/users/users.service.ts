@@ -99,6 +99,72 @@ export class UsersService {
   }
 
   /**
+   * Unlink Discord from a user account.
+   * Preserves the Discord ID as 'unlinked:<id>' so Discord Login can re-match later.
+   */
+  async unlinkDiscord(userId: number) {
+    const user = await this.findById(userId);
+    if (!user || !user.discordId || user.discordId.startsWith('local:')) {
+      return user;
+    }
+
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        discordId: `unlinked:${user.discordId}`,
+        avatar: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
+
+    return updated;
+  }
+
+  /**
+   * Find a user by Discord ID, including previously unlinked accounts.
+   * Checks both raw ID and 'unlinked:<id>' pattern.
+   */
+  async findByDiscordIdIncludingUnlinked(discordId: string) {
+    // First try exact match
+    const exact = await this.findByDiscordId(discordId);
+    if (exact) return exact;
+
+    // Try unlinked match
+    const unlinked = await this.db.query.users.findFirst({
+      where: eq(schema.users.discordId, `unlinked:${discordId}`),
+    });
+    return unlinked ?? null;
+  }
+
+  /**
+   * Re-link a previously unlinked Discord account.
+   * Strips 'unlinked:' prefix and restores Discord info.
+   */
+  async relinkDiscord(
+    userId: number,
+    username: string,
+    avatar?: string,
+  ) {
+    const user = await this.findById(userId);
+    if (!user?.discordId?.startsWith('unlinked:')) return user;
+
+    const rawDiscordId = user.discordId.replace('unlinked:', '');
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        discordId: rawDiscordId,
+        username,
+        avatar,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
+
+    return updated;
+  }
+
+  /**
    * Count total users in the database.
    * Used for first-run detection (ROK-175 AC-4).
    */

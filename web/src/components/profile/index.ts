@@ -8,3 +8,5 @@ export { PowerCoreAvatar } from './PowerCoreAvatar';
 export { AvatarSelectorModal } from './AvatarSelectorModal';
 export { OrbitRing } from './OrbitRing';
 export { GhostNode } from './GhostNode';
+export { LightningArcs } from './LightningArcs';
+export { DiscordDetailsModal } from './DiscordDetailsModal';

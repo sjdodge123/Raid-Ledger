@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Delete,
   Body,
   Param,
   ParseIntPipe,
@@ -9,6 +10,7 @@ import {
   BadRequestException,
   UseGuards,
   Request,
+  HttpCode,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ZodError } from 'zod';
@@ -80,6 +82,17 @@ export class UsersController {
     }, {} as Record<string, unknown>);
 
     return { data: preferencesMap };
+  }
+
+  /**
+   * Unlink Discord from the current user's account.
+   * Preserves the Discord ID for re-matching on future Discord logins.
+   */
+  @Delete('me/discord')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async unlinkDiscord(@Request() req: AuthenticatedRequest) {
+    await this.usersService.unlinkDiscord(req.user.id);
   }
 
   /**
