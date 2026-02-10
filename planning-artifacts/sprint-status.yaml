@@ -1,4 +1,4 @@
-# generated: Mon Feb 10 02:10:00 EST 2026
+# generated: Mon Feb 10 02:20:00 EST 2026
 # NOTE: task.md is the primary source of truth. This file is for bmad workflow compatibility.
 project: Raid Ledger
 tracking_system: linear
@@ -48,7 +48,7 @@ development_status:
   ROK-182: done # Team Availability → Event Creation
   ROK-183: done # Universal Roster Builder + Quick-Join
   ROK-184: done # Event Details Page Redesign (Desktop)
-  ROK-185: backlog # Event Details Mobile (Stories UI) - PHASE 3
+  ROK-185: ready-for-dev # Event Details Mobile (Stories UI) - PHASE 3
   
   # === Phase 2: User Profile Enhancements ===
   ROK-186: done # Calendar Avatar Overflow Fix
@@ -66,14 +66,14 @@ development_status:
   ROK-193: ready-for-dev # Delete Demo Data Button
   ROK-194: done # Dynamic Avatar Resolution
   ROK-195: done # Hub & Spoke Integration Model
-  ROK-196: ready-for-dev # Player Profile Demo Data
+  ROK-196: done # Player Profile Demo Data
   
   # === Phase 2: Notification System (SPLIT per Council 2026-02-06) ===
   ROK-197: done # Notification Core Infrastructure (P0 - unblocks ROK-190, ROK-203)
-  ROK-204: backlog # Browser Push Notifications
+  ROK-204: ready-for-dev # Browser Push Notifications
   ROK-205: backlog # Presence-Aware Notification Sync - PHASE 3
-  ROK-198: ready-for-dev # Notification Preferences UI
-  ROK-199: backlog # Discord Bot Welcome & Dispatch - PHASE 3
+  ROK-198: done # Notification Preferences UI
+  ROK-199: done # Discord Bot Welcome & Dispatch - PHASE 3
   ROK-206: backlog # Notification Real-time Updates - PHASE 3
   ROK-200: ready-for-dev # User Feedback Widget
   
@@ -95,7 +95,7 @@ development_status:
   ROK-145: done # Local Admin Auth
   ROK-146: done # Admin Settings Page
   ROK-151: done # Link Discord Account
-  ROK-159: ready-for-dev # Admin Onboarding Wizard
+  ROK-159: done # Admin Onboarding Wizard
   
   # === Discord Bot (PHASE 3) ===
   ROK-116: backlog # Epic: Discord Bot Integration
