@@ -10,6 +10,7 @@ import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { NotificationService } from '../notifications/notification.service';
 import type {
   SignupResponseDto,
   EventRosterDto,
@@ -33,6 +34,7 @@ export class SignupsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private notificationService: NotificationService,
   ) {}
 
   /**
@@ -218,23 +220,80 @@ export class SignupsService {
    * @throws NotFoundException if signup doesn't exist
    */
   async cancel(eventId: number, userId: number): Promise<void> {
-    const result = await this.db
-      .delete(schema.eventSignups)
+    // Find the signup first to get its ID
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
       .where(
         and(
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.userId, userId),
         ),
       )
-      .returning();
+      .limit(1);
 
-    if (result.length === 0) {
+    if (!signup) {
       throw new NotFoundException(
         `Signup not found for user ${userId} on event ${eventId}`,
       );
     }
 
+    // Check if user held a roster assignment
+    const [assignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, signup.id))
+      .limit(1);
+
+    // Gather notification data before deleting (if assigned)
+    let notifyData: {
+      creatorId: number;
+      eventTitle: string;
+      role: string | null;
+      displayName: string;
+    } | null = null;
+    if (assignment) {
+      const [[event], [user]] = await Promise.all([
+        this.db
+          .select({
+            creatorId: schema.events.creatorId,
+            title: schema.events.title,
+          })
+          .from(schema.events)
+          .where(eq(schema.events.id, eventId))
+          .limit(1),
+        this.db
+          .select({ username: schema.users.username })
+          .from(schema.users)
+          .where(eq(schema.users.id, userId))
+          .limit(1),
+      ]);
+      notifyData = {
+        creatorId: event.creatorId,
+        eventTitle: event.title,
+        role: assignment.role,
+        displayName: user?.username ?? 'Unknown',
+      };
+    }
+
+    // Delete the signup (cascade removes the roster assignment)
+    await this.db
+      .delete(schema.eventSignups)
+      .where(eq(schema.eventSignups.id, signup.id));
+
     this.logger.log(`User ${userId} canceled signup for event ${eventId}`);
+
+    // Notify organizer if the user held a roster slot
+    if (notifyData) {
+      const slotLabel = notifyData.role ?? 'assigned';
+      await this.notificationService.create({
+        userId: notifyData.creatorId,
+        type: 'slot_vacated',
+        title: 'Slot Vacated',
+        message: `${notifyData.displayName} left the ${slotLabel} slot for ${notifyData.eventTitle}`,
+        payload: { eventId },
+      });
+    }
   }
 
   /**

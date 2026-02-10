@@ -6,10 +6,12 @@ import {
 } from '@nestjs/common';
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { NotificationService } from '../notifications/notification.service';
 
 describe('SignupsService', () => {
   let service: SignupsService;
   let mockDb: Record<string, jest.Mock>;
+  let mockNotificationService: { create: jest.Mock };
 
   const mockUser = {
     id: 1,
@@ -47,6 +49,8 @@ describe('SignupsService', () => {
   };
 
   beforeEach(async () => {
+    mockNotificationService = { create: jest.fn().mockResolvedValue(null) };
+
     mockDb = {
       select: jest.fn(),
       insert: jest.fn(),
@@ -104,6 +108,7 @@ describe('SignupsService', () => {
       providers: [
         SignupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: NotificationService, useValue: mockNotificationService },
       ],
     }).compile();
 
@@ -204,20 +209,149 @@ describe('SignupsService', () => {
   });
 
   describe('cancel', () => {
-    it('should cancel signup when exists', async () => {
+    it('should cancel unassigned signup without notification', async () => {
+      // 1. Find signup
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        // 2. Check roster assignment — none
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        });
+
       await service.cancel(1, 1);
 
       expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when signup does not exist', async () => {
-      mockDb.delete.mockReturnValueOnce({
-        where: jest.fn().mockReturnValue({
-          returning: jest.fn().mockResolvedValue([]),
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
         }),
       });
 
       await expect(service.cancel(999, 1)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should dispatch slot_vacated notification when assigned signup is canceled', async () => {
+      const mockAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'healer',
+        position: 2,
+        eventId: 1,
+        isOverride: 0,
+      };
+
+      mockDb.select
+        // 1. Find signup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        // 2. Check roster assignment — found
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockAssignment]),
+            }),
+          }),
+        })
+        // 3. Fetch event (for creatorId + title)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ creatorId: 5, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        // 4. Fetch user (for display name)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ username: 'Frostmage' }]),
+            }),
+          }),
+        });
+
+      await service.cancel(1, 1);
+
+      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockNotificationService.create).toHaveBeenCalledWith({
+        userId: 5,
+        type: 'slot_vacated',
+        title: 'Slot Vacated',
+        message: 'Frostmage left the healer slot for Raid Night',
+        payload: { eventId: 1 },
+      });
+    });
+
+    it('should include eventId in notification payload', async () => {
+      const mockAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'tank',
+        position: 1,
+        eventId: 42,
+        isOverride: 0,
+      };
+      const signup42 = { ...mockSignup, eventId: 42 };
+
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([signup42]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockAssignment]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ creatorId: 3, title: 'Weekly Clear' }]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ username: 'ShadowBlade' }]),
+            }),
+          }),
+        });
+
+      await service.cancel(42, 1);
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({ payload: { eventId: 42 } }),
+      );
     });
   });
 

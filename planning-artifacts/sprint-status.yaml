@@ -1,0 +1,102 @@
+# generated: Sun Feb  9 20:35:00 EST 2026
+# NOTE: task.md is the primary source of truth. This file is for bmad workflow compatibility.
+project: Raid Ledger
+tracking_system: linear
+
+development_status:
+  # === Phase 1: Core Infrastructure (COMPLETE) ===
+  ROK-101: done # Epic: Core Infrastructure & Auth
+  ROK-102: done # Initialize Monorepo Structure
+  ROK-103: done # Database Schema & Migration Setup
+  ROK-104: done # Discord OAuth Integration
+  ROK-105: done # RBAC & Admin Seed Script
+  
+  # === Phase 1: Event Management (COMPLETE) ===
+  ROK-106: done # Epic: Event Management
+  ROK-107: done # IGDB Game Discovery Integration
+  ROK-108: done # Event CRUD API
+  ROK-109: done # Native Sign-Up Logic
+  ROK-110: done # Event List & Details UI
+  
+  # === Phase 1.5: Availability & Roster (COMPLETE) ===
+  ROK-111: done # Epic: Availability & Roster
+  ROK-112: done # Availability Service (tsrange)
+  ROK-113: done # Heatmap Grid Component
+  ROK-114: done # Roster Tetris (Drag-and-Drop)
+  ROK-115: deprecated # Flash Check-In - REPLACED BY ROK-203
+  ROK-156: done # Event Detail Layout (Desktop)
+  ROK-158: done # Testing Infrastructure Hardening
+  ROK-160: done # Game Seed Expansion (IGDB)
+  ROK-161: done # IGDB Rate Limit Protection
+  
+  # === Phase 2: Calendar Epic (CURRENT) ===
+  ROK-170: done # Epic: Calendar Page
+  ROK-171: done # Calendar Month View
+  ROK-172: done # Calendar Week View
+  ROK-173: deferred # Calendar Mobile Responsive - PHASE 3
+  ROK-174: done # Calendar API (Date Range)
+  ROK-175: done # Calendar as Default Route
+  ROK-176: done # Remove Marketing Landing Page
+  ROK-177: done # Week View Attendee Avatars
+  ROK-178: done # Calendar Day View
+  ROK-179: ready-for-dev # IGDB Artwork Integration for Calendar
+  ROK-180: ready-for-dev # Contextual Back Navigation
+  
+  # === Phase 2: Event Details Redesign ===
+  ROK-157: deprecated # Event Detail Mobile - SUPERSEDED
+  ROK-181: done # Clickable User Profiles
+  ROK-182: done # Team Availability → Event Creation
+  ROK-183: done # Universal Roster Builder + Quick-Join
+  ROK-184: done # Event Details Page Redesign (Desktop)
+  ROK-185: backlog # Event Details Mobile (Stories UI) - PHASE 3
+  
+  # === Phase 2: User Profile Enhancements ===
+  ROK-186: done # Calendar Avatar Overflow Fix
+  ROK-187: ready-for-dev # User Timezone Preferences
+  ROK-188: ready-for-dev # Delete User Account
+  ROK-189: done # Weekly Game Time Selector (Heatmap)
+  
+  # === Phase 2: Roster UX Improvements (Council #006) ===
+  ROK-190: in-progress # Notify Organizer on Slot Leave (backend dispatch done, UI pending)
+  ROK-191: ready-for-dev # Calendar Day View Quick-Join
+  ROK-192: done # Collapsible Banner + Inline Description (REDESIGNED)
+  
+  # === Phase 2: Profile Hub & Theme (Council #006) ===
+  ROK-124: ready-for-dev # Theme System (Light/Dark/Auto)
+  ROK-193: ready-for-dev # Delete Demo Data Button
+  ROK-194: done # Dynamic Avatar Resolution
+  ROK-195: done # Hub & Spoke Integration Model
+  ROK-196: ready-for-dev # Player Profile Demo Data
+  
+  # === Phase 2: Notification System (SPLIT per Council 2026-02-06) ===
+  ROK-197: done # Notification Core Infrastructure (P0 - unblocks ROK-190, ROK-203)
+  ROK-204: backlog # Browser Push Notifications
+  ROK-205: backlog # Presence-Aware Notification Sync - PHASE 3
+  ROK-198: ready-for-dev # Notification Preferences UI
+  ROK-199: backlog # Discord Bot Welcome & Dispatch - PHASE 3
+  ROK-206: backlog # Notification Real-time Updates - PHASE 3
+  ROK-200: ready-for-dev # User Feedback Widget
+  
+  # === Phase 2: Game Time System (Council #006) ===
+  ROK-201: ready-for-dev # Weekly Game Time Check-In
+  ROK-202: deprecated # First-Time User Game Time Setup - ABSORBED BY ROK-220
+  ROK-203: ready-for-dev # Event Reminder Notifications
+  
+  # === Phase 3: Character Management ===
+  ROK-207: backlog # Enforce Single Main Character Per Player
+  
+  # === Phase 2: CSS & Theme Infrastructure ===
+  ROK-224: done # CSS Theme Token Migration (blocks ROK-124)
+
+  # === Admin & Auth ===
+  ROK-145: done # Local Admin Auth
+  ROK-146: done # Admin Settings Page
+  ROK-151: done # Link Discord Account
+  ROK-159: ready-for-dev # Admin Onboarding Wizard
+  
+  # === Discord Bot (PHASE 3) ===
+  ROK-116: backlog # Epic: Discord Bot Integration
+  ROK-117: backlog # Bot Module Infrastructure
+  ROK-118: backlog # Event Notification Embeds
+  ROK-119: backlog # Bidirectional Syncing
+  ROK-126: backlog # Event Reminder Job
