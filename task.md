@@ -473,11 +473,14 @@
   - **Depends on:** ROK-195
 
 ### Roster UX Improvements
-- [ ] **ROK-190: Double-Click to Leave Slot** — 🟡 P1
-  - First click shows red "Leave?" confirmation state
-  - Second click within 3s cancels signup
-  - Auto-revert after 3s timeout
-  - **Depends on:** ROK-183
+- [x] ~~**ROK-190: Double-Click to Leave Slot**~~ — ⚠️ CANCELED
+  - Replaced by ROK-226 (Player Self-Unassign from Roster Slot)
+
+- [ ] **ROK-226: Player Self-Unassign from Roster Slot** — 🔴 P0
+  - Same red X button admins have, but only on the player's own slot
+  - Unassigns from slot (moves to unassigned pool), stays signed up
+  - Fires `slot_vacated` notification to organizer (ROK-225)
+  - **Depends on:** ROK-225 ✅
 
 - [ ] **ROK-191: Calendar Day View Quick-Join** — 🟡 P1
   - Join events directly from calendar day view

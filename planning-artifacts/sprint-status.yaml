@@ -57,7 +57,7 @@ development_status:
   ROK-189: done # Weekly Game Time Selector (Heatmap)
   
   # === Phase 2: Roster UX Improvements (Council #006) ===
-  ROK-190: in-progress # Notify Organizer on Slot Leave (backend dispatch done, UI pending)
+  ROK-190: deprecated # Double-Click to Leave Slot — CANCELED, replaced by ROK-226
   ROK-191: ready-for-dev # Calendar Day View Quick-Join
   ROK-192: done # Collapsible Banner + Inline Description (REDESIGNED)
   
@@ -87,6 +87,9 @@ development_status:
   
   # === Phase 2: CSS & Theme Infrastructure ===
   ROK-224: done # CSS Theme Token Migration (blocks ROK-124)
+  ROK-225: done # Notify Organizer on Slot Leave (slot_vacated dispatch)
+  ROK-226: ready-for-dev # Player Self-Unassign from Roster Slot
+  ROK-227: ready-for-dev # Seed Game Time Data for Demo Users
 
   # === Admin & Auth ===
   ROK-145: done # Local Admin Auth
