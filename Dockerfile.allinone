@@ -255,7 +255,7 @@ ENV REDIS_URL=/tmp/redis.sock
 ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=*
-ENV CLIENT_URL=http://localhost
+ENV CLIENT_URL=
 ENV DEMO_MODE=false
 ENV ADMIN_PASSWORD=
 

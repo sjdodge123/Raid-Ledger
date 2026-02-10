@@ -7,8 +7,6 @@ import {
   Query,
   HttpException,
   HttpStatus,
-  Injectable,
-  ExecutionContext,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -19,18 +17,9 @@ import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import * as crypto from 'crypto';
 
-@Injectable()
-class DiscordAuthGuard extends AuthGuard('discord') {
-  getAuthenticateOptions(context: ExecutionContext) {
-    const req = context.switchToHttp().getRequest<Request>();
-    const proto =
-      (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
-      req.protocol ||
-      'http';
-    const host = req.headers.host || 'localhost';
-    return { callbackURL: `${proto}://${host}/api/auth/discord/callback` };
-  }
-}
+// Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
+// No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
+class DiscordAuthGuard extends AuthGuard('discord') {}
 
 interface RequestWithUser extends Request {
   user: {
@@ -181,8 +170,11 @@ export class AuthController {
       timestamp: Date.now(), // Prevent replay attacks
     });
 
-    // Derive redirect URI from the incoming request (auto-detect origin)
-    const redirectUri = `${this.getOriginUrl(req)}/api/auth/discord/link/callback`;
+    // Derive link callback URL from the stored login callback URL (single source of truth)
+    const redirectUri = oauthConfig.callbackUrl.replace(
+      '/callback',
+      '/link/callback',
+    );
 
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
 
@@ -221,8 +213,11 @@ export class AuthController {
         throw new Error('Invalid state action');
       }
 
-      // Derive redirect URI from request - must match what was sent to Discord
-      const redirectUri = `${this.getOriginUrl(req)}/api/auth/discord/link/callback`;
+      // Derive link callback URL from stored login callback URL (single source of truth)
+      const redirectUri = oauthConfig.callbackUrl.replace(
+        '/callback',
+        '/link/callback',
+      );
 
       // Exchange code for access token
       const tokenResponse = await fetch(
@@ -243,6 +238,10 @@ export class AuthController {
       );
 
       if (!tokenResponse.ok) {
+        const errorBody = await tokenResponse.text();
+        console.error(
+          `Discord token exchange failed: ${tokenResponse.status} ${errorBody}`,
+        );
         throw new Error('Failed to exchange code for token');
       }
 

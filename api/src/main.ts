@@ -47,6 +47,12 @@ async function bootstrap() {
     credentials: true,
   });
 
+  // Trust first proxy hop (nginx/Render LB) so req.protocol honors X-Forwarded-Proto
+  if (process.env.NODE_ENV === 'production') {
+    const httpAdapter = app.getHttpAdapter();
+    httpAdapter.getInstance().set('trust proxy', 1);
+  }
+
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

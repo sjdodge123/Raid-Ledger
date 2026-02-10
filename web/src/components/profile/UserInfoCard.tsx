@@ -1,38 +1,17 @@
-import { useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
 import type { User } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
+import { toast } from 'sonner';
 
 interface UserInfoCardProps {
     user: User;
-    onRefresh?: () => void;
 }
 
 /**
  * Displays user profile information: avatar, username.
  * Shows "Link Discord" button for local-only users.
+ * Note: Discord link result toasts are handled by IntegrationHub.
  */
-export function UserInfoCard({ user, onRefresh }: UserInfoCardProps) {
-    const [searchParams, setSearchParams] = useSearchParams();
-
-    // Check for Discord link result on mount
-    useEffect(() => {
-        const linked = searchParams.get('linked');
-        const message = searchParams.get('message');
-
-        if (linked === 'success') {
-            toast.success('Discord account linked successfully!');
-            // Clear query params
-            setSearchParams({});
-            // Refetch user data to update UI with Discord info
-            onRefresh?.();
-        } else if (linked === 'error') {
-            toast.error(message || 'Failed to link Discord account');
-            setSearchParams({});
-        }
-    }, [searchParams, setSearchParams, onRefresh]);
-
+export function UserInfoCard({ user }: UserInfoCardProps) {
     // Check if user has Discord linked (discordId doesn't start with 'local:')
     const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
 
