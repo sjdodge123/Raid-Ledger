@@ -236,7 +236,7 @@ RUN chmod +x /app/entrypoint.sh
 # Environment Defaults
 # ==================
 ENV NODE_ENV=production
-ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@/raid_ledger?host=/run/postgresql
+ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost/raid_ledger?host=/run/postgresql
 ENV REDIS_URL=redis://localhost:6379
 ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV CORS_ORIGIN=*
