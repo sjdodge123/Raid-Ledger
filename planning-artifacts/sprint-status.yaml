@@ -1,4 +1,4 @@
-# generated: Sun Feb  9 20:35:00 EST 2026
+# generated: Mon Feb 10 02:10:00 EST 2026
 # NOTE: task.md is the primary source of truth. This file is for bmad workflow compatibility.
 project: Raid Ledger
 tracking_system: linear
@@ -88,7 +88,7 @@ development_status:
   # === Phase 2: CSS & Theme Infrastructure ===
   ROK-224: done # CSS Theme Token Migration (blocks ROK-124)
   ROK-225: done # Notify Organizer on Slot Leave (slot_vacated dispatch)
-  ROK-226: ready-for-dev # Player Self-Unassign from Roster Slot
+  ROK-226: done # Player Self-Unassign from Roster Slot
   ROK-227: ready-for-dev # Seed Game Time Data for Demo Users
 
   # === Admin & Auth ===

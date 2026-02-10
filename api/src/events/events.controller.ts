@@ -224,6 +224,20 @@ export class EventsController {
   }
 
   /**
+   * Self-unassign from roster slot (ROK-226).
+   * Removes the current user's roster assignment but keeps their signup.
+   * Dispatches slot_vacated notification to organizer.
+   */
+  @Delete(':id/roster/me')
+  @UseGuards(AuthGuard('jwt'))
+  async selfUnassign(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<RosterWithAssignments> {
+    return this.signupsService.selfUnassign(eventId, req.user.id);
+  }
+
+  /**
    * Get roster with assignment data (ROK-114 AC-6).
    * Returns pool and assignments for RosterBuilder component.
    * Public endpoint.

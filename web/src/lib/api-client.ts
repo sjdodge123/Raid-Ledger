@@ -368,6 +368,18 @@ export async function updateRoster(
     });
 }
 
+/**
+ * Self-unassign from roster slot (ROK-226).
+ * Removes the current user's assignment but keeps signup.
+ */
+export async function selfUnassignFromRoster(
+    eventId: number,
+): Promise<RosterWithAssignments> {
+    return fetchApi(`/events/${eventId}/roster/me`, {
+        method: 'DELETE',
+    });
+}
+
 // ============================================================
 // Discord Integration API (ROK-195)
 // ============================================================

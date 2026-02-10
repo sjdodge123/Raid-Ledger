@@ -15,6 +15,8 @@ interface RosterSlotProps {
     onAdminClick?: (role: RosterRole, position: number) => void;
     /** ROK-208: Admin can remove player from slot */
     onRemove?: (signupId: number) => void;
+    /** ROK-226: Current user can self-unassign from their own slot */
+    onSelfRemove?: () => void;
 }
 
 /**
@@ -25,7 +27,7 @@ interface RosterSlotProps {
  * Second click: triggers the join action
  * ROK-184: Glow effect for current user's slot
  */
-export function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove }: RosterSlotProps) {
+export function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove }: RosterSlotProps) {
     // ROK-183: Double-click confirmation state
     const [isPending, setIsPending] = useState(false);
 
@@ -97,7 +99,11 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
                 <div className="p-1">
                     <RosterCard
                         item={item}
-                        onRemove={onRemove ? () => onRemove(item.signupId) : undefined}
+                        onRemove={
+                            onRemove ? () => onRemove(item.signupId)
+                            : (isCurrentUser && onSelfRemove) ? onSelfRemove
+                            : undefined
+                        }
                     />
                 </div>
             ) : (

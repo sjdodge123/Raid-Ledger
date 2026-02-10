@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
-import { useRoster, useUpdateRoster, buildRosterUpdate } from '../hooks/use-roster';
+import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
@@ -69,6 +69,7 @@ export function EventDetailPage() {
     const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
+    const selfUnassign = useSelfUnassign(eventId);
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -116,6 +117,20 @@ export function EventDetailPage() {
             });
         } catch (err) {
             toast.error('Failed to cancel signup', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-226: Handle self-unassign from roster slot
+    const handleSelfRemove = async () => {
+        try {
+            await selfUnassign.mutateAsync();
+            toast.success('Left roster slot', {
+                description: 'You\'re still signed up but moved to unassigned.',
+            });
+        } catch (err) {
+            toast.error('Failed to leave slot', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -259,6 +274,7 @@ export function EventDetailPage() {
                         onSlotClick={handleSlotClick}
                         canJoin={canJoinSlot}
                         currentUserId={user?.id}
+                        onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}

@@ -355,6 +355,179 @@ describe('SignupsService', () => {
     });
   });
 
+  describe('selfUnassign', () => {
+    const mockAssignment = {
+      id: 10,
+      signupId: 1,
+      role: 'healer',
+      position: 2,
+      eventId: 1,
+      isOverride: 0,
+    };
+
+    it('should throw NotFoundException when signup does not exist', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await expect(service.selfUnassign(1, 99)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException when no roster assignment exists', async () => {
+      mockDb.select
+        // 1. Find signup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        // 2. Find roster assignment — none
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        });
+
+      await expect(service.selfUnassign(1, 1)).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should delete assignment, notify organizer, and return updated roster', async () => {
+      // Spy on getRosterWithAssignments to avoid deep mock chains
+      const mockRoster = {
+        eventId: 1,
+        pool: [
+          {
+            id: 0,
+            signupId: 1,
+            userId: 1,
+            discordId: '123',
+            username: 'testuser',
+            avatar: 'avatar.png',
+            slot: null,
+            position: 0,
+            isOverride: false,
+            character: null,
+          },
+        ],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      };
+      jest
+        .spyOn(service, 'getRosterWithAssignments')
+        .mockResolvedValueOnce(mockRoster);
+
+      mockDb.select
+        // 1. Find signup
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        // 2. Find roster assignment
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockAssignment]),
+            }),
+          }),
+        })
+        // 3. Fetch event (creatorId + title) via Promise.all
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ creatorId: 5, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        // 4. Fetch user (username) via Promise.all
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ username: 'Frostmage' }]),
+            }),
+          }),
+        });
+
+      const result = await service.selfUnassign(1, 1);
+
+      // Assignment was deleted
+      expect(mockDb.delete).toHaveBeenCalled();
+      // Notification dispatched to organizer
+      expect(mockNotificationService.create).toHaveBeenCalledWith({
+        userId: 5,
+        type: 'slot_vacated',
+        title: 'Slot Vacated',
+        message: 'Frostmage left the healer slot for Raid Night',
+        payload: { eventId: 1 },
+      });
+      // Returns updated roster
+      expect(result.pool).toHaveLength(1);
+      expect(result.assignments).toHaveLength(0);
+    });
+
+    it('should not delete the signup itself', async () => {
+      jest.spyOn(service, 'getRosterWithAssignments').mockResolvedValueOnce({
+        eventId: 1,
+        pool: [],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      });
+
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockAssignment]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ creatorId: 5, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ username: 'TestUser' }]),
+            }),
+          }),
+        });
+
+      await service.selfUnassign(1, 1);
+
+      // delete was called exactly once (for assignment, not signup)
+      expect(mockDb.delete).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('getRoster', () => {
     it('should return roster for event with character data', async () => {
       const signupWithChar = {

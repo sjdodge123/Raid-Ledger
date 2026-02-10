@@ -410,6 +410,89 @@ export class SignupsService {
     };
   }
 
+  /**
+   * Self-unassign the current user from their roster slot (ROK-226).
+   * Removes the roster assignment only — user stays signed up in the pool.
+   * Dispatches slot_vacated notification to the event organizer.
+   * @param eventId - Event ID
+   * @param userId - User requesting self-unassign
+   * @returns Updated roster with assignments
+   * @throws NotFoundException if signup or assignment doesn't exist
+   */
+  async selfUnassign(
+    eventId: number,
+    userId: number,
+  ): Promise<RosterWithAssignments> {
+    // Find the user's signup
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) {
+      throw new NotFoundException(
+        `Signup not found for user ${userId} on event ${eventId}`,
+      );
+    }
+
+    // Find the user's roster assignment
+    const [assignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, signup.id))
+      .limit(1);
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `No roster assignment found for user ${userId} on event ${eventId}`,
+      );
+    }
+
+    // Gather notification data before deleting
+    const [[event], [user]] = await Promise.all([
+      this.db
+        .select({
+          creatorId: schema.events.creatorId,
+          title: schema.events.title,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1),
+      this.db
+        .select({ username: schema.users.username })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1),
+    ]);
+
+    // Delete only the roster assignment (keep the signup)
+    await this.db
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.id, assignment.id));
+
+    this.logger.log(
+      `User ${userId} self-unassigned from ${assignment.role} slot for event ${eventId}`,
+    );
+
+    // Notify organizer about the vacated slot
+    const slotLabel = assignment.role ?? 'assigned';
+    await this.notificationService.create({
+      userId: event.creatorId,
+      type: 'slot_vacated',
+      title: 'Slot Vacated',
+      message: `${user?.username ?? 'Unknown'} left the ${slotLabel} slot for ${event.title}`,
+      payload: { eventId },
+    });
+
+    return this.getRosterWithAssignments(eventId);
+  }
+
   // ============================================================
   // Roster Assignment Methods (ROK-114)
   // ============================================================

@@ -476,7 +476,7 @@
 - [x] ~~**ROK-190: Double-Click to Leave Slot**~~ — ⚠️ CANCELED
   - Replaced by ROK-226 (Player Self-Unassign from Roster Slot)
 
-- [ ] **ROK-226: Player Self-Unassign from Roster Slot** — 🔴 P0
+- [x] **ROK-226: Player Self-Unassign from Roster Slot** — 🔴 P0 ✅
   - Same red X button admins have, but only on the player's own slot
   - Unassigns from slot (moves to unassigned pool), stays signed up
   - Fires `slot_vacated` notification to organizer (ROK-225)
@@ -623,4 +623,10 @@
   - [x] Dispatches `slot_vacated` notification to event creator when assigned user leaves
   - [x] 3 new tests + all 146 API tests pass, lint clean
   - [x] Browser-tested: assign user → impersonate → leave → organizer notification bell shows "Slot Vacated"
+- [x] ROK-226: Player Self-Unassign from Roster Slot
+  - [x] Backend: `selfUnassign()` method + `DELETE /events/:id/roster/me` endpoint
+  - [x] Frontend: X button on own slot, `useSelfUnassign` hook, toast feedback
+  - [x] 4 new tests (150 API total), lint clean, build clean
+  - [x] Browser-tested: impersonate TankMaster → X on own tank slot → slot vacated → ShadowMage notification confirmed
+  - [x] Story file created: `implementation-artifacts/stories/ROK-226.md`
 

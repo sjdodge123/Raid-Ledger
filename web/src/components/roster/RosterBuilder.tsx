@@ -33,6 +33,8 @@ interface RosterBuilderProps {
     canJoin?: boolean;
     /** ROK-184: Current user ID for highlighting their slot */
     currentUserId?: number;
+    /** ROK-226: Called when current user self-unassigns from their roster slot */
+    onSelfRemove?: () => void;
     /** Optional extra content rendered alongside the UnassignedBar in a shared sticky row */
     stickyExtra?: React.ReactNode;
 }
@@ -68,6 +70,7 @@ export function RosterBuilder({
     onSlotClick,
     canJoin = false,
     currentUserId,
+    onSelfRemove,
     stickyExtra,
 }: RosterBuilderProps) {
     // ROK-208: Assignment popup state
@@ -268,6 +271,7 @@ export function RosterBuilder({
                                             isCurrentUser={currentUserId != null && assignedItem?.userId === currentUserId}
                                             onAdminClick={canEdit ? handleAdminSlotClick : undefined}
                                             onRemove={canEdit ? handleRemoveFromSlot : undefined}
+                                            onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && assignedItem?.userId === currentUserId ? onSelfRemove : undefined}
                                         />
                                     );
                                 })}

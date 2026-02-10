@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RosterWithAssignments, RosterAssignmentResponse, UpdateRosterDto } from '@raid-ledger/contract';
-import { getRosterWithAssignments, updateRoster } from '../lib/api-client';
+import { getRosterWithAssignments, updateRoster, selfUnassignFromRoster } from '../lib/api-client';
 
 interface MutationContext {
     previousRoster?: RosterWithAssignments;
@@ -58,6 +58,26 @@ export function useUpdateRoster(eventId: number) {
                 queryKey: ['events', eventId, 'roster', 'assignments'],
             });
             // Also invalidate the regular roster query
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'roster'],
+            });
+        },
+    });
+}
+
+/**
+ * Mutation hook for self-unassigning from a roster slot (ROK-226).
+ * User stays signed up but moves back to the unassigned pool.
+ */
+export function useSelfUnassign(eventId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation<RosterWithAssignments, Error, void>({
+        mutationFn: () => selfUnassignFromRoster(eventId),
+        onSettled: () => {
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'roster', 'assignments'],
+            });
             queryClient.invalidateQueries({
                 queryKey: ['events', eventId, 'roster'],
             });
