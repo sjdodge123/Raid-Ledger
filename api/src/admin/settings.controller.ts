@@ -142,8 +142,20 @@ export class AdminSettingsController {
         }),
       });
 
-      // Discord returns 400 for invalid grant type but with proper error codes
-      const data = (await response.json()) as { error?: string };
+      // Discord may return HTML (Cloudflare page, rate-limit) instead of JSON
+      const responseText = await response.text();
+      let data: { error?: string };
+      try {
+        data = JSON.parse(responseText) as { error?: string };
+      } catch {
+        this.logger.error(
+          `Discord returned non-JSON (${response.status}): ${responseText.slice(0, 200)}`,
+        );
+        return {
+          success: false,
+          message: `Discord returned an unexpected response (HTTP ${response.status}). Try again in a moment.`,
+        };
+      }
 
       if (response.status === 401) {
         return {
