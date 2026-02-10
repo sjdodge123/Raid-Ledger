@@ -445,44 +445,82 @@
     overflow: visible;
 }
 
-/* ── Pulse Conduit layers (2-layer model) ─────────────── */
+/* ── Laser beam baseline — persistent pulsating guide line ─── */
+
+.beam-line {
+    fill: none;
+    stroke-linecap: round;
+}
+
+.beam-line--emerald {
+    stroke: rgba(6, 214, 160, 0.12);
+    animation: laser-breathe-emerald 2.5s ease-in-out infinite;
+}
+
+.beam-line--purple {
+    stroke: rgba(139, 92, 246, 0.12);
+    animation: laser-breathe-purple 2.5s ease-in-out infinite;
+}
+
+@keyframes laser-breathe-emerald {
+    0%, 100% {
+        stroke: rgba(6, 214, 160, 0.08);
+        filter: drop-shadow(0 0 2px rgba(6, 214, 160, 0.05));
+    }
+    50% {
+        stroke: rgba(6, 214, 160, 0.3);
+        filter: drop-shadow(0 0 8px rgba(6, 214, 160, 0.3));
+    }
+}
+
+@keyframes laser-breathe-purple {
+    0%, 100% {
+        stroke: rgba(139, 92, 246, 0.08);
+        filter: drop-shadow(0 0 2px rgba(139, 92, 246, 0.05));
+    }
+    50% {
+        stroke: rgba(139, 92, 246, 0.3);
+        filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.3));
+    }
+}
+
+/* ── Pulse Conduit layers (2-layer laser model) ─────────────── */
 
 /*
- * Periodic energy pulse: short bright dash + long gap travelling outward.
+ * Periodic energy pulse: tight bright dash travelling outward like a laser bolt.
  * --path-len is set by JS (getTotalLength) for accurate stroke-dashoffset.
- * Synced to core-breathe 4s cycle — pulse departs at peak glow (2s mark).
  */
 
-/* Outer glow — blurred, wide */
+/* Outer glow — tight laser bloom */
 .pulse-line__glow {
-    filter: blur(8px);
-    /* dash = 10% of path, gap = rest → single short glow blob */
-    stroke-dasharray: calc(var(--path-len, 200) * 0.10) calc(var(--path-len, 200) * 0.90);
+    filter: blur(3px) drop-shadow(0 0 4px currentColor);
+    stroke-dasharray: calc(var(--path-len, 200) * 0.06) calc(var(--path-len, 200) * 0.94);
 }
 
 .pulse-line__glow--emerald {
-    stroke: rgba(6, 214, 160, 0.35);
-    animation: pulse-travel 4s ease-in-out infinite;
+    stroke: rgba(6, 214, 160, 0.6);
+    animation: pulse-travel 2s ease-in-out infinite;
 }
 
 .pulse-line__glow--purple {
-    stroke: rgba(139, 92, 246, 0.35);
-    animation: pulse-travel 4s ease-in-out infinite;
+    stroke: rgba(139, 92, 246, 0.6);
+    animation: pulse-travel 2s ease-in-out infinite;
 }
 
-/* Inner bright core */
+/* Inner bright core — white-hot laser center */
 .pulse-line__core {
-    stroke-dasharray: calc(var(--path-len, 200) * 0.08) calc(var(--path-len, 200) * 0.92);
+    stroke-dasharray: calc(var(--path-len, 200) * 0.05) calc(var(--path-len, 200) * 0.95);
+    filter: drop-shadow(0 0 2px currentColor);
 }
 
 .pulse-line__core--emerald {
-    stroke: rgba(167, 243, 208, 0.9);
-    animation: pulse-travel 4s ease-in-out infinite;
+    stroke: rgba(200, 255, 230, 0.95);
+    animation: pulse-travel 2s ease-in-out infinite;
 }
 
 .pulse-line__core--purple {
-    stroke: rgba(196, 181, 253, 0.9);
-    animation: pulse-travel 4s ease-in-out infinite;
+    stroke: rgba(220, 200, 255, 0.95);
+    animation: pulse-travel 2s ease-in-out infinite;
 }
 
 /*
@@ -491,7 +529,7 @@
  */
 @keyframes pulse-travel {
     0% {
-        stroke-dashoffset: var(--path-len, 200);
+        stroke-dashoffset: 0;
         opacity: 0;
     }
     5% {
@@ -501,7 +539,7 @@
         opacity: 1;
     }
     100% {
-        stroke-dashoffset: 0;
+        stroke-dashoffset: var(--path-len, 200);
         opacity: 0;
     }
 }
@@ -968,4 +1006,184 @@
     pointer-events: none;
     z-index: 0;
     overflow: visible;
+}
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+/* Hide space background in light mode */
+[data-scheme="light"] .profile-page__nebula,
+[data-scheme="light"] .profile-page__stars {
+    display: none;
+}
+
+/* Reduce glow intensity in light mode */
+[data-scheme="light"] .power-core__ring::before {
+    border-color: rgba(16, 185, 129, 0.7);
+    box-shadow:
+        0 0 8px rgba(16, 185, 129, 0.35),
+        0 0 18px rgba(16, 185, 129, 0.18),
+        inset 0 0 8px rgba(16, 185, 129, 0.12);
+}
+
+[data-scheme="light"] .power-core__ring::after {
+    border-color: rgba(16, 185, 129, 0.25);
+    box-shadow:
+        0 0 10px rgba(16, 185, 129, 0.25),
+        0 0 24px rgba(16, 185, 129, 0.1);
+}
+
+[data-scheme="light"] .power-core__avatar {
+    border-color: rgba(16, 185, 129, 0.7);
+    background: rgba(255, 255, 255, 0.9);
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+}
+
+[data-scheme="light"] .power-core__edit {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .power-core__nav-btn {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .power-core__username {
+    color: #0f172a;
+    text-shadow: none;
+}
+
+[data-scheme="light"] .spoke-node__hex-frame {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .spoke-node--active .spoke-node__hex-frame {
+    border-color: rgba(16, 185, 129, 0.8);
+    background: rgba(16, 185, 129, 0.08);
+    box-shadow:
+        0 0 10px rgba(16, 185, 129, 0.35),
+        0 0 24px rgba(16, 185, 129, 0.12);
+}
+
+[data-scheme="light"] .spoke-node__label {
+    color: #475569;
+    text-shadow: none;
+}
+
+[data-scheme="light"] .spoke-node__status {
+    text-shadow: none;
+}
+
+[data-scheme="light"] .spoke-tooltip {
+    background: #ffffff;
+    border-color: rgba(203, 213, 225, 0.6);
+    color: #334155;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+[data-scheme="light"] .orbit-ring__track {
+    opacity: 0.4;
+}
+
+[data-scheme="light"] .orbit-ring__label {
+    text-shadow: none;
+}
+
+[data-scheme="light"] .ghost-node__icon-ring {
+    background: rgba(139, 92, 246, 0.08);
+}
+
+[data-scheme="light"] .ghost-node__label {
+    text-shadow: none;
+}
+
+/* Mobile module rows light mode */
+[data-scheme="light"] .mobile-module-row {
+    background: rgba(255, 255, 255, 0.7);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .mobile-module-row:not(:disabled):active {
+    background: rgba(241, 245, 249, 0.9);
+}
+
+[data-scheme="light"] .mobile-module-row__icon {
+    background: rgba(248, 250, 252, 0.9);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-scheme="light"] .mobile-module-row__name {
+    color: #334155;
+}
+
+[data-scheme="light"] .mobile-module-row--active .mobile-module-row__name {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .mobile-avatar__img {
+    background: rgba(255, 255, 255, 0.9);
+}
+
+[data-scheme="light"] .mobile-avatar__edit {
+    background: rgba(255, 255, 255, 0.95);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .avatar-selector-option {
+    background: rgba(241, 245, 249, 0.8);
+}
+
+/* ── Light mode laser conduit overrides ── */
+
+[data-scheme="light"] .beam-line--emerald {
+    animation-name: laser-breathe-emerald-light;
+}
+
+[data-scheme="light"] .beam-line--purple {
+    animation-name: laser-breathe-purple-light;
+}
+
+[data-scheme="light"] .pulse-line__glow {
+    filter: blur(3px) drop-shadow(0 0 6px currentColor);
+}
+
+[data-scheme="light"] .pulse-line__glow--emerald {
+    stroke: rgba(16, 185, 129, 0.8);
+}
+
+[data-scheme="light"] .pulse-line__glow--purple {
+    stroke: rgba(139, 92, 246, 0.8);
+}
+
+[data-scheme="light"] .pulse-line__core--emerald {
+    stroke: rgba(6, 214, 160, 0.95);
+}
+
+[data-scheme="light"] .pulse-line__core--purple {
+    stroke: rgba(167, 139, 250, 0.95);
+}
+
+@keyframes laser-breathe-emerald-light {
+    0%, 100% {
+        stroke: rgba(16, 185, 129, 0.12);
+        filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.1));
+    }
+    50% {
+        stroke: rgba(16, 185, 129, 0.5);
+        filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
+    }
+}
+
+@keyframes laser-breathe-purple-light {
+    0%, 100% {
+        stroke: rgba(139, 92, 246, 0.12);
+        filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.1));
+    }
+    50% {
+        stroke: rgba(139, 92, 246, 0.5);
+        filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.4));
+    }
 }

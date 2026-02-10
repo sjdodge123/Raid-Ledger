@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { MobileNav } from './MobileNav';
+import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
 import { useAuth } from '../../hooks/use-auth';
 
@@ -50,6 +51,7 @@ export function Header() {
                     {/* Right side: Notification Bell + User menu (desktop) + Hamburger (mobile) */}
                     <div className="flex items-center gap-4">
                         <div className="hidden md:flex items-center gap-4">
+                            <ThemeToggle />
                             {user ? (
                                 <>
                                     <NotificationBell />

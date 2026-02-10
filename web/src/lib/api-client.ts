@@ -475,3 +475,25 @@ export async function getGameTimeAbsences(): Promise<Array<{ id: number; startDa
     );
     return response.data;
 }
+
+// ============================================================
+// Preferences API (ROK-124)
+// ============================================================
+
+/**
+ * Fetch current user's preferences as a key-value map.
+ */
+export async function getMyPreferences(): Promise<Record<string, unknown>> {
+    const response = await fetchApi<{ data: Record<string, unknown> }>('/users/me/preferences');
+    return response.data;
+}
+
+/**
+ * Update a single user preference (upsert).
+ */
+export async function updatePreference(key: string, value: unknown): Promise<void> {
+    await fetchApi('/users/me/preferences', {
+        method: 'PATCH',
+        body: JSON.stringify({ key, value }),
+    });
+}

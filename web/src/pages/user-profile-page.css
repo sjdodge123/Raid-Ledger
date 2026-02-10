@@ -246,3 +246,69 @@
     background: linear-gradient(135deg, #a78bfa, #8b5cf6);
     transform: translateY(-1px);
 }
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .user-profile-card {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(203, 213, 225, 0.5);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+[data-scheme="light"] .user-profile-header {
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .user-profile-name {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .user-profile-meta {
+    color: #64748b;
+}
+
+[data-scheme="light"] .user-profile-section-title {
+    color: #64748b;
+}
+
+[data-scheme="light"] .character-card {
+    background: rgba(241, 245, 249, 0.6);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-scheme="light"] .character-card:hover {
+    background: rgba(226, 232, 240, 0.5);
+}
+
+[data-scheme="light"] .character-card-name {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .character-card-class,
+[data-scheme="light"] .character-card-realm {
+    color: #64748b;
+}
+
+[data-scheme="light"] .character-card-role {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+[data-scheme="light"] .user-profile-empty {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .user-profile-error h2 {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .user-profile-error p {
+    color: #64748b;
+}
+
+[data-scheme="light"] .skeleton {
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.04) 25%, rgba(0, 0, 0, 0.07) 50%, rgba(0, 0, 0, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+}

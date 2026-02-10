@@ -630,3 +630,15 @@
   - [x] Browser-tested: impersonate TankMaster → X on own tank slot → slot vacated → ShadowMage notification confirmed
   - [x] Story file created: `implementation-artifacts/stories/ROK-226.md`
 
+---
+
+## Session Progress (2026-02-09 Night #2)
+
+- [/] ROK-124: Theme System — light mode polish on hub/spoke profile component
+  - [x] Fixed pulse conduits: dark blobs → bright emerald/purple colors in light mode
+  - [x] Improved Discord circle + avatar ring visibility in light mode (stronger border, box-shadow)
+  - [x] Reversed pulse direction (inward toward avatar)
+  - [x] Increased pulse speed (3s → 2s animation duration)
+  - [x] Added tangent-line endpoints (strands fan out from circle edges instead of single point)
+  - [ ] Remaining: full theme system (DB sync, auto mode, header toggle, extensible architecture)
+

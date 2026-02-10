@@ -343,3 +343,93 @@
 .animate-pulse-subtle {
     animation: pulse-subtle 2s ease-in-out infinite;
 }
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .event-detail-back {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-detail-back:hover {
+    color: #475569;
+}
+
+[data-scheme="light"] .event-detail-error p {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-detail-slots {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .event-detail-slots__header h2 {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .event-detail-roster {
+    background: rgba(248, 250, 252, 0.9);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .event-detail-roster h2 {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-detail-roster__group h3 {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .event-detail-roster__item {
+    background: rgba(241, 245, 249, 0.7);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-scheme="light"] .event-detail-roster__character {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .event-detail-roster__empty {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .event-detail-signup-fallback {
+    background: rgba(248, 250, 252, 0.5);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-scheme="light"] .btn-secondary {
+    background: rgba(0, 0, 0, 0.05);
+    color: #475569;
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.08);
+}
+
+[data-scheme="light"] .skeleton {
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.04) 25%, rgba(0, 0, 0, 0.07) 50%, rgba(0, 0, 0, 0.04) 75%);
+    background-size: 200% 100%;
+    animation: skeleton-pulse 1.5s infinite;
+}
+
+[data-scheme="light"] .skeleton-slots-header {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+[data-scheme="light"] .skeleton-slots-grid::before,
+[data-scheme="light"] .skeleton-slots-grid::after {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+[data-scheme="light"] .skeleton-roster-header {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+[data-scheme="light"] .skeleton-roster-items::before,
+[data-scheme="light"] .skeleton-roster-items::after {
+    background: rgba(0, 0, 0, 0.04);
+}

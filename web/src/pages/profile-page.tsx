@@ -4,6 +4,7 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useThemeStore } from '../stores/theme-store';
 import { IntegrationHub } from '../components/profile/IntegrationHub';
 import { CharacterList, AddCharacterModal } from '../components/profile';
 import { GameTimePanel } from '../components/features/game-time';
@@ -97,6 +98,9 @@ export function ProfilePage() {
                     onRefresh={refetch}
                 />
 
+                {/* Appearance Section (ROK-124) */}
+                <AppearanceSection />
+
                 {/* Game Time Section (ROK-189) — unified panel */}
                 <div id="game-time" className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-8">
                     <GameTimePanel
@@ -145,6 +149,40 @@ export function ProfilePage() {
                     editingCharacter={editingCharacter}
                 />
             )}
+        </div>
+    );
+}
+
+const THEME_OPTIONS = [
+    { id: 'default-dark', label: 'Dark', subtitle: 'Always dark' },
+    { id: 'default-light', label: 'Light', subtitle: 'Always light' },
+    { id: 'auto', label: 'Auto', subtitle: 'Match system' },
+] as const;
+
+function AppearanceSection() {
+    const themeId = useThemeStore((s) => s.themeId);
+    const setTheme = useThemeStore((s) => s.setTheme);
+
+    return (
+        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
+            <h2 className="text-xl font-semibold text-foreground mb-1">Appearance</h2>
+            <p className="text-sm text-muted mb-4">Choose your preferred color scheme</p>
+            <div className="flex gap-3">
+                {THEME_OPTIONS.map((opt) => (
+                    <button
+                        key={opt.id}
+                        onClick={() => setTheme(opt.id)}
+                        className={`flex-1 px-4 py-3 rounded-lg border-2 transition-colors text-center ${
+                            themeId === opt.id
+                                ? 'border-emerald-500 bg-emerald-500/10 text-foreground'
+                                : 'border-edge bg-panel text-secondary hover:border-edge-strong'
+                        }`}
+                    >
+                        <div className="font-medium text-sm">{opt.label}</div>
+                        <div className="text-xs text-muted mt-0.5">{opt.subtitle}</div>
+                    </button>
+                ))}
+            </div>
         </div>
     );
 }

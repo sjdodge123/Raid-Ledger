@@ -162,10 +162,10 @@ export function AdminSettingsPage() {
             >
                 {/* Setup Instructions */}
                 <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
-                    <p className="text-sm text-blue-300">
+                    <p className="text-sm text-foreground">
                         <strong>Setup Instructions:</strong>
                     </p>
-                    <ol className="text-sm text-blue-200 mt-2 space-y-1 list-decimal list-inside">
+                    <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
                         <li>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-100">Discord Developer Portal</a></li>
                         <li>Create or select an application</li>
                         <li>Go to OAuth2 → Copy Client ID and Client Secret</li>

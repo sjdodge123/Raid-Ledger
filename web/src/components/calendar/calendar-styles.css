@@ -187,16 +187,18 @@
 }
 
 .rbc-today {
-    background: rgba(16, 185, 129, 0.1) !important;
+    background: transparent !important;
 }
 
-.rbc-today::before {
+/* Scope the today border to the day-slot column only, not individual events */
+.rbc-day-slot.rbc-today::before {
     content: '';
     position: absolute;
     inset: 0;
-    border: 2px solid rgba(16, 185, 129, 0.5);
+    border: 2px solid rgba(16, 185, 129, 0.3);
     border-radius: 0.25rem;
     pointer-events: none;
+    z-index: 0;
 }
 
 .rbc-date-cell {
@@ -680,9 +682,9 @@
     border-top: 1px solid rgba(148, 163, 184, 0.05);
 }
 
-/* Today column highlight */
+/* Today column highlight — header-only; no tint on the slot to avoid overlaying events */
 .rbc-day-slot.rbc-today {
-    background: rgba(16, 185, 129, 0.05);
+    background: transparent;
 }
 
 /* Current time indicator */
@@ -994,4 +996,231 @@
     .day-event-description {
         font-size: 0.75rem;
     }
+}
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .calendar-container {
+    background: rgba(241, 245, 249, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .toolbar-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+[data-scheme="light"] .toolbar-btn:hover:not(:disabled) {
+    background: rgba(203, 213, 225, 0.7);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+[data-scheme="light"] .toolbar-title {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .calendar-loading {
+    color: #64748b;
+}
+
+[data-scheme="light"] .calendar-empty {
+    color: #64748b;
+}
+
+[data-scheme="light"] .rbc-header {
+    color: #64748b;
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+    background: rgba(241, 245, 249, 0.5);
+}
+
+[data-scheme="light"] .rbc-month-view {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-month-row {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-day-bg {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-day-bg:hover {
+    background: rgba(241, 245, 249, 0.5);
+}
+
+[data-scheme="light"] .rbc-off-range-bg {
+    background: rgba(248, 250, 252, 0.7);
+}
+
+[data-scheme="light"] .rbc-date-cell>a {
+    color: #334155;
+}
+
+[data-scheme="light"] .rbc-off-range .rbc-date-cell>a,
+[data-scheme="light"] .rbc-off-range a {
+    color: #cbd5e1;
+}
+
+[data-scheme="light"] .rbc-overlay {
+    background: rgba(255, 255, 255, 0.97);
+    border-color: rgba(203, 213, 225, 0.5);
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+[data-scheme="light"] .rbc-overlay-header {
+    color: #0f172a;
+    border-bottom-color: rgba(203, 213, 225, 0.5);
+}
+
+/* Mini calendar light overrides */
+[data-scheme="light"] .mini-calendar {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .mini-nav-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #64748b;
+}
+
+[data-scheme="light"] .mini-nav-btn:hover {
+    background: rgba(203, 213, 225, 0.7);
+    color: #334155;
+}
+
+[data-scheme="light"] .mini-calendar-title {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .mini-weekday {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .mini-day {
+    color: #334155;
+}
+
+[data-scheme="light"] .mini-day:hover {
+    background: rgba(226, 232, 240, 0.6);
+}
+
+[data-scheme="light"] .mini-day.other-month {
+    color: #cbd5e1;
+}
+
+/* Sidebar light overrides */
+[data-scheme="light"] .sidebar-section {
+    background: rgba(255, 255, 255, 0.8);
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .sidebar-section-title {
+    color: #64748b;
+}
+
+[data-scheme="light"] .sidebar-action-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+[data-scheme="light"] .sidebar-action-btn:hover {
+    background: rgba(203, 213, 225, 0.7);
+}
+
+[data-scheme="light"] .filter-action-btn {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.4);
+    color: #64748b;
+}
+
+[data-scheme="light"] .filter-action-btn:hover {
+    background: rgba(203, 213, 225, 0.7);
+    color: #334155;
+}
+
+[data-scheme="light"] .game-filter-item {
+    background: rgba(241, 245, 249, 0.5);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
+[data-scheme="light"] .game-filter-item:hover {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .game-filter-icon {
+    background: rgba(241, 245, 249, 0.7);
+}
+
+[data-scheme="light"] .game-filter-name {
+    color: #334155;
+}
+
+[data-scheme="light"] .game-filter-item.selected .game-filter-name {
+    color: #1e293b;
+}
+
+/* Week view light overrides */
+[data-scheme="light"] .rbc-time-view {
+    border-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-header {
+    background: rgba(241, 245, 249, 0.5);
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-header-content {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-header-gutter {
+    background: rgba(241, 245, 249, 0.5);
+    border-right-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-allday-cell {
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-content {
+    border-top-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-content>*+*>* {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-gutter {
+    background: rgba(248, 250, 252, 0.5);
+}
+
+[data-scheme="light"] .rbc-timeslot-group {
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-time-slot {
+    border-top-color: rgba(203, 213, 225, 0.15);
+}
+
+[data-scheme="light"] .rbc-label {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .rbc-day-slot {
+    border-left-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .rbc-day-slot .rbc-time-slot {
+    border-top-color: rgba(203, 213, 225, 0.15);
+}
+
+[data-scheme="light"] .rbc-day-slot .rbc-event {
+    border-top-color: rgba(255, 255, 255, 0.95) !important;
 }

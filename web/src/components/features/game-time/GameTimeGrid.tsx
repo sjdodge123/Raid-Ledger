@@ -93,7 +93,7 @@ function getMergeColor(group: string): string {
         case 'committed-overlay': return 'rgba(51, 65, 85, 0.3)';
         case 'blocked': return 'rgba(239, 68, 68, 0.5)';
         case 'freed': return 'rgba(16, 185, 129, 0.4)';
-        default: return 'rgba(30, 41, 59, 0.5)';
+        default: return 'var(--gt-split-bg)';
     }
 }
 
@@ -462,7 +462,7 @@ export function GameTimeGrid({
         if (hoverDay < 0 || !gridDims || !isInteractive) return undefined;
         const x = gridDims.colStartLeft + hoverDay * (gridDims.colWidth + gap) + gridDims.colWidth / 2;
         const y = gridDims.headerHeight + (hoverHour - rangeStart) * gridDims.rowHeight + gridDims.rowHeight / 2;
-        return `radial-gradient(circle 100px at ${x}px ${y}px, rgba(148, 163, 184, 0.2), transparent 80%)`;
+        return `radial-gradient(circle 100px at ${x}px ${y}px, var(--gt-hover-glow), transparent 80%)`;
     }, [hoverDay, hoverHour, gridDims, isInteractive, rangeStart]);
 
     return (
@@ -519,7 +519,7 @@ export function GameTimeGrid({
                                         : 'bg-surface text-muted'
                             }`}
                             style={isTodaySplit ? {
-                                background: 'linear-gradient(to right, rgba(30, 41, 59, 0.8) 50%, rgba(16, 185, 129, 0.15) 50%)',
+                                background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)',
                             } : undefined}
                             data-testid={`day-header-${i}`}
                         >
@@ -532,8 +532,8 @@ export function GameTimeGrid({
                                 <span className="flex flex-col items-center leading-none gap-0.5">
                                     <span>{day}</span>
                                     <span className="text-[9px] leading-none flex items-center gap-0.5">
-                                        <span className="text-dim">{nextDateLabel}</span>
-                                        <span className="text-faint">/</span>
+                                        <span className="text-muted">{nextDateLabel}</span>
+                                        <span className="text-dim">/</span>
                                         <span className="text-emerald-400/80">{dateLabel}</span>
                                     </span>
                                 </span>
@@ -594,13 +594,13 @@ export function GameTimeGrid({
                             if (sameAbove) shadows.push(`0 -1px 0 0 ${getMergeColor(group)}`);
                             if (isInteractive && dist > 0 && dist <= 4) {
                                 const alpha = (0.28 - (dist - 1) * 0.06).toFixed(2);
-                                shadows.push(`inset 0 0 0 0.5px rgba(148, 163, 184, ${alpha})`);
+                                shadows.push(`inset 0 0 0 0.5px rgba(var(--gt-proximity-line), ${alpha})`);
                             }
                             if (isHovered && isInteractive) {
                                 if (locked) {
                                     // Locked cells: subtle slate ring so cursor is still visible
-                                    shadows.push('0 0 0 1.5px rgba(148, 163, 184, 0.5)');
-                                    shadows.push('0 0 10px 1px rgba(148, 163, 184, 0.25)');
+                                    shadows.push(`0 0 0 1.5px rgba(var(--gt-proximity-line), 0.5)`);
+                                    shadows.push(`0 0 10px 1px rgba(var(--gt-proximity-line), 0.25)`);
                                 } else {
                                     const ringColor = isErase
                                         ? 'rgba(248, 113, 113, 0.9)'
@@ -710,7 +710,7 @@ export function GameTimeGrid({
                                         left: colLeft,
                                         width: gridDims.colWidth,
                                         height: splitY,
-                                        background: 'rgba(30, 41, 59, 0.3)',
+                                        background: 'var(--gt-past-highlight)',
                                     }}
                                     data-testid="today-highlight-past"
                                 />

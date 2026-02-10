@@ -84,3 +84,35 @@
     min-width: 1.5rem;
     text-align: center;
 }
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .unassigned-bar {
+    background: rgba(241, 245, 249, 0.9);
+    border-color: rgba(203, 213, 225, 0.6);
+}
+
+[data-scheme="light"] .unassigned-bar:hover {
+    background: rgba(226, 232, 240, 0.95);
+    border-color: rgba(99, 102, 241, 0.4);
+}
+
+[data-scheme="light"] .unassigned-bar--empty:hover {
+    background: rgba(241, 245, 249, 0.9);
+    border-color: rgba(203, 213, 225, 0.6);
+}
+
+[data-scheme="light"] .unassigned-bar__label {
+    color: #64748b;
+}
+
+[data-scheme="light"] .unassigned-bar__avatar {
+    border-color: rgba(255, 255, 255, 0.9);
+}
+
+[data-scheme="light"] .unassigned-bar__overflow {
+    color: #64748b;
+    background: rgba(226, 232, 240, 0.7);
+}

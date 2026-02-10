@@ -1,4 +1,4 @@
-# generated: Mon Feb 10 02:20:00 EST 2026
+# generated: Mon Feb 10 03:00:00 EST 2026
 # NOTE: task.md is the primary source of truth. This file is for bmad workflow compatibility.
 project: Raid Ledger
 tracking_system: linear
@@ -62,7 +62,7 @@ development_status:
   ROK-192: done # Collapsible Banner + Inline Description (REDESIGNED)
   
   # === Phase 2: Profile Hub & Theme (Council #006) ===
-  ROK-124: ready-for-dev # Theme System (Light/Dark/Auto)
+  ROK-124: in-progress # Theme System (Light/Dark/Auto)
   ROK-193: ready-for-dev # Delete Demo Data Button
   ROK-194: done # Dynamic Avatar Resolution
   ROK-195: done # Hub & Spoke Integration Model

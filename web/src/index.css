@@ -49,6 +49,40 @@
     --color-edge-subtle: #1e293b;/* slate-800 */
 }
 
+/* Game Time Grid inline-style tokens — dark defaults (ROK-124) */
+html {
+    --gt-widget-bg: rgba(30, 41, 59, 0.7);
+    --gt-widget-border: rgba(51, 65, 85, 0.6);
+    --gt-split-bg: rgba(30, 41, 59, 0.8);
+    --gt-past-highlight: rgba(30, 41, 59, 0.3);
+    --gt-hover-glow: rgba(148, 163, 184, 0.2);
+    --gt-proximity-line: 148, 163, 184;
+}
+
+/* Light theme overrides (ROK-124) */
+[data-scheme="light"] {
+    --color-backdrop: #f8fafc;
+    --color-surface: #ffffff;
+    --color-panel: #f1f5f9;
+    --color-overlay: #e2e8f0;
+    --color-faint: #cbd5e1;
+    --color-dim: #94a3b8;
+    --color-muted: #64748b;
+    --color-secondary: #475569;
+    --color-foreground: #0f172a;
+    --color-edge: #e2e8f0;
+    --color-edge-strong: #cbd5e1;
+    --color-edge-subtle: #f1f5f9;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(241, 245, 249, 0.9);
+    --gt-widget-border: rgba(203, 213, 225, 0.6);
+    --gt-split-bg: rgba(226, 232, 240, 0.4);
+    --gt-past-highlight: rgba(203, 213, 225, 0.3);
+    --gt-hover-glow: rgba(100, 116, 139, 0.15);
+    --gt-proximity-line: 100, 116, 139;
+}
+
 /* ============================================
    UX Design System - Raid Ledger
    Based on ux-design-specification.md
@@ -84,6 +118,10 @@ html {
     color-scheme: dark;
 }
 
+html[data-scheme="light"] {
+    color-scheme: light;
+}
+
 body {
     margin: 0;
     min-height: 100vh;
@@ -113,6 +151,17 @@ body {
     background: color-mix(in srgb, var(--color-surface) 80%, transparent);
 }
 
+/* Light mode glass-card: opaque with subtle shadow */
+[data-scheme="light"] .glass-card {
+    background: color-mix(in srgb, var(--color-surface) 90%, transparent);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+[data-scheme="light"] .glass-card:hover {
+    background: color-mix(in srgb, var(--color-surface) 95%, transparent);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
 /* Glow Button Effects */
 .glow-emerald {
     box-shadow: var(--glow-emerald);
@@ -128,6 +177,23 @@ body {
 
 .glow-indigo:hover {
     box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
+}
+
+/* Light mode: reduced glows */
+[data-scheme="light"] .glow-emerald {
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+[data-scheme="light"] .glow-emerald:hover {
+    box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
+}
+
+[data-scheme="light"] .glow-indigo {
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
+}
+
+[data-scheme="light"] .glow-indigo:hover {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
 }
 
 /* Role Badge Colors */

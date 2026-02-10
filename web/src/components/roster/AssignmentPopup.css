@@ -285,6 +285,81 @@
     max-width: 100%;
 }
 
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .assignment-popup__search-wrapper {
+    background: var(--color-surface, #ffffff);
+}
+
+[data-scheme="light"] .assignment-popup__search {
+    background: rgba(241, 245, 249, 0.8);
+    border-color: rgba(203, 213, 225, 0.6);
+    color: #0f172a;
+}
+
+[data-scheme="light"] .assignment-popup__search::placeholder {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .assignment-popup__section-title {
+    color: #64748b;
+    border-bottom-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .assignment-popup__player-row:hover {
+    background: rgba(241, 245, 249, 0.7);
+}
+
+[data-scheme="light"] .assignment-popup__player-name {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .assignment-popup__player-character {
+    color: #64748b;
+}
+
+[data-scheme="light"] .assignment-popup__role-badge--tank {
+    background: rgba(37, 99, 235, 0.12);
+    color: #2563eb;
+}
+
+[data-scheme="light"] .assignment-popup__role-badge--healer {
+    background: rgba(22, 163, 74, 0.12);
+    color: #16a34a;
+}
+
+[data-scheme="light"] .assignment-popup__role-badge--dps {
+    background: rgba(220, 38, 38, 0.12);
+    color: #dc2626;
+}
+
+[data-scheme="light"] .assignment-popup__empty {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .assignment-popup__self-assign-btn {
+    color: #6366f1;
+}
+
+[data-scheme="light"] .assignment-popup__self-assign-btn:hover {
+    color: #4f46e5;
+}
+
+[data-scheme="light"] .assignment-popup__back-btn {
+    color: #64748b;
+}
+
+[data-scheme="light"] .assignment-popup__back-btn:hover {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .assignment-popup__selected-player {
+    background: rgba(241, 245, 249, 0.7);
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
 /* Mobile: Bottom sheet */
 @media (max-width: 767px) {
 

@@ -246,3 +246,63 @@
         max-width: 300px;
     }
 }
+
+/* ============================================
+   Light Theme Overrides (ROK-124)
+   ============================================ */
+
+[data-scheme="light"] .event-banner {
+    background: linear-gradient(135deg, rgba(241, 245, 249, 0.95), rgba(226, 232, 240, 0.98));
+    border-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .event-banner__title {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .event-banner__meta {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-banner__game {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.25);
+    color: #7c3aed;
+}
+
+[data-scheme="light"] .event-banner__separator {
+    color: rgba(0, 0, 0, 0.15);
+}
+
+[data-scheme="light"] .event-banner__creator .user-link {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-banner__description {
+    color: #94a3b8;
+}
+
+[data-scheme="light"] .event-banner--collapsed {
+    background: rgba(255, 255, 255, 0.95);
+    border-bottom-color: rgba(203, 213, 225, 0.5);
+}
+
+[data-scheme="light"] .event-banner--collapsed__title {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .event-banner--collapsed__date {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-banner--collapsed__time {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-banner--collapsed__creator {
+    color: #64748b;
+}
+
+[data-scheme="light"] .event-banner--collapsed__creator .user-link {
+    color: #64748b;
+}

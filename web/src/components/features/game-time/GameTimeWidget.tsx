@@ -176,9 +176,9 @@ export function GameTimeWidget({
             <div
                 className="flex items-center gap-2 h-full px-3 rounded-lg cursor-pointer transition-colors"
                 style={{
-                    background: 'rgba(30, 41, 59, 0.7)',
+                    background: 'var(--gt-widget-bg)',
                     backdropFilter: 'blur(8px)',
-                    border: hasOverlap ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid rgba(51, 65, 85, 0.6)',
+                    border: hasOverlap ? '1px solid rgba(52, 211, 153, 0.3)' : '1px solid var(--gt-widget-border)',
                 }}
                 onClick={() => setShowModal(true)}
                 data-testid="game-time-widget"

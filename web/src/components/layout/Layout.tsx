@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { ImpersonationBanner } from '../auth';
+import { useThemeSync } from '../../hooks/use-theme-sync';
 
 interface LayoutProps {
     children: ReactNode;
@@ -12,6 +13,8 @@ interface LayoutProps {
  * Applied to all routes for consistent navigation.
  */
 export function Layout({ children }: LayoutProps) {
+    useThemeSync();
+
     return (
         <div className="min-h-screen flex flex-col bg-backdrop">
             <ImpersonationBanner />

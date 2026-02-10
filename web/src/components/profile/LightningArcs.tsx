@@ -12,25 +12,28 @@ interface StrandConfig {
     delay: number;      // animation-delay in seconds
     glowWidth: number;
     coreWidth: number;
+    tangentOffset: number; // perpendicular offset on circle edge (px, + = right of line)
 }
 
 /** Emerald strands: center → Discord — 3 varied paths, staggered */
 const EMERALD_STRANDS: StrandConfig[] = [
-    { curvature: 0.03, delay: 0,   glowWidth: 14, coreWidth: 3   },
-    { curvature: 0.09, delay: 1.3, glowWidth: 10, coreWidth: 2   },
-    { curvature: 0.15, delay: 2.6, glowWidth: 12, coreWidth: 2.5 },
+    { curvature: 0.03, delay: 0,   glowWidth: 14, coreWidth: 3,   tangentOffset: -12 },
+    { curvature: 0.06, delay: 0.7, glowWidth: 10, coreWidth: 2,   tangentOffset: 0   },
+    { curvature: 0.10, delay: 1.4, glowWidth: 12, coreWidth: 2.5, tangentOffset: 12  },
 ];
 
 /** Purple strands: Discord → Ghost — 3 varied paths, offset from emerald */
 const PURPLE_STRANDS: StrandConfig[] = [
-    { curvature: -0.07, delay: 0.3, glowWidth: 12, coreWidth: 2.5 },
-    { curvature: -0.13, delay: 1.6, glowWidth: 9,  coreWidth: 2   },
-    { curvature: -0.19, delay: 2.9, glowWidth: 11, coreWidth: 2   },
+    { curvature: -0.07, delay: 0.2, glowWidth: 12, coreWidth: 2.5, tangentOffset: -10 },
+    { curvature: -0.10, delay: 0.9, glowWidth: 9,  coreWidth: 2,   tangentOffset: 0   },
+    { curvature: -0.14, delay: 1.6, glowWidth: 11, coreWidth: 2,   tangentOffset: 10  },
 ];
 
 /**
  * Generate a smooth quadratic bezier path between two points,
  * trimmed inward so it starts/ends at element borders rather than centers.
+ * tangentOffset shifts the start/end points perpendicular to the connecting line
+ * so strands fan out from tangent positions on the circle edges.
  */
 function conduitPath(
     x1: number, y1: number,
@@ -38,6 +41,7 @@ function conduitPath(
     startInset: number,
     endInset: number,
     curvature = 0.1,
+    tangentOffset = 0,
 ): string {
     const dx = x2 - x1;
     const dy = y2 - y1;
@@ -46,11 +50,14 @@ function conduitPath(
 
     const ux = dx / len;
     const uy = dy / len;
+    // Perpendicular unit vector (right-hand)
+    const px = -uy;
+    const py = ux;
 
-    const sx = x1 + ux * startInset;
-    const sy = y1 + uy * startInset;
-    const ex = x2 - ux * endInset;
-    const ey = y2 - uy * endInset;
+    const sx = x1 + ux * startInset + px * tangentOffset;
+    const sy = y1 + uy * startInset + py * tangentOffset;
+    const ex = x2 - ux * endInset + px * tangentOffset;
+    const ey = y2 - uy * endInset + py * tangentOffset;
 
     const mx = (sx + ex) / 2;
     const my = (sy + ey) / 2;
@@ -93,6 +100,8 @@ export function LightningArcs({
     const purpleGroupRef = useRef<SVGGElement>(null);
     const burstEmeraldGroupRef = useRef<SVGGElement>(null);
     const burstPurpleGroupRef = useRef<SVGGElement>(null);
+    const emeraldBeamRef = useRef<SVGPathElement>(null);
+    const purpleBeamRef = useRef<SVGPathElement>(null);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -114,11 +123,14 @@ export function LightningArcs({
             const emeraldPaths = emeraldGroupRef.current?.querySelectorAll('path');
             if (emeraldPaths) {
                 EMERALD_STRANDS.forEach((strand, i) => {
-                    const d = conduitPath(cx, cy, sx, sy, POWER_CORE_RADIUS, SPOKE_RADIUS, strand.curvature);
+                    const d = conduitPath(cx, cy, sx, sy, POWER_CORE_RADIUS, SPOKE_RADIUS, strand.curvature, strand.tangentOffset);
                     applyPath(emeraldPaths[i * 2] as SVGPathElement, d);     // glow
                     applyPath(emeraldPaths[i * 2 + 1] as SVGPathElement, d); // core
                 });
             }
+
+            // Beam baseline — center strand curvature
+            applyPath(emeraldBeamRef.current, conduitPath(cx, cy, sx, sy, POWER_CORE_RADIUS, SPOKE_RADIUS, EMERALD_STRANDS[1].curvature));
 
             // Burst uses center strand's curvature
             const burstEPaths = burstEmeraldGroupRef.current?.querySelectorAll('path');
@@ -137,7 +149,7 @@ export function LightningArcs({
 
                     const purplePaths = purpleGroupRef.current.querySelectorAll('path');
                     PURPLE_STRANDS.forEach((strand, i) => {
-                        const d = conduitPath(sx, sy, gx, gy, SPOKE_RADIUS, GHOST_RADIUS, strand.curvature);
+                        const d = conduitPath(sx, sy, gx, gy, SPOKE_RADIUS, GHOST_RADIUS, strand.curvature, strand.tangentOffset);
                         applyPath(purplePaths[i * 2] as SVGPathElement, d);
                         applyPath(purplePaths[i * 2 + 1] as SVGPathElement, d);
                     });
@@ -149,9 +161,14 @@ export function LightningArcs({
                         burstPPaths.forEach(p => applyPath(p as SVGPathElement, d));
                     }
                     if (burstPurpleGroupRef.current) burstPurpleGroupRef.current.style.display = '';
+
+                    // Purple beam baseline
+                    applyPath(purpleBeamRef.current, conduitPath(sx, sy, gx, gy, SPOKE_RADIUS, GHOST_RADIUS, PURPLE_STRANDS[1].curvature));
+                    if (purpleBeamRef.current) purpleBeamRef.current.style.display = '';
                 } else {
                     if (purpleGroupRef.current) purpleGroupRef.current.style.display = 'none';
                     if (burstPurpleGroupRef.current) burstPurpleGroupRef.current.style.display = 'none';
+                    if (purpleBeamRef.current) purpleBeamRef.current.style.display = 'none';
                 }
             }
         };
@@ -169,6 +186,11 @@ export function LightningArcs({
 
     return (
         <svg className="lightning-arcs" aria-hidden="true">
+            {/* ── Laser beam baselines — persistent pulsating guide lines ── */}
+            <path ref={emeraldBeamRef} className="beam-line beam-line--emerald" strokeWidth="2" />
+            <path ref={purpleBeamRef} className="beam-line beam-line--purple" strokeWidth="2"
+                  style={{ display: hasActiveGhost ? undefined : 'none' }} />
+
             {/* ── Emerald multi-strand conduit: Center → Discord ── */}
             <g ref={emeraldGroupRef}>
                 {EMERALD_STRANDS.map((strand, i) => (
@@ -286,6 +308,8 @@ export function MobilePulseConduits({
 }: MobilePulseConduitsProps) {
     const emeraldGroupRef = useRef<SVGGElement>(null);
     const purpleGroupRef = useRef<SVGGElement>(null);
+    const mobileEmeraldBeamRef = useRef<SVGPathElement>(null);
+    const mobilePurpleBeamRef = useRef<SVGPathElement>(null);
 
     useEffect(() => {
         const container = containerRef.current;
@@ -330,6 +354,20 @@ export function MobilePulseConduits({
                 });
             }
 
+            // Emerald beam baseline (center strand path)
+            {
+                const startY = avatarBottom;
+                const endY = diCy - iconR;
+                const spanY = endY - startY;
+                const s = MOBILE_EMERALD_STRANDS[1];
+                const cp1x = avatarCx + s.offsetX;
+                const cp1y = startY + spanY * 0.35;
+                const cp2x = diCx + s.offsetX;
+                const cp2y = startY + spanY * 0.65;
+                const d = `M${avatarCx.toFixed(1)},${startY.toFixed(1)} C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${diCx.toFixed(1)},${endY.toFixed(1)}`;
+                applyPath(mobileEmeraldBeamRef.current, d);
+            }
+
             // ── Purple strands: Discord icon bottom → Notifications icon top ──
             if (hasActiveGhost && purpleGroupRef.current) {
                 const notifIcon = rows[1]?.querySelector('.mobile-module-row__icon');
@@ -353,8 +391,19 @@ export function MobilePulseConduits({
                         applyPath(purplePaths[i * 2 + 1] as SVGPathElement, d);
                     });
                     purpleGroupRef.current.style.display = '';
+
+                    // Purple beam baseline (center strand path)
+                    const ps = MOBILE_PURPLE_STRANDS[1];
+                    const pcp1x = diCx + ps.offsetX;
+                    const pcp1y = startY + spanY * 0.35;
+                    const pcp2x = niCx + ps.offsetX;
+                    const pcp2y = startY + spanY * 0.65;
+                    const beamD = `M${diCx.toFixed(1)},${startY.toFixed(1)} C${pcp1x.toFixed(1)},${pcp1y.toFixed(1)} ${pcp2x.toFixed(1)},${pcp2y.toFixed(1)} ${niCx.toFixed(1)},${endY.toFixed(1)}`;
+                    applyPath(mobilePurpleBeamRef.current, beamD);
+                    if (mobilePurpleBeamRef.current) mobilePurpleBeamRef.current.style.display = '';
                 } else {
                     purpleGroupRef.current.style.display = 'none';
+                    if (mobilePurpleBeamRef.current) mobilePurpleBeamRef.current.style.display = 'none';
                 }
             }
         };
@@ -369,6 +418,11 @@ export function MobilePulseConduits({
 
     return (
         <svg className="mobile-pulse-conduits" aria-hidden="true">
+            {/* Laser beam baselines */}
+            <path ref={mobileEmeraldBeamRef} className="beam-line beam-line--emerald" strokeWidth="1.5" />
+            <path ref={mobilePurpleBeamRef} className="beam-line beam-line--purple" strokeWidth="1.5"
+                  style={{ display: hasActiveGhost ? undefined : 'none' }} />
+
             {/* Emerald: avatar → Discord */}
             <g ref={emeraldGroupRef}>
                 {MOBILE_EMERALD_STRANDS.map((strand, i) => (
