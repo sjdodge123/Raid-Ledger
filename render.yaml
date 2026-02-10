@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: raid-ledger
+    runtime: docker
+    dockerfilePath: ./Dockerfile.allinone
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: DEMO_MODE
+        value: "true"
+    disk:
+      name: postgres-data
+      mountPath: /var/lib/postgresql/data
+      sizeGB: 1
