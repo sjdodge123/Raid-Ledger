@@ -16,13 +16,13 @@ import {
     subWeeks,
     addDays,
     subDays,
-    differenceInMinutes,
 } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
-import { AttendeeAvatars } from './AttendeeAvatars';
+import { DayEventCard } from './DayEventCard';
+import { WeekEventCard } from './WeekEventCard';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
@@ -37,7 +37,7 @@ const localizer = dateFnsLocalizer({
     locales,
 });
 
-interface CalendarEvent {
+export interface CalendarEvent {
     id: number;
     title: string;
     start: Date;
@@ -294,193 +294,24 @@ export function CalendarView({
         [eventOverlapsGameTime]
     );
 
-    // Custom event component for WEEK view (full block with details)
-    const WeekEventComponent = useCallback(
-        ({ event }: { event: CalendarEvent }) => {
-            const gameSlug = event.resource?.game?.slug || 'default';
-            const coverUrl = event.resource?.game?.coverUrl;
-            const gameName = event.resource?.game?.name || 'Event';
-            const signupCount = event.resource?.signupCount ?? 0;
-            const signupsPreview = event.resource?.signupsPreview;
-            const creatorName = event.resource?.creator?.username;
-            const colors = getGameColors(gameSlug);
-            const overlaps = eventOverlapsGameTime(event.start, event.end);
-
-            // Format time range (e.g., "7:00 AM - 10:00 AM")
-            const startTime = format(event.start, 'h:mm a');
-            const endTime = event.end ? format(event.end, 'h:mm a') : '';
-
-            // ROK-186: Calculate avatar config based on event duration
-            const durationMins = event.end
-                ? (event.end.getTime() - event.start.getTime()) / (1000 * 60)
-                : 0;
-
-            // Duration-based avatar display:
-            // < 60 min: hide avatars
-            // 60-120 min: xs size (16px), max 3 avatars
-            // > 120 min: sm size (20px), max 5 avatars
-            const getAvatarConfig = () => {
-                if (durationMins < 60) return { show: false, size: 'sm' as const, max: 3 };
-                if (durationMins < 120) return { show: true, size: 'xs' as const, max: 3 };
-                return { show: true, size: 'sm' as const, max: 5 };
-            };
-            const avatarConfig = getAvatarConfig();
-
-            return (
-                <div
-                    className="week-event-block"
-                    style={{
-                        backgroundImage: coverUrl
-                            ? `linear-gradient(180deg, ${colors.bg}f5 0%, ${colors.bg}ee 60%, ${colors.bg}cc 100%), url(${coverUrl})`
-                            : `linear-gradient(180deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
-                        backgroundSize: 'cover',
-                        backgroundPosition: 'center',
-                        borderLeft: `3px solid ${colors.border}`,
-                    }}
-                >
-                    <div className="week-event-header" style={{ position: 'relative' }}>
-                        <span className="week-event-title">{event.title}</span>
-                        {overlaps && (
-                            <span
-                                className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400"
-                                style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }}
-                                title="Overlaps with your game time"
-                            />
-                        )}
-                    </div>
-                    <div className="week-event-details">
-                        <span className="week-event-game">{gameName}</span>
-                        <span className="week-event-time">
-                            {startTime}{endTime ? ` - ${endTime}` : ''}
-                        </span>
-                        {creatorName && (
-                            <span className="week-event-creator">by {creatorName}</span>
-                        )}
-                        {/* ROK-186: Duration-based avatar sizing */}
-                        {avatarConfig.show && signupsPreview && signupsPreview.length > 0 ? (
-                            <div className="week-event-attendees">
-                                <AttendeeAvatars
-                                    signups={signupsPreview}
-                                    totalCount={signupCount}
-                                    size={avatarConfig.size}
-                                    maxVisible={avatarConfig.max}
-                                    accentColor={colors.border}
-                                    gameId={event.resource?.game?.registryId ?? undefined}
-                                />
-                            </div>
-                        ) : signupCount > 0 ? (
-                            <span className="week-event-signups">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '4px', verticalAlign: 'middle' }}>
-                                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-                                </svg>
-                                {signupCount} signed up
-                            </span>
-                        ) : null}
-                    </div>
-                </div>
-            );
-        },
-        [eventOverlapsGameTime]
+    // Custom event component for WEEK view — delegates to extracted WeekEventCard
+    const WeekEventWrapper = useCallback(
+        ({ event }: { event: CalendarEvent }) => (
+            <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />
+        ),
+        [eventOverlapsGameTime],
     );
 
-    // Custom event component for DAY view (expanded with centered art + description)
-    const DayEventComponent = useCallback(
-        ({ event }: { event: CalendarEvent }) => {
-            const gameSlug = event.resource?.game?.slug || 'default';
-            const coverUrl = event.resource?.game?.coverUrl;
-            const gameName = event.resource?.game?.name || 'Event';
-            const signupCount = event.resource?.signupCount ?? 0;
-            const signupsPreview = event.resource?.signupsPreview;
-            const description = event.resource?.description || '';
-            const creatorName = event.resource?.creator?.username;
-            const colors = getGameColors(gameSlug);
-            const overlaps = eventOverlapsGameTime(event.start, event.end);
-
-
-
-            // Format time range (e.g., "7:00 AM - 10:00 AM")
-            const startTime = format(event.start, 'h:mm a');
-            const endTime = event.end ? format(event.end, 'h:mm a') : '';
-
-            // Calculate duration
-            const durationMins = event.end ? differenceInMinutes(event.end, event.start) : 0;
-            const hours = Math.floor(durationMins / 60);
-            const mins = durationMins % 60;
-            const durationStr = hours > 0
-                ? (mins > 0 ? `${hours}h ${mins}m` : `${hours}h`)
-                : `${mins}m`;
-
-            // Truncate description for preview
-            const descriptionPreview = description.length > 80
-                ? `${description.slice(0, 80)}...`
-                : description;
-
-            return (
-                <div
-                    className="day-event-block"
-                    style={{
-                        // Centered art with horizontal edge fades - subtle art treatment
-                        backgroundImage: coverUrl
-                            ? `linear-gradient(90deg, ${colors.bg}f5 0%, ${colors.bg}dd 20%, ${colors.bg}aa 40%, ${colors.bg}aa 60%, ${colors.bg}dd 80%, ${colors.bg}f5 100%), url(${coverUrl})`
-                            : `linear-gradient(90deg, ${colors.bg} 0%, ${colors.bg}dd 100%)`,
-                        backgroundSize: 'auto 100%, cover',
-                        backgroundPosition: 'center, center',
-                        backgroundRepeat: 'no-repeat',
-                        borderLeft: `4px solid ${colors.border}`,
-                    }}
-                >
-                    <div className="day-event-content">
-                        <div className="day-event-header" style={{ position: 'relative' }}>
-                            <span className="day-event-duration">{durationStr}</span>
-                            <span className="day-event-title">{event.title}</span>
-                            {overlaps && (
-                                <span
-                                    className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-emerald-400"
-                                    style={{ boxShadow: '0 0 4px rgba(52, 211, 153, 0.6)' }}
-                                    title="Overlaps with your game time"
-                                />
-                            )}
-                        </div>
-                        <div className="day-event-meta">
-                            <span className="day-event-game">{gameName}</span>
-                            <span className="day-event-time">
-                                {startTime}{endTime ? ` - ${endTime}` : ''}
-                            </span>
-                            {creatorName && (
-                                <span className="day-event-creator">by {creatorName}</span>
-                            )}
-                        </div>
-                        {descriptionPreview && (
-                            <p className="day-event-description">{descriptionPreview}</p>
-                        )}
-                        {/* ROK-177: Attendee avatars in day view footer */}
-                        <div className="day-event-footer">
-                            {signupsPreview && signupsPreview.length > 0 ? (
-                                <AttendeeAvatars
-                                    signups={signupsPreview}
-                                    totalCount={signupCount}
-                                    size="md"
-                                    accentColor={colors.border}
-                                    gameId={event.resource?.game?.registryId ?? undefined}
-                                />
-                            ) : signupCount > 0 ? (
-                                <span className="day-event-signups">
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style={{ marginRight: '6px', verticalAlign: 'middle' }}>
-                                        <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />
-                                    </svg>
-                                    {signupCount} signed up
-                                </span>
-                            ) : null}
-                        </div>
-                    </div>
-                </div>
-            );
-        },
-        [eventOverlapsGameTime]
+    // ROK-191: Day event wrapper — passes eventOverlapsGameTime to the extracted DayEventCard
+    const DayEventWrapper = useCallback(
+        ({ event }: { event: CalendarEvent }) => (
+            <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />
+        ),
+        [eventOverlapsGameTime],
     );
 
     return (
-        <div className={`calendar-container ${className}`}>
+        <div className={`calendar-container calendar-view-${view} ${className}`}>
             {/* Custom Toolbar */}
             <div className="calendar-toolbar">
                 <div className="toolbar-nav">
@@ -592,8 +423,8 @@ export function CalendarView({
                     eventPropGetter={eventPropGetter}
                     components={{
                         month: { event: MonthEventComponent },
-                        week: { event: WeekEventComponent },
-                        day: { event: DayEventComponent }, // Enhanced day view with centered art
+                        week: { event: WeekEventWrapper },
+                        day: { event: DayEventWrapper }, // ROK-191: Interactive day view with quick-join
                         toolbar: () => null, // Hide default toolbar
                     }}
                     popup

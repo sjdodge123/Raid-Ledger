@@ -736,8 +736,16 @@
     height: 100%;
     padding: 0;
     overflow: hidden;
-    /* Prevent any content from escaping event bounds */
     position: relative;
+}
+
+/* Day view: allow event content to overflow for action buttons */
+.calendar-view-day .rbc-time-view .rbc-event {
+    overflow: visible;
+}
+
+.calendar-view-day .rbc-time-view .rbc-event-content {
+    overflow: visible;
 }
 
 /* Week event block component */
@@ -817,6 +825,51 @@
     text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
 }
 
+/* Week event tier: minimal (<2.5hr) — tighter padding, smaller title, no avatars */
+.week-event-block--minimal {
+    padding: 0.25rem 0.375rem 0.375rem 0.375rem;
+}
+
+.week-event-block--minimal .week-event-details {
+    gap: 0.0625rem;
+}
+
+.week-event-block--minimal .week-event-game {
+    font-size: 0.625rem;
+}
+
+.week-event-block--minimal .week-event-time {
+    font-size: 0.625rem;
+}
+
+.week-event-title--minimal {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    font-size: 0.75rem;
+}
+
+/* Week event tier: compact (2.5-4hr) — slightly smaller title */
+.week-event-block--compact .week-event-title {
+    font-size: 0.8125rem;
+}
+
+.week-event-block--compact .week-event-game {
+    font-size: 0.6875rem;
+}
+
+/* Week event signup badge — compact pill with icon + count */
+.week-event-signup-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.125rem 0.375rem;
+    border-radius: 0.25rem;
+    width: fit-content;
+    margin-top: auto;
+}
+
 /* Attendee avatars container - positioned at bottom, contained within event */
 .week-event-attendees {
     margin-top: auto;
@@ -874,10 +927,12 @@
     height: 100%;
     width: 100%;
     border-radius: 0.5rem;
-    overflow: hidden;
+    overflow: visible;
     cursor: pointer;
     transition: transform 0.15s ease, box-shadow 0.15s ease;
     position: relative;
+    z-index: 2;
+    min-height: 100px;
 }
 
 .day-event-block:hover {
@@ -961,12 +1016,19 @@
     opacity: 0.9;
 }
 
-/* Footer with signup count */
-.day-event-footer {
+/* Right column: avatars + actions over cover art */
+.day-event-right {
     display: flex;
-    align-items: center;
-    margin-top: auto;
-    padding-top: 0.375rem;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.375rem;
+    padding: 0.75rem 0.75rem 0.75rem 0;
+    margin-left: auto;
+    z-index: 1;
+}
+
+.day-event-right .day-event-actions {
+    justify-content: flex-end;
 }
 
 .day-event-signups {
@@ -1223,4 +1285,212 @@
 
 [data-scheme="light"] .rbc-day-slot .rbc-event {
     border-top-color: rgba(255, 255, 255, 0.95) !important;
+}
+
+[data-scheme="light"] .week-event-signup-badge {
+    background: rgba(0, 0, 0, 0.15);
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* ============================================
+   Quick-Join Actions (ROK-191)
+   ============================================ */
+
+/* Actions container in day event footer */
+.day-event-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    margin-top: 0.375rem;
+    flex-wrap: wrap;
+}
+
+/* Shimmer placeholder while roster loads */
+.day-event-actions-shimmer {
+    width: 120px;
+    height: 24px;
+    border-radius: 0.25rem;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(255, 255, 255, 0.05) 100%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Base role button style */
+.day-event-role-btn {
+    padding: 0.1875rem 0.5rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    border: 1px solid;
+    border-radius: 0.25rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-role-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.day-event-role-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Role color variants */
+.day-event-role-btn--tank {
+    background: rgba(59, 130, 246, 0.2);
+    border-color: rgba(59, 130, 246, 0.5);
+    color: #93bbfd;
+}
+
+.day-event-role-btn--tank:hover:not(:disabled) {
+    background: rgba(59, 130, 246, 0.35);
+}
+
+.day-event-role-btn--healer {
+    background: rgba(34, 197, 94, 0.2);
+    border-color: rgba(34, 197, 94, 0.5);
+    color: #86efac;
+}
+
+.day-event-role-btn--healer:hover:not(:disabled) {
+    background: rgba(34, 197, 94, 0.35);
+}
+
+.day-event-role-btn--dps {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+    color: #fca5a5;
+}
+
+.day-event-role-btn--dps:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.35);
+}
+
+.day-event-role-btn--flex {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.5);
+    color: #d8b4fe;
+}
+
+.day-event-role-btn--flex:hover:not(:disabled) {
+    background: rgba(168, 85, 247, 0.35);
+}
+
+/* Full slot styling */
+.day-event-role-btn--full {
+    opacity: 0.4;
+}
+
+/* Generic join button */
+.day-event-join-btn {
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.5);
+    border-radius: 0.25rem;
+    color: #6ee7b7;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-join-btn:hover:not(:disabled) {
+    background: rgba(16, 185, 129, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.day-event-join-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Leave button */
+.day-event-leave-btn {
+    padding: 0.1875rem 0.625rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.5);
+    border-radius: 0.25rem;
+    color: #fca5a5;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.day-event-leave-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.35);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+}
+
+.day-event-leave-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Login link */
+.day-event-login-link {
+    font-size: 0.6875rem;
+    color: rgba(255, 255, 255, 0.7);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    transition: color 0.15s ease;
+}
+
+.day-event-login-link:hover {
+    color: rgba(255, 255, 255, 0.95);
+}
+
+/* ============================================
+   Quick-Join Light Theme Overrides (ROK-191)
+   ============================================ */
+
+[data-scheme="light"] .day-event-actions-shimmer {
+    background: linear-gradient(90deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.03) 100%);
+    background-size: 200% 100%;
+}
+
+[data-scheme="light"] .day-event-role-btn--tank {
+    color: #2563eb;
+}
+
+[data-scheme="light"] .day-event-role-btn--healer {
+    color: #16a34a;
+}
+
+[data-scheme="light"] .day-event-role-btn--dps {
+    color: #dc2626;
+}
+
+[data-scheme="light"] .day-event-role-btn--flex {
+    color: #9333ea;
+}
+
+[data-scheme="light"] .day-event-join-btn {
+    color: #059669;
+}
+
+[data-scheme="light"] .day-event-leave-btn {
+    color: #dc2626;
+}
+
+[data-scheme="light"] .day-event-login-link {
+    color: rgba(0, 0, 0, 0.5);
+}
+
+[data-scheme="light"] .day-event-login-link:hover {
+    color: rgba(0, 0, 0, 0.8);
 }
