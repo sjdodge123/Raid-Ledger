@@ -14,7 +14,9 @@ async function getSystemStatus(): Promise<SystemStatusDto> {
         throw new Error('Failed to fetch system status');
     }
 
-    return response.json();
+    return response.json().catch(() => {
+        throw new Error('Server unavailable');
+    });
 }
 
 /**

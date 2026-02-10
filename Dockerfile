@@ -39,8 +39,8 @@ RUN npm run build -w @raid-ledger/web
 # ====================
 FROM node:20-alpine AS production
 
-# Install nginx and supervisor
-RUN apk add --no-cache nginx supervisor
+# Install nginx, supervisor, and gettext (for envsubst)
+RUN apk add --no-cache nginx supervisor gettext
 
 WORKDIR /app
 
@@ -63,8 +63,9 @@ COPY --from=builder /app/api/seeds ./dist/seeds
 # Copy built Web static files
 COPY --from=builder /app/web/dist /usr/share/nginx/html
 
-# Copy nginx config (monolith uses localhost proxy)
-COPY nginx/monolith.conf /etc/nginx/http.d/default.conf
+# Copy and resolve nginx config template (always port 80 for this Dockerfile)
+COPY nginx/monolith.conf.template /etc/nginx/http.d/default.conf.template
+RUN NGINX_PORT=80 envsubst '${NGINX_PORT}' < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
 
 # Copy entrypoint script
 COPY api/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh

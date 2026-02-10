@@ -52,7 +52,8 @@ RUN apk add --no-cache \
   redis \
   supervisor \
   bash \
-  su-exec
+  su-exec \
+  gettext
 
 # Create app user and directories
 RUN addgroup -g 1001 -S app && \
@@ -82,8 +83,8 @@ RUN mkdir -p /run/nginx && \
 # Copy built Web static files
 COPY --from=builder /app/web/dist /usr/share/nginx/html
 
-# Nginx config for all-in-one (API on localhost:3000)
-COPY nginx/monolith.conf /etc/nginx/http.d/default.conf
+# Nginx config template (port resolved at runtime via envsubst)
+COPY nginx/monolith.conf.template /etc/nginx/http.d/default.conf.template
 
 # ==================
 # API Setup
@@ -151,6 +152,7 @@ stderr_logfile_maxbytes=0
 [program:api]
 command=/app/start-api.sh
 directory=/app
+environment=PORT=3000
 autostart=true
 autorestart=true
 priority=40
@@ -221,6 +223,10 @@ set -e
 # Initialize database on first run
 /app/init-db.sh
 
+# Resolve nginx listen port from $PORT (Render injects PORT=10000)
+export NGINX_PORT="${PORT:-80}"
+envsubst '${NGINX_PORT}' < /etc/nginx/http.d/default.conf.template > /etc/nginx/http.d/default.conf
+
 # Start all services via supervisor
 exec supervisord -c /etc/supervisord.conf
 EOF
@@ -243,7 +249,7 @@ EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost/api/health || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost:${PORT:-80}/api/health || exit 1
 
 # Start everything
 ENTRYPOINT ["/app/entrypoint.sh"]

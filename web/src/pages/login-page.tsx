@@ -41,7 +41,9 @@ export function LoginPage() {
                 body: JSON.stringify({ username, password }),
             });
 
-            const data = await response.json();
+            const data = await response.json().catch(() => ({
+                message: 'Server unavailable — please try again shortly',
+            }));
 
             if (!response.ok) {
                 throw new Error(data.message || 'Invalid credentials');
