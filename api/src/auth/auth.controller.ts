@@ -7,6 +7,8 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Injectable,
+  ExecutionContext,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -16,6 +18,19 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import * as crypto from 'crypto';
+
+@Injectable()
+class DiscordAuthGuard extends AuthGuard('discord') {
+  getAuthenticateOptions(context: ExecutionContext) {
+    const req = context.switchToHttp().getRequest<Request>();
+    const proto =
+      (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
+      req.protocol ||
+      'http';
+    const host = req.headers.host || 'localhost';
+    return { callbackURL: `${proto}://${host}/api/auth/discord/callback` };
+  }
+}
 
 interface RequestWithUser extends Request {
   user: {
@@ -81,29 +96,41 @@ export class AuthController {
   }
 
   /**
-   * Get the frontend client URL for post-auth redirects.
-   * Uses CLIENT_URL env var (frontend origin), NOT the OAuth callback URL (API origin).
+   * Derive the external origin from request headers (proto + host).
    */
-  private getClientUrl(): string {
+  private getOriginUrl(req: Request): string {
+    const proto =
+      (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() ||
+      req.protocol ||
+      'http';
+    const host = req.headers.host || 'localhost';
+    return `${proto}://${host}`;
+  }
+
+  /**
+   * Get the frontend client URL for post-auth redirects.
+   * Uses CLIENT_URL env var if set, otherwise auto-detects from the request.
+   */
+  private getClientUrl(req: Request): string {
     return (
-      this.configService.get<string>('CLIENT_URL') || 'http://localhost:5173'
+      this.configService.get<string>('CLIENT_URL') || this.getOriginUrl(req)
     );
   }
 
   @Get('discord')
-  @UseGuards(AuthGuard('discord'))
+  @UseGuards(DiscordAuthGuard)
   async discordLogin() {
     // Initiates the Discord OAuth flow
   }
 
   @Get('discord/callback')
-  @UseGuards(AuthGuard('discord'))
+  @UseGuards(DiscordAuthGuard)
   discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
 
-    // Redirect to frontend with token (derive URL from callback URL in settings)
-    const clientUrl = this.getClientUrl();
+    // Redirect to frontend with token (auto-detect URL from request)
+    const clientUrl = this.getClientUrl(req);
     // Using query param for simplicity in MVP. Secure httpOnly cookie is better for prod.
     res.redirect(`${clientUrl}/auth/success?token=${access_token}`);
   }
@@ -114,7 +141,11 @@ export class AuthController {
    * Note: Uses token query param since browser redirects can't send Authorization headers.
    */
   @Get('discord/link')
-  async discordLink(@Query('token') token: string, @Res() res: Response) {
+  async discordLink(
+    @Query('token') token: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     // Verify JWT from query param (browser redirects can't send headers)
     if (!token) {
       throw new HttpException(
@@ -150,11 +181,8 @@ export class AuthController {
       timestamp: Date.now(), // Prevent replay attacks
     });
 
-    // Use /link/callback endpoint - separate from login /callback to avoid Passport guard
-    const redirectUri = oauthConfig.callbackUrl.replace(
-      '/callback',
-      '/link/callback',
-    );
+    // Derive redirect URI from the incoming request (auto-detect origin)
+    const redirectUri = `${this.getOriginUrl(req)}/api/auth/discord/link/callback`;
 
     const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
 
@@ -169,9 +197,10 @@ export class AuthController {
   async discordLinkCallback(
     @Query('code') code: string,
     @Query('state') state: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const clientUrl = this.getClientUrl();
+    const clientUrl = this.getClientUrl(req);
 
     try {
       // Get OAuth config from database settings (ROK-146)
@@ -192,11 +221,8 @@ export class AuthController {
         throw new Error('Invalid state action');
       }
 
-      // Use /link/callback - must match what was sent to Discord
-      const redirectUri = oauthConfig.callbackUrl.replace(
-        '/callback',
-        '/link/callback',
-      );
+      // Derive redirect URI from request - must match what was sent to Discord
+      const redirectUri = `${this.getOriginUrl(req)}/api/auth/discord/link/callback`;
 
       // Exchange code for access token
       const tokenResponse = await fetch(

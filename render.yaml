@@ -8,8 +8,6 @@ services:
     envVars:
       - key: DEMO_MODE
         value: "true"
-      - key: CLIENT_URL
-        value: "https://raid-ledger.onrender.com"
     disk:
       name: postgres-data
       mountPath: /var/lib/postgresql/data
