@@ -119,7 +119,7 @@ logfile_maxbytes=0
 pidfile=/run/supervisord.pid
 
 [program:postgres]
-command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data
+command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data -c listen_addresses= -k /run/postgresql
 autostart=true
 autorestart=true
 priority=10
@@ -171,7 +171,7 @@ set -e
 
 # Wait for PostgreSQL to be ready
 echo "⏳ Waiting for PostgreSQL..."
-until /sbin/su-exec postgres pg_isready -q; do
+until /sbin/su-exec postgres pg_isready -h /run/postgresql -q; do
   sleep 1
 done
 echo "✅ PostgreSQL is ready"
@@ -236,7 +236,7 @@ RUN chmod +x /app/entrypoint.sh
 # Environment Defaults
 # ==================
 ENV NODE_ENV=production
-ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
+ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@/raid_ledger?host=/run/postgresql
 ENV REDIS_URL=redis://localhost:6379
 ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV CORS_ORIGIN=*

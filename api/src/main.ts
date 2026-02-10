@@ -22,6 +22,9 @@ async function bootstrap() {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
+      // Wildcard allows all origins (used for all-in-one Docker image)
+      if (corsOrigin === '*') return callback(null, true);
+
       // Allowed origins
       const allowedOrigins = [
         'http://localhost',
