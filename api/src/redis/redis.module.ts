@@ -19,7 +19,8 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
           'REDIS_URL',
           'redis://localhost:6379',
         );
-        return new Redis(url);
+        // Unix socket path (e.g. /tmp/redis.sock) vs TCP URL
+        return url.startsWith('/') ? new Redis({ path: url }) : new Redis(url);
       },
     },
   ],

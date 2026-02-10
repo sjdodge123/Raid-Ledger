@@ -111,33 +111,49 @@ RUN mkdir -p /etc/supervisor.d
 
 # Create all-in-one supervisor config
 COPY <<'EOF' /etc/supervisor.d/raid-ledger.ini
+[unix_http_server]
+file=/run/supervisor.sock
+chmod=0700
+username=admin
+password=admin
+
+[supervisorctl]
+serverurl=unix:///run/supervisor.sock
+username=admin
+password=admin
+
 [supervisord]
 nodaemon=true
 user=root
 logfile=/dev/stdout
 logfile_maxbytes=0
+loglevel=warn
 pidfile=/run/supervisord.pid
 
 [program:postgres]
-command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data
+command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data -c log_min_messages=FATAL
 autostart=true
 autorestart=true
 priority=10
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
+redirect_stderr=true
+stopwaitsecs=5
+stopsignal=TERM
+killasgroup=true
+stopasgroup=true
 
 [program:redis]
-command=/usr/bin/redis-server --dir /var/lib/redis --daemonize no
+command=/usr/bin/redis-server --dir /var/lib/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700
 user=redis
 autostart=true
 autorestart=true
 priority=20
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
+redirect_stderr=true
+stopwaitsecs=5
+stopsignal=TERM
 
 [program:nginx]
 command=/usr/sbin/nginx -g "daemon off;"
@@ -146,8 +162,7 @@ autorestart=true
 priority=30
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
+redirect_stderr=true
 
 [program:api]
 command=/app/start-api.sh
@@ -160,8 +175,7 @@ startsecs=15
 startretries=5
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
+redirect_stderr=true
 EOF
 
 # Create API startup script (waits for PostgreSQL + Redis)
@@ -176,9 +190,9 @@ until /sbin/su-exec postgres pg_isready -q; do
 done
 echo "✅ PostgreSQL is ready"
 
-# Wait for Redis to be ready
+# Wait for Redis to be ready (Unix socket)
 echo "⏳ Waiting for Redis..."
-until redis-cli ping > /dev/null 2>&1; do
+until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
   sleep 1
 done
 echo "✅ Redis is ready"
@@ -197,18 +211,18 @@ set -e
 # Initialize PostgreSQL if not already done
 if [ ! -s "${PGDATA}/PG_VERSION" ]; then
   echo "📦 Initializing PostgreSQL database..."
-  /sbin/su-exec postgres initdb -D "${PGDATA}" --auth-local=trust --auth-host=trust
+  /sbin/su-exec postgres initdb -D "${PGDATA}" --auth-local=trust --auth-host=trust > /dev/null 2>&1
   
-  # Start PostgreSQL temporarily to create database
-  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -o "-k /run/postgresql" -w start
-  
+  # Start PostgreSQL temporarily to create database (quiet LOG-level output)
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -o "-k /run/postgresql -c log_min_messages=FATAL" -w start 2>/dev/null
+
   # Create user and database
-  /sbin/su-exec postgres psql -c "CREATE USER raid_ledger WITH PASSWORD 'raid_ledger';"
-  /sbin/su-exec postgres psql -c "CREATE DATABASE raid_ledger OWNER raid_ledger;"
-  /sbin/su-exec postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE raid_ledger TO raid_ledger;"
-  
+  /sbin/su-exec postgres psql -q -c "CREATE USER raid_ledger WITH PASSWORD 'raid_ledger';"
+  /sbin/su-exec postgres psql -q -c "CREATE DATABASE raid_ledger OWNER raid_ledger;"
+  /sbin/su-exec postgres psql -q -c "GRANT ALL PRIVILEGES ON DATABASE raid_ledger TO raid_ledger;"
+
   # Stop PostgreSQL (supervisor will start it)
-  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop
+  /sbin/su-exec postgres pg_ctl -D "${PGDATA}" -m fast -w stop 2>/dev/null
   
   echo "✅ PostgreSQL initialized"
 fi
@@ -237,8 +251,9 @@ RUN chmod +x /app/entrypoint.sh
 # ==================
 ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
-ENV REDIS_URL=redis://localhost:6379
+ENV REDIS_URL=/tmp/redis.sock
 ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
+ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=*
 ENV CLIENT_URL=http://localhost
 ENV DEMO_MODE=false
