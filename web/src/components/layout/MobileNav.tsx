@@ -61,6 +61,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         : '/default-avatar.svg';
 
     const navLinks = [
+        { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
     ];
 

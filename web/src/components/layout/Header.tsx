@@ -16,6 +16,7 @@ export function Header() {
 
     const navLinks = [
         { to: '/calendar', label: 'Calendar' },
+        { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
     ];
 

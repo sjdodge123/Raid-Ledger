@@ -18,6 +18,15 @@ interface OAuthTestResponse {
     message: string;
 }
 
+interface IgdbStatusResponse {
+    configured: boolean;
+}
+
+interface IgdbConfigDto {
+    clientId: string;
+    clientSecret: string;
+}
+
 interface ApiResponse {
     success: boolean;
     message: string;
@@ -111,10 +120,92 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // IGDB Configuration (ROK-229)
+    // ============================================================
+
+    // Get IGDB status
+    const igdbStatus = useQuery<IgdbStatusResponse>({
+        queryKey: ['admin', 'settings', 'igdb'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb`, {
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch IGDB status');
+            }
+
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    // Update IGDB config
+    const updateIgdb = useMutation<ApiResponse, Error, IgdbConfigDto>({
+        mutationFn: async (config) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(config),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update IGDB configuration' }));
+                throw new Error(error.message || 'Failed to update IGDB configuration');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb'] });
+        },
+    });
+
+    // Test IGDB credentials
+    const testIgdb = useMutation<OAuthTestResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/test`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to test IGDB configuration');
+            }
+
+            return response.json();
+        },
+    });
+
+    // Clear IGDB config
+    const clearIgdb = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to clear IGDB configuration');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
         testOAuth,
         clearOAuth,
+        igdbStatus,
+        updateIgdb,
+        testIgdb,
+        clearIgdb,
     };
 }

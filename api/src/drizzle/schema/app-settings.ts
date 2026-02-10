@@ -20,6 +20,8 @@ export const SETTING_KEYS = {
   DISCORD_CLIENT_ID: 'discord_client_id',
   DISCORD_CLIENT_SECRET: 'discord_client_secret',
   DISCORD_CALLBACK_URL: 'discord_callback_url',
+  IGDB_CLIENT_ID: 'igdb_client_id',
+  IGDB_CLIENT_SECRET: 'igdb_client_secret',
   DEMO_MODE: 'demo_mode',
 } as const;
 

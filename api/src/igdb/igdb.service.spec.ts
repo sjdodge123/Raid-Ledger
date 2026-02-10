@@ -1,18 +1,36 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { IgdbService } from './igdb.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { SettingsService } from '../settings/settings.service';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
 global.fetch = mockFetch;
+
+/**
+ * Creates a thenable mock that also exposes query-builder methods (.limit(), .orderBy(), .groupBy()).
+ * This mirrors Drizzle's pattern where the query builder is itself a PromiseLike.
+ */
+function thenableResult(data: unknown[]) {
+  const obj: any = {
+    then: (resolve: any, reject?: any) =>
+      Promise.resolve(data).then(resolve, reject),
+    limit: jest.fn().mockImplementation(() => thenableResult(data)),
+    orderBy: jest.fn().mockImplementation(() => thenableResult(data)),
+    groupBy: jest.fn().mockImplementation(() => thenableResult(data)),
+  };
+  return obj;
+}
 
 describe('IgdbService', () => {
   let service: IgdbService;
   let mockDb: Record<string, jest.Mock>;
   let mockRedis: Record<string, jest.Mock>;
   let mockConfigService: Partial<ConfigService>;
+  let selectResults: unknown[];
 
   const mockGames = [
     {
@@ -25,18 +43,24 @@ describe('IgdbService', () => {
   ];
 
   beforeEach(async () => {
-    // Mock database operations
+    // Default select results — tests can override selectResults before calling service
+    selectResults = mockGames;
+
+    // Mock database operations using thenable pattern
     mockDb = {
-      select: jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue(mockGames),
-          }),
-        }),
-      }),
+      select: jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest
+            .fn()
+            .mockImplementation(() => thenableResult(selectResults)),
+        })),
+      })),
       insert: jest.fn().mockReturnValue({
         values: jest.fn().mockReturnValue({
           onConflictDoNothing: jest.fn().mockResolvedValue(undefined),
+          onConflictDoUpdate: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue(mockGames),
+          }),
         }),
       }),
     };
@@ -45,6 +69,8 @@ describe('IgdbService', () => {
     mockRedis = {
       get: jest.fn().mockResolvedValue(null), // Default: cache miss
       setex: jest.fn().mockResolvedValue('OK'),
+      keys: jest.fn().mockResolvedValue([]),
+      del: jest.fn().mockResolvedValue(0),
     };
 
     mockConfigService = {
@@ -57,12 +83,18 @@ describe('IgdbService', () => {
       }),
     };
 
+    const mockSettingsService = {
+      getIgdbConfig: jest.fn().mockResolvedValue(null), // Fall through to env vars
+      isIgdbConfigured: jest.fn().mockResolvedValue(false),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IgdbService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: REDIS_CLIENT, useValue: mockRedis },
         { provide: ConfigService, useValue: mockConfigService },
+        { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
 
@@ -91,7 +123,7 @@ describe('IgdbService', () => {
     });
 
     it('should return database-cached games when Redis misses', async () => {
-      // Redis miss, DB hit
+      // Redis miss, DB hit (selectResults defaults to mockGames)
       mockRedis.get.mockResolvedValueOnce(null);
 
       const result = await service.searchGames('valheim');
@@ -104,18 +136,19 @@ describe('IgdbService', () => {
     });
 
     it('should fetch from IGDB when both caches miss', async () => {
-      // Both caches miss
+      // Both caches miss, then return games after upsert
       mockRedis.get.mockResolvedValueOnce(null);
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValueOnce([]) // First call: cache miss
-              .mockResolvedValueOnce(mockGames), // Second call: after insert
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            // First select: search cache miss, subsequent selects: return games
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
           }),
-        }),
-      });
+        })),
+      }));
 
       // Mock IGDB API responses
       mockFetch
@@ -149,16 +182,16 @@ describe('IgdbService', () => {
 
       // Both caches miss
       mockRedis.get.mockResolvedValueOnce(null);
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValueOnce([])
-              .mockResolvedValueOnce(mockGames),
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
           }),
-        }),
-      });
+        })),
+      }));
 
       // First call: get token
       // Second call: 429 (rate limited)
@@ -207,16 +240,16 @@ describe('IgdbService', () => {
       // Redis miss
       mockRedis.get.mockResolvedValueOnce(null);
       // First DB check: miss, local fallback: has games
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValueOnce([]) // First cache check
-              .mockResolvedValueOnce(mockGames), // Local fallback
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
           }),
-        }),
-      });
+        })),
+      }));
 
       // All IGDB calls fail with 429
       mockFetch
@@ -273,18 +306,18 @@ describe('IgdbService', () => {
       expect(result.source).toBe('database');
     });
 
-    it('should batch insert games instead of sequential inserts', async () => {
+    it('should upsert games from IGDB with full data', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValueOnce([])
-              .mockResolvedValueOnce(mockGames),
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
           }),
-        }),
-      });
+        })),
+      }));
 
       mockFetch
         .mockResolvedValueOnce({
@@ -308,8 +341,8 @@ describe('IgdbService', () => {
 
       await service.searchGames('valheim');
 
-      // Should call insert once with array (batch) not multiple times
-      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+      // upsertGamesFromApi inserts each game individually
+      expect(mockDb.insert).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -321,13 +354,7 @@ describe('IgdbService', () => {
     });
 
     it('should return null when game not found', async () => {
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]),
-          }),
-        }),
-      });
+      selectResults = [];
 
       const result = await service.getGameById(999);
 
@@ -349,13 +376,7 @@ describe('IgdbService', () => {
     it('should throw when IGDB credentials not configured', async () => {
       mockConfigService.get = jest.fn().mockReturnValue(undefined);
       mockRedis.get.mockResolvedValueOnce(null);
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]),
-          }),
-        }),
-      });
+      selectResults = [];
 
       // Should fall back to local, not throw (since we have local fallback now)
       const result = await service.searchGames('valheim');
@@ -364,13 +385,7 @@ describe('IgdbService', () => {
 
     it('should throw when Twitch auth fails and no local games', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
-      mockDb.select = jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]), // No local games
-          }),
-        }),
-      });
+      selectResults = [];
 
       mockFetch.mockResolvedValueOnce({
         ok: false,

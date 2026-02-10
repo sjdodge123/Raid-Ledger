@@ -141,6 +141,20 @@
       "when": 1770671100384,
       "tag": "0019_sharp_doctor_octopus",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1770750086529,
+      "tag": "0020_dapper_polaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1770753142248,
+      "tag": "0021_spooky_leper_queen",
+      "breakpoints": true
     }
   ]
 }

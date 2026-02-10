@@ -11,6 +11,8 @@ import { UserProfilePage } from './pages/user-profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { CalendarPage } from './pages/calendar-page';
 import { AdminSettingsPage } from './pages/admin-settings-page';
+import { GamesPage } from './pages/games-page';
+import { GameDetailPage } from './pages/game-detail-page';
 import './App.css';
 
 function App() {
@@ -30,6 +32,8 @@ function App() {
           {/* Legacy /login redirects to root (AC-2) */}
           <Route path="/login" element={<Navigate to="/" replace />} />
           <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/games" element={<GamesPage />} />
+          <Route path="/games/:id" element={<GameDetailPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/new" element={
             <ProtectedRoute>

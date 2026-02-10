@@ -13,8 +13,14 @@ export interface DiscordOAuthConfig {
   callbackUrl: string;
 }
 
+export interface IgdbConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 export const SETTINGS_EVENTS = {
   OAUTH_DISCORD_UPDATED: 'settings.oauth.discord.updated',
+  IGDB_UPDATED: 'settings.igdb.updated',
   DEMO_MODE_UPDATED: 'settings.demo_mode.updated',
 } as const;
 
@@ -160,5 +166,46 @@ export class SettingsService {
     await this.set(SETTING_KEYS.DEMO_MODE, enabled ? 'true' : 'false');
     this.eventEmitter.emit(SETTINGS_EVENTS.DEMO_MODE_UPDATED, enabled);
     this.logger.log(`Demo mode ${enabled ? 'enabled' : 'disabled'}`);
+  }
+
+  /**
+   * Get IGDB configuration
+   */
+  async getIgdbConfig(): Promise<IgdbConfig | null> {
+    const [clientId, clientSecret] = await Promise.all([
+      this.get(SETTING_KEYS.IGDB_CLIENT_ID),
+      this.get(SETTING_KEYS.IGDB_CLIENT_SECRET),
+    ]);
+
+    if (!clientId || !clientSecret) {
+      return null;
+    }
+
+    return { clientId, clientSecret };
+  }
+
+  /**
+   * Set IGDB configuration
+   */
+  async setIgdbConfig(config: IgdbConfig): Promise<void> {
+    await Promise.all([
+      this.set(SETTING_KEYS.IGDB_CLIENT_ID, config.clientId),
+      this.set(SETTING_KEYS.IGDB_CLIENT_SECRET, config.clientSecret),
+    ]);
+
+    this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, config);
+    this.logger.log('IGDB configuration updated, emitting reload event');
+  }
+
+  /**
+   * Check if IGDB is configured
+   */
+  async isIgdbConfigured(): Promise<boolean> {
+    const [clientIdExists, clientSecretExists] = await Promise.all([
+      this.exists(SETTING_KEYS.IGDB_CLIENT_ID),
+      this.exists(SETTING_KEYS.IGDB_CLIENT_SECRET),
+    ]);
+
+    return clientIdExists && clientSecretExists;
   }
 }

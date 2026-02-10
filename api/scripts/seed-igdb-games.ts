@@ -13,9 +13,10 @@ dotenv.config();
 /**
  * Seed IGDB games from static JSON file.
  * This populates the `games` table (IGDB cache) with pre-seeded games,
- * enabling game search to work without requiring IGDB API keys.
+ * enabling game search and discovery to work without requiring IGDB API keys.
  *
  * Uses upsert (ON CONFLICT DO UPDATE) to safely re-run without duplicates.
+ * Writes all expanded fields (summary, rating, gameModes, screenshots, etc.)
  */
 
 interface GameSeed {
@@ -24,6 +25,19 @@ interface GameSeed {
     slug: string;
     coverUrl: string | null;
     genres?: number[];
+    summary?: string | null;
+    rating?: number | null;
+    aggregatedRating?: number | null;
+    popularity?: number | null;
+    gameModes?: number[];
+    themes?: number[];
+    platforms?: number[];
+    screenshots?: string[];
+    videos?: { name: string; videoId: string }[];
+    firstReleaseDate?: string | null;
+    playerCount?: { min: number; max: number } | null;
+    twitchGameId?: string | null;
+    crossplay?: boolean | null;
 }
 
 interface GamesSeedFile {
@@ -60,38 +74,65 @@ async function bootstrap() {
 
     try {
         let created = 0;
-        let updated = 0;
         let failed = 0;
 
         for (let i = 0; i < seedData.games.length; i++) {
             const game = seedData.games[i];
 
             try {
-                // Upsert: insert or update on conflict
+                const values = {
+                    igdbId: game.igdbId,
+                    name: game.name,
+                    slug: game.slug,
+                    coverUrl: game.coverUrl,
+                    genres: game.genres ?? [],
+                    summary: game.summary ?? null,
+                    rating: game.rating ?? null,
+                    aggregatedRating: game.aggregatedRating ?? null,
+                    popularity: game.popularity ?? null,
+                    gameModes: game.gameModes ?? [],
+                    themes: game.themes ?? [],
+                    platforms: game.platforms ?? [],
+                    screenshots: game.screenshots ?? [],
+                    videos: game.videos ?? [],
+                    firstReleaseDate: game.firstReleaseDate
+                        ? new Date(game.firstReleaseDate)
+                        : null,
+                    playerCount: game.playerCount ?? null,
+                    twitchGameId: game.twitchGameId ?? null,
+                    crossplay: game.crossplay ?? null,
+                };
+
+                // Upsert: insert or update all fields on conflict
                 const result = await db
                     .insert(schema.games)
-                    .values({
-                        igdbId: game.igdbId,
-                        name: game.name,
-                        slug: game.slug,
-                        coverUrl: game.coverUrl,
-                        genres: game.genres ?? [],
-                    })
+                    .values(values)
                     .onConflictDoUpdate({
                         target: schema.games.igdbId,
                         set: {
-                            name: game.name,
-                            slug: game.slug,
-                            coverUrl: game.coverUrl,
-                            genres: game.genres ?? [],
+                            name: values.name,
+                            slug: values.slug,
+                            coverUrl: values.coverUrl,
+                            genres: values.genres,
+                            summary: values.summary,
+                            rating: values.rating,
+                            aggregatedRating: values.aggregatedRating,
+                            popularity: values.popularity,
+                            gameModes: values.gameModes,
+                            themes: values.themes,
+                            platforms: values.platforms,
+                            screenshots: values.screenshots,
+                            videos: values.videos,
+                            firstReleaseDate: values.firstReleaseDate,
+                            playerCount: values.playerCount,
+                            twitchGameId: values.twitchGameId,
+                            crossplay: values.crossplay,
                             cachedAt: new Date(),
                         },
                     })
                     .returning();
 
                 if (result.length > 0) {
-                    // Upsert always returns 1 row; we count all as successful
-                    // Note: Drizzle onConflictDoUpdate doesn't distinguish insert vs update
                     created++;
                 }
 

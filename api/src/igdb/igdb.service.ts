@@ -1,14 +1,17 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { eq, ilike } from 'drizzle-orm';
+import { OnEvent } from '@nestjs/event-emitter';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import { eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
-import { IgdbGameDto } from '@raid-ledger/contract';
+import { IgdbGameDto, GameDetailDto } from '@raid-ledger/contract';
+import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
 
-/** IGDB API game response structure */
+/** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {
   id: number;
   name: string;
@@ -16,8 +19,27 @@ interface IgdbApiGame {
   cover?: {
     image_id: string;
   };
-  /** ROK-183: Genre IDs array */
   genres?: { id: number }[];
+  themes?: { id: number }[];
+  game_modes?: number[];
+  platforms?: { id: number }[];
+  summary?: string;
+  rating?: number;
+  aggregated_rating?: number;
+  total_rating?: number;
+  screenshots?: { image_id: string }[];
+  videos?: { name: string; video_id: string }[];
+  first_release_date?: number;
+  multiplayer_modes?: {
+    onlinemax?: number;
+    offlinemax?: number;
+    onlinecoop?: boolean;
+    offlinecoop?: boolean;
+    lancoop?: boolean;
+    splitscreen?: boolean;
+    platform?: number;
+  }[];
+  external_games?: { category: number; uid: string }[];
 }
 
 /** Search result with source tracking */
@@ -35,12 +57,42 @@ const IGDB_CONFIG = {
   SEARCH_LIMIT: 20,
   /** IGDB cover image base URL */
   COVER_URL_BASE: 'https://images.igdb.com/igdb/image/upload/t_cover_big',
+  /** IGDB screenshot image base URL */
+  SCREENSHOT_URL_BASE:
+    'https://images.igdb.com/igdb/image/upload/t_screenshot_big',
   /** Redis cache TTL for search results (24 hours) */
   SEARCH_CACHE_TTL: 86400,
+  /** Redis cache TTL for discovery rows (1 hour) */
+  DISCOVER_CACHE_TTL: 3600,
+  /** Redis cache TTL for streams (5 minutes) */
+  STREAMS_CACHE_TTL: 300,
   /** Maximum retry attempts for 429 errors */
   MAX_RETRIES: 3,
   /** Base delay for exponential backoff (ms) */
   BASE_RETRY_DELAY: 1000,
+  /** Twitch external game category ID in IGDB */
+  TWITCH_CATEGORY_ID: 14,
+  /** Expanded APICALYPSE fields for discovery */
+  EXPANDED_FIELDS: [
+    'name',
+    'slug',
+    'cover.image_id',
+    'genres.id',
+    'themes.id',
+    'game_modes',
+    'platforms.id',
+    'summary',
+    'rating',
+    'aggregated_rating',
+    'total_rating',
+    'screenshots.image_id',
+    'videos.name',
+    'videos.video_id',
+    'first_release_date',
+    'multiplayer_modes.*',
+    'external_games.category',
+    'external_games.uid',
+  ].join(', '),
 } as const;
 
 @Injectable()
@@ -56,7 +108,234 @@ export class IgdbService {
     private db: PostgresJsDatabase<typeof schema>,
     @Inject(REDIS_CLIENT)
     private redis: Redis,
+    private readonly settingsService: SettingsService,
   ) {}
+
+  /**
+   * Handle IGDB config updates — clear cached token so next request
+   * picks up new credentials, then trigger an immediate sync.
+   */
+  @OnEvent(SETTINGS_EVENTS.IGDB_UPDATED)
+  handleIgdbConfigUpdate(config: unknown) {
+    this.accessToken = null;
+    this.tokenExpiry = null;
+    this.tokenFetchPromise = null;
+    this.logger.log('IGDB config updated — cached token cleared');
+
+    // Trigger immediate sync when credentials are set (not cleared)
+    if (config) {
+      this.syncAllGames().catch((err) =>
+        this.logger.error(`Initial IGDB sync failed: ${err}`),
+      );
+    }
+  }
+
+  /**
+   * Scheduled sync: refresh game data from IGDB every 6 hours.
+   * Only runs when IGDB credentials are configured.
+   */
+  @Cron(CronExpression.EVERY_6_HOURS)
+  async handleScheduledSync() {
+    const configured = await this.settingsService.isIgdbConfigured();
+    if (!configured) {
+      // Also check env vars
+      const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
+      if (!clientId) return;
+    }
+
+    this.logger.log('Starting scheduled IGDB sync...');
+    try {
+      await this.syncAllGames();
+      this.logger.log('Scheduled IGDB sync complete');
+    } catch (err) {
+      this.logger.error(`Scheduled IGDB sync failed: ${err}`);
+    }
+  }
+
+  /**
+   * Full sync: refresh all existing games + pull popular multiplayer titles.
+   * Called by scheduled cron and on initial IGDB config.
+   */
+  async syncAllGames(): Promise<{ refreshed: number; discovered: number }> {
+    let refreshed = 0;
+    let discovered = 0;
+
+    // Phase 1: Refresh existing games in batches of 10 by IGDB ID
+    const existingGames = await this.db
+      .select({ igdbId: schema.games.igdbId })
+      .from(schema.games);
+
+    if (existingGames.length > 0) {
+      const batchSize = 10;
+      for (let i = 0; i < existingGames.length; i += batchSize) {
+        const batch = existingGames.slice(i, i + batchSize);
+        const ids = batch.map((g) => g.igdbId).join(',');
+
+        try {
+          const apiGames = await this.queryIgdb(
+            `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids}); limit ${batchSize};`,
+          );
+          await this.upsertGamesFromApi(apiGames);
+          refreshed += apiGames.length;
+        } catch (err) {
+          this.logger.warn(
+            `Failed to refresh batch starting at index ${i}: ${err}`,
+          );
+        }
+
+        // Rate limit: small delay between batches
+        await this.delay(250);
+      }
+    }
+
+    // Phase 2: Discover popular multiplayer games
+    try {
+      const popular = await this.queryIgdb(
+        `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; ` +
+          `where game_modes = (2,3,5) & rating_count > 10; ` +
+          `sort total_rating desc; limit 100;`,
+      );
+      await this.upsertGamesFromApi(popular);
+      discovered = popular.length;
+    } catch (err) {
+      this.logger.warn(`Failed to discover popular games: ${err}`);
+    }
+
+    this.logger.log(
+      `IGDB sync: refreshed ${refreshed} existing games, discovered ${discovered} popular titles`,
+    );
+
+    // Clear discovery cache so fresh data shows up
+    try {
+      const keys = await this.redis.keys('games:discover:*');
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+      }
+    } catch {
+      // Non-fatal
+    }
+
+    return { refreshed, discovered };
+  }
+
+  /**
+   * Resolve IGDB credentials: DB-stored settings first, env vars as fallback.
+   */
+  private async resolveCredentials(): Promise<{
+    clientId: string;
+    clientSecret: string;
+  }> {
+    // Try DB settings first
+    const dbConfig = await this.settingsService.getIgdbConfig();
+    if (dbConfig) {
+      return dbConfig;
+    }
+
+    // Fall back to env vars
+    const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
+    const clientSecret = this.configService.get<string>('IGDB_CLIENT_SECRET');
+
+    if (!clientId || !clientSecret) {
+      throw new Error('IGDB credentials not configured');
+    }
+
+    return { clientId, clientSecret };
+  }
+
+  /**
+   * Map an IGDB API game response to a database insert row.
+   */
+  mapApiGameToDbRow(game: IgdbApiGame) {
+    // Extract Twitch category ID from external_games
+    const twitchExternal = game.external_games?.find(
+      (eg) => eg.category === IGDB_CONFIG.TWITCH_CATEGORY_ID,
+    );
+
+    // Extract player count from multiplayer_modes
+    let playerCount: { min: number; max: number } | null = null;
+    let crossplay: boolean | null = null;
+    if (game.multiplayer_modes && game.multiplayer_modes.length > 0) {
+      const maxPlayers = Math.max(
+        ...game.multiplayer_modes.map((m) =>
+          Math.max(m.onlinemax ?? 0, m.offlinemax ?? 0),
+        ),
+      );
+      if (maxPlayers > 0) {
+        playerCount = { min: 1, max: maxPlayers };
+      }
+
+      // Infer crossplay: online play available on 2+ distinct platforms
+      const platformsWithOnline = new Set(
+        game.multiplayer_modes
+          .filter((m) => (m.onlinemax ?? 0) > 0 && m.platform)
+          .map((m) => m.platform),
+      );
+      if (platformsWithOnline.size >= 2) {
+        crossplay = true;
+      }
+    }
+
+    return {
+      igdbId: game.id,
+      name: game.name,
+      slug: game.slug,
+      coverUrl: game.cover
+        ? `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`
+        : null,
+      genres: game.genres?.map((g) => g.id) ?? [],
+      summary: game.summary ?? null,
+      rating: game.rating ?? null,
+      aggregatedRating: game.aggregated_rating ?? null,
+      popularity: game.total_rating ?? null,
+      gameModes: game.game_modes ?? [],
+      themes: game.themes?.map((t) => t.id) ?? [],
+      platforms: game.platforms?.map((p) => p.id) ?? [],
+      screenshots:
+        game.screenshots?.map(
+          (s) => `${IGDB_CONFIG.SCREENSHOT_URL_BASE}/${s.image_id}.jpg`,
+        ) ?? [],
+      videos:
+        game.videos?.map((v) => ({
+          name: v.name,
+          videoId: v.video_id,
+        })) ?? [],
+      firstReleaseDate: game.first_release_date
+        ? new Date(game.first_release_date * 1000)
+        : null,
+      playerCount,
+      twitchGameId: twitchExternal?.uid ?? null,
+      crossplay,
+    };
+  }
+
+  /**
+   * Map a database game row to a GameDetailDto.
+   */
+  mapDbRowToDetail(g: typeof schema.games.$inferSelect): GameDetailDto {
+    return {
+      id: g.id,
+      igdbId: g.igdbId,
+      name: g.name,
+      slug: g.slug,
+      coverUrl: g.coverUrl,
+      genres: (g.genres as number[]) ?? [],
+      summary: g.summary,
+      rating: g.rating,
+      aggregatedRating: g.aggregatedRating,
+      popularity: g.popularity,
+      gameModes: (g.gameModes as number[]) ?? [],
+      themes: (g.themes as number[]) ?? [],
+      platforms: (g.platforms as number[]) ?? [],
+      screenshots: (g.screenshots as string[]) ?? [],
+      videos: (g.videos as { name: string; videoId: string }[]) ?? [],
+      firstReleaseDate: g.firstReleaseDate
+        ? g.firstReleaseDate.toISOString()
+        : null,
+      playerCount: g.playerCount as { min: number; max: number } | null,
+      twitchGameId: g.twitchGameId,
+      crossplay: g.crossplay ?? null,
+    };
+  }
 
   /**
    * Escape special characters in LIKE/ILIKE patterns to prevent injection
@@ -124,12 +403,7 @@ export class IgdbService {
    * Fetch a new OAuth2 token from Twitch
    */
   private async fetchNewToken(): Promise<string> {
-    const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
-    const clientSecret = this.configService.get<string>('IGDB_CLIENT_SECRET');
-
-    if (!clientId || !clientSecret) {
-      throw new Error('IGDB credentials not configured');
-    }
+    const { clientId, clientSecret } = await this.resolveCredentials();
 
     // Use POST body instead of query string for secrets (security best practice)
     const response = await fetch('https://id.twitch.tv/oauth2/token', {
@@ -232,22 +506,9 @@ export class IgdbService {
     try {
       const igdbGames = await this.fetchWithRetry(normalizedQuery);
 
-      // Batch insert for performance (instead of sequential inserts)
+      // Upsert games with full expanded data from IGDB
       if (igdbGames.length > 0) {
-        const gamesToInsert = igdbGames.map((game) => ({
-          igdbId: game.id,
-          name: game.name,
-          slug: game.slug,
-          coverUrl: game.cover
-            ? `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`
-            : null,
-          genres: game.genres?.map((g) => g.id) ?? [],
-        }));
-
-        await this.db
-          .insert(schema.games)
-          .values(gamesToInsert)
-          .onConflictDoNothing();
+        await this.upsertGamesFromApi(igdbGames);
       }
 
       // Return freshly cached games
@@ -376,7 +637,7 @@ export class IgdbService {
    */
   private async fetchFromIgdb(query: string): Promise<IgdbApiGame[]> {
     const token = await this.getAccessToken();
-    const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
+    const { clientId } = await this.resolveCredentials();
 
     // Escape quotes in query to prevent APICALYPSE injection
     const sanitizedQuery = query.replace(/"/g, '\\"');
@@ -384,11 +645,11 @@ export class IgdbService {
     const response = await fetch('https://api.igdb.com/v4/games', {
       method: 'POST',
       headers: {
-        'Client-ID': clientId!,
+        'Client-ID': clientId,
         Authorization: `Bearer ${token}`,
         'Content-Type': 'text/plain',
       },
-      body: `search "${sanitizedQuery}"; fields name, slug, cover.image_id, genres.id; limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
+      body: `search "${sanitizedQuery}"; fields ${IGDB_CONFIG.EXPANDED_FIELDS}; limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
     });
 
     if (!response.ok) {
@@ -424,5 +685,110 @@ export class IgdbService {
       slug: g.slug,
       coverUrl: g.coverUrl,
     };
+  }
+
+  /**
+   * Get full game detail by local database ID.
+   */
+  async getGameDetailById(id: number): Promise<GameDetailDto | null> {
+    const result = await this.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (result.length === 0) return null;
+    return this.mapDbRowToDetail(result[0]);
+  }
+
+  /**
+   * Execute an arbitrary APICALYPSE query against IGDB.
+   * Used by discovery endpoints for category-specific queries.
+   */
+  async queryIgdb(body: string): Promise<IgdbApiGame[]> {
+    const token = await this.getAccessToken();
+    const { clientId } = await this.resolveCredentials();
+
+    const response = await fetch('https://api.igdb.com/v4/games', {
+      method: 'POST',
+      headers: {
+        'Client-ID': clientId,
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'text/plain',
+      },
+      body,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      this.logger.error(`IGDB API error: ${response.status} ${errorText}`);
+      throw new Error(
+        `IGDB API error ${response.status}: ${response.statusText}`,
+      );
+    }
+
+    return (await response.json()) as IgdbApiGame[];
+  }
+
+  /**
+   * Upsert games from IGDB API responses into the local database.
+   * Returns the inserted/existing game rows as detail DTOs.
+   */
+  async upsertGamesFromApi(apiGames: IgdbApiGame[]): Promise<GameDetailDto[]> {
+    if (apiGames.length === 0) return [];
+
+    const rows = apiGames.map((g) => this.mapApiGameToDbRow(g));
+
+    // Use onConflictDoUpdate to refresh expanded data
+    for (const row of rows) {
+      await this.db
+        .insert(schema.games)
+        .values(row)
+        .onConflictDoUpdate({
+          target: schema.games.igdbId,
+          set: {
+            name: row.name,
+            slug: row.slug,
+            coverUrl: row.coverUrl,
+            genres: row.genres,
+            summary: row.summary,
+            rating: row.rating,
+            aggregatedRating: row.aggregatedRating,
+            popularity: row.popularity,
+            gameModes: row.gameModes,
+            themes: row.themes,
+            platforms: row.platforms,
+            screenshots: row.screenshots,
+            videos: row.videos,
+            firstReleaseDate: row.firstReleaseDate,
+            playerCount: row.playerCount,
+            twitchGameId: row.twitchGameId,
+            cachedAt: new Date(),
+          },
+        });
+    }
+
+    // Fetch the upserted rows
+    const igdbIds = rows.map((r) => r.igdbId);
+    const results = await this.db
+      .select()
+      .from(schema.games)
+      .where(sql`${schema.games.igdbId} = ANY(${igdbIds})`);
+
+    return results.map((g) => this.mapDbRowToDetail(g));
+  }
+
+  /** Expose Redis client and config for controller use */
+  get redisClient() {
+    return this.redis;
+  }
+
+  get config() {
+    return IGDB_CONFIG;
+  }
+
+  /** Expose DB for controller queries */
+  get database() {
+    return this.db;
   }
 }

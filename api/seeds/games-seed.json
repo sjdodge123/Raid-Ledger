@@ -1,507 +1,1977 @@
 {
-    "version": "1.1.0",
-    "generatedAt": "2026-02-07",
-    "source": "igdb",
-    "description": "Pre-seeded games for Raid-Ledger. IGDB IDs are canonical to prevent duplicates when search is enabled. Genre 36 = MMORPG (enables Tank/Healer/DPS slot layout).",
-    "games": [
+  "version": "2.0.0",
+  "generatedAt": "2026-02-10",
+  "source": "igdb",
+  "description": "Pre-seeded games for Raid-Ledger. IGDB IDs are canonical to prevent duplicates when search is enabled. Genre 36 = MMORPG (enables Tank/Healer/DPS slot layout).",
+  "games": [
+    {
+      "igdbId": 123,
+      "name": "World of Warcraft",
+      "slug": "world-of-warcraft",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2l7z.jpg",
+      "genres": [
+        12,
+        15,
+        31,
+        36
+      ],
+      "summary": "A massively multiplayer online role-playing game set in the fantasy world of Azeroth, where players explore vast continents, battle enemies, and join forces in epic raids and dungeons.",
+      "rating": 86,
+      "aggregatedRating": 93,
+      "popularity": 480,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        14
+      ],
+      "screenshots": [],
+      "videos": [
         {
-            "igdbId": 123,
-            "name": "World of Warcraft",
-            "slug": "world-of-warcraft",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2l7z.jpg",
-            "genres": [
-                12,
-                15,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 14729,
-            "name": "Final Fantasy XIV Online",
-            "slug": "final-fantasy-xiv-online",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob1vd.jpg",
-            "genres": [
-                12,
-                15,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 1183,
-            "name": "Guild Wars 2",
-            "slug": "guild-wars-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co54tr.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 1081,
-            "name": "The Elder Scrolls Online",
-            "slug": "the-elder-scrolls-online",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co9nt3.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 26128,
-            "name": "Lost Ark",
-            "slug": "lost-ark",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4w4j.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 24654,
-            "name": "New World",
-            "slug": "new-world-aeternum--1",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaoc1.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 6292,
-            "name": "Black Desert Online",
-            "slug": "black-desert",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coay9v.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 117294,
-            "name": "Throne and Liberty",
-            "slug": "throne-and-liberty",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajo3.jpg",
-            "genres": [
-                12,
-                31,
-                36
-            ]
-        },
-        {
-            "igdbId": 104967,
-            "name": "Valheim",
-            "slug": "valheim",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob24q.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 10239,
-            "name": "ARK: Survival Evolved",
-            "slug": "ark-survival-evolved",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co493k.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 3277,
-            "name": "Rust",
-            "slug": "rust",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajjj.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 151665,
-            "name": "Palworld",
-            "slug": "palworld",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7n02.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 272600,
-            "name": "Soulmask",
-            "slug": "soulmask",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaz9.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 16999,
-            "name": "Conan Exiles",
-            "slug": "conan-exiles",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa90l.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 5574,
-            "name": "7 Days to Die",
-            "slug": "7-days-to-die",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaqz.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 90558,
-            "name": "Satisfactory",
-            "slug": "satisfactory",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8tfy.jpg",
-            "genres": [
-                12,
-                13,
-                31
-            ]
-        },
-        {
-            "igdbId": 25657,
-            "name": "Destiny 2",
-            "slug": "destiny-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa8q3.jpg",
-            "genres": [
-                5,
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 250616,
-            "name": "Helldivers 2",
-            "slug": "helldivers-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coabbf.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 27134,
-            "name": "Deep Rock Galactic",
-            "slug": "deep-rock-galactic",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaat4.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 2903,
-            "name": "Warframe",
-            "slug": "warframe",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob9an.jpg",
-            "genres": [
-                5,
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 90099,
-            "name": "Tom Clancy's The Division 2",
-            "slug": "tom-clancys-the-division-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xrm.jpg",
-            "genres": [
-                5,
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 119171,
-            "name": "Baldur's Gate 3",
-            "slug": "baldurs-gate-iii",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg",
-            "genres": [
-                12,
-                15,
-                16,
-                24,
-                31
-            ]
-        },
-        {
-            "igdbId": 125165,
-            "name": "Diablo IV",
-            "slug": "diablo-iv",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co69sm.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 36926,
-            "name": "Monster Hunter: World",
-            "slug": "monster-hunter-world",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rst.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 138950,
-            "name": "Monster Hunter Rise",
-            "slug": "monster-hunter-rise",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co3uzk.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 279661,
-            "name": "Monster Hunter Wilds",
-            "slug": "monster-hunter-wilds",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co904o.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 1911,
-            "name": "Path of Exile",
-            "slug": "path-of-exile",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1n6w.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 95118,
-            "name": "Last Epoch",
-            "slug": "last-epoch",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7p46.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 115,
-            "name": "League of Legends",
-            "slug": "league-of-legends",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobf3m.jpg",
-            "genres": [
-                15,
-                36
-            ]
-        },
-        {
-            "igdbId": 126459,
-            "name": "VALORANT",
-            "slug": "valorant",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coau39.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 114795,
-            "name": "Apex Legends",
-            "slug": "apex-legends",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa93z.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 125174,
-            "name": "Overwatch 2",
-            "slug": "overwatch--1",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfow.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 119133,
-            "name": "Elden Ring",
-            "slug": "elden-ring",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 11137,
-            "name": "Sea of Thieves",
-            "slug": "sea-of-thieves",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2558.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 121,
-            "name": "Minecraft",
-            "slug": "minecraft-java-edition",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa77e.jpg",
-            "genres": [
-                12,
-                13,
-                31
-            ]
-        },
-        {
-            "igdbId": 1905,
-            "name": "Fortnite",
-            "slug": "fortnite",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaxt6.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 11198,
-            "name": "Rocket League",
-            "slug": "rocket-league",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaiyq.jpg",
-            "genres": [
-                10,
-                14
-            ]
-        },
-        {
-            "igdbId": 242408,
-            "name": "Counter-Strike 2",
-            "slug": "counter-strike-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaczd.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 1942,
-            "name": "The Witcher 3: Wild Hunt",
-            "slug": "the-witcher-3-wild-hunt",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaarl.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 1020,
-            "name": "Grand Theft Auto V",
-            "slug": "grand-theft-auto-v",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2lbd.jpg",
-            "genres": [
-                5,
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 27789,
-            "name": "PUBG: Battlegrounds",
-            "slug": "pubg-battlegrounds",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaam4.jpg",
-            "genres": [
-                5,
-                31
-            ]
-        },
-        {
-            "igdbId": 2963,
-            "name": "DOTA 2",
-            "slug": "dota-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfk4.jpg",
-            "genres": [
-                15,
-                36
-            ]
-        },
-        {
-            "igdbId": 282566,
-            "name": "Smite 2",
-            "slug": "smite-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7m9c.jpg",
-            "genres": [
-                15,
-                36
-            ]
-        },
-        {
-            "igdbId": 18866,
-            "name": "Dead by Daylight",
-            "slug": "dead-by-daylight",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5zky.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 28512,
-            "name": "Risk of Rain 2",
-            "slug": "risk-of-rain-2",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaavb.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 212089,
-            "name": "Lethal Company",
-            "slug": "lethal-company",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5ive.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 294661,
-            "name": "Content Warning",
-            "slug": "content-warning",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8086.jpg",
-            "genres": [
-                12,
-                31
-            ]
-        },
-        {
-            "igdbId": 132516,
-            "name": "Phasmophobia",
-            "slug": "phasmophobia",
-            "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coamcz.jpg",
-            "genres": [
-                12,
-                31
-            ]
+          "name": "Battle for Azeroth Cinematic",
+          "videoId": "jSJr3dXZfcg"
         }
-    ]
+      ],
+      "firstReleaseDate": "2004-11-23T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 40
+      },
+      "twitchGameId": "18122",
+      "crossplay": false
+    },
+    {
+      "igdbId": 14729,
+      "name": "Final Fantasy XIV Online",
+      "slug": "final-fantasy-xiv-online",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob1vd.jpg",
+      "genres": [
+        12,
+        15,
+        31,
+        36
+      ],
+      "summary": "A critically acclaimed MMORPG set in the realm of Hydaelyn, featuring an expansive story-driven experience with deep class systems, challenging raids, and a welcoming community.",
+      "rating": 88,
+      "aggregatedRating": 86,
+      "popularity": 450,
+      "gameModes": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Endwalker Launch Trailer",
+          "videoId": "zTTtd6bnhFs"
+        }
+      ],
+      "firstReleaseDate": "2013-08-27T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 24
+      },
+      "twitchGameId": "24241",
+      "crossplay": true
+    },
+    {
+      "igdbId": 1183,
+      "name": "Guild Wars 2",
+      "slug": "guild-wars-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co54tr.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "A living-world MMORPG where dynamic events replace traditional questing, featuring large-scale World vs World PvP, structured PvP, and challenging endgame content without gear treadmills.",
+      "rating": 82,
+      "aggregatedRating": 86,
+      "popularity": 320,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2012-08-28T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 50
+      },
+      "twitchGameId": "30921",
+      "crossplay": false
+    },
+    {
+      "igdbId": 1081,
+      "name": "The Elder Scrolls Online",
+      "slug": "the-elder-scrolls-online",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co9nt3.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "An MMORPG set in the Elder Scrolls universe of Tamriel, blending solo-friendly storytelling with group dungeons, 12-player trials, and massive alliance PvP warfare in Cyrodiil.",
+      "rating": 78,
+      "aggregatedRating": 77,
+      "popularity": 340,
+      "gameModes": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        14
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2014-04-04T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 24
+      },
+      "twitchGameId": "65654",
+      "crossplay": true
+    },
+    {
+      "igdbId": 26128,
+      "name": "Lost Ark",
+      "slug": "lost-ark",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4w4j.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "A free-to-play action MMORPG with an isometric perspective, featuring fast-paced combat, extensive endgame raiding, and a sprawling story across the continents of Arkesia.",
+      "rating": 75,
+      "aggregatedRating": 81,
+      "popularity": 310,
+      "gameModes": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2019-12-04T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 8
+      },
+      "twitchGameId": "490100",
+      "crossplay": false
+    },
+    {
+      "igdbId": 24654,
+      "name": "New World",
+      "slug": "new-world-aeternum--1",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaoc1.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "An open-world MMO set on the supernatural island of Aeternum, featuring real-time action combat, territory control warfare, and a classless progression system driven by weapon mastery.",
+      "rating": 68,
+      "aggregatedRating": 70,
+      "popularity": 280,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2021-09-28T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 20
+      },
+      "twitchGameId": "493597",
+      "crossplay": null
+    },
+    {
+      "igdbId": 6292,
+      "name": "Black Desert Online",
+      "slug": "black-desert",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coay9v.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "A visually stunning sandbox MMORPG known for its deep action combat system, extensive life-skill activities, and open-world node warfare between guilds.",
+      "rating": 76,
+      "aggregatedRating": 73,
+      "popularity": 290,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        34,
+        39
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2015-07-14T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 100
+      },
+      "twitchGameId": "386821",
+      "crossplay": null
+    },
+    {
+      "igdbId": 117294,
+      "name": "Throne and Liberty",
+      "slug": "throne-and-liberty",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajo3.jpg",
+      "genres": [
+        12,
+        31,
+        36
+      ],
+      "summary": "A free-to-play MMORPG from NCSoft featuring large-scale siege warfare, shapeshifting traversal mechanics, and dynamic weather that changes gameplay and combat encounters.",
+      "rating": null,
+      "aggregatedRating": 65,
+      "popularity": 250,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2023-12-07T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 200
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 104967,
+      "name": "Valheim",
+      "slug": "valheim",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob24q.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A Viking-themed survival and exploration game where up to ten players build, craft, and battle mythological creatures across a procedurally generated purgatory world.",
+      "rating": 87,
+      "aggregatedRating": 86,
+      "popularity": 370,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        21,
+        38
+      ],
+      "platforms": [
+        6,
+        3,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Valheim Early Access Trailer",
+          "videoId": "5mHRJ1KFe20"
+        }
+      ],
+      "firstReleaseDate": "2021-02-02T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 10
+      },
+      "twitchGameId": "514885",
+      "crossplay": false
+    },
+    {
+      "igdbId": 10239,
+      "name": "ARK: Survival Evolved",
+      "slug": "ark-survival-evolved",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co493k.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A survival game set on a mysterious island filled with dinosaurs and prehistoric creatures that players can tame, breed, and ride while building bases and fighting other tribes.",
+      "rating": 73,
+      "aggregatedRating": 70,
+      "popularity": 350,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18,
+        21,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        49,
+        130,
+        34,
+        39,
+        14
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2017-08-29T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 70
+      },
+      "twitchGameId": "489635",
+      "crossplay": null
+    },
+    {
+      "igdbId": 3277,
+      "name": "Rust",
+      "slug": "rust",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coajjj.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A harsh multiplayer survival game where players gather resources, build shelters, and fight to survive against both the environment and other players on persistent servers.",
+      "rating": 80,
+      "aggregatedRating": 69,
+      "popularity": 400,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        21
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        14
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2018-02-08T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 500
+      },
+      "twitchGameId": "263490",
+      "crossplay": false
+    },
+    {
+      "igdbId": 151665,
+      "name": "Palworld",
+      "slug": "palworld",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7n02.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An open-world survival crafting game where players befriend and collect mysterious creatures called Pals, using them for combat, building, farming, and factory work.",
+      "rating": 78,
+      "aggregatedRating": 76,
+      "popularity": 420,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        21,
+        38
+      ],
+      "platforms": [
+        6,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2024-01-19T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 32
+      },
+      "twitchGameId": null,
+      "crossplay": true
+    },
+    {
+      "igdbId": 272600,
+      "name": "Soulmask",
+      "slug": "soulmask",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaz9.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A survival sandbox game where players don an ancient mask with mysterious powers, build tribal settlements, recruit NPCs, and explore a dangerous prehistoric world.",
+      "rating": null,
+      "aggregatedRating": null,
+      "popularity": 85,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        21,
+        38
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2024-06-18T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 50
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 16999,
+      "name": "Conan Exiles",
+      "slug": "conan-exiles",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa90l.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A survival game set in the brutal lands of Conan the Barbarian, where exiled players build, dominate, and explore a vast open world filled with dungeons and rival clans.",
+      "rating": 72,
+      "aggregatedRating": 71,
+      "popularity": 260,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        21,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2018-05-08T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 40
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 5574,
+      "name": "7 Days to Die",
+      "slug": "7-days-to-die",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaaqz.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A zombie survival crafting game blending tower defense, FPS combat, and voxel-based building, where every seven days a massive horde attacks the player's fortifications.",
+      "rating": 77,
+      "aggregatedRating": 70,
+      "popularity": 240,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        19,
+        21
+      ],
+      "platforms": [
+        6,
+        48,
+        49,
+        14
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2013-12-13T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 8
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 90558,
+      "name": "Satisfactory",
+      "slug": "satisfactory",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8tfy.jpg",
+      "genres": [
+        12,
+        13,
+        31
+      ],
+      "summary": "A first-person open-world factory building game where players explore an alien planet, harvest resources, and construct increasingly complex automated production lines.",
+      "rating": 88,
+      "aggregatedRating": 85,
+      "popularity": 270,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        18,
+        33,
+        38
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2024-09-10T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": false
+    },
+    {
+      "igdbId": 25657,
+      "name": "Destiny 2",
+      "slug": "destiny-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa8q3.jpg",
+      "genres": [
+        5,
+        12,
+        31
+      ],
+      "summary": "A free-to-play online multiplayer FPS with MMO elements, where Guardians wield the power of Light and Darkness to defend humanity across story campaigns, raids, and competitive PvP.",
+      "rating": 80,
+      "aggregatedRating": 85,
+      "popularity": 430,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Destiny 2 Launch Trailer",
+          "videoId": "hdWkpbuzfOM"
+        }
+      ],
+      "firstReleaseDate": "2017-09-06T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 6
+      },
+      "twitchGameId": "497057",
+      "crossplay": true
+    },
+    {
+      "igdbId": 250616,
+      "name": "Helldivers 2",
+      "slug": "helldivers-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coabbf.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A third-person cooperative shooter where up to four players deploy as elite soldiers to spread democracy across a hostile galaxy, battling alien bugs and killer robots.",
+      "rating": 85,
+      "aggregatedRating": 83,
+      "popularity": 440,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18,
+        27
+      ],
+      "platforms": [
+        6,
+        167
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Helldivers 2 Announce Trailer",
+          "videoId": "UC1fUMWN"
+        }
+      ],
+      "firstReleaseDate": "2024-02-08T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "2016605443",
+      "crossplay": true
+    },
+    {
+      "igdbId": 27134,
+      "name": "Deep Rock Galactic",
+      "slug": "deep-rock-galactic",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaat4.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A cooperative FPS where teams of up to four dwarven miners dig through procedurally generated cave systems on a hostile alien planet, fighting swarms of creatures while completing objectives.",
+      "rating": 90,
+      "aggregatedRating": 85,
+      "popularity": 300,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18,
+        27
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Deep Rock Galactic Launch Trailer",
+          "videoId": "SL-p3fFWJk8"
+        }
+      ],
+      "firstReleaseDate": "2020-05-13T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "506268",
+      "crossplay": true
+    },
+    {
+      "igdbId": 2903,
+      "name": "Warframe",
+      "slug": "warframe",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cob9an.jpg",
+      "genres": [
+        5,
+        12,
+        31
+      ],
+      "summary": "A free-to-play cooperative action game where players control ancient warriors called Tenno, using powered exoskeletons called Warframes to complete missions across the Origin System.",
+      "rating": 82,
+      "aggregatedRating": 80,
+      "popularity": 360,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2013-03-25T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "66170",
+      "crossplay": true
+    },
+    {
+      "igdbId": 90099,
+      "name": "Tom Clancy's The Division 2",
+      "slug": "tom-clancys-the-division-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1xrm.jpg",
+      "genres": [
+        5,
+        12,
+        31
+      ],
+      "summary": "A tactical third-person looter-shooter set in a devastated Washington D.C., where agents work to restore order through cooperative missions, raids, and open-world exploration.",
+      "rating": 74,
+      "aggregatedRating": 78,
+      "popularity": 220,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        39
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2019-03-15T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 8
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 119171,
+      "name": "Baldur's Gate 3",
+      "slug": "baldurs-gate-iii",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co670h.jpg",
+      "genres": [
+        12,
+        15,
+        16,
+        24,
+        31
+      ],
+      "summary": "A sprawling RPG based on Dungeons & Dragons 5th Edition, offering deep turn-based combat, rich storytelling, and extensive multiplayer co-op for up to four players.",
+      "rating": 95,
+      "aggregatedRating": 96,
+      "popularity": 490,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        167,
+        49,
+        169,
+        14
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Baldur's Gate 3 Launch Trailer",
+          "videoId": "XuCfkgaAY_o"
+        }
+      ],
+      "firstReleaseDate": "2023-08-03T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "1332860767",
+      "crossplay": true
+    },
+    {
+      "igdbId": 125165,
+      "name": "Diablo IV",
+      "slug": "diablo-iv",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co69sm.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An action RPG set in a dark, gothic open world where players battle the forces of Hell, loot powerful gear, and tackle endgame content through seasons and challenging dungeons.",
+      "rating": 79,
+      "aggregatedRating": 84,
+      "popularity": 410,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        19
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Diablo IV Announce Cinematic",
+          "videoId": "0SSYzl9fXOQ"
+        }
+      ],
+      "firstReleaseDate": "2023-06-06T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "1847498734",
+      "crossplay": true
+    },
+    {
+      "igdbId": 36926,
+      "name": "Monster Hunter: World",
+      "slug": "monster-hunter-world",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1rst.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An action RPG where players hunt massive monsters across lush ecosystems, using the spoils to craft increasingly powerful weapons and armor in a deeply rewarding gameplay loop.",
+      "rating": 88,
+      "aggregatedRating": 90,
+      "popularity": 380,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        48,
+        49
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "MH World Launch Trailer",
+          "videoId": "3gzoGutQ_bE"
+        }
+      ],
+      "firstReleaseDate": "2018-01-26T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "497467",
+      "crossplay": false
+    },
+    {
+      "igdbId": 138950,
+      "name": "Monster Hunter Rise",
+      "slug": "monster-hunter-rise",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co3uzk.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A fast-paced entry in the Monster Hunter series featuring Wirebug mobility, rideable Palamutes, and streamlined hunting in a Japanese folklore-inspired setting.",
+      "rating": 84,
+      "aggregatedRating": 87,
+      "popularity": 300,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        130,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2021-03-26T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": false
+    },
+    {
+      "igdbId": 279661,
+      "name": "Monster Hunter Wilds",
+      "slug": "monster-hunter-wilds",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co904o.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "The next mainline Monster Hunter featuring seamless open environments, dynamic ecosystems, and enhanced cooperative hunting for up to four players across vast wilderness areas.",
+      "rating": null,
+      "aggregatedRating": null,
+      "popularity": 350,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        38
+      ],
+      "platforms": [
+        6,
+        167,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Monster Hunter Wilds Reveal",
+          "videoId": "5aSfdCikbDE"
+        }
+      ],
+      "firstReleaseDate": "2025-02-28T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 1911,
+      "name": "Path of Exile",
+      "slug": "path-of-exile",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co1n6w.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A free-to-play action RPG renowned for its staggeringly deep skill and passive systems, dark Wraeclast setting, and endgame mapping system with regular league content updates.",
+      "rating": 86,
+      "aggregatedRating": 88,
+      "popularity": 380,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        19
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2013-10-23T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 6
+      },
+      "twitchGameId": "29307",
+      "crossplay": false
+    },
+    {
+      "igdbId": 95118,
+      "name": "Last Epoch",
+      "slug": "last-epoch",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7p46.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A time-travel themed action RPG with deep character customization, loot crafting, and both online multiplayer and robust offline play across multiple historical eras.",
+      "rating": 80,
+      "aggregatedRating": 78,
+      "popularity": 200,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17,
+        18
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2024-02-21T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 115,
+      "name": "League of Legends",
+      "slug": "league-of-legends",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobf3m.jpg",
+      "genres": [
+        15,
+        36
+      ],
+      "summary": "A competitive MOBA where two teams of five champions battle to destroy the opposing team's Nexus, featuring a massive roster of unique characters and a thriving esports scene.",
+      "rating": 80,
+      "aggregatedRating": 83,
+      "popularity": 500,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        14
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "League of Legends Cinematic",
+          "videoId": "oGnZk-_R0KQ"
+        }
+      ],
+      "firstReleaseDate": "2009-10-27T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": "21779",
+      "crossplay": false
+    },
+    {
+      "igdbId": 126459,
+      "name": "VALORANT",
+      "slug": "valorant",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coau39.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A tactical 5v5 character-based FPS combining precise gunplay with unique agent abilities, requiring strategic coordination and sharp aim to win rounds.",
+      "rating": 76,
+      "aggregatedRating": 80,
+      "popularity": 470,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "VALORANT Official Launch Trailer",
+          "videoId": "e_E9W2vsRG4"
+        }
+      ],
+      "firstReleaseDate": "2020-06-02T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": "516575",
+      "crossplay": null
+    },
+    {
+      "igdbId": 114795,
+      "name": "Apex Legends",
+      "slug": "apex-legends",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa93z.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A free-to-play battle royale FPS set in the Titanfall universe, featuring a diverse roster of Legends with unique abilities competing in squads of three across dynamic maps.",
+      "rating": 82,
+      "aggregatedRating": 88,
+      "popularity": 430,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Apex Legends Launch Trailer",
+          "videoId": "innmNewjkuk"
+        }
+      ],
+      "firstReleaseDate": "2019-02-04T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 60
+      },
+      "twitchGameId": "511224",
+      "crossplay": true
+    },
+    {
+      "igdbId": 125174,
+      "name": "Overwatch 2",
+      "slug": "overwatch--1",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfow.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A team-based hero shooter where two teams of five compete in objective-based game modes, each player choosing from a roster of heroes with distinct roles and abilities.",
+      "rating": 68,
+      "aggregatedRating": 79,
+      "popularity": 420,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Overwatch 2 Reveal Trailer",
+          "videoId": "dZl1yGUetjI"
+        }
+      ],
+      "firstReleaseDate": "2022-10-04T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": "515025",
+      "crossplay": true
+    },
+    {
+      "igdbId": 119133,
+      "name": "Elden Ring",
+      "slug": "elden-ring",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co4jni.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An expansive open-world action RPG from FromSoftware and George R.R. Martin, blending challenging Soulslike combat with horseback exploration across the vast Lands Between.",
+      "rating": 93,
+      "aggregatedRating": 95,
+      "popularity": 480,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Elden Ring Official Gameplay Trailer",
+          "videoId": "OT8if6DXOFQ"
+        }
+      ],
+      "firstReleaseDate": "2022-02-25T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "1721818930",
+      "crossplay": false
+    },
+    {
+      "igdbId": 11137,
+      "name": "Sea of Thieves",
+      "slug": "sea-of-thieves",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2558.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A shared-world pirate adventure where crews sail the seas together, hunting treasure, battling skeleton fleets, and engaging in ship-to-ship PvP combat on the open ocean.",
+      "rating": 78,
+      "aggregatedRating": 75,
+      "popularity": 310,
+      "gameModes": [
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        38
+      ],
+      "platforms": [
+        6,
+        49,
+        169,
+        167
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Sea of Thieves Launch Trailer",
+          "videoId": "r5JIBaaKxII"
+        }
+      ],
+      "firstReleaseDate": "2018-03-20T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "490377",
+      "crossplay": true
+    },
+    {
+      "igdbId": 121,
+      "name": "Minecraft",
+      "slug": "minecraft-java-edition",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coa77e.jpg",
+      "genres": [
+        12,
+        13,
+        31
+      ],
+      "summary": "A sandbox game where players mine resources, craft tools, and build anything imaginable in a procedurally generated block world, supporting both creative and survival gameplay.",
+      "rating": 87,
+      "aggregatedRating": 93,
+      "popularity": 500,
+      "gameModes": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "themes": [
+        33,
+        21,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130,
+        34,
+        39,
+        14,
+        3
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Minecraft Official Trailer",
+          "videoId": "MmB9b5njVbA"
+        }
+      ],
+      "firstReleaseDate": "2011-11-18T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 30
+      },
+      "twitchGameId": "27471",
+      "crossplay": true
+    },
+    {
+      "igdbId": 1905,
+      "name": "Fortnite",
+      "slug": "fortnite",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaxt6.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "A free-to-play battle royale phenomenon where 100 players drop onto an island, gather loot, build structures, and fight to be the last one standing in ever-evolving seasonal content.",
+      "rating": 75,
+      "aggregatedRating": 81,
+      "popularity": 490,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        27
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130,
+        34,
+        39
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Fortnite Chapter 2 Trailer",
+          "videoId": "JNHekPCHnYY"
+        }
+      ],
+      "firstReleaseDate": "2017-07-25T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 100
+      },
+      "twitchGameId": "33214",
+      "crossplay": true
+    },
+    {
+      "igdbId": 11198,
+      "name": "Rocket League",
+      "slug": "rocket-league",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaiyq.jpg",
+      "genres": [
+        10,
+        14
+      ],
+      "summary": "A physics-based vehicular soccer game where rocket-powered cars hit a giant ball into the opponent's goal, blending accessible gameplay with an incredibly high skill ceiling.",
+      "rating": 88,
+      "aggregatedRating": 86,
+      "popularity": 390,
+      "gameModes": [
+        1,
+        2,
+        4
+      ],
+      "themes": [
+        1,
+        27
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Rocket League Free to Play Trailer",
+          "videoId": "Xi3jDDCBFB0"
+        }
+      ],
+      "firstReleaseDate": "2015-07-07T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 8
+      },
+      "twitchGameId": "30921",
+      "crossplay": true
+    },
+    {
+      "igdbId": 242408,
+      "name": "Counter-Strike 2",
+      "slug": "counter-strike-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaczd.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "Valve's definitive tactical FPS built on the Source 2 engine, featuring updated maps, responsive smoke grenades, and the same precise gunplay that defined competitive shooters.",
+      "rating": 72,
+      "aggregatedRating": 78,
+      "popularity": 470,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        39
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2023-09-27T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": "32399",
+      "crossplay": false
+    },
+    {
+      "igdbId": 1942,
+      "name": "The Witcher 3: Wild Hunt",
+      "slug": "the-witcher-3-wild-hunt",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaarl.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An award-winning open-world RPG following Geralt of Rivia on a quest to find his adopted daughter, featuring branching narratives, monster hunting, and a richly detailed fantasy world.",
+      "rating": 94,
+      "aggregatedRating": 95,
+      "popularity": 460,
+      "gameModes": [
+        1
+      ],
+      "themes": [
+        1,
+        17,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130,
+        14
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "The Witcher 3 Launch Cinematic",
+          "videoId": "XHrskkHf958"
+        }
+      ],
+      "firstReleaseDate": "2015-05-19T00:00:00.000Z",
+      "playerCount": null,
+      "twitchGameId": "115977",
+      "crossplay": null
+    },
+    {
+      "igdbId": 1020,
+      "name": "Grand Theft Auto V",
+      "slug": "grand-theft-auto-v",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2lbd.jpg",
+      "genres": [
+        5,
+        12,
+        31
+      ],
+      "summary": "An open-world action-adventure game set in the sprawling city of Los Santos, featuring three playable protagonists and a massive online multiplayer mode with constant content updates.",
+      "rating": 92,
+      "aggregatedRating": 96,
+      "popularity": 490,
+      "gameModes": [
+        1,
+        2
+      ],
+      "themes": [
+        1,
+        27,
+        38
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "GTA V Official Trailer",
+          "videoId": "QkkoHAzjnUs"
+        }
+      ],
+      "firstReleaseDate": "2013-09-17T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 30
+      },
+      "twitchGameId": "32982",
+      "crossplay": null
+    },
+    {
+      "igdbId": 27789,
+      "name": "PUBG: Battlegrounds",
+      "slug": "pubg-battlegrounds",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaam4.jpg",
+      "genres": [
+        5,
+        31
+      ],
+      "summary": "The battle royale that popularized the genre, dropping up to 100 players onto a shrinking map where they scavenge for weapons and gear to be the last person or team standing.",
+      "rating": 74,
+      "aggregatedRating": 75,
+      "popularity": 400,
+      "gameModes": [
+        1,
+        2
+      ],
+      "themes": [
+        1,
+        39
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        34,
+        39
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2017-12-20T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 100
+      },
+      "twitchGameId": "493057",
+      "crossplay": true
+    },
+    {
+      "igdbId": 2963,
+      "name": "DOTA 2",
+      "slug": "dota-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/cobfk4.jpg",
+      "genres": [
+        15,
+        36
+      ],
+      "summary": "A complex and deeply strategic MOBA where two teams of five heroes battle across three lanes to destroy the opposing Ancient, with one of the highest skill ceilings in gaming.",
+      "rating": 83,
+      "aggregatedRating": 90,
+      "popularity": 470,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        14,
+        3
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Dota 2 The International Trailer",
+          "videoId": "Cp8neRiF9-k"
+        }
+      ],
+      "firstReleaseDate": "2013-07-09T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": "29595",
+      "crossplay": null
+    },
+    {
+      "igdbId": 282566,
+      "name": "Smite 2",
+      "slug": "smite-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co7m9c.jpg",
+      "genres": [
+        15,
+        36
+      ],
+      "summary": "A third-person MOBA where players control gods and mythological figures from various pantheons, battling in arena-style and conquest modes with action-oriented skillshot combat.",
+      "rating": null,
+      "aggregatedRating": null,
+      "popularity": 180,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        167,
+        169
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2025-01-14T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 10
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 18866,
+      "name": "Dead by Daylight",
+      "slug": "dead-by-daylight",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5zky.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "An asymmetric multiplayer horror game where one player takes the role of a brutal Killer hunting four Survivors who must cooperate to power generators and escape the trial grounds.",
+      "rating": 78,
+      "aggregatedRating": 72,
+      "popularity": 380,
+      "gameModes": [
+        2
+      ],
+      "themes": [
+        1,
+        19
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130,
+        34,
+        39
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "Dead by Daylight Launch Trailer",
+          "videoId": "JGhIXLO3ul8"
+        }
+      ],
+      "firstReleaseDate": "2016-06-14T00:00:00.000Z",
+      "playerCount": {
+        "min": 2,
+        "max": 5
+      },
+      "twitchGameId": "491487",
+      "crossplay": null
+    },
+    {
+      "igdbId": 28512,
+      "name": "Risk of Rain 2",
+      "slug": "risk-of-rain-2",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coaavb.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A roguelike third-person shooter where up to four players fight through hordes of alien monsters, collecting increasingly powerful items as difficulty scales with time.",
+      "rating": 87,
+      "aggregatedRating": 85,
+      "popularity": 280,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        1,
+        18
+      ],
+      "platforms": [
+        6,
+        48,
+        167,
+        49,
+        169,
+        130
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2020-08-11T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": false
+    },
+    {
+      "igdbId": 212089,
+      "name": "Lethal Company",
+      "slug": "lethal-company",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co5ive.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A cooperative horror game where employees of a shady corporation explore abandoned moons to scavenge valuable loot while avoiding a terrifying variety of alien creatures.",
+      "rating": 88,
+      "aggregatedRating": null,
+      "popularity": 360,
+      "gameModes": [
+        2,
+        3
+      ],
+      "themes": [
+        19,
+        18,
+        27
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2023-10-23T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "2040578541",
+      "crossplay": false
+    },
+    {
+      "igdbId": 294661,
+      "name": "Content Warning",
+      "slug": "content-warning",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co8086.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A cooperative horror-comedy game where players film spooky content in a mysterious underground world, trying to go viral on a fictional video platform called SpookTube.",
+      "rating": null,
+      "aggregatedRating": null,
+      "popularity": 150,
+      "gameModes": [
+        2,
+        3
+      ],
+      "themes": [
+        19,
+        27
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2024-04-01T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": null,
+      "crossplay": null
+    },
+    {
+      "igdbId": 132516,
+      "name": "Phasmophobia",
+      "slug": "phasmophobia",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/coamcz.jpg",
+      "genres": [
+        12,
+        31
+      ],
+      "summary": "A cooperative ghost hunting game where teams of up to four use real ghost hunting equipment to identify paranormal activity in haunted locations while trying to survive.",
+      "rating": 84,
+      "aggregatedRating": null,
+      "popularity": 320,
+      "gameModes": [
+        1,
+        2,
+        3
+      ],
+      "themes": [
+        19,
+        43
+      ],
+      "platforms": [
+        6
+      ],
+      "screenshots": [],
+      "videos": [],
+      "firstReleaseDate": "2020-09-18T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 4
+      },
+      "twitchGameId": "518184",
+      "crossplay": true
+    }
+  ]
 }

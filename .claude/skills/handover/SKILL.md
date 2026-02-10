@@ -1,12 +1,14 @@
 ---
 name: handover
-description: End-of-session handover — lint, build, chrome smoke test, docs, commit, Linear sync, and summary report
-allowed-tools: "Bash(npm run *), Bash(git *), Bash(curl *), Bash(mkdir *), Bash(cat *), Read, Edit, Write, Glob, Grep, Task, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__find, mcp__claude-in-chrome__get_page_text, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__get_issue"
+description: End-of-session handover — health checks, push to Linear, regenerate caches, commit, and summary report
+allowed-tools: "Bash(npm run *), Bash(git *), Bash(curl *), Bash(mkdir *), Read, Edit, Write, Glob, Grep, Task, mcp__claude-in-chrome__tabs_context_mcp, mcp__claude-in-chrome__tabs_create_mcp, mcp__claude-in-chrome__navigate, mcp__claude-in-chrome__computer, mcp__claude-in-chrome__read_page, mcp__claude-in-chrome__find, mcp__claude-in-chrome__get_page_text, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__get_issue"
 ---
 
 # Handover Skill
 
-End-of-session handover: health checks, visual smoke tests, documentation sync, clean commit, bidirectional Linear sync, and summary report.
+End-of-session handover: health checks, push session work to Linear, regenerate local caches from Linear, clean commit, and summary report.
+
+**Principle:** Linear is the single source of truth. Session work tracked in `task.md` checkboxes gets pushed TO Linear. Then `sprint-status.yaml` is regenerated FROM Linear. No circular reconciliation.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -20,33 +22,23 @@ Execute all phases sequentially (0 through 6). Track results for the final repor
 
 ## Compact Instructions
 
-**CRITICAL:** If context compression occurs during handover execution, the handover context snapshot at `/tmp/handover-snapshot.md` contains all state needed to continue. Re-read that file immediately after any compression event before proceeding with remaining phases.
+**CRITICAL:** If context compression occurs during handover execution, re-read `/tmp/handover-snapshot.md` immediately to recover state.
 
-When compacting during a handover, **always preserve:**
-- The current handover phase number and results from completed phases
+Always preserve during compaction:
+- Current handover phase number and completed phase results
 - The path `/tmp/handover-snapshot.md` and instruction to re-read it
 - Any commit SHAs produced during the handover
-- The list of session-changed stories
+- The list of session-changed stories (ROK-XXX identifiers and their target statuses)
 - Phase pass/fail results
 
 ---
 
 ## Phase 0: Session Context Snapshot
 
-**Purpose:** Capture all critical session context to a file before heavy processing begins. This makes the handover resilient to context compression — if compression fires mid-handover, re-read this file to recover state.
+**Purpose:** Capture all critical session context to a file before heavy processing begins. This makes the handover resilient to context compression.
 
-Write `/tmp/handover-snapshot.md` with the following content:
+Write `/tmp/handover-snapshot.md` with:
 
-```bash
-# Gather session context
-git log --oneline -20                           # Recent commits
-git diff --name-only HEAD~5                     # Files changed recently
-git branch --show-current                       # Current branch
-git rev-parse --short HEAD                      # Current SHA
-cat planning-artifacts/sprint-status.yaml       # Current sprint state
-```
-
-The snapshot file should contain:
 ```markdown
 # Handover Session Snapshot
 Generated: <timestamp>
@@ -54,19 +46,27 @@ Branch: <branch>
 SHA: <sha>
 
 ## Recent Commits
-<git log output>
+<git log --oneline -20>
 
 ## Changed Files
-<git diff --name-only output>
+<git diff --name-only HEAD~5>
 
-## Sprint Status
-<full sprint-status.yaml contents>
+## task.md Contents
+<full task.md>
 
 ## Phase Results
-(Updated as phases complete — append results after each phase)
+(Updated as phases complete)
 ```
 
-**After each subsequent phase completes**, append its results to this file so the snapshot stays current.
+Gather the data via:
+```bash
+git log --oneline -20
+git diff --name-only HEAD~5
+git branch --show-current
+git rev-parse --short HEAD
+```
+
+**After each subsequent phase completes**, append its results to this file.
 
 ---
 
@@ -97,131 +97,120 @@ If not `200`, warn the user and offer to skip this phase. If skipped, record "sk
 
 | Page | URL | Verify |
 |------|-----|--------|
-| Calendar | `http://localhost:5173/calendar` | Page loads, month grid or content renders |
+| Calendar | `http://localhost:5173/calendar` | Page loads, content renders |
 | Login | `http://localhost:5173/login` | Sign In form visible |
-| Events | `http://localhost:5173/events` | Page loads, event cards or empty state |
+| Events | `http://localhost:5173/events` | Page loads |
 | Event Detail | `http://localhost:5173/events/1` | Page loads (title or 404 — both acceptable) |
 | Profile | `http://localhost:5173/profile` | Page loads (may redirect to login — acceptable) |
 
-For each page:
-1. Navigate to URL
-2. Wait briefly for render
-3. Take screenshot
-4. Record pass/fail
-
-Save all screenshots to `implementation-artifacts/screenshots/handover/` (create dir if needed).
+For each page: navigate, wait, screenshot, record pass/fail.
+Save screenshots to `implementation-artifacts/screenshots/handover/`.
 
 Record: `X/Y pages verified` or `skipped`.
 **Append Phase 2 results to `/tmp/handover-snapshot.md`.**
 
 ---
 
-## Phase 3: Documentation
+## Phase 3: Push Session Changes to Linear
 
-1. **Read `task.md`** — update session progress section:
-   - Mark completed items `[x]`
-   - Mark in-progress items `[/]`
-   - Note any test/build failures from Phase 1
+Read `task.md` and extract all checkbox entries with their states:
 
-2. **Read `planning-artifacts/sprint-status.yaml`** — hard-reconcile against task.md:
-   - For every story in either file, ensure the statuses agree using this mapping:
-     - `[x]` in task.md = `done` in sprint-status.yaml
-     - `[/]` in task.md = `in-progress` in sprint-status.yaml
-     - `[ ]` in task.md = whatever sprint-status.yaml says (backlog/ready-for-dev/etc.)
-     - `deprecated` in sprint-status.yaml → remove from task.md or mark with `~~strikethrough~~`
-   - If statuses conflict, **task.md is the authority for work done this session** — update sprint-status.yaml to match
-   - Update the `generated:` timestamp comment at top of file
-   - **List every conflict found and how it was resolved** so the user can verify
+| Checkbox | Linear Action |
+|----------|---------------|
+| `[x] ROK-XXX: ...` | Update Linear issue → **Done** |
+| `[/] ROK-XXX: ...` | Update Linear issue → **In Progress** |
+| `[ ] ROK-XXX: ...` | No change (still Todo in Linear) |
 
-3. **Ask user** to confirm documentation changes look correct before proceeding.
+For each `[x]` or `[/]` story:
+1. Use `mcp__linear__get_issue` to verify current Linear status
+2. If Linear already matches the target status, skip (count as already-correct)
+3. If different, use `mcp__linear__update_issue` to push the new status
 
+**Commit-message scan:** Also check `git log --oneline` for this session's commits. If any commit message references a `ROK-XXX` story that isn't in task.md, identify those stories and push their status too (code committed = at least In Progress).
+
+**Missing stories:** If a story in task.md doesn't exist in Linear, create it with `mcp__linear__create_issue` in the Raid Ledger project with the appropriate status.
+
+Track counts: **pushed**, **already-correct**, **created**, **errors**.
 **Append Phase 3 results to `/tmp/handover-snapshot.md`.**
 
 ---
 
-## Phase 4: Clean Commit
+## Phase 4: Regenerate sprint-status.yaml from Linear
+
+**Delegate to a subagent** to keep the main context lean and avoid compression.
+
+Use the `Task` tool with `subagent_type: "general-purpose"` and provide:
+- The Linear project ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`
+- The team ID: `0728c19f-5268-4e16-aa45-c944349ce386`
+- The status mapping table
+- The target file path: `planning-artifacts/sprint-status.yaml`
+- Instructions to return: total issue count and a confirmation the file was written
+
+### Subagent instructions (include in the Task prompt):
+
+1. Call `mcp__linear__list_issues` with `project: "Raid Ledger"`, `limit: 250`
+2. Map each issue's status using:
+
+| Linear Status | Local Status |
+|---|---|
+| Done | `done` |
+| In Progress | `in-progress` |
+| Todo | `ready-for-dev` |
+| In Review | `review` |
+| Backlog | `backlog` |
+| Canceled | `deprecated` |
+| Duplicate | *(skip)* |
+
+3. Write `planning-artifacts/sprint-status.yaml` in this format:
+
+```yaml
+# generated: <ISO-8601 timestamp>
+# source: Linear (Raid Ledger project) — do not hand-edit
+# regenerate: /init pulls from Linear, /handover pushes then pulls
+project: Raid Ledger
+tracking_system: linear
+
+development_status:
+  # === Done ===
+  ROK-XXX: done           # <issue title>
+
+  # === In Progress ===
+  ROK-XXX: in-progress    # <issue title>
+
+  # === Ready for Dev ===
+  ROK-XXX: ready-for-dev  # <issue title>
+
+  # === Backlog ===
+  ROK-XXX: backlog        # <issue title>
+
+  # === Deprecated ===
+  ROK-XXX: deprecated     # <issue title>
+```
+
+4. Sort entries by ROK number (ascending) within each status group
+5. Omit empty status groups
+6. Return: total issue count, count per status group
+
+### After subagent returns
+
+Record the regeneration results.
+**Append Phase 4 results to `/tmp/handover-snapshot.md`.**
+
+---
+
+## Phase 5: Clean Commit
 
 1. Run `git status --short` to see all changes
-2. Stage specific changed files with `git add` (never use `-A` or `.`)
+2. Stage specific changed files with `git add` (never use `-A` or `.`):
+   - `planning-artifacts/sprint-status.yaml`
+   - `task.md`
+   - Any code files changed during the session
 3. Show staged changes summary to user
 4. **Ask user to confirm** before committing
 5. Commit: `chore: session handover — <brief summary of session work>`
 6. Record commit SHA for report
 
-**Append Phase 4 commit SHA to `/tmp/handover-snapshot.md`.**
-
----
-
-## Phase 5: Linear Sync (Bidirectional)
-
-**Delegate this phase to a subagent** to keep the main context lean and avoid compression.
-
-Use the `Task` tool with `subagent_type: "general-purpose"` and provide:
-- The full contents of `planning-artifacts/sprint-status.yaml`
-- The session-changed stories (diff from Phase 4 commit vs HEAD~1)
-- The Linear project ID and team ID
-- The status mapping table
-- Instructions to return: pushed count, pulled count, created count, errors, and the updated sprint-status.yaml content (if changes were made)
-
-### Subagent instructions (include in the Task prompt):
-
-Linear is the source of truth, **except** for stories touched this session.
-
-**Step 5a: Detect session-changed stories**
-
-Compare current `planning-artifacts/sprint-status.yaml` against the previous commit:
-```bash
-git show HEAD~1:planning-artifacts/sprint-status.yaml
-```
-Any story whose status differs was **touched this session**.
-
-**Step 5b: Sync**
-
-For **session-changed stories** → push local status TO Linear (local is fresher).
-For **all other stories** → pull status FROM Linear and update local yaml (Linear is source of truth).
-If a story exists locally but not in Linear → create it in Linear with local status.
-If a story exists in Linear (Raid Ledger project) but not locally → add to local yaml with Linear's status.
-
-**Status mapping (bidirectional):**
-
-| Local | Linear |
-|-------|--------|
-| `done` | Done |
-| `in-progress` | In Progress |
-| `ready-for-dev` | Todo |
-| `review` | In Review |
-| `backlog` | Backlog |
-| `deprecated` | Canceled |
-| `deferred` | Backlog |
-
-For issues in Linear with status `Duplicate`, skip them (do not sync).
-
-After sync, if local yaml changed, update the file and commit:
-```
-chore: linear sync — X pushed, Y pulled, Z created
-```
-
-Track counts: pushed, pulled, created, already-correct, errors.
-
-**Step 5c: Post-sync reconciliation**
-
-After Linear sync completes, re-verify that `task.md` and `sprint-status.yaml` still agree. The Linear pull in step 5b may have introduced new conflicts (e.g., Linear says "Backlog" but task.md has `[x]`).
-
-For each story, compare both files:
-- If they disagree and the story was **touched this session** → task.md wins, fix sprint-status.yaml
-- If they disagree and the story was **not touched this session** → sprint-status.yaml wins (it was just synced from Linear), fix task.md
-
-If any corrections were made, amend the linear sync commit:
-```bash
-git add task.md planning-artifacts/sprint-status.yaml && git commit --amend --no-edit
-```
-
-**Report any corrections made** — these indicate the sync introduced drift that was auto-fixed.
-
-### After subagent returns
-
-Record the sync counts from the subagent response.
-**Append Phase 5 results to `/tmp/handover-snapshot.md`.**
+**Append Phase 5 commit SHA to `/tmp/handover-snapshot.md`.**
 
 ---
 
@@ -232,18 +221,18 @@ Display the final summary:
 ```
 === Handover Complete ===
 
-| Check         | Result |
-|---------------|--------|
-| Lint          | pass/fail (+ error count if failed) |
-| Build         | pass/fail (which workspace failed if any) |
-| Chrome Tests  | X/Y pages verified (or skipped) |
-| Documentation | task.md + sprint-status.yaml updated |
-| Commit        | <sha> |
-| Linear Sync   | X pushed, Y pulled, Z created, W correct, N reconciled |
+| Check           | Result |
+|-----------------|--------|
+| Lint            | pass/fail (+ error count if failed) |
+| Build           | pass/fail (which workspace failed if any) |
+| Chrome Tests    | X/Y pages verified (or skipped) |
+| Linear Push     | X pushed, Y already correct, Z created, N errors |
+| Cache Regen     | sprint-status.yaml regenerated (<total> issues) |
+| Commit          | <sha> |
 
 Key files for next session:
-- task.md
-- planning-artifacts/sprint-status.yaml
+- planning-artifacts/sprint-status.yaml (Linear cache — regenerated)
+- task.md (will be regenerated by /init)
 ```
 
 Clean up: `rm -f /tmp/handover-snapshot.md`

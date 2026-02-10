@@ -22,6 +22,10 @@ export interface OAuthStatusResponse {
   callbackUrl: string | null;
 }
 
+export interface IgdbStatusResponse {
+  configured: boolean;
+}
+
 export class OAuthConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client ID is required' })
@@ -37,6 +41,16 @@ export class OAuthConfigDto {
     { message: 'Callback URL must be a valid URL' },
   )
   callbackUrl?: string;
+}
+
+export class IgdbConfigDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Client ID is required' })
+  clientId!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Client Secret is required' })
+  clientSecret!: string;
 }
 
 export interface OAuthTestResponse {
@@ -185,6 +199,116 @@ export class AdminSettingsController {
     return {
       success: true,
       message: 'Discord OAuth configuration cleared.',
+    };
+  }
+
+  // ============================================================
+  // IGDB Configuration (ROK-229)
+  // ============================================================
+
+  /**
+   * GET /admin/settings/igdb
+   * Returns current IGDB configuration status.
+   */
+  @Get('igdb')
+  async getIgdbStatus(): Promise<IgdbStatusResponse> {
+    const configured = await this.settingsService.isIgdbConfigured();
+    return { configured };
+  }
+
+  /**
+   * PUT /admin/settings/igdb
+   * Update IGDB credentials.
+   */
+  @Put('igdb')
+  @HttpCode(HttpStatus.OK)
+  async updateIgdbConfig(
+    @Body() body: IgdbConfigDto,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.setIgdbConfig({
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+    });
+
+    this.logger.log('IGDB configuration updated via admin UI');
+
+    return {
+      success: true,
+      message: 'IGDB configuration saved. Game discovery is now enabled.',
+    };
+  }
+
+  /**
+   * POST /admin/settings/igdb/test
+   * Test IGDB credentials by fetching a real Twitch OAuth token.
+   */
+  @Post('igdb/test')
+  @HttpCode(HttpStatus.OK)
+  async testIgdbConfig(): Promise<OAuthTestResponse> {
+    const config = await this.settingsService.getIgdbConfig();
+
+    if (!config) {
+      return {
+        success: false,
+        message: 'IGDB is not configured',
+      };
+    }
+
+    try {
+      const response = await fetch('https://id.twitch.tv/oauth2/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          client_id: config.clientId,
+          client_secret: config.clientSecret,
+          grant_type: 'client_credentials',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.warn(`IGDB test failed: ${response.status} ${errorText}`);
+        return {
+          success: false,
+          message: 'Invalid Client ID or Client Secret',
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Credentials verified! IGDB / Twitch API is ready.',
+      };
+    } catch (error) {
+      this.logger.error('Failed to test IGDB credentials:', error);
+      return {
+        success: false,
+        message: 'Failed to connect to Twitch API. Please check your network.',
+      };
+    }
+  }
+
+  /**
+   * POST /admin/settings/igdb/clear
+   * Remove IGDB configuration.
+   */
+  @Post('igdb/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearIgdbConfig(): Promise<{ success: boolean; message: string }> {
+    await Promise.all([
+      this.settingsService.delete(SETTING_KEYS.IGDB_CLIENT_ID),
+      this.settingsService.delete(SETTING_KEYS.IGDB_CLIENT_SECRET),
+    ]);
+
+    // Emit event to clear cached token in IgdbService
+    this.settingsService['eventEmitter'].emit('settings.igdb.updated', null);
+
+    this.logger.log('IGDB configuration cleared via admin UI');
+
+    return {
+      success: true,
+      message: 'IGDB configuration cleared.',
     };
   }
 }

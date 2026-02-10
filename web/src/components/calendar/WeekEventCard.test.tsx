@@ -136,11 +136,11 @@ describe('WeekEventCard', () => {
 
     describe('avatar rendering', () => {
         const mockSignups = [
-            { id: 1, username: 'Player1', avatar: null },
-            { id: 2, username: 'Player2', avatar: null },
-            { id: 3, username: 'Player3', avatar: null },
-            { id: 4, username: 'Player4', avatar: null },
-            { id: 5, username: 'Player5', avatar: null },
+            { id: 1, username: 'Player1', avatar: null, discordId: '1' },
+            { id: 2, username: 'Player2', avatar: null, discordId: '2' },
+            { id: 3, username: 'Player3', avatar: null, discordId: '3' },
+            { id: 4, username: 'Player4', avatar: null, discordId: '4' },
+            { id: 5, username: 'Player5', avatar: null, discordId: '5' },
         ];
 
         it('hides avatars on minimal tier even with signupsPreview', () => {
