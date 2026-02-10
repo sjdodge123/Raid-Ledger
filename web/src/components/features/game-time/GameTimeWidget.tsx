@@ -195,10 +195,10 @@ export function GameTimeWidget({
                         <svg className="w-4 h-4 text-amber-400 shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Outside game time</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Outside game time</span>
                     </>
                 )}
-                <svg className="w-3 h-3 text-slate-500 ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="w-3 h-3 text-dim ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
@@ -212,7 +212,7 @@ export function GameTimeWidget({
                     maxWidth="max-w-3xl"
                 >
                     <div className="flex items-center justify-between mb-3">
-                        <p className="text-slate-400 text-xs">
+                        <p className="text-muted text-xs">
                             Read-only view — your weekly availability with this event highlighted
                         </p>
                         <Link
@@ -240,7 +240,7 @@ export function GameTimeWidget({
 
                     {/* Event detail card — inline summary of the previewed event */}
                     {eventTitle && (
-                        <div className="mt-3 p-3 rounded-lg border border-amber-500/20 bg-slate-800/60 flex items-start gap-3">
+                        <div className="mt-3 p-3 rounded-lg border border-amber-500/20 bg-panel/60 flex items-start gap-3">
                             {coverUrl && (
                                 <div
                                     className="w-10 h-10 rounded-md bg-cover bg-center shrink-0"
@@ -248,14 +248,14 @@ export function GameTimeWidget({
                                 />
                             )}
                             <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-semibold text-white truncate">{eventTitle}</h4>
-                                <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400">
+                                <h4 className="text-sm font-semibold text-foreground truncate">{eventTitle}</h4>
+                                <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
                                     {gameName && <span>{gameName}</span>}
-                                    {gameName && eventTimeLabel && <span className="text-slate-600">·</span>}
+                                    {gameName && eventTimeLabel && <span className="text-faint">·</span>}
                                     {eventTimeLabel && <span>{eventTimeLabel}</span>}
                                 </div>
                                 {creatorUsername && (
-                                    <p className="text-[11px] text-slate-500 mt-0.5">by {creatorUsername}</p>
+                                    <p className="text-[11px] text-dim mt-0.5">by {creatorUsername}</p>
                                 )}
                             </div>
                             {attendees && attendees.length > 0 && (

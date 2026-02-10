@@ -235,8 +235,8 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
             <div>
                 {/* Section header */}
                 <div className="px-4 pt-4 pb-0">
-                    <h2 className="text-lg font-semibold text-white">Integration Modules</h2>
-                    <p className="text-slate-400 text-xs mt-1">
+                    <h2 className="text-lg font-semibold text-foreground">Integration Modules</h2>
+                    <p className="text-muted text-xs mt-1">
                         Link platforms to sync auth, gaming data, and notifications
                     </p>
                 </div>
@@ -270,7 +270,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                             </button>
                         </div>
                         <div className="mt-2 text-center">
-                            <span className="text-base font-bold text-white">{user.username}</span>
+                            <span className="text-base font-bold text-foreground">{user.username}</span>
                             {user.isAdmin && (
                                 <span className="ml-2 inline-block px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
                                     Admin
@@ -280,15 +280,15 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                         {avatarOptions.length > 1 && (
                             <div className="flex items-center gap-3 mt-2">
                                 <button
-                                    className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-sm flex items-center justify-center"
+                                    className="w-7 h-7 rounded-full bg-panel border border-edge text-muted text-sm flex items-center justify-center"
                                     onClick={() => cycleAvatar(-1)}
                                     aria-label="Previous avatar"
                                 >
                                     ‹
                                 </button>
-                                <span className="text-xs text-slate-500">Change Avatar</span>
+                                <span className="text-xs text-dim">Change Avatar</span>
                                 <button
-                                    className="w-7 h-7 rounded-full bg-slate-800 border border-slate-700 text-slate-400 text-sm flex items-center justify-center"
+                                    className="w-7 h-7 rounded-full bg-panel border border-edge text-muted text-sm flex items-center justify-center"
                                     onClick={() => cycleAvatar(1)}
                                     aria-label="Next avatar"
                                 >

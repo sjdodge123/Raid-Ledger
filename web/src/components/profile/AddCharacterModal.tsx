@@ -156,18 +156,18 @@ export function AddCharacterModal({
             <form onSubmit={handleSubmit} className="space-y-4">
                 {/* Game Selector (AC-6) — Disabled when editing */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                    <label className="block text-sm font-medium text-secondary mb-1">
                         Game <span className="text-red-400">*</span>
                     </label>
                     {isEditing ? (
-                        <div className="px-3 py-2 bg-slate-800/50 border border-slate-700/50 rounded-lg text-slate-400 text-sm">
+                        <div className="px-3 py-2 bg-panel/50 border border-edge/50 rounded-lg text-muted text-sm">
                             {effectiveGameName}
                         </div>
                     ) : (
                         <select
                             value={selectedGameId}
                             onChange={(e) => setSelectedGameId(e.target.value)}
-                            className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
                         >
                             {!selectedGameId && (
                                 <option value="">Select a game...</option>
@@ -183,7 +183,7 @@ export function AddCharacterModal({
 
                 {/* Character Name */}
                 <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-1">
+                    <label className="block text-sm font-medium text-secondary mb-1">
                         Name <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -192,7 +192,7 @@ export function AddCharacterModal({
                         onChange={(e) => updateField('name', e.target.value)}
                         placeholder="Character name"
                         maxLength={100}
-                        className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
                     />
                 </div>
 
@@ -202,7 +202,7 @@ export function AddCharacterModal({
                         {/* Class & Spec */}
                         <div className="grid grid-cols-2 gap-3">
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                <label className="block text-sm font-medium text-secondary mb-1">
                                     Class
                                 </label>
                                 <input
@@ -211,11 +211,11 @@ export function AddCharacterModal({
                                     onChange={(e) => updateField('class', e.target.value)}
                                     placeholder="e.g. Warrior"
                                     maxLength={50}
-                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-slate-300 mb-1">
+                                <label className="block text-sm font-medium text-secondary mb-1">
                                     Spec
                                 </label>
                                 <input
@@ -224,20 +224,20 @@ export function AddCharacterModal({
                                     onChange={(e) => updateField('spec', e.target.value)}
                                     placeholder="e.g. Arms"
                                     maxLength={50}
-                                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
                             </div>
                         </div>
 
                         {/* Role */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                            <label className="block text-sm font-medium text-secondary mb-1">
                                 Role
                             </label>
                             <select
                                 value={form.role}
                                 onChange={(e) => updateField('role', e.target.value as CharacterRole | '')}
-                                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             >
                                 <option value="">Select role...</option>
                                 <option value="tank">Tank</option>
@@ -248,7 +248,7 @@ export function AddCharacterModal({
 
                         {/* Realm (optional) */}
                         <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-1">
+                            <label className="block text-sm font-medium text-secondary mb-1">
                                 Realm/Server
                             </label>
                             <input
@@ -257,7 +257,7 @@ export function AddCharacterModal({
                                 onChange={(e) => updateField('realm', e.target.value)}
                                 placeholder="e.g. Illidan"
                                 maxLength={100}
-                                className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
                             />
                         </div>
                     </>
@@ -270,9 +270,9 @@ export function AddCharacterModal({
                             type="checkbox"
                             checked={form.isMain}
                             onChange={(e) => updateField('isMain', e.target.checked)}
-                            className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-emerald-500 focus:ring-emerald-500"
+                            className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500"
                         />
-                        <span className="text-sm text-slate-300">Set as main character</span>
+                        <span className="text-sm text-secondary">Set as main character</span>
                     </label>
                 )}
 
@@ -286,14 +286,14 @@ export function AddCharacterModal({
                     <button
                         type="button"
                         onClick={onClose}
-                        className="px-4 py-2 text-slate-300 hover:text-white transition-colors"
+                        className="px-4 py-2 text-secondary hover:text-foreground transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         type="submit"
                         disabled={isPending}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white font-medium rounded-lg transition-colors"
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors"
                     >
                         {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Character'}
                     </button>

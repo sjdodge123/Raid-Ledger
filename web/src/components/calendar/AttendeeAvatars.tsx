@@ -108,7 +108,7 @@ export function AttendeeAvatars({
                             ring-2
                             flex-shrink-0
                             flex items-center justify-center
-                            font-semibold text-white
+                            font-semibold text-foreground
                             ${!avatarUrl ? getInitialsBg(signup.username) : ''}
                         `}
                             style={{
@@ -138,7 +138,7 @@ export function AttendeeAvatars({
             {/* Overflow badge */}
             {overflowCount > 0 && (
                 <span
-                    className="ml-1 text-xs text-white/80 font-medium whitespace-nowrap"
+                    className="ml-1 text-xs text-foreground/80 font-medium whitespace-nowrap"
                     title={`${overflowCount} more signed up`}
                 >
                     +{overflowCount}

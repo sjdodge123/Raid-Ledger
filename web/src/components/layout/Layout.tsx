@@ -13,7 +13,7 @@ interface LayoutProps {
  */
 export function Layout({ children }: LayoutProps) {
     return (
-        <div className="min-h-screen flex flex-col bg-slate-950">
+        <div className="min-h-screen flex flex-col bg-backdrop">
             <ImpersonationBanner />
             <Header />
             <main className="flex-1">

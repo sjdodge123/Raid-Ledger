@@ -88,7 +88,7 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
 
     if (data.users.length === 0) {
         return (
-            <div className="text-center py-8 text-slate-400">
+            <div className="text-center py-8 text-muted">
                 <p className="text-sm">No signed-up users to display.</p>
             </div>
         );
@@ -137,7 +137,7 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
                                 e.currentTarget.src = '/default-avatar.svg';
                             }}
                         />
-                        <span className="text-xs text-slate-400 truncate max-w-full">
+                        <span className="text-xs text-muted truncate max-w-full">
                             {user.username.slice(0, 6)}
                         </span>
                     </div>
@@ -148,7 +148,7 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
                     <React.Fragment key={`row-${slotIndex}`}>
                         {/* Time label */}
                         <div
-                            className="flex items-center justify-end pr-2 text-xs text-slate-400"
+                            className="flex items-center justify-end pr-2 text-xs text-muted"
                         >
                             {slot.label}
                         </div>

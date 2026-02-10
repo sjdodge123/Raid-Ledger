@@ -71,13 +71,13 @@ export function DiscordDetailsModal({
                         />
                     ) : (
                         <div className="w-14 h-14 rounded-full bg-indigo-600 flex items-center justify-center border-2 border-emerald-500/50">
-                            <span className="text-white text-lg font-bold">
+                            <span className="text-foreground text-lg font-bold">
                                 {username[0]?.toUpperCase()}
                             </span>
                         </div>
                     )}
                     <div>
-                        <p className="text-white font-semibold text-lg">{username}</p>
+                        <p className="text-foreground font-semibold text-lg">{username}</p>
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
                             Linked
@@ -100,7 +100,7 @@ export function DiscordDetailsModal({
                         disabled={unlinking}
                         className={`w-full py-2.5 rounded-lg font-medium text-sm transition-colors ${
                             confirmStep === 'confirming'
-                                ? 'bg-red-600 hover:bg-red-500 text-white'
+                                ? 'bg-red-600 hover:bg-red-500 text-foreground'
                                 : 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30'
                         } disabled:opacity-50 disabled:cursor-not-allowed`}
                     >
@@ -113,7 +113,7 @@ export function DiscordDetailsModal({
                     {confirmStep === 'confirming' && (
                         <button
                             onClick={() => setConfirmStep('idle')}
-                            className="w-full mt-2 py-2 text-sm text-slate-400 hover:text-slate-300 transition-colors"
+                            className="w-full mt-2 py-2 text-sm text-muted hover:text-secondary transition-colors"
                         >
                             Cancel
                         </button>

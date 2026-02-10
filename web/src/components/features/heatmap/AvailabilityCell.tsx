@@ -12,9 +12,9 @@ interface AvailabilityCellProps {
 const statusColors: Record<AvailabilityStatus | 'none', string> = {
     available: 'bg-emerald-500/80 hover:bg-emerald-400',
     committed: 'bg-blue-500/80 hover:bg-blue-400',
-    blocked: 'bg-slate-500/80 hover:bg-slate-400',
+    blocked: 'bg-dim/80 hover:bg-muted',
     freed: 'bg-emerald-500/50 border-2 border-dashed border-emerald-400',
-    none: 'bg-slate-800/50',
+    none: 'bg-panel/50',
 };
 
 const statusIcons: Record<AvailabilityStatus | 'none', string | null> = {

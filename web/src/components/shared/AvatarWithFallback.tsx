@@ -25,7 +25,7 @@ export function AvatarWithFallback({
     if (showInitials) {
         return (
             <div
-                className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-slate-700 flex items-center justify-center text-xs font-semibold text-slate-400`}
+                className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted`}
             >
                 {username.charAt(0).toUpperCase()}
             </div>
@@ -33,7 +33,7 @@ export function AvatarWithFallback({
     }
 
     return (
-        <div className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-slate-700`}>
+        <div className={`${sizeClassName} flex-shrink-0 overflow-hidden rounded-full bg-overlay`}>
             <img
                 src={avatarUrl}
                 alt={username}

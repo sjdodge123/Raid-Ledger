@@ -91,22 +91,22 @@ export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopo
         <>
             <div
                 ref={popoverRef}
-                className="fixed z-50 w-60 bg-slate-800 border border-slate-600 rounded-lg shadow-xl"
+                className="fixed z-50 w-60 bg-panel border border-edge-strong rounded-lg shadow-xl"
                 style={{ top: position.top, left: position.left }}
                 data-testid="event-block-popover"
             >
                 <div className="p-3 space-y-2">
                     {/* Title + game */}
                     <div>
-                        <h3 className="text-sm font-semibold text-white truncate">{event.title}</h3>
+                        <h3 className="text-sm font-semibold text-foreground truncate">{event.title}</h3>
                         {event.gameName && (
-                            <p className="text-xs text-slate-400 truncate">{event.gameName}</p>
+                            <p className="text-xs text-muted truncate">{event.gameName}</p>
                         )}
                     </div>
 
                     {/* Time + status */}
                     <div className="flex items-center justify-between">
-                        <span className="text-xs text-slate-300">
+                        <span className="text-xs text-secondary">
                             {formatHourRange(event.startHour, event.endHour)}
                         </span>
                         <StatusBadge status={event.confirmationStatus} />
@@ -119,7 +119,7 @@ export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopo
                                 navigate(`/events/${event.eventId}`);
                                 onClose();
                             }}
-                            className="flex-1 px-2 py-1.5 text-xs font-medium text-white bg-slate-700 hover:bg-slate-600 rounded transition-colors"
+                            className="flex-1 px-2 py-1.5 text-xs font-medium text-foreground bg-overlay hover:bg-faint rounded transition-colors"
                         >
                             View Event
                         </button>

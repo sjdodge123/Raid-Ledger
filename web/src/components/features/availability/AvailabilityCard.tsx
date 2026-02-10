@@ -78,13 +78,13 @@ export function AvailabilityCard({ availability, onEdit, onDelete }: Availabilit
                     </span>
 
                     {/* Time Range */}
-                    <p className="text-white font-medium text-sm">
+                    <p className="text-foreground font-medium text-sm">
                         {formatTimeRange(availability.timeRange.start, availability.timeRange.end)}
                     </p>
 
                     {/* Game indicator (if game-specific) */}
                     {availability.gameId && (
-                        <p className="text-slate-400 text-xs mt-1">
+                        <p className="text-muted text-xs mt-1">
                             Game-specific availability
                         </p>
                     )}
@@ -95,7 +95,7 @@ export function AvailabilityCard({ availability, onEdit, onDelete }: Availabilit
                     {onEdit && (
                         <button
                             onClick={() => onEdit(availability)}
-                            className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                            className="p-1.5 text-muted hover:text-foreground hover:bg-overlay rounded transition-colors"
                             title="Edit"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -106,7 +106,7 @@ export function AvailabilityCard({ availability, onEdit, onDelete }: Availabilit
                     {onDelete && (
                         <button
                             onClick={() => onDelete(availability.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                            className="p-1.5 text-muted hover:text-red-400 hover:bg-overlay rounded transition-colors"
                             title="Delete"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

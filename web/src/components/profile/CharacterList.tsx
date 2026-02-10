@@ -14,8 +14,8 @@ export function CharacterList({ characters, onEdit }: CharacterListProps) {
         return (
             <div className="text-center py-12">
                 <div className="text-4xl mb-4">🎮</div>
-                <p className="text-slate-400 text-lg">No characters yet</p>
-                <p className="text-slate-500 text-sm mt-1">
+                <p className="text-muted text-lg">No characters yet</p>
+                <p className="text-dim text-sm mt-1">
                     Add your first character to get started
                 </p>
             </div>
@@ -45,7 +45,7 @@ export function CharacterList({ characters, onEdit }: CharacterListProps) {
         <div className="space-y-6">
             {Object.entries(grouped).map(([gameId, chars]) => (
                 <div key={gameId}>
-                    <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wide mb-3">
+                    <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">
                         {chars.length} Character{chars.length !== 1 ? 's' : ''}
                     </h3>
                     <div className="space-y-2">

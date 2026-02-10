@@ -20,12 +20,12 @@ export function Header() {
 
     return (
         <>
-            <header className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-sm border-b border-slate-800">
+            <header className="sticky top-0 z-40 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     {/* Logo */}
                     <Link
                         to="/"
-                        className="flex items-center gap-2 text-xl font-bold text-white hover:text-emerald-400 transition-colors"
+                        className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors"
                     >
                         <span className="text-2xl">⚔️</span>
                         Raid Ledger
@@ -39,7 +39,7 @@ export function Header() {
                                 to={to}
                                 className={`font-medium transition-colors ${location.pathname === to
                                     ? 'text-emerald-400'
-                                    : 'text-slate-300 hover:text-white'
+                                    : 'text-secondary hover:text-foreground'
                                     }`}
                             >
                                 {label}
@@ -58,7 +58,7 @@ export function Header() {
                             ) : (
                                 <Link
                                     to="/login"
-                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
+                                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors text-sm"
                                 >
                                     Login
                                 </Link>
@@ -68,7 +68,7 @@ export function Header() {
                         {/* Mobile hamburger button */}
                         <button
                             onClick={() => setMobileNavOpen(true)}
-                            className="md:hidden p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"
+                            className="md:hidden p-2 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
                             aria-label="Open menu"
                         >
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -13,7 +13,7 @@ export function CreateEventPage() {
     if (isLoading) {
         return (
             <div className="min-h-[50vh] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
             </div>
         );
     }
@@ -28,14 +28,14 @@ export function CreateEventPage() {
             <div className="max-w-2xl mx-auto">
                 {/* Page Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">Create Event</h1>
-                    <p className="text-slate-400">
+                    <h1 className="text-3xl font-bold text-foreground mb-2">Create Event</h1>
+                    <p className="text-muted">
                         Set up a new gaming session for your community
                     </p>
                 </div>
 
                 {/* Form Card */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div className="bg-surface border border-edge-subtle rounded-xl p-6">
                     <CreateEventForm />
                 </div>
             </div>

@@ -98,7 +98,7 @@ export function UserMenu() {
         return (
             <a
                 href={`${API_BASE_URL}/auth/discord`}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-foreground font-medium rounded-lg transition-colors"
             >
                 <DiscordIcon className="w-5 h-5" />
                 Login with Discord
@@ -115,23 +115,23 @@ export function UserMenu() {
         <div className="relative" ref={menuRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-800 transition-colors"
+                className="flex items-center gap-2 p-1 rounded-lg hover:bg-panel transition-colors"
                 aria-expanded={isOpen}
                 aria-haspopup="true"
             >
                 <img
                     src={avatarUrl}
                     alt={user.username}
-                    className="w-8 h-8 rounded-full bg-slate-700"
+                    className="w-8 h-8 rounded-full bg-overlay"
                     onError={(e) => {
                         e.currentTarget.src = '/default-avatar.svg';
                     }}
                 />
-                <span className="text-white font-medium hidden sm:block">
+                <span className="text-foreground font-medium hidden sm:block">
                     {user.username}
                 </span>
                 <svg
-                    className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+                    className={`w-4 h-4 text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`}
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -141,9 +141,9 @@ export function UserMenu() {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-slate-700 rounded-lg shadow-xl z-50">
-                    <div className="p-3 border-b border-slate-700">
-                        <p className="text-white font-medium">{user.username}</p>
+                <div className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
+                    <div className="p-3 border-b border-edge">
+                        <p className="text-foreground font-medium">{user.username}</p>
                         {isImpersonating && (
                             <p className="text-amber-400 text-xs mt-1">🔄 Impersonating</p>
                         )}
@@ -153,7 +153,7 @@ export function UserMenu() {
                         {isImpersonating && (
                             <button
                                 onClick={handleExitImpersonation}
-                                className="flex items-center gap-2 w-full text-left px-4 py-2 text-amber-400 hover:bg-slate-800 transition-colors font-medium"
+                                className="flex items-center gap-2 w-full text-left px-4 py-2 text-amber-400 hover:bg-panel transition-colors font-medium"
                             >
                                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
@@ -164,7 +164,7 @@ export function UserMenu() {
 
                         <Link
                             to="/profile"
-                            className="block px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                            className="block px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
                             onClick={() => setIsOpen(false)}
                         >
                             Profile
@@ -174,7 +174,7 @@ export function UserMenu() {
                             <>
                                 <Link
                                     to="/admin/settings"
-                                    className="flex items-center gap-2 px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                    className="flex items-center gap-2 px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
                                     onClick={() => setIsOpen(false)}
                                 >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -185,10 +185,10 @@ export function UserMenu() {
                                 </Link>
 
                                 {/* Impersonation dropdown */}
-                                <div className="border-t border-slate-700 mt-1 pt-1">
+                                <div className="border-t border-edge mt-1 pt-1">
                                     <button
                                         onClick={() => setShowImpersonateMenu(!showImpersonateMenu)}
-                                        className="flex items-center justify-between w-full px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                                        className="flex items-center justify-between w-full px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
                                     >
                                         <span className="flex items-center gap-2">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,25 +207,25 @@ export function UserMenu() {
                                     </button>
 
                                     {showImpersonateMenu && (
-                                        <div className="max-h-48 overflow-y-auto bg-slate-800/50">
+                                        <div className="max-h-48 overflow-y-auto bg-panel/50">
                                             {impersonateUsers && impersonateUsers.length > 0 ? (
                                                 impersonateUsers.map((u) => (
                                                     <button
                                                         key={u.id}
                                                         onClick={() => handleImpersonate(u.id)}
-                                                        className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-white transition-colors"
+                                                        className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
                                                     >
                                                         <img
                                                             src={u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : '/default-avatar.svg'}
                                                             alt={u.username}
-                                                            className="w-5 h-5 rounded-full bg-slate-600"
+                                                            className="w-5 h-5 rounded-full bg-faint"
                                                             onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
                                                         />
                                                         {u.username}
                                                     </button>
                                                 ))
                                             ) : (
-                                                <p className="px-6 py-2 text-xs text-slate-500">No users available</p>
+                                                <p className="px-6 py-2 text-xs text-dim">No users available</p>
                                             )}
                                         </div>
                                     )}
@@ -235,7 +235,7 @@ export function UserMenu() {
 
                         <button
                             onClick={handleLogout}
-                            className="block w-full text-left px-4 py-2 text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+                            className="block w-full text-left px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
                         >
                             Logout
                         </button>

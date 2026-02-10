@@ -32,27 +32,27 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
     };
 
     return (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 flex items-center justify-between gap-4">
+        <div className="bg-panel border border-edge rounded-lg p-4 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
                 {/* Avatar or placeholder */}
                 {character.avatarUrl ? (
                     <img
                         src={character.avatarUrl}
                         alt={character.name}
-                        className="w-10 h-10 rounded-full bg-slate-700"
+                        className="w-10 h-10 rounded-full bg-overlay"
                         onError={(e) => {
                             e.currentTarget.style.display = 'none';
                         }}
                     />
                 ) : (
-                    <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400">
+                    <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-muted">
                         👤
                     </div>
                 )}
 
                 <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                        <span className="font-medium text-white truncate">
+                        <span className="font-medium text-foreground truncate">
                             {character.name}
                         </span>
                         {character.isMain && (
@@ -61,12 +61,12 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-400">
+                    <div className="flex items-center gap-2 text-sm text-muted">
                         {character.class && <span>{character.class}</span>}
                         {character.spec && <span>• {character.spec}</span>}
                         {character.role && (
                             <span
-                                className={`px-1.5 py-0.5 rounded text-xs text-white ${roleColors[character.role] || 'bg-slate-600'}`}
+                                className={`px-1.5 py-0.5 rounded text-xs text-foreground ${roleColors[character.role] || 'bg-faint'}`}
                             >
                                 {character.role.toUpperCase()}
                             </span>
@@ -81,7 +81,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                     <button
                         onClick={handleSetMain}
                         disabled={setMainMutation.isPending}
-                        className="px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                        className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
                         title="Set as main"
                     >
                         ⭐ Main
@@ -89,7 +89,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                 )}
                 <button
                     onClick={() => onEdit(character)}
-                    className="px-3 py-1.5 text-sm text-slate-300 hover:text-white hover:bg-slate-700 rounded transition-colors"
+                    className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
                 >
                     Edit
                 </button>

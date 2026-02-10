@@ -74,7 +74,7 @@ export function PowerCoreAvatar({
                     >
                         ‹
                     </button>
-                    <span className="text-xs text-slate-500">Change Avatar</span>
+                    <span className="text-xs text-dim">Change Avatar</span>
                     <button
                         className="power-core__nav-btn"
                         onClick={onCycleNext}

@@ -148,15 +148,15 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
             />
 
             {/* Modal */}
-            <div className="relative bg-slate-900 border border-slate-700 rounded-xl w-full max-w-md shadow-2xl">
+            <div className="relative bg-surface border border-edge rounded-xl w-full max-w-md shadow-2xl">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                    <h2 className="text-lg font-semibold text-white">
+                <div className="flex items-center justify-between p-4 border-b border-edge">
+                    <h2 className="text-lg font-semibold text-foreground">
                         {isEditing ? 'Edit Availability' : 'Add Availability'}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="text-slate-400 hover:text-white transition-colors"
+                        className="text-muted hover:text-foreground transition-colors"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -174,7 +174,7 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
 
                     {/* Start Time */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                        <label className="block text-sm font-medium text-secondary mb-1">
                             Start Time
                         </label>
                         <input
@@ -182,13 +182,13 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
                             value={startTime}
                             onChange={(e) => setStartTime(e.target.value)}
                             required
-                            className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            className="w-full px-3 py-2 bg-panel border border-edge-strong rounded-lg text-foreground focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         />
                     </div>
 
                     {/* End Time */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1">
+                        <label className="block text-sm font-medium text-secondary mb-1">
                             End Time
                         </label>
                         <input
@@ -196,13 +196,13 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
                             value={endTime}
                             onChange={(e) => setEndTime(e.target.value)}
                             required
-                            className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                            className="w-full px-3 py-2 bg-panel border border-edge-strong rounded-lg text-foreground focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
                         />
                     </div>
 
                     {/* Status */}
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-2">
+                        <label className="block text-sm font-medium text-secondary mb-2">
                             Status
                         </label>
                         <div className="grid grid-cols-2 gap-2">
@@ -212,12 +212,12 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
                                     type="button"
                                     onClick={() => setStatus(option.value)}
                                     className={`p-3 rounded-lg border text-left transition-all ${status === option.value
-                                        ? 'bg-emerald-500/20 border-emerald-500 text-white'
-                                        : 'bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500'
+                                        ? 'bg-emerald-500/20 border-emerald-500 text-foreground'
+                                        : 'bg-panel border-edge-strong text-secondary hover:border-dim'
                                         }`}
                                 >
                                     <div className="font-medium text-sm">{option.label}</div>
-                                    <div className="text-xs text-slate-400 mt-0.5">{option.description}</div>
+                                    <div className="text-xs text-muted mt-0.5">{option.description}</div>
                                 </button>
                             ))}
                         </div>
@@ -228,14 +228,14 @@ export function AvailabilityForm({ isOpen, onClose, editingAvailability }: Avail
                         <button
                             type="button"
                             onClick={onClose}
-                            className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-lg transition-colors"
+                            className="flex-1 px-4 py-2 bg-overlay hover:bg-faint text-foreground font-medium rounded-lg transition-colors"
                         >
                             Cancel
                         </button>
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                            className="flex-1 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
                         >
                             {isLoading ? 'Saving...' : isEditing ? 'Update' : 'Add'}
                         </button>

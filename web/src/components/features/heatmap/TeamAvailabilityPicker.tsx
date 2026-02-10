@@ -103,13 +103,13 @@ export function TeamAvailabilityPicker({
         : 'No availability set. Add your availability in your profile.';
 
     return (
-        <div className="bg-slate-800/50 rounded-lg border border-slate-700 overflow-hidden">
+        <div className="bg-panel/50 rounded-lg border border-edge overflow-hidden">
             <button
                 type="button"
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-overlay/50 transition-colors"
             >
-                <span className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                <span className="text-sm font-medium text-secondary flex items-center gap-2">
                     <span>📅</span>
                     {title}
                     {availabilityData && availabilityData.users.length > 0 && (
@@ -121,7 +121,7 @@ export function TeamAvailabilityPicker({
                         </span>
                     )}
                 </span>
-                <span className="text-slate-400 text-sm">
+                <span className="text-muted text-sm">
                     {isExpanded ? '▼' : '▶'}
                 </span>
             </button>
@@ -130,15 +130,15 @@ export function TeamAvailabilityPicker({
                 <div className="px-4 pb-4">
                     {isLoading ? (
                         <div className="space-y-2 py-4">
-                            <div className="h-6 bg-slate-700 rounded animate-pulse" />
-                            <div className="h-24 bg-slate-700 rounded animate-pulse" />
+                            <div className="h-6 bg-overlay rounded animate-pulse" />
+                            <div className="h-24 bg-overlay rounded animate-pulse" />
                         </div>
                     ) : displayData && displayData.users.length > 0 ? (
                         <div className="pt-2">
                             <HeatmapGrid data={displayData} slotDurationMinutes={60} />
                         </div>
                     ) : (
-                        <div className="text-center py-6 text-slate-400 text-sm">
+                        <div className="text-center py-6 text-muted text-sm">
                             {emptyMessage}
                         </div>
                     )}

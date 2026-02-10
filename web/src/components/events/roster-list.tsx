@@ -89,7 +89,7 @@ export function RosterList({ signups, isLoading }: RosterListProps) {
 
     if (signups.length === 0) {
         return (
-            <div className="text-center py-8 text-slate-500">
+            <div className="text-center py-8 text-dim">
                 No signups yet. Be the first to join!
             </div>
         );
@@ -127,7 +127,7 @@ function RosterItem({ signup }: RosterItemProps) {
 
     return (
         <div
-            className={`flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg hover:bg-slate-800 transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'
+            className={`flex items-center gap-3 p-3 bg-panel/50 rounded-lg hover:bg-panel transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'
                 }`}
         >
             {/* Avatar */}
@@ -135,7 +135,7 @@ function RosterItem({ signup }: RosterItemProps) {
                 <img
                     src={getAvatarUrl(user.discordId, user.avatar)}
                     alt={user.username}
-                    className="w-10 h-10 rounded-full bg-slate-700"
+                    className="w-10 h-10 rounded-full bg-overlay"
                     onError={(e) => handleAvatarError(e, user.discordId)}
                 />
                 {/* Pending confirmation badge (AC-7) */}
@@ -155,7 +155,7 @@ function RosterItem({ signup }: RosterItemProps) {
                 {isConfirmed && character ? (
                     <>
                         <div className="flex items-center gap-2">
-                            <p className="font-medium text-white truncate">
+                            <p className="font-medium text-foreground truncate">
                                 {character.name}
                             </p>
                             {character.isMain && (
@@ -169,18 +169,18 @@ function RosterItem({ signup }: RosterItemProps) {
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-slate-500">
+                        <div className="flex items-center gap-2 text-sm text-dim">
                             <span className="truncate">{user.username}</span>
                             {character.class && (
                                 <>
                                     <span>·</span>
-                                    <span className="text-slate-400">{character.class}</span>
+                                    <span className="text-muted">{character.class}</span>
                                 </>
                             )}
                             {character.spec && (
                                 <>
-                                    <span className="text-slate-600">/</span>
-                                    <span className="text-slate-400">{character.spec}</span>
+                                    <span className="text-faint">/</span>
+                                    <span className="text-muted">{character.spec}</span>
                                 </>
                             )}
                             {character.itemLevel && (
@@ -193,10 +193,10 @@ function RosterItem({ signup }: RosterItemProps) {
                     </>
                 ) : (
                     <>
-                        <p className="font-medium text-white truncate">
+                        <p className="font-medium text-foreground truncate">
                             {user.username}
                         </p>
-                        <p className="text-sm text-slate-500">
+                        <p className="text-sm text-dim">
                             Signed up {formatSignupTime(signup.signedUpAt)}
                             {isPending && (
                                 <span className="text-amber-500/80 ml-2">
@@ -226,11 +226,11 @@ function RosterItem({ signup }: RosterItemProps) {
  */
 function RosterItemSkeleton() {
     return (
-        <div className="flex items-center gap-3 p-3 bg-slate-800/50 rounded-lg animate-pulse">
-            <div className="w-10 h-10 rounded-full bg-slate-700" />
+        <div className="flex items-center gap-3 p-3 bg-panel/50 rounded-lg animate-pulse">
+            <div className="w-10 h-10 rounded-full bg-overlay" />
             <div className="flex-1 space-y-2">
-                <div className="h-4 bg-slate-700 rounded w-1/3" />
-                <div className="h-3 bg-slate-700 rounded w-1/4" />
+                <div className="h-4 bg-overlay rounded w-1/3" />
+                <div className="h-3 bg-overlay rounded w-1/4" />
             </div>
         </div>
     );

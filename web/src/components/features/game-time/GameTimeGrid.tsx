@@ -68,13 +68,13 @@ function getCellClasses(status?: string, hasEventOverlay?: boolean): string {
         case 'available':
             return 'bg-emerald-500/70';
         case 'committed':
-            return hasEventOverlay ? 'bg-slate-700/30' : 'bg-blue-500/70';
+            return hasEventOverlay ? 'bg-overlay/30' : 'bg-blue-500/70';
         case 'blocked':
             return 'bg-red-500/50';
         case 'freed':
             return 'bg-emerald-500/40 border border-dashed border-emerald-400';
         default:
-            return 'bg-slate-800/50';
+            return 'bg-panel/50';
     }
 }
 
@@ -100,7 +100,7 @@ function getMergeColor(group: string): string {
 /** Duration badge (dark pill with hour count) */
 function DurationBadge({ hours }: { hours: number }) {
     return (
-        <span className="inline-flex items-center px-1 py-px rounded text-[8px] font-bold text-white/90 bg-black/40 leading-none">
+        <span className="inline-flex items-center px-1 py-px rounded text-[8px] font-bold text-foreground/90 bg-black/40 leading-none">
             {hours}h
         </span>
     );
@@ -134,22 +134,22 @@ function RichEventBlock({
             <div className="px-1.5 py-1 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
                 <div className="flex items-center gap-1">
                     <DurationBadge hours={spanHours} />
-                    <span className="text-[10px] font-semibold leading-tight truncate text-white">
+                    <span className="text-[10px] font-semibold leading-tight truncate text-foreground">
                         {event.title}
                     </span>
                 </div>
                 {event.gameName && (
-                    <span className="text-[9px] text-white/60 leading-tight truncate">
+                    <span className="text-[9px] text-foreground/60 leading-tight truncate">
                         {event.gameName}
                     </span>
                 )}
                 {event.creatorUsername && spanHours >= 4 && (
-                    <span className="text-[8px] text-white/40 leading-tight truncate">
+                    <span className="text-[8px] text-foreground/40 leading-tight truncate">
                         by {event.creatorUsername}
                     </span>
                 )}
                 {event.description && spanHours >= 5 && (
-                    <span className="text-[8px] text-white/40 leading-tight line-clamp-2">
+                    <span className="text-[8px] text-foreground/40 leading-tight line-clamp-2">
                         {event.description}
                     </span>
                 )}
@@ -175,12 +175,12 @@ function RichEventBlock({
             <div className="px-1 py-0.5 h-full flex flex-col gap-0.5 min-w-0 overflow-hidden">
                 <div className="flex items-center gap-1">
                     <DurationBadge hours={spanHours} />
-                    <span className="text-[10px] font-semibold leading-tight truncate text-white">
+                    <span className="text-[10px] font-semibold leading-tight truncate text-foreground">
                         {event.title}
                     </span>
                 </div>
                 {event.gameName && (
-                    <span className="text-[9px] text-white/60 leading-tight truncate">
+                    <span className="text-[9px] text-foreground/60 leading-tight truncate">
                         {event.gameName}
                     </span>
                 )}
@@ -191,7 +191,7 @@ function RichEventBlock({
     // 1 hour: title only
     return (
         <div className="px-1 py-0.5 h-full flex items-center min-w-0 overflow-hidden">
-            <span className="text-[10px] font-medium leading-tight truncate text-white">
+            <span className="text-[10px] font-medium leading-tight truncate text-foreground">
                 {event.title}
             </span>
         </div>
@@ -469,7 +469,7 @@ export function GameTimeGrid({
         <div className={`relative overflow-hidden ${className ?? ''}`}>
             {/* Tooltip */}
             {hoveredCell && (
-                <div className="absolute z-30 px-2 py-1 bg-slate-700 text-white text-xs rounded whitespace-nowrap pointer-events-none" style={{ top: 0, right: 0 }}>
+                <div className="absolute z-30 px-2 py-1 bg-overlay text-foreground text-xs rounded whitespace-nowrap pointer-events-none" style={{ top: 0, right: 0 }}>
                     {(() => {
                         const [d, h] = hoveredCell.split(':').map(Number);
                         const past = isPastCell(d, h);
@@ -495,9 +495,9 @@ export function GameTimeGrid({
                 data-testid="game-time-grid"
             >
                 {/* Header row: timezone label corner + day labels */}
-                <div className="sticky top-0 z-10 bg-slate-900 flex items-center justify-center">
+                <div className="sticky top-0 z-10 bg-surface flex items-center justify-center">
                     {tzLabel && (
-                        <span className="text-[10px] text-slate-500 font-medium">{tzLabel}</span>
+                        <span className="text-[10px] text-dim font-medium">{tzLabel}</span>
                     )}
                 </div>
                 {DAYS.map((day, i) => {
@@ -511,12 +511,12 @@ export function GameTimeGrid({
                             key={day}
                             className={`sticky top-0 z-10 text-center text-xs font-medium py-1 ${
                                 isTodaySplit
-                                    ? 'text-slate-300'
+                                    ? 'text-secondary'
                                     : isToday
                                       ? 'bg-emerald-500/15 text-emerald-300'
                                       : isRollingPast
-                                        ? 'bg-slate-800/80 text-slate-500'
-                                        : 'bg-slate-900 text-slate-400'
+                                        ? 'bg-panel/80 text-dim'
+                                        : 'bg-surface text-muted'
                             }`}
                             style={isTodaySplit ? {
                                 background: 'linear-gradient(to right, rgba(30, 41, 59, 0.8) 50%, rgba(16, 185, 129, 0.15) 50%)',
@@ -532,8 +532,8 @@ export function GameTimeGrid({
                                 <span className="flex flex-col items-center leading-none gap-0.5">
                                     <span>{day}</span>
                                     <span className="text-[9px] leading-none flex items-center gap-0.5">
-                                        <span className="text-slate-500">{nextDateLabel}</span>
-                                        <span className="text-slate-600">/</span>
+                                        <span className="text-dim">{nextDateLabel}</span>
+                                        <span className="text-faint">/</span>
                                         <span className="text-emerald-400/80">{dateLabel}</span>
                                     </span>
                                 </span>
@@ -554,7 +554,7 @@ export function GameTimeGrid({
                     <Fragment key={`row-${hour}`}>
                         {/* Hour label */}
                         <div
-                            className="text-right text-xs text-slate-500 pr-2 py-0.5 flex items-center justify-end"
+                            className="text-right text-xs text-dim pr-2 py-0.5 flex items-center justify-end"
                         >
                             {formatHour(hour)}
                         </div>

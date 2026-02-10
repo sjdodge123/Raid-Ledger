@@ -20,7 +20,7 @@ export function AvailabilityList({
     if (isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
             </div>
         );
     }
@@ -29,7 +29,7 @@ export function AvailabilityList({
         return (
             <div className="text-center py-12">
                 <svg
-                    className="w-12 h-12 mx-auto text-slate-600 mb-4"
+                    className="w-12 h-12 mx-auto text-faint mb-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -41,8 +41,8 @@ export function AvailabilityList({
                         d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                     />
                 </svg>
-                <p className="text-slate-400 mb-2">No availability windows set</p>
-                <p className="text-slate-500 text-sm">
+                <p className="text-muted mb-2">No availability windows set</p>
+                <p className="text-dim text-sm">
                     Add your availability to help raid leaders schedule events
                 </p>
             </div>

@@ -141,7 +141,7 @@ export function NotificationItem({
     return (
         <button
             onClick={handleClick}
-            className={`w-full px-4 py-3 text-left hover:bg-slate-800/50 transition-colors ${isUnread ? 'bg-slate-800/30' : ''
+            className={`w-full px-4 py-3 text-left hover:bg-panel/50 transition-colors ${isUnread ? 'bg-panel/30' : ''
                 }`}
         >
             <div className="flex items-start gap-3">
@@ -149,7 +149,7 @@ export function NotificationItem({
                 <div
                     className={`flex-shrink-0 p-2 rounded-full ${isUnread
                             ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-slate-700/50 text-slate-400'
+                            : 'bg-overlay/50 text-muted'
                         }`}
                 >
                     {getIcon()}
@@ -158,15 +158,15 @@ export function NotificationItem({
                 {/* Content */}
                 <div className="flex-1 min-w-0">
                     <p
-                        className={`text-sm font-medium ${isUnread ? 'text-white' : 'text-slate-300'
+                        className={`text-sm font-medium ${isUnread ? 'text-foreground' : 'text-secondary'
                             }`}
                     >
                         {notification.title}
                     </p>
-                    <p className="text-sm text-slate-400 mt-0.5 line-clamp-2">
+                    <p className="text-sm text-muted mt-0.5 line-clamp-2">
                         {notification.message}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">{getTimeAgo()}</p>
+                    <p className="text-xs text-dim mt-1">{getTimeAgo()}</p>
                 </div>
 
                 {/* Unread indicator */}

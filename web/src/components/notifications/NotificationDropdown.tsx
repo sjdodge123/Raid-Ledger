@@ -17,10 +17,10 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
     };
 
     return (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-slate-900 border border-slate-700 rounded-lg shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-96 bg-surface border border-edge rounded-lg shadow-2xl overflow-hidden z-50">
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700">
-                <h3 className="text-lg font-semibold text-white">Notifications</h3>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
+                <h3 className="text-lg font-semibold text-foreground">Notifications</h3>
                 {notifications.length > 0 && (
                     <button
                         onClick={handleMarkAllRead}
@@ -40,7 +40,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
                 ) : notifications.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
                         <svg
-                            className="w-16 h-16 text-slate-600 mb-3"
+                            className="w-16 h-16 text-faint mb-3"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -52,13 +52,13 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
                                 d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
                             />
                         </svg>
-                        <p className="text-slate-400 font-medium">No notifications</p>
-                        <p className="text-sm text-slate-500 mt-1">
+                        <p className="text-muted font-medium">No notifications</p>
+                        <p className="text-sm text-dim mt-1">
                             You're all caught up!
                         </p>
                     </div>
                 ) : (
-                    <div className="divide-y divide-slate-800">
+                    <div className="divide-y divide-edge-subtle">
                         {notifications.map((notification) => (
                             <NotificationItem
                                 key={notification.id}

@@ -71,13 +71,13 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
             />
 
             {/* Drawer */}
-            <div className="absolute top-0 right-0 w-72 h-full bg-slate-900 border-l border-slate-800 shadow-2xl">
+            <div className="absolute top-0 right-0 w-72 h-full bg-surface border-l border-edge-subtle shadow-2xl">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-800">
-                    <span className="text-lg font-semibold text-white">Menu</span>
+                <div className="flex items-center justify-between p-4 border-b border-edge-subtle">
+                    <span className="text-lg font-semibold text-foreground">Menu</span>
                     <button
                         onClick={onClose}
-                        className="p-2 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"
+                        className="p-2 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
                         aria-label="Close menu"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -88,17 +88,17 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
                 {/* User info */}
                 {isAuthenticated && user && (
-                    <div className="p-4 border-b border-slate-800">
+                    <div className="p-4 border-b border-edge-subtle">
                         <div className="flex items-center gap-3">
                             <img
                                 src={avatarUrl}
                                 alt={user.username}
-                                className="w-10 h-10 rounded-full bg-slate-700"
+                                className="w-10 h-10 rounded-full bg-overlay"
                                 onError={(e) => {
                                     e.currentTarget.src = '/default-avatar.svg';
                                 }}
                             />
-                            <span className="text-white font-medium">{user.username}</span>
+                            <span className="text-foreground font-medium">{user.username}</span>
                         </div>
                     </div>
                 )}
@@ -111,7 +111,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                             to={to}
                             className={`block px-4 py-3 rounded-lg font-medium transition-colors ${location.pathname === to
                                 ? 'bg-emerald-600/20 text-emerald-400'
-                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                : 'text-secondary hover:bg-panel hover:text-foreground'
                                 }`}
                         >
                             {label}
@@ -123,7 +123,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                             to="/profile"
                             className={`block px-4 py-3 rounded-lg font-medium transition-colors ${location.pathname === '/profile'
                                 ? 'bg-emerald-600/20 text-emerald-400'
-                                : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                : 'text-secondary hover:bg-panel hover:text-foreground'
                                 }`}
                         >
                             Profile
@@ -132,18 +132,18 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 </nav>
 
                 {/* Auth action */}
-                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-800">
+                <div className="absolute bottom-0 left-0 right-0 p-4 border-t border-edge-subtle">
                     {isAuthenticated ? (
                         <button
                             onClick={handleLogout}
-                            className="block w-full text-center px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium rounded-lg transition-colors"
+                            className="block w-full text-center px-4 py-3 bg-panel hover:bg-overlay text-secondary font-medium rounded-lg transition-colors"
                         >
                             Logout
                         </button>
                     ) : discordConfigured ? (
                         <a
                             href={`${API_BASE_URL}/auth/discord`}
-                            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-medium rounded-lg transition-colors"
+                            className="flex items-center justify-center gap-2 w-full px-4 py-3 bg-indigo-600 hover:bg-indigo-500 text-foreground font-medium rounded-lg transition-colors"
                         >
                             <DiscordIcon className="w-5 h-5" />
                             Login with Discord

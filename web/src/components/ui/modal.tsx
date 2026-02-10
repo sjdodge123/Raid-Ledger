@@ -49,19 +49,19 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' 
 
             {/* Modal Content */}
             <div
-                className={`relative bg-slate-900 border border-slate-700 rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
+                className={`relative bg-surface border border-edge rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="modal-title"
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                    <h2 id="modal-title" className="text-lg font-semibold text-white">
+                <div className="flex items-center justify-between p-4 border-b border-edge">
+                    <h2 id="modal-title" className="text-lg font-semibold text-foreground">
                         {title}
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-1 text-slate-400 hover:text-white transition-colors rounded-lg hover:bg-slate-800"
+                        className="p-1 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
                         aria-label="Close modal"
                     >
                         <svg

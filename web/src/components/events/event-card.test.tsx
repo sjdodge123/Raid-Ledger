@@ -144,7 +144,7 @@ describe('EventCardSkeleton', () => {
 
     it('renders skeleton badge placeholder', () => {
         const { container } = render(<EventCardSkeleton />);
-        const badgeSkeleton = container.querySelector('.rounded-full.bg-slate-700');
+        const badgeSkeleton = container.querySelector('.rounded-full.bg-overlay');
         expect(badgeSkeleton).toBeInTheDocument();
     });
 });

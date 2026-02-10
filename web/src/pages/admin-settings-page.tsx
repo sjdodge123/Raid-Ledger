@@ -41,9 +41,9 @@ export function AdminSettingsPage() {
         return (
             <div className="max-w-2xl mx-auto px-4 py-8">
                 <div className="animate-pulse">
-                    <div className="h-8 bg-slate-700 rounded w-48 mb-4"></div>
-                    <div className="h-4 bg-slate-700 rounded w-64 mb-8"></div>
-                    <div className="bg-slate-800/50 rounded-xl h-96"></div>
+                    <div className="h-8 bg-overlay rounded w-48 mb-4"></div>
+                    <div className="h-4 bg-overlay rounded w-64 mb-8"></div>
+                    <div className="bg-panel/50 rounded-xl h-96"></div>
                 </div>
             </div>
         );
@@ -55,12 +55,12 @@ export function AdminSettingsPage() {
             <div className="max-w-2xl mx-auto px-4 py-8">
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
                     <h2 className="text-xl font-semibold text-red-400">Access Denied</h2>
-                    <p className="text-slate-400 mt-2">
+                    <p className="text-muted mt-2">
                         You must be an administrator to access this page.
                     </p>
                     <button
                         onClick={() => navigate('/')}
-                        className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-white transition-colors"
+                        className="mt-4 px-4 py-2 bg-overlay hover:bg-faint rounded-lg text-foreground transition-colors"
                     >
                         Go Home
                     </button>
@@ -138,7 +138,7 @@ export function AdminSettingsPage() {
     // Discord icon component
     const DiscordIcon = (
         <div className="w-10 h-10 rounded-lg bg-[#5865F2] flex items-center justify-center">
-            <svg className="w-6 h-6 text-white" viewBox="0 0 24 24" fill="currentColor">
+            <svg className="w-6 h-6 text-foreground" viewBox="0 0 24 24" fill="currentColor">
                 <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
             </svg>
         </div>
@@ -146,8 +146,8 @@ export function AdminSettingsPage() {
 
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
-            <h1 className="text-3xl font-bold text-white mb-2">Admin Settings</h1>
-            <p className="text-slate-400 mb-8">
+            <h1 className="text-3xl font-bold text-foreground mb-2">Admin Settings</h1>
+            <p className="text-muted mb-8">
                 Configure OAuth providers and system settings.
             </p>
 
@@ -176,7 +176,7 @@ export function AdminSettingsPage() {
                 {/* Configuration Form */}
                 <form onSubmit={handleSave} className="space-y-4">
                     <div>
-                        <label htmlFor="clientId" className="block text-sm font-medium text-slate-300 mb-1.5">
+                        <label htmlFor="clientId" className="block text-sm font-medium text-secondary mb-1.5">
                             Client ID
                         </label>
                         <input
@@ -185,12 +185,12 @@ export function AdminSettingsPage() {
                             value={clientId}
                             onChange={(e) => setClientId(e.target.value)}
                             placeholder={oauthStatus.data?.configured ? '••••••••••••••••••••' : 'Discord Application Client ID'}
-                            className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                            className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                         />
                     </div>
 
                     <div>
-                        <label htmlFor="clientSecret" className="block text-sm font-medium text-slate-300 mb-1.5">
+                        <label htmlFor="clientSecret" className="block text-sm font-medium text-secondary mb-1.5">
                             Client Secret
                         </label>
                         <div className="relative">
@@ -200,12 +200,12 @@ export function AdminSettingsPage() {
                                 value={clientSecret}
                                 onChange={(e) => setClientSecret(e.target.value)}
                                 placeholder={oauthStatus.data?.configured ? '••••••••••••••••••••' : 'Discord Application Client Secret'}
-                                className="w-full px-4 py-3 pr-12 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 pr-12 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                             />
                             <button
                                 type="button"
                                 onClick={() => setShowSecret(!showSecret)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors"
                             >
                                 {showSecret ? (
                                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
@@ -222,8 +222,8 @@ export function AdminSettingsPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-slate-300 mb-1.5">
-                            <>Callback URLs <span className="text-slate-500">(add both to Discord)</span></>
+                        <label className="block text-sm font-medium text-secondary mb-1.5">
+                            <>Callback URLs <span className="text-dim">(add both to Discord)</span></>
                         </label>
 
                         {/* Login callback URL (always shown) */}
@@ -242,9 +242,9 @@ export function AdminSettingsPage() {
                                 type="text"
                                 value={callbackUrl}
                                 readOnly
-                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white cursor-pointer select-all focus:outline-none group-hover:border-slate-500 transition-all text-sm"
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground cursor-pointer select-all focus:outline-none group-hover:border-dim transition-all text-sm"
                             />
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-white transition-colors">
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted group-hover:text-foreground transition-colors">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
@@ -267,16 +267,16 @@ export function AdminSettingsPage() {
                                 type="text"
                                 value={linkCallbackUrl}
                                 readOnly
-                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white cursor-pointer select-all focus:outline-none group-hover:border-slate-500 transition-all text-sm"
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground cursor-pointer select-all focus:outline-none group-hover:border-dim transition-all text-sm"
                             />
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 group-hover:text-white transition-colors">
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 text-muted group-hover:text-foreground transition-colors">
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                                 </svg>
                             </div>
                         </div>
 
-                        <p className="text-xs text-slate-500 mt-1.5">
+                        <p className="text-xs text-dim mt-1.5">
                             <>Click to copy. Add <strong>both</strong> URLs to Discord → OAuth2 → Redirects.</>
                         </p>
                     </div>
@@ -296,7 +296,7 @@ export function AdminSettingsPage() {
                         <button
                             type="submit"
                             disabled={updateOAuth.isPending}
-                            className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                            className="flex-1 py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors"
                         >
                             {updateOAuth.isPending ? 'Saving...' : 'Save Configuration'}
                         </button>
@@ -307,7 +307,7 @@ export function AdminSettingsPage() {
                                     type="button"
                                     onClick={handleTest}
                                     disabled={testOAuth.isPending}
-                                    className="py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors"
+                                    className="py-3 px-4 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors"
                                 >
                                     {testOAuth.isPending ? 'Testing...' : 'Test Connection'}
                                 </button>
@@ -329,7 +329,7 @@ export function AdminSettingsPage() {
             {/* Back Link */}
             <button
                 onClick={() => navigate(-1)}
-                className="mt-6 text-slate-400 hover:text-white transition-colors"
+                className="mt-6 text-muted hover:text-foreground transition-colors"
             >
                 ← Back
             </button>

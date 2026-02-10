@@ -28,7 +28,7 @@ export function RosterCard({ item, onRemove }: RosterCardProps) {
 
     return (
         <div
-            className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/50 p-2 transition-all"
+            className="flex items-center gap-3 rounded-lg border border-edge bg-panel/50 p-2 transition-all"
         >
             {/* Avatar - ROK-194: Use character portrait with Discord fallback */}
             <AvatarWithFallback
@@ -39,11 +39,11 @@ export function RosterCard({ item, onRemove }: RosterCardProps) {
             {/* Info */}
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                    <span className="truncate font-medium text-slate-200">{item.username}</span>
+                    <span className="truncate font-medium text-foreground">{item.username}</span>
                     {roleBadge}
                 </div>
                 {item.character && (
-                    <p className="truncate text-xs text-slate-400">
+                    <p className="truncate text-xs text-muted">
                         {item.character.name}
                         {item.character.className && ` • ${item.character.className}`}
                     </p>
@@ -54,7 +54,7 @@ export function RosterCard({ item, onRemove }: RosterCardProps) {
             {onRemove && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                    className="rounded p-1 text-slate-500 hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    className="rounded p-1 text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
                     aria-label={`Remove ${item.username} from slot`}
                     title="Remove from slot"
                 >

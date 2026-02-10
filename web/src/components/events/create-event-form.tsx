@@ -148,7 +148,7 @@ export function CreateEventForm() {
         <form onSubmit={handleSubmit} className="space-y-6">
             {/* Title */}
             <div>
-                <label htmlFor="title" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="title" className="block text-sm font-medium text-secondary mb-2">
                     Event Title <span className="text-red-400">*</span>
                 </label>
                 <input
@@ -158,7 +158,7 @@ export function CreateEventForm() {
                     onChange={(e) => updateField('title', e.target.value)}
                     placeholder="Weekly Raid Night"
                     maxLength={200}
-                    className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.title ? 'border-red-500' : 'border-slate-700'
+                    className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.title ? 'border-red-500' : 'border-edge'
                         }`}
                 />
                 {errors.title && (
@@ -168,7 +168,7 @@ export function CreateEventForm() {
 
             {/* Description */}
             <div>
-                <label htmlFor="description" className="block text-sm font-medium text-slate-300 mb-2">
+                <label htmlFor="description" className="block text-sm font-medium text-secondary mb-2">
                     Description
                 </label>
                 <textarea
@@ -178,7 +178,7 @@ export function CreateEventForm() {
                     placeholder="Add details about this event..."
                     maxLength={2000}
                     rows={4}
-                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors resize-none"
+                    className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors resize-none"
                 />
             </div>
 
@@ -192,7 +192,7 @@ export function CreateEventForm() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Start Date */}
                 <div>
-                    <label htmlFor="startDate" className="block text-sm font-medium text-slate-300 mb-2">
+                    <label htmlFor="startDate" className="block text-sm font-medium text-secondary mb-2">
                         Start Date <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -200,7 +200,7 @@ export function CreateEventForm() {
                         type="date"
                         value={form.startDate}
                         onChange={(e) => updateField('startDate', e.target.value)}
-                        className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startDate ? 'border-red-500' : 'border-slate-700'
+                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startDate ? 'border-red-500' : 'border-edge'
                             }`}
                     />
                     {errors.startDate && (
@@ -210,7 +210,7 @@ export function CreateEventForm() {
 
                 {/* Start Time */}
                 <div>
-                    <label htmlFor="startTime" className="block text-sm font-medium text-slate-300 mb-2">
+                    <label htmlFor="startTime" className="block text-sm font-medium text-secondary mb-2">
                         Start Time <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -218,7 +218,7 @@ export function CreateEventForm() {
                         type="time"
                         value={form.startTime}
                         onChange={(e) => updateField('startTime', e.target.value)}
-                        className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startTime ? 'border-red-500' : 'border-slate-700'
+                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.startTime ? 'border-red-500' : 'border-edge'
                             }`}
                     />
                     {errors.startTime && (
@@ -228,7 +228,7 @@ export function CreateEventForm() {
 
                 {/* End Date */}
                 <div>
-                    <label htmlFor="endDate" className="block text-sm font-medium text-slate-300 mb-2">
+                    <label htmlFor="endDate" className="block text-sm font-medium text-secondary mb-2">
                         End Date <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -236,7 +236,7 @@ export function CreateEventForm() {
                         type="date"
                         value={form.endDate}
                         onChange={(e) => updateField('endDate', e.target.value)}
-                        className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.endDate ? 'border-red-500' : 'border-slate-700'
+                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.endDate ? 'border-red-500' : 'border-edge'
                             }`}
                     />
                     {errors.endDate && (
@@ -246,7 +246,7 @@ export function CreateEventForm() {
 
                 {/* End Time */}
                 <div>
-                    <label htmlFor="endTime" className="block text-sm font-medium text-slate-300 mb-2">
+                    <label htmlFor="endTime" className="block text-sm font-medium text-secondary mb-2">
                         End Time <span className="text-red-400">*</span>
                     </label>
                     <input
@@ -254,7 +254,7 @@ export function CreateEventForm() {
                         type="time"
                         value={form.endTime}
                         onChange={(e) => updateField('endTime', e.target.value)}
-                        className={`w-full px-4 py-3 bg-slate-800 border rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.endTime ? 'border-red-500' : 'border-slate-700'
+                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.endTime ? 'border-red-500' : 'border-edge'
                             }`}
                     />
                     {errors.endTime && (
@@ -265,7 +265,7 @@ export function CreateEventForm() {
 
             {/* Duration Preview */}
             {duration && (
-                <div className="text-sm text-slate-400">
+                <div className="text-sm text-muted">
                     Duration: <span className="text-emerald-400 font-medium">{duration}</span>
                 </div>
             )}
@@ -289,14 +289,14 @@ export function CreateEventForm() {
                 <button
                     type="button"
                     onClick={() => navigate('/events')}
-                    className="px-6 py-3 text-slate-300 hover:text-white font-medium transition-colors"
+                    className="px-6 py-3 text-secondary hover:text-foreground font-medium transition-colors"
                 >
                     Cancel
                 </button>
                 <button
                     type="submit"
                     disabled={mutation.isPending}
-                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white font-semibold rounded-lg transition-colors"
+                    className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-semibold rounded-lg transition-colors"
                 >
                     {mutation.isPending ? 'Creating...' : 'Create Event'}
                 </button>

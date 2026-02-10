@@ -38,7 +38,7 @@ export function ProfilePage() {
     if (authLoading) {
         return (
             <div className="min-h-[50vh] flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
             </div>
         );
     }
@@ -84,8 +84,8 @@ export function ProfilePage() {
             <div className="relative z-10 max-w-3xl mx-auto space-y-8">
                 {/* Page Header */}
                 <div>
-                    <h1 className="text-3xl font-bold text-white mb-2">My Profile</h1>
-                    <p className="text-slate-400">
+                    <h1 className="text-3xl font-bold text-foreground mb-2">My Profile</h1>
+                    <p className="text-muted">
                         Manage your characters, game time, and preferences
                     </p>
                 </div>
@@ -98,7 +98,7 @@ export function ProfilePage() {
                 />
 
                 {/* Game Time Section (ROK-189) — unified panel */}
-                <div id="game-time" className="bg-slate-900 border border-slate-800 rounded-xl p-6 scroll-mt-8">
+                <div id="game-time" className="bg-surface border border-edge-subtle rounded-xl p-6 scroll-mt-8">
                     <GameTimePanel
                         mode="profile"
                         rolling
@@ -107,13 +107,13 @@ export function ProfilePage() {
                 </div>
 
                 {/* Characters Section */}
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+                <div className="bg-surface border border-edge-subtle rounded-xl p-6">
                     <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-xl font-semibold text-white">My Characters</h2>
+                        <h2 className="text-xl font-semibold text-foreground">My Characters</h2>
                         <button
                             onClick={handleAddCharacter}
                             disabled={games.length === 0}
-                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -124,7 +124,7 @@ export function ProfilePage() {
 
                     {charactersLoading ? (
                         <div className="flex items-center justify-center py-12">
-                            <div className="w-8 h-8 border-4 border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
+                            <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
                         </div>
                     ) : (
                         <CharacterList

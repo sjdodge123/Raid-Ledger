@@ -17,7 +17,7 @@ function StatusBadge({ status }: { status: EventStatus }) {
     const styles: Record<EventStatus, string> = {
         upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
         live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        ended: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+        ended: 'bg-dim/20 text-muted border-dim/30',
     };
 
     const labels: Record<EventStatus, string> = {
@@ -103,10 +103,10 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
             }}
             role="button"
             tabIndex={0}
-            className="group cursor-pointer bg-slate-900 rounded-lg border border-slate-700 overflow-hidden hover:border-slate-500 hover:shadow-xl hover:shadow-emerald-500/10 focus:border-emerald-500 focus:outline-none transition-all duration-200"
+            className="group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl hover:shadow-emerald-500/10 focus:border-emerald-500 focus:outline-none transition-all duration-200"
         >
             {/* Game Cover */}
-            <div className="aspect-[3/4] relative overflow-hidden bg-slate-800">
+            <div className="aspect-[3/4] relative overflow-hidden bg-panel">
                 {!showPlaceholder && gameCoverUrl && (
                     <img
                         src={gameCoverUrl}
@@ -128,7 +128,7 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
                 </div>
                 {event.game && (
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
-                        <span className="text-sm text-slate-300">{event.game.name}</span>
+                        <span className="text-sm text-secondary">{event.game.name}</span>
                     </div>
                 )}
             </div>
@@ -136,16 +136,16 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
 
             {/* Event Info */}
             <div className="p-4">
-                <h3 className="font-semibold text-white text-lg mb-2 line-clamp-2">
+                <h3 className="font-semibold text-foreground text-lg mb-2 line-clamp-2">
                     {event.title}
                 </h3>
 
                 <div className="flex items-center gap-2 mb-3">
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-muted text-sm">
                         {formatEventTime(event.startTime)}
                     </p>
-                    <span className="text-slate-600">•</span>
-                    <p data-testid="relative-time" className="text-sm text-slate-500">
+                    <span className="text-faint">•</span>
+                    <p data-testid="relative-time" className="text-sm text-dim">
                         {relativeTime}
                     </p>
                 </div>
@@ -159,12 +159,12 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
                         <img
                             src={event.creator.avatar || '/default-avatar.svg'}
                             alt={event.creator.username}
-                            className="w-6 h-6 rounded-full bg-slate-700"
+                            className="w-6 h-6 rounded-full bg-overlay"
                             onError={(e) => {
                                 e.currentTarget.src = '/default-avatar.svg';
                             }}
                         />
-                        <span className="text-xs text-slate-500">
+                        <span className="text-xs text-dim">
                             by {event.creator.username}
                         </span>
                     </div>
@@ -179,15 +179,15 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
  */
 export function EventCardSkeleton() {
     return (
-        <div className="bg-slate-900 rounded-lg border border-slate-700 overflow-hidden animate-pulse">
-            <div className="aspect-[3/4] bg-slate-800 relative">
+        <div className="bg-surface rounded-lg border border-edge overflow-hidden animate-pulse">
+            <div className="aspect-[3/4] bg-panel relative">
                 {/* Status badge skeleton */}
-                <div className="absolute top-2 right-2 w-16 h-5 bg-slate-700 rounded-full" />
+                <div className="absolute top-2 right-2 w-16 h-5 bg-overlay rounded-full" />
             </div>
             <div className="p-4 space-y-3">
-                <div className="h-6 bg-slate-800 rounded w-3/4" />
-                <div className="h-4 bg-slate-800 rounded w-1/2" />
-                <div className="h-4 bg-slate-800 rounded w-1/4" />
+                <div className="h-6 bg-panel rounded w-3/4" />
+                <div className="h-4 bg-panel rounded w-1/2" />
+                <div className="h-4 bg-panel rounded w-1/4" />
             </div>
         </div>
     );

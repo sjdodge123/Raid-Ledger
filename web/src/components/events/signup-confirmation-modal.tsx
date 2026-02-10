@@ -106,7 +106,7 @@ export function SignupConfirmationModal({
                         {[1, 2, 3].map((i) => (
                             <div
                                 key={i}
-                                className="h-16 bg-slate-800 rounded-lg animate-pulse"
+                                className="h-16 bg-panel rounded-lg animate-pulse"
                             />
                         ))}
                     </div>
@@ -116,7 +116,7 @@ export function SignupConfirmationModal({
                 {isError && (
                     <div className="text-center py-8 text-red-400">
                         <p className="mb-2">Failed to load characters</p>
-                        <p className="text-sm text-slate-400">
+                        <p className="text-sm text-muted">
                             {error instanceof Error ? error.message : 'Please try again.'}
                         </p>
                     </div>
@@ -124,7 +124,7 @@ export function SignupConfirmationModal({
 
                 {/* No characters state */}
                 {!isLoadingCharacters && !isError && characters.length === 0 && (
-                    <div className="text-center py-8 text-slate-400">
+                    <div className="text-center py-8 text-muted">
                         <p className="mb-2">No characters found for this game.</p>
                         <p className="text-sm">
                             Add characters in your profile to confirm signups.
@@ -135,7 +135,7 @@ export function SignupConfirmationModal({
                 {/* Main character section (AC-3) */}
                 {mainCharacter && (
                     <div>
-                        <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
                             Main Character
                         </h3>
                         <CharacterCard
@@ -150,7 +150,7 @@ export function SignupConfirmationModal({
                 {/* Alt characters section (AC-4) */}
                 {altCharacters.length > 0 && (
                     <div>
-                        <h3 className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">
+                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
                             Alt Characters
                         </h3>
                         <div className="space-y-2">
@@ -185,14 +185,14 @@ export function SignupConfirmationModal({
                 <div className="flex gap-3 pt-2">
                     <button
                         onClick={onClose}
-                        className="flex-1 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
+                        className="flex-1 px-4 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleConfirm}
                         disabled={!selectedCharacterId || confirmMutation.isPending}
-                        className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors font-medium"
+                        className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
                     >
                         {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
                     </button>
@@ -220,7 +220,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
             onClick={onSelect}
             className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${isSelected
                 ? 'border-indigo-500 bg-indigo-500/10'
-                : 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800'
+                : 'border-edge bg-panel/50 hover:border-edge-strong hover:bg-panel'
                 }`}
         >
             {/* Avatar or placeholder */}
@@ -228,10 +228,10 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                 <img
                     src={character.avatarUrl}
                     alt={character.name}
-                    className="w-10 h-10 rounded-full bg-slate-700"
+                    className="w-10 h-10 rounded-full bg-overlay"
                 />
             ) : (
-                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-lg">
+                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-lg">
                     {character.name.charAt(0).toUpperCase()}
                 </div>
             )}
@@ -239,7 +239,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
             {/* Character info */}
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
-                    <span className="font-medium text-white truncate">
+                    <span className="font-medium text-foreground truncate">
                         {character.name}
                     </span>
                     {isMain && (
@@ -248,7 +248,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-slate-400">
+                <div className="flex items-center gap-2 text-sm text-muted">
                     {character.class && <span>{character.class}</span>}
                     {character.spec && (
                         <>
@@ -278,7 +278,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
             {isSelected && (
                 <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
                     <svg
-                        className="w-3 h-3 text-white"
+                        className="w-3 h-3 text-foreground"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"

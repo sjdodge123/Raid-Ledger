@@ -33,10 +33,10 @@ export function HeatmapTooltip({ username, status, timeRange, position }: Heatma
                 top: position.y + 10,
             }}
         >
-            <div className="bg-slate-900 border border-slate-600 rounded-lg shadow-xl px-3 py-2 max-w-xs">
-                <p className="font-medium text-white text-sm">{username}</p>
-                <p className="text-slate-300 text-xs mt-1">{statusLabels[status]}</p>
-                <p className="text-slate-400 text-xs mt-1">
+            <div className="bg-surface border border-edge-strong rounded-lg shadow-xl px-3 py-2 max-w-xs">
+                <p className="font-medium text-foreground text-sm">{username}</p>
+                <p className="text-secondary text-xs mt-1">{statusLabels[status]}</p>
+                <p className="text-muted text-xs mt-1">
                     {formatTime(timeRange.start)} - {formatTime(timeRange.end)}
                 </p>
             </div>

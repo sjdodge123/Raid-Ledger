@@ -52,7 +52,7 @@ const GENERIC_ROLE_SLOTS: { role: RosterRole; count: number; label: string; colo
 
 // Bench slot config
 const BENCH_SLOT: { role: RosterRole; count: number; label: string; color: string } =
-    { role: 'bench', count: 0, label: 'Bench', color: 'bg-slate-600' };
+    { role: 'bench', count: 0, label: 'Bench', color: 'bg-faint' };
 
 /**
  * RosterBuilder - Click-to-assign roster component (ROK-208).
@@ -246,8 +246,8 @@ export function RosterBuilder({
                     if (count === 0) return null;
 
                     return (
-                        <div key={role} className="rounded-lg border border-slate-700 bg-slate-900/50 p-4">
-                            <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
+                        <div key={role} className="rounded-lg border border-edge bg-surface/50 p-4">
+                            <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
                                 <span className={`inline-block h-3 w-3 rounded ${color}`} />
                                 {/* ROK-183: For generic games show "Players" instead of just "Player" */}
                                 {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})

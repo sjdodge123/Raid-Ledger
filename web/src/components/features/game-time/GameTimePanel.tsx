@@ -78,7 +78,7 @@ export function GameTimePanel({
     if (editor.isLoading) {
         return (
             <div className="flex items-center justify-center py-12">
-                <div className="w-8 h-8 border-4 border-slate-500 border-t-emerald-500 rounded-full animate-spin" />
+                <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
             </div>
         );
     }
@@ -91,32 +91,32 @@ export function GameTimePanel({
             {mode === 'profile' && (
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h2 className="text-xl font-semibold text-white">My Game Time this week</h2>
-                        <p className="text-slate-400 text-sm mt-1">
+                        <h2 className="text-xl font-semibold text-foreground">My Game Time this week</h2>
+                        <p className="text-muted text-sm mt-1">
                             Your weekly template + this week's events
                         </p>
                     </div>
                     <div className="flex gap-2">
                         <button
                             onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                            className="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 rounded-lg transition-colors"
+                            className="px-3 py-1.5 text-sm text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors"
                         >
                             {showAbsenceForm ? 'Cancel' : 'Set Absence'}
                         </button>
                         <button
                             onClick={editor.clear}
                             disabled={editor.slots.length === 0}
-                            className="px-3 py-1.5 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-600 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-3 py-1.5 text-sm text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             Clear All
                         </button>
                         <button
                             onClick={editor.save}
                             disabled={!editor.isDirty || editor.isSaving}
-                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors"
                         >
                             {editor.isSaving && (
-                                <div className="w-3 h-3 border-2 border-slate-400 border-t-white rounded-full animate-spin" />
+                                <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />
                             )}
                             Save Game Time
                         </button>
@@ -126,43 +126,43 @@ export function GameTimePanel({
 
             {/* Absence form (profile mode) */}
             {mode === 'profile' && showAbsenceForm && (
-                <div className="mb-4 p-4 rounded-lg border border-slate-700 bg-slate-800/50">
-                    <h3 className="text-sm font-medium text-white mb-3">New Absence</h3>
+                <div className="mb-4 p-4 rounded-lg border border-edge bg-panel/50">
+                    <h3 className="text-sm font-medium text-foreground mb-3">New Absence</h3>
                     <div className="flex flex-wrap items-end gap-3">
                         <div>
-                            <label className="block text-xs text-slate-400 mb-1">Start Date</label>
+                            <label className="block text-xs text-muted mb-1">Start Date</label>
                             <input
                                 type="date"
                                 value={absenceStartDate}
                                 onChange={(e) => setAbsenceStartDate(e.target.value)}
-                                className="px-2 py-1.5 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-emerald-500 focus:outline-none"
+                                className="px-2 py-1.5 text-sm bg-surface border border-edge-strong rounded-lg text-foreground focus:border-emerald-500 focus:outline-none"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs text-slate-400 mb-1">End Date</label>
+                            <label className="block text-xs text-muted mb-1">End Date</label>
                             <input
                                 type="date"
                                 value={absenceEndDate}
                                 onChange={(e) => setAbsenceEndDate(e.target.value)}
                                 min={absenceStartDate}
-                                className="px-2 py-1.5 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white focus:border-emerald-500 focus:outline-none"
+                                className="px-2 py-1.5 text-sm bg-surface border border-edge-strong rounded-lg text-foreground focus:border-emerald-500 focus:outline-none"
                             />
                         </div>
                         <div className="flex-1 min-w-[120px]">
-                            <label className="block text-xs text-slate-400 mb-1">Reason (optional)</label>
+                            <label className="block text-xs text-muted mb-1">Reason (optional)</label>
                             <input
                                 type="text"
                                 value={absenceReason}
                                 onChange={(e) => setAbsenceReason(e.target.value)}
                                 placeholder="e.g. Vacation, Travel"
                                 maxLength={255}
-                                className="w-full px-2 py-1.5 text-sm bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                                className="w-full px-2 py-1.5 text-sm bg-surface border border-edge-strong rounded-lg text-foreground placeholder-dim focus:border-emerald-500 focus:outline-none"
                             />
                         </div>
                         <button
                             onClick={handleCreateAbsence}
                             disabled={!absenceStartDate || !absenceEndDate || createAbsence.isPending}
-                            className="px-4 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-slate-700 disabled:text-slate-400 text-white text-sm font-medium rounded-lg transition-colors"
+                            className="px-4 py-1.5 bg-red-600 hover:bg-red-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors"
                         >
                             {createAbsence.isPending ? 'Saving...' : 'Add Absence'}
                         </button>

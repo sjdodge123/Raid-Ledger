@@ -86,14 +86,14 @@ export function LoginPage() {
     return (
         <div className="min-h-[70vh] flex items-center justify-center px-4">
             <div className="w-full max-w-md">
-                <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl shadow-xl border border-slate-700/50 p-8">
+                <div className="bg-panel/50 backdrop-blur-sm rounded-2xl shadow-xl border border-edge/50 p-8">
                     {/* Logo and Community Name (AC-2, AC-3) */}
                     <div className="text-center mb-8">
                         <span className="text-4xl">⚔️</span>
-                        <h1 className="text-2xl font-bold text-white mt-2">
+                        <h1 className="text-2xl font-bold text-foreground mt-2">
                             {communityName}
                         </h1>
-                        <p className="text-slate-400 mt-1">
+                        <p className="text-muted mt-1">
                             Sign in to manage your raids
                         </p>
                     </div>
@@ -103,7 +103,7 @@ export function LoginPage() {
                         <div>
                             <label
                                 htmlFor="username"
-                                className="block text-sm font-medium text-slate-300 mb-1.5"
+                                className="block text-sm font-medium text-secondary mb-1.5"
                             >
                                 Username
                             </label>
@@ -112,7 +112,7 @@ export function LoginPage() {
                                 type="text"
                                 value={username}
                                 onChange={(e) => setUsername(e.target.value)}
-                                className="w-full px-4 py-3 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                                 placeholder="admin"
                                 required
                             />
@@ -121,7 +121,7 @@ export function LoginPage() {
                         <div>
                             <label
                                 htmlFor="password"
-                                className="block text-sm font-medium text-slate-300 mb-1.5"
+                                className="block text-sm font-medium text-secondary mb-1.5"
                             >
                                 Password
                             </label>
@@ -131,14 +131,14 @@ export function LoginPage() {
                                     type={showPassword ? 'text' : 'password'}
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full px-4 py-3 pr-12 bg-slate-900/50 border border-slate-700 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                                    className="w-full px-4 py-3 pr-12 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                                     placeholder="••••••••"
                                     required
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors p-1"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-foreground transition-colors p-1"
                                     tabIndex={-1}
                                     aria-label={showPassword ? 'Hide password' : 'Show password'}
                                 >
@@ -165,11 +165,11 @@ export function LoginPage() {
                         <button
                             type="submit"
                             disabled={isLoading}
-                            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
+                            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-slate-900"
                         >
                             {isLoading ? (
                                 <span className="flex items-center justify-center gap-2">
-                                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <span className="w-4 h-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
                                     Signing in...
                                 </span>
                             ) : (
@@ -184,10 +184,10 @@ export function LoginPage() {
                             {/* Divider */}
                             <div className="relative my-8">
                                 <div className="absolute inset-0 flex items-center">
-                                    <div className="w-full border-t border-slate-700" />
+                                    <div className="w-full border-t border-edge" />
                                 </div>
                                 <div className="relative flex justify-center text-sm">
-                                    <span className="px-4 bg-slate-800/50 text-slate-400">
+                                    <span className="px-4 bg-panel/50 text-muted">
                                         or continue with
                                     </span>
                                 </div>
@@ -196,11 +196,11 @@ export function LoginPage() {
                             <button
                                 onClick={handleDiscordLogin}
                                 disabled={isRedirecting}
-                                className="w-full py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#5865F2] focus:ring-offset-2 focus:ring-offset-slate-900"
+                                className="w-full py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#5865F2] focus:ring-offset-2 focus:ring-offset-slate-900"
                             >
                                 {isRedirecting ? (
                                     <>
-                                        <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        <span className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
                                         Redirecting to Discord...
                                     </>
                                 ) : (
@@ -226,7 +226,7 @@ export function LoginPage() {
                 </div>
 
                 {/* Subtle tagline (AC-2) */}
-                <p className="mt-6 text-center text-sm text-slate-500">
+                <p className="mt-6 text-center text-sm text-dim">
                     Coordinate raids. Track attendance. Conquer together.
                 </p>
             </div>

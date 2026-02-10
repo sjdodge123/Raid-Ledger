@@ -88,8 +88,8 @@ export function CalendarPage() {
     return (
         <div className="max-w-7xl mx-auto px-4 py-6">
             <div className="mb-6">
-                <h1 className="text-3xl font-bold text-white">Calendar</h1>
-                <p className="text-slate-400 mt-1">
+                <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
+                <p className="text-muted mt-1">
                     View upcoming events and plan your schedule
                 </p>
             </div>
