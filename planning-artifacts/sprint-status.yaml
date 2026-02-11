@@ -1,4 +1,4 @@
-# generated: 2026-02-10T20:26:38Z
+# generated: 2026-02-11T12:00:00Z
 # source: Linear (Raid Ledger project) — do not hand-edit
 # regenerate: /init pulls from Linear, /handover pushes then pulls
 project: Raid Ledger
@@ -6,122 +6,129 @@ tracking_system: linear
 
 development_status:
   # === Done ===
-  ROK-101: done          # Epic: Core Infrastructure & Auth
-  ROK-102: done          # Initialize Monorepo Structure
-  ROK-103: done          # Database Schema & Migration Setup
-  ROK-104: done          # Discord OAuth Integration
-  ROK-105: done          # RBAC & Admin Seed Script
-  ROK-106: done          # Epic: Event Management
-  ROK-107: done          # IGDB Game Discovery Integration
-  ROK-108: done          # Event CRUD API
-  ROK-109: done          # Native Sign-Up Logic
-  ROK-110: done          # Event List & Details UI
-  ROK-111: done          # Epic: Availability & Roster
-  ROK-112: done          # Availability Service (tsrange)
-  ROK-113: done          # Heatmap Grid Component
-  ROK-114: done          # Roster Tetris (Drag-and-Drop)
-  ROK-124: done          # Theme System Implementation
-  ROK-128: done          # Games Module & Seed Data
-  ROK-129: done          # Characters CRUD + Main/Alt Designation
-  ROK-130: done          # Sign-Up Character Confirmation
-  ROK-132: done          # Create Event Form
-  ROK-133: done          # Landing Page & Navigation
-  ROK-134: done          # User Profile & Character Management UI
-  ROK-135: done          # Event Cards UI Polish
-  ROK-136: done          # Auth Flow Polish
-  ROK-139: done          # Docker Production Build
-  ROK-140: done          # Local Admin Auth
-  ROK-141: done          # Link Discord Account
-  ROK-142: done          # Admin Settings Page
-  ROK-143: done          # Docker Deployment & Admin Bootstrap
-  ROK-144: done          # Fix GHCR Docker Build
-  ROK-145: done          # Browser E2E Verification Workflow
-  ROK-146: done          # Investigate Events API 500 Error
-  ROK-156: done          # Event Detail Layout
-  ROK-158: done          # Game Seed Expansion
-  ROK-159: done          # IGDB Rate Limit Protection
-  ROK-163: done          # Remove Marketing Landing Page
-  ROK-164: done          # Calendar API
-  ROK-165: done          # Calendar Month View
-  ROK-166: done          # Calendar as Default Route
-  ROK-167: done          # Calendar Week View
-  ROK-174: done          # Week View Attendee Avatars
-  ROK-175: done          # Calendar Day View
-  ROK-176: done          # Notification Core Infrastructure
-  ROK-177: done          # Browser Push Notifications
-  ROK-178: done          # Presence-Aware Notification Sync
-  ROK-181: done          # Notification Real-time Updates
-  ROK-182: done          # Weekly Game Time Selector
-  ROK-183: done          # Weekly Game Time Check-In
-  ROK-184: done          # First-Time User Game Time Setup
-  ROK-186: done          # User Feedback Widget
-  ROK-189: done          # Dynamic Avatar Resolution
-  ROK-191: done          # Calendar Day View Quick-Join
-  ROK-192: done          # Collapsible Banner + Inline Description
-  ROK-194: done          # Epic: Calendar Page
-  ROK-195: done          # Clickable User Profiles
-  ROK-196: done          # Team Availability → Event Creation
-  ROK-197: done          # Universal Roster Builder + Quick-Join
-  ROK-198: done          # Event Details Page Redesign (Desktop)
-  ROK-199: done          # Calendar Avatar Overflow Fix
-  ROK-207: done          # Click-to-Assign Roster Interaction
-  ROK-221: done          # GameTimeGrid v2 — Calendar Parity, Rolling Week & Component Unification
-  ROK-224: done          # CSS Theme Token Migration
-  ROK-225: done          # Notify Organizer on Slot Leave
-  ROK-226: done          # Player Self-Unassign from Roster Slot
-  ROK-227: done          # Seed Game Time Data for Demo Users
-  ROK-230: done          # IGDB Games Integration Bug Fixes + Crossplay Support
+  ROK-101: done            # Epic: Core Infrastructure & Auth
+  ROK-102: done            # Initialize Monorepo Structure
+  ROK-103: done            # Database Schema & Migration Setup
+  ROK-104: done            # Discord OAuth Integration
+  ROK-105: done            # RBAC & Admin Seed Script
+  ROK-106: done            # Epic: Event Management
+  ROK-107: done            # IGDB Game Discovery Integration
+  ROK-108: done            # Event CRUD API
+  ROK-109: done            # Native Sign-Up Logic
+  ROK-110: done            # Event List & Details UI
+  ROK-111: done            # Epic: Availability & Roster
+  ROK-112: done            # Availability Service (tsrange)
+  ROK-113: done            # Heatmap Grid Component
+  ROK-114: done            # Roster Tetris (Drag-and-Drop)
+  ROK-124: done            # Theme System Implementation
+  ROK-128: done            # Games Module & Seed Data
+  ROK-129: done            # Characters CRUD + Main/Alt Designation
+  ROK-130: done            # Sign-Up Character Confirmation
+  ROK-132: done            # Create Event Form
+  ROK-133: done            # Landing Page & Navigation
+  ROK-134: done            # User Profile & Character Management UI
+  ROK-135: done            # Event Cards UI Polish
+  ROK-136: done            # Auth Flow Polish
+  ROK-139: done            # Docker Production Build
+  ROK-140: done            # Local Admin Auth
+  ROK-141: done            # Link Discord Account
+  ROK-142: done            # Admin Settings Page
+  ROK-143: done            # Docker Deployment & Admin Bootstrap
+  ROK-144: done            # Fix GHCR Docker Build
+  ROK-145: done            # Browser E2E Verification Workflow
+  ROK-146: done            # Investigate Events API 500 Error
+  ROK-156: done            # Event Detail Layout
+  ROK-158: done            # Game Seed Expansion
+  ROK-159: done            # IGDB Rate Limit Protection
+  ROK-163: done            # Remove Marketing Landing Page
+  ROK-164: done            # Calendar API
+  ROK-165: done            # Calendar Month View
+  ROK-166: done            # Calendar as Default Route
+  ROK-167: done            # Calendar Week View
+  ROK-173: done            # IGDB Admin Configuration Panel
+  ROK-174: done            # Week View Attendee Avatars
+  ROK-175: done            # Calendar Day View
+  ROK-176: done            # Notification Core Infrastructure
+  ROK-177: done            # Browser Push Notifications
+  ROK-178: done            # Presence-Aware Notification Sync
+  ROK-179: done            # Notification Preferences UI
+  ROK-181: done            # Notification Real-time Updates
+  ROK-182: done            # Weekly Game Time Selector
+  ROK-183: done            # Weekly Game Time Check-In
+  ROK-184: done            # First-Time User Game Time Setup
+  ROK-186: done            # User Feedback Widget
+  ROK-187: done            # User Timezone Preferences
+  ROK-189: done            # Dynamic Avatar Resolution
+  ROK-191: done            # Calendar Day View Quick-Join
+  ROK-192: done            # Collapsible Banner + Inline Description
+  ROK-193: done            # Delete Demo Data Button
+  ROK-194: done            # Epic: Calendar Page
+  ROK-195: done            # Clickable User Profiles
+  ROK-196: done            # Team Availability → Event Creation
+  ROK-197: done            # Universal Roster Builder + Quick-Join
+  ROK-198: done            # Event Details Page Redesign (Desktop)
+  ROK-199: done            # Calendar Avatar Overflow Fix
+  ROK-201: done            # Contextual Back Navigation
+  ROK-203: done            # Calendar Day View Quick-Join
+  ROK-207: done            # Click-to-Assign Roster Interaction
+  ROK-221: done            # GameTimeGrid v2 — Calendar Parity, Rolling Week & Component Unification
+  ROK-224: done            # CSS Theme Token Migration
+  ROK-225: done            # Notify Organizer on Slot Leave
+  ROK-226: done            # Player Self-Unassign from Roster Slot
+  ROK-227: done            # Seed Game Time Data for Demo Users
+  ROK-230: done            # IGDB Games Integration Bug Fixes + Crossplay Support
+
+  # === In Progress ===
+  ROK-235: in-progress     # Bug: translucent overlay box appears over events in calendar week view
 
   # === Ready for Dev ===
-  ROK-179: ready-for-dev # Notification Preferences UI
-  ROK-180: ready-for-dev # Discord Bot Welcome & Dispatch
-  ROK-185: ready-for-dev # Event Reminder Notifications
-  ROK-187: ready-for-dev # User Timezone Preferences
-  ROK-188: ready-for-dev # Delete User Account
-  ROK-193: ready-for-dev # Delete Demo Data Button
-  ROK-200: ready-for-dev # IGDB Artwork Integration for Calendar
-  ROK-201: ready-for-dev # Contextual Back Navigation
-  ROK-203: ready-for-dev # Calendar Day View Quick-Join
-  ROK-204: ready-for-dev # Admin Onboarding Wizard
+  ROK-180: ready-for-dev   # Discord Bot Welcome & Dispatch
+  ROK-185: ready-for-dev   # Event Reminder Notifications
+  ROK-188: ready-for-dev   # Delete User Account
+  ROK-204: ready-for-dev   # Admin Onboarding Wizard
 
   # === Backlog ===
-  ROK-116: backlog       # Epic: Discord Bot Integration
-  ROK-117: backlog       # Bot Module Infrastructure
-  ROK-118: backlog       # Event Notification Embeds
-  ROK-119: backlog       # Bidirectional Syncing
-  ROK-120: backlog       # Epic: Server Integrations & DevOps
-  ROK-121: backlog       # Pelican Status Polling
-  ROK-122: backlog       # Rate Limiting & Queue Strategy
-  ROK-123: backlog       # Epic: UX Polish
-  ROK-125: backlog       # Mobile Responsive Refactor
-  ROK-126: backlog       # Event Reminder Job (FR-011)
-  ROK-127: backlog       # Global Toast Provider (FR-013)
-  ROK-137: backlog       # Interactive Signup Buttons
-  ROK-138: backlog       # Character Select Ephemeral
-  ROK-168: backlog       # Calendar Mobile Responsive
-  ROK-173: backlog       # IGDB Admin Configuration Panel
-  ROK-205: backlog       # Event Details Mobile (Stories UI)
-  ROK-206: backlog       # Enforce Single Main Character Per Player
-  ROK-208: backlog       # Calendar Default View & Persisted Preference
-  ROK-209: backlog       # Roster Auto-Fill & Clear All
-  ROK-210: backlog       # Attendees Section Redesign & Assignment Modal Consistency
-  ROK-212: backlog       # Persona-Based Testing Architecture
-  ROK-213: backlog       # Raid Leader Event Dashboard
-  ROK-214: backlog       # XP & Leveling Engine
-  ROK-215: backlog       # Achievement System Core
-  ROK-216: backlog       # Rewards & Unlockables
-  ROK-217: backlog       # Achievement Catalog Expansion
-  ROK-218: backlog       # Missed-Event Nudge & Schedule Keeper
-  ROK-219: backlog       # First-Time User Experience (FTE)
-  ROK-220: backlog       # Custom Avatar Upload
-  ROK-222: backlog       # Audit & unify all avatar references to use resolveAvatar()
-  ROK-223: backlog       # Event reschedule modal with aggregate game time overlay
-  ROK-228: backlog       # Space Dark Mode Theme
-  ROK-229: backlog       # Auto-Sub Benched Players
+  ROK-116: backlog         # Epic: Discord Bot Integration
+  ROK-117: backlog         # Bot Module Infrastructure
+  ROK-118: backlog         # Event Notification Embeds
+  ROK-119: backlog         # Bidirectional Syncing
+  ROK-120: backlog         # Epic: Server Integrations & DevOps
+  ROK-121: backlog         # Pelican Status Polling
+  ROK-122: backlog         # Rate Limiting & Queue Strategy
+  ROK-123: backlog         # Epic: UX Polish
+  ROK-125: backlog         # Mobile Responsive Refactor
+  ROK-126: backlog         # Event Reminder Job (FR-011)
+  ROK-127: backlog         # Global Toast Provider (FR-013)
+  ROK-137: backlog         # Interactive Signup Buttons
+  ROK-138: backlog         # Character Select Ephemeral
+  ROK-168: backlog         # Calendar Mobile Responsive
+  ROK-205: backlog         # Event Details Mobile (Stories UI)
+  ROK-206: backlog         # Enforce Single Main Character Per Player
+  ROK-208: backlog         # Calendar Default View & Persisted Preference
+  ROK-209: backlog         # Roster Auto-Fill & Clear All
+  ROK-210: backlog         # Attendees Section Redesign & Assignment Modal Consistency
+  ROK-212: backlog         # Persona-Based Testing Architecture
+  ROK-213: backlog         # Raid Leader Event Dashboard
+  ROK-214: backlog         # XP & Leveling Engine
+  ROK-215: backlog         # Achievement System Core
+  ROK-216: backlog         # Rewards & Unlockables
+  ROK-217: backlog         # Achievement Catalog Expansion
+  ROK-218: backlog         # Missed-Event Nudge & Schedule Keeper
+  ROK-219: backlog         # First-Time User Experience (FTE)
+  ROK-220: backlog         # Custom Avatar Upload
+  ROK-222: backlog         # Audit & unify all avatar references to use resolveAvatar()
+  ROK-223: backlog         # Event reschedule modal with aggregate game time overlay
+  ROK-228: backlog         # Space Dark Mode Theme
+  ROK-229: backlog         # Auto-Sub Benched Players
+  ROK-231: backlog         # Game library: hide/ban games and adult content filter
+  ROK-232: backlog         # Set browser tab title to "Raid Ledger" and add favicon
+  ROK-233: backlog         # Expand demo seed data to ~100 players with rich cross-domain data
+  ROK-234: backlog         # Reimagine character creation: inline onboarding, WoW Armory import, and no-character signup UX
 
   # === Deprecated ===
-  ROK-115: deprecated    # Flash Check-In (Zero-Click)
-  ROK-131: deprecated    # Docker Containerization
-  ROK-157: deprecated    # Testing Infrastructure Hardening
-  ROK-190: deprecated    # Hub & Spoke Integration Model
-  ROK-202: deprecated    # Double-Click to Leave Slot
+  ROK-115: deprecated      # Flash Check-In (Zero-Click)
+  ROK-131: deprecated      # Docker Containerization
+  ROK-157: deprecated      # Testing Infrastructure Hardening
+  ROK-190: deprecated      # Hub & Spoke Integration Model
+  ROK-200: deprecated      # IGDB Artwork Integration for Calendar
+  ROK-202: deprecated      # Double-Click to Leave Slot
