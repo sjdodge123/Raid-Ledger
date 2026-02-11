@@ -226,6 +226,8 @@ export class AuthController {
           method: 'POST',
           headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent':
+              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
           },
           body: new URLSearchParams({
             client_id: oauthConfig.clientId,
@@ -251,6 +253,8 @@ export class AuthController {
       const userResponse = await fetch('https://discord.com/api/users/@me', {
         headers: {
           Authorization: `Bearer ${tokens.access_token}`,
+          'User-Agent':
+            'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
         },
       });
 

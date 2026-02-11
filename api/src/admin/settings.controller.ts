@@ -133,6 +133,7 @@ export class AdminSettingsController {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
         },
         body: new URLSearchParams({
           client_id: config.clientId,
