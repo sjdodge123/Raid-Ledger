@@ -1,8 +1,41 @@
+import { useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useEvents } from '../hooks/use-events';
 import { useAuth } from '../hooks/use-auth';
+import { useGameTime } from '../hooks/use-game-time';
 import { EventCard, EventCardSkeleton } from '../components/events/event-card';
 import { EventsEmptyState } from '../components/events/events-empty-state';
+import type { EventResponseDto, GameTimeSlot } from '@raid-ledger/contract';
+
+/**
+ * Convert JS Date.getDay() (0=Sunday) to game-time dayOfWeek (0=Monday).
+ */
+function toGameTimeDow(jsDay: number): number {
+    return jsDay === 0 ? 6 : jsDay - 1;
+}
+
+/**
+ * Check if an event overlaps with any game time slot.
+ * Checks every hour the event spans, not just the start hour.
+ */
+function eventOverlapsGameTime(
+    event: EventResponseDto,
+    slotSet: Set<string>,
+): boolean {
+    const start = new Date(event.startTime);
+    const end = new Date(event.endTime);
+    // Walk hour-by-hour through the event duration
+    const cursor = new Date(start);
+    cursor.setMinutes(0, 0, 0); // snap to hour boundary
+    if (cursor < start) cursor.setHours(cursor.getHours() + 1);
+
+    while (cursor < end) {
+        const key = `${toGameTimeDow(cursor.getDay())}-${cursor.getHours()}`;
+        if (slotSet.has(key)) return true;
+        cursor.setHours(cursor.getHours() + 1);
+    }
+    return false;
+}
 
 /**
  * Events List Page - displays upcoming events in a responsive grid
@@ -11,6 +44,30 @@ export function EventsPage() {
     const navigate = useNavigate();
     const { data, isLoading, error } = useEvents({ upcoming: true });
     const { isAuthenticated } = useAuth();
+    const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
+
+    const gameTimeSlots = gameTime?.slots;
+    const events = data?.data;
+
+    // Build a Set of "dow-hour" keys for O(1) lookup
+    const slotSet = useMemo(() => {
+        if (!gameTimeSlots?.length) return null;
+        const set = new Set<string>();
+        for (const slot of gameTimeSlots as GameTimeSlot[]) {
+            set.add(`${slot.dayOfWeek}-${slot.hour}`);
+        }
+        return set;
+    }, [gameTimeSlots]);
+
+    // Sort events: game-time overlaps first, then by original order
+    const sortedEvents = useMemo(() => {
+        if (!events || !slotSet) return events;
+        return [...events].sort((a, b) => {
+            const aOverlaps = eventOverlapsGameTime(a, slotSet) ? 0 : 1;
+            const bOverlaps = eventOverlapsGameTime(b, slotSet) ? 0 : 1;
+            return aOverlaps - bOverlaps;
+        });
+    }, [events, slotSet]);
 
     if (error) {
         return (
@@ -56,12 +113,12 @@ export function EventsPage() {
                         Array.from({ length: 8 }).map((_, i) => (
                             <EventCardSkeleton key={i} />
                         ))
-                    ) : data?.data.length === 0 ? (
+                    ) : (sortedEvents ?? data?.data)?.length === 0 ? (
                         // Empty state with illustration and CTA
                         <EventsEmptyState />
                     ) : (
-                        // Event cards - now using signupCount from event response
-                        data?.data.map((event) => (
+                        // Event cards — sorted by game time overlap when authenticated
+                        (sortedEvents ?? data?.data)?.map((event) => (
                             <EventCard
                                 key={event.id}
                                 event={event}
