@@ -20,6 +20,7 @@ const testManifest: PluginManifest = {
   name: 'Test Plugin',
   version: '1.0.0',
   description: 'A test plugin',
+  author: { name: 'Test Author' },
   gameSlugs: ['test-game'],
   capabilities: ['test-cap'],
   settingKeys: ['test_setting_1'],
@@ -40,6 +41,7 @@ const depManifest: PluginManifest = {
   name: 'Dependent Plugin',
   version: '1.0.0',
   description: 'Depends on test-plugin',
+  author: { name: 'Test Author' },
   gameSlugs: [],
   capabilities: [],
   dependencies: ['test-plugin'],
@@ -163,6 +165,21 @@ describe('PluginRegistryService', () => {
       expect(result[0].slug).toBe('test-plugin');
       expect(result[0].status).toBe('active');
       expect(result[0].installedAt).toBe(installedAt.toISOString());
+    });
+
+    it('should include author from manifest', async () => {
+      service.registerManifest(testManifest);
+
+      mockDb.select.mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => {
+          const r = thenableResult([]);
+          r.where = jest.fn().mockImplementation(() => thenableResult([]));
+          return r;
+        }),
+      }));
+
+      const result = await service.listPlugins();
+      expect(result[0].author).toEqual({ name: 'Test Author' });
     });
 
     it('should return not_installed for manifests without DB records', async () => {

@@ -1,4 +1,5 @@
 import type {
+    PluginInfoDto,
     EventListResponseDto,
     EventResponseDto,
     EventRosterDto,
@@ -661,4 +662,29 @@ export async function createEventTemplate(dto: CreateTemplateDto): Promise<Templ
 
 export async function deleteEventTemplate(id: number): Promise<void> {
     await fetchApi(`/event-templates/${id}`, { method: 'DELETE' });
+}
+
+// ============================================================
+// Plugin Admin API (ROK-239)
+// ============================================================
+
+export async function getPlugins(): Promise<PluginInfoDto[]> {
+    const response = await fetchApi<{ data: PluginInfoDto[] }>('/admin/plugins');
+    return response.data;
+}
+
+export async function installPlugin(slug: string): Promise<void> {
+    await fetchApi(`/admin/plugins/${slug}/install`, { method: 'POST' });
+}
+
+export async function uninstallPlugin(slug: string): Promise<void> {
+    await fetchApi(`/admin/plugins/${slug}/uninstall`, { method: 'POST' });
+}
+
+export async function activatePlugin(slug: string): Promise<void> {
+    await fetchApi(`/admin/plugins/${slug}/activate`, { method: 'POST' });
+}
+
+export async function deactivatePlugin(slug: string): Promise<void> {
+    await fetchApi(`/admin/plugins/${slug}/deactivate`, { method: 'POST' });
 }

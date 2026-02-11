@@ -8,6 +8,7 @@ import { API_BASE_URL } from '../lib/config';
 import { GameLibraryTable } from '../components/admin/GameLibraryTable';
 import { DemoDataCard } from '../components/admin/DemoDataCard';
 import { PluginSlot } from '../plugins';
+import { PluginList } from '../components/admin/PluginList';
 
 /** Format ISO date as relative time (e.g., "5m ago") */
 function formatRelativeTime(iso: string) {
@@ -31,6 +32,7 @@ export function AdminSettingsPage() {
     const { user, isLoading: authLoading } = useAuth();
     const { oauthStatus, updateOAuth, testOAuth, clearOAuth, igdbStatus, updateIgdb, testIgdb, clearIgdb, blizzardStatus, updateBlizzard, testBlizzard, clearBlizzard, igdbSyncStatus, syncIgdb } = useAdminSettings();
 
+    const [activeTab, setActiveTab] = useState<'settings' | 'plugins'>('settings');
     const [clientId, setClientId] = useState('');
     const [clientSecret, setClientSecret] = useState('');
     const [showSecret, setShowSecret] = useState(false);
@@ -256,10 +258,37 @@ export function AdminSettingsPage() {
     return (
         <div className="max-w-2xl mx-auto px-4 py-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">Admin Settings</h1>
-            <p className="text-muted mb-8">
+            <p className="text-muted mb-4">
                 Configure OAuth providers and system settings.
             </p>
 
+            {/* Tabs */}
+            <div className="flex gap-6 border-b border-edge/50 mb-8">
+                <button
+                    onClick={() => setActiveTab('settings')}
+                    className={`pb-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                        activeTab === 'settings'
+                            ? 'border-emerald-500 text-foreground'
+                            : 'border-transparent text-muted hover:text-foreground'
+                    }`}
+                >
+                    Settings
+                </button>
+                <button
+                    onClick={() => setActiveTab('plugins')}
+                    className={`pb-2 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                        activeTab === 'plugins'
+                            ? 'border-emerald-500 text-foreground'
+                            : 'border-transparent text-muted hover:text-foreground'
+                    }`}
+                >
+                    Plugins
+                </button>
+            </div>
+
+            {activeTab === 'plugins' && <PluginList />}
+
+            {activeTab === 'settings' && <>
             {/* Discord OAuth Section */}
             <IntegrationCard
                 title="Discord OAuth"
@@ -665,6 +694,7 @@ export function AdminSettingsPage() {
 
             {/* Demo Data Management (ROK-193) */}
             <DemoDataCard />
+            </>}
 
             {/* Back Link */}
             <button

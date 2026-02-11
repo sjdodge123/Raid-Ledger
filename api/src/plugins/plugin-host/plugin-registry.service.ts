@@ -58,6 +58,7 @@ export class PluginRegistryService implements OnModuleInit {
         name: manifest.name,
         version: manifest.version,
         description: manifest.description,
+        author: manifest.author,
         gameSlugs: manifest.gameSlugs,
         capabilities: manifest.capabilities,
         integrations,

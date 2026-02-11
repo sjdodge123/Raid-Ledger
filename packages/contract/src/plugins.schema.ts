@@ -1,5 +1,12 @@
 import { z } from 'zod';
 
+export const PluginAuthorSchema = z.object({
+  name: z.string(),
+  url: z.string().optional(),
+});
+
+export type PluginAuthorDto = z.infer<typeof PluginAuthorSchema>;
+
 export const PluginIntegrationInfoSchema = z.object({
   key: z.string(),
   name: z.string(),
@@ -16,6 +23,7 @@ export const PluginInfoSchema = z.object({
   name: z.string(),
   version: z.string(),
   description: z.string(),
+  author: PluginAuthorSchema,
   gameSlugs: z.array(z.string()),
   capabilities: z.array(z.string()),
   integrations: z.array(PluginIntegrationInfoSchema),
