@@ -46,6 +46,26 @@ interface ApiResponse {
     message: string;
 }
 
+export interface DemoDataCounts {
+    users: number;
+    events: number;
+    characters: number;
+    signups: number;
+    availability: number;
+    gameTimeSlots: number;
+    notifications: number;
+}
+
+export interface DemoDataStatus extends DemoDataCounts {
+    demoMode: boolean;
+}
+
+export interface DemoDataResult {
+    success: boolean;
+    message: string;
+    counts: DemoDataCounts;
+}
+
 /**
  * Hook for admin settings API operations.
  */
@@ -244,6 +264,55 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Demo Data (ROK-193)
+    // ============================================================
+
+    const demoDataStatus = useQuery<DemoDataStatus>({
+        queryKey: ['admin', 'settings', 'demo', 'status'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/demo/status`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch demo data status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 10_000,
+    });
+
+    const installDemoData = useMutation<DemoDataResult, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/demo/install`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to install demo data');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'demo', 'status'] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+        },
+    });
+
+    const clearDemoData = useMutation<DemoDataResult, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/demo/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to clear demo data');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'demo', 'status'] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+            queryClient.invalidateQueries({ queryKey: ['users'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -255,5 +324,8 @@ export function useAdminSettings() {
         clearIgdb,
         igdbSyncStatus,
         syncIgdb,
+        demoDataStatus,
+        installDemoData,
+        clearDemoData,
     };
 }

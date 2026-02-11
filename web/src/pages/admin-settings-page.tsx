@@ -6,6 +6,7 @@ import { useAdminSettings } from '../hooks/use-admin-settings';
 import { IntegrationCard } from '../components/admin/IntegrationCard';
 import { API_BASE_URL } from '../lib/config';
 import { GameLibraryTable } from '../components/admin/GameLibraryTable';
+import { DemoDataCard } from '../components/admin/DemoDataCard';
 
 /** Format ISO date as relative time (e.g., "5m ago") */
 function formatRelativeTime(iso: string) {
@@ -645,6 +646,9 @@ export function AdminSettingsPage() {
 
             {/* Game Library Management */}
             <GameLibraryTable />
+
+            {/* Demo Data Management (ROK-193) */}
+            <DemoDataCard />
 
             {/* Back Link */}
             <button

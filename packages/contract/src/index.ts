@@ -42,3 +42,6 @@ export * from './preferences.schema.js';
 
 // Game Time Templates (ROK-189)
 export * from './game-time.schema.js';
+
+// Admin (ROK-193)
+export * from './admin.schema.js';

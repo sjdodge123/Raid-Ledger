@@ -22,10 +22,13 @@ import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
+import { DemoDataService } from './demo-data.service';
 import {
   IgdbSyncStatusDto,
   IgdbHealthStatusDto,
   AdminGameListResponseDto,
+  DemoDataStatusDto,
+  DemoDataResultDto,
 } from '@raid-ledger/contract';
 import { eq, ilike, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
@@ -85,6 +88,7 @@ export class AdminSettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
+    private readonly demoDataService: DemoDataService,
   ) {}
 
   /**
@@ -514,5 +518,38 @@ export class AdminSettingsController {
       success: true,
       message: `Game "${existing[0].name}" removed from library.`,
     };
+  }
+
+  // ============================================================
+  // ROK-193: Demo Data Management
+  // ============================================================
+
+  /**
+   * GET /admin/settings/demo/status
+   * Returns demo data entity counts and demoMode flag.
+   */
+  @Get('demo/status')
+  async getDemoStatus(): Promise<DemoDataStatusDto> {
+    return this.demoDataService.getStatus();
+  }
+
+  /**
+   * POST /admin/settings/demo/install
+   * Install all demo data (users, events, characters, etc.).
+   */
+  @Post('demo/install')
+  @HttpCode(HttpStatus.OK)
+  async installDemoData(): Promise<DemoDataResultDto> {
+    return this.demoDataService.installDemoData();
+  }
+
+  /**
+   * POST /admin/settings/demo/clear
+   * Delete all demo data in FK-safe order.
+   */
+  @Post('demo/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearDemoData(): Promise<DemoDataResultDto> {
+    return this.demoDataService.clearDemoData();
   }
 }

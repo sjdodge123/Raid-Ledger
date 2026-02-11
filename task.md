@@ -4,16 +4,12 @@
 <!-- [/] = in progress (pushes In Progress to Linear) -->
 <!-- [ ] = not started (no change in Linear) -->
 
-## In Progress
-
 ## Ready for Dev
-- [x] ROK-227: Seed Game Time Data for Demo Users  (P1)
-- [ ] ROK-179: Notification Preferences UI
 - [ ] ROK-180: Discord Bot Welcome & Dispatch
 - [ ] ROK-185: Event Reminder Notifications
 - [ ] ROK-187: User Timezone Preferences
 - [ ] ROK-188: Delete User Account
-- [ ] ROK-193: Delete Demo Data Button
+- [/] ROK-193: Delete Demo Data Button
 - [ ] ROK-200: IGDB Artwork Integration for Calendar
 - [ ] ROK-201: Contextual Back Navigation
 - [ ] ROK-203: Calendar Day View Quick-Join
