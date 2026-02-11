@@ -256,6 +256,19 @@ export class CharactersService {
       dto.gameVariant,
     );
 
+    // If Blizzard didn't return an active_spec (common for Classic), infer from talents
+    if (!profile.spec && profile.class) {
+      const inferred = await this.blizzardService.fetchCharacterSpecializations(
+        dto.name,
+        dto.realm,
+        dto.region,
+        profile.class,
+        dto.gameVariant,
+      );
+      if (inferred.spec) profile.spec = inferred.spec;
+      if (inferred.role) profile.role = inferred.role;
+    }
+
     // Fetch equipment (non-fatal)
     const equipment = await this.blizzardService.fetchCharacterEquipment(
       dto.name,
@@ -381,6 +394,19 @@ export class CharactersService {
       gameVariant,
     );
 
+    // If Blizzard didn't return an active_spec (common for Classic), infer from talents
+    if (!profile.spec && profile.class) {
+      const inferred = await this.blizzardService.fetchCharacterSpecializations(
+        character.name,
+        character.realm,
+        region,
+        profile.class,
+        gameVariant,
+      );
+      if (inferred.spec) profile.spec = inferred.spec;
+      if (inferred.role) profile.role = inferred.role;
+    }
+
     const equipment = await this.blizzardService.fetchCharacterEquipment(
       character.name,
       character.realm,
@@ -457,26 +483,38 @@ export class CharactersService {
 
     for (const char of blizzardCharacters) {
       try {
+        const variant = char.gameVariant as
+          | 'retail'
+          | 'classic_era'
+          | 'classic'
+          | 'classic_anniversary';
+
         const profile = await this.blizzardService.fetchCharacterProfile(
           char.name,
           char.realm!,
           char.region!,
-          char.gameVariant as
-            | 'retail'
-            | 'classic_era'
-            | 'classic'
-            | 'classic_anniversary',
+          variant,
         );
+
+        // Infer spec/role from talents if Blizzard didn't return active_spec
+        if (!profile.spec && profile.class) {
+          const inferred =
+            await this.blizzardService.fetchCharacterSpecializations(
+              char.name,
+              char.realm!,
+              char.region!,
+              profile.class,
+              variant,
+            );
+          if (inferred.spec) profile.spec = inferred.spec;
+          if (inferred.role) profile.role = inferred.role;
+        }
 
         const equipment = await this.blizzardService.fetchCharacterEquipment(
           char.name,
           char.realm!,
           char.region!,
-          char.gameVariant as
-            | 'retail'
-            | 'classic_era'
-            | 'classic'
-            | 'classic_anniversary',
+          variant,
         );
 
         await this.db

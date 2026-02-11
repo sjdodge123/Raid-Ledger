@@ -49,6 +49,8 @@ export const EquipmentItemSchema = z.object({
     description: z.string().optional(),
     /** Set name if item is part of a set */
     setName: z.string().optional(),
+    /** Item icon URL from Blizzard media API */
+    iconUrl: z.string().optional(),
 });
 
 export type EquipmentItemDto = z.infer<typeof EquipmentItemSchema>;

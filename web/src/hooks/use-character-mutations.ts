@@ -37,9 +37,10 @@ export function useUpdateCharacter() {
     return useMutation({
         mutationFn: ({ id, dto }: { id: string; dto: UpdateCharacterDto }) =>
             updateCharacter(id, dto),
-        onSuccess: () => {
+        onSuccess: (_data, variables) => {
             toast.success('Character updated!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
+            queryClient.invalidateQueries({ queryKey: ['characters', variables.id] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to update character');

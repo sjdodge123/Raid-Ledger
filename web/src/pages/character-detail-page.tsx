@@ -1,12 +1,12 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacterDetail } from '../hooks/use-character-detail';
-import { useRefreshCharacterFromArmory } from '../hooks/use-character-mutations';
+import { useRefreshCharacterFromArmory, useUpdateCharacter } from '../hooks/use-character-mutations';
 import { useWowheadTooltips, isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
 import { ItemFallbackTooltip } from '../components/characters/item-fallback-tooltip';
 import { ItemDetailModal } from '../components/characters/item-detail-modal';
 import { useAuth } from '../hooks/use-auth';
-import { useState, useEffect } from 'react';
-import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
+import { useState, useEffect, useRef } from 'react';
+import type { CharacterEquipmentDto, EquipmentItemDto, CharacterRole } from '@raid-ledger/contract';
 
 /** Quality color mapping for WoW item quality */
 const QUALITY_COLORS: Record<string, string> = {
@@ -95,6 +95,86 @@ function buildOrderedItems(equipment: CharacterEquipmentDto): EquipmentItemDto[]
     return ordered;
 }
 
+interface RoleEditorProps {
+    characterId: string;
+    currentRole: CharacterRole | null;
+}
+
+function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
+    const [isOpen, setIsOpen] = useState(false);
+    const updateMutation = useUpdateCharacter();
+    const dropdownRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        if (!isOpen) return;
+        function handleClickOutside(e: MouseEvent) {
+            if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isOpen]);
+
+    function handleRoleChange(newRole: CharacterRole | null) {
+        updateMutation.mutate({
+            id: characterId,
+            dto: { role: newRole },
+        });
+        setIsOpen(false);
+    }
+
+    const roles: Array<{ value: CharacterRole; label: string; color: string }> = [
+        { value: 'tank', label: 'TANK', color: 'bg-blue-600' },
+        { value: 'healer', label: 'HEALER', color: 'bg-emerald-600' },
+        { value: 'dps', label: 'DPS', color: 'bg-red-600' },
+    ];
+
+    if (!isOpen) {
+        return (
+            <button
+                onClick={() => setIsOpen(true)}
+                className={`px-2 py-0.5 rounded text-xs text-foreground transition-colors ${
+                    currentRole
+                        ? `${ROLE_COLORS[currentRole] ?? 'bg-faint'} hover:opacity-80`
+                        : 'bg-faint/50 text-muted hover:bg-faint border border-dashed border-edge'
+                }`}
+                title="Click to change role"
+            >
+                {currentRole ? currentRole.toUpperCase() : 'Set Role'}
+            </button>
+        );
+    }
+
+    return (
+        <div className="relative inline-block" ref={dropdownRef}>
+            <div className="absolute z-10 top-full mt-1 bg-panel border border-edge rounded-lg shadow-lg p-2 min-w-[140px]">
+                {roles.map((r) => (
+                    <button
+                        key={r.value}
+                        onClick={() => handleRoleChange(r.value)}
+                        className={`w-full text-left px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${
+                            currentRole === r.value
+                                ? `${r.color} text-foreground`
+                                : 'text-muted hover:bg-overlay hover:text-foreground'
+                        }`}
+                    >
+                        {r.label}
+                    </button>
+                ))}
+                {currentRole && (
+                    <button
+                        onClick={() => handleRoleChange(null)}
+                        className="w-full text-left px-3 py-1.5 text-xs rounded text-muted hover:bg-overlay hover:text-foreground mt-1 border-t border-edge"
+                    >
+                        Clear Role
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 interface EquipmentSlotProps {
     item: EquipmentItemDto | undefined;
     slotName: string;
@@ -120,6 +200,15 @@ function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: EquipmentSl
     }
 
     const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-gray-300';
+    const qualityBorder: Record<string, string> = {
+        POOR: 'border-gray-600',
+        COMMON: 'border-gray-500',
+        UNCOMMON: 'border-green-600',
+        RARE: 'border-blue-600',
+        EPIC: 'border-purple-600',
+        LEGENDARY: 'border-orange-600',
+    };
+    const iconBorderClass = qualityBorder[item.quality.toUpperCase()] ?? 'border-gray-500';
 
     return (
         <div
@@ -128,7 +217,19 @@ function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: EquipmentSl
             onMouseEnter={() => setShowFallback(true)}
             onMouseLeave={() => setShowFallback(false)}
         >
-            <div className="w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono">
+            {item.iconUrl ? (
+                <img
+                    src={item.iconUrl}
+                    alt={item.name}
+                    className={`w-8 h-8 rounded border ${iconBorderClass} flex-shrink-0`}
+                    onError={(e) => {
+                        // Fall back to item level display if icon fails
+                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                    }}
+                />
+            ) : null}
+            <div className={`w-8 h-8 rounded bg-faint flex items-center justify-center text-xs text-muted font-mono flex-shrink-0${item.iconUrl ? ' hidden' : ''}`}>
                 {item.itemLevel > 0 ? item.itemLevel : '--'}
             </div>
             <div className="min-w-0 flex-1">
@@ -377,11 +478,16 @@ export function CharacterDetailPage() {
                                     {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
                                 </span>
                             )}
-                            {character.role && (
+                            {isOwner ? (
+                                <RoleEditor
+                                    characterId={character.id}
+                                    currentRole={character.role as CharacterRole | null}
+                                />
+                            ) : character.role ? (
                                 <span className={`px-2 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.role] ?? 'bg-faint'}`}>
                                     {character.role.toUpperCase()}
                                 </span>
-                            )}
+                            ) : null}
                             {character.isMain && (
                                 <span className="text-yellow-400" title="Main character">⭐ Main</span>
                             )}

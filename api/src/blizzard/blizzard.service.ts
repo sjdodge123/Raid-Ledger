@@ -25,6 +25,13 @@ export interface BlizzardEquipmentItem {
   };
   description?: string;
   setName?: string;
+  iconUrl?: string;
+}
+
+/** Inferred specialization from Blizzard talent data */
+export interface InferredSpecialization {
+  spec: string | null;
+  role: 'tank' | 'healer' | 'dps' | null;
 }
 
 /** Equipment data returned from the Blizzard API */
@@ -101,6 +108,33 @@ const SPEC_ROLE_MAP: Record<string, 'tank' | 'healer' | 'dps'> = {
   // Warrior
   Arms: 'dps',
   Fury: 'dps',
+};
+
+/**
+ * Classic WoW talent tree names → role mapping.
+ * Key = class name, value = map of tree name → role.
+ * Used to infer role from the talent tree with the most points invested.
+ */
+const CLASSIC_TALENT_TREE_ROLES: Record<
+  string,
+  Record<string, 'tank' | 'healer' | 'dps'>
+> = {
+  Druid: {
+    Balance: 'dps',
+    'Feral Combat': 'dps',
+    Feral: 'dps',
+    Restoration: 'healer',
+    Guardian: 'tank',
+  },
+  Warrior: { Arms: 'dps', Fury: 'dps', Protection: 'tank' },
+  Paladin: { Holy: 'healer', Protection: 'tank', Retribution: 'dps' },
+  Priest: { Discipline: 'healer', Holy: 'healer', Shadow: 'dps' },
+  Mage: { Arcane: 'dps', Fire: 'dps', Frost: 'dps' },
+  Warlock: { Affliction: 'dps', Demonology: 'dps', Destruction: 'dps' },
+  Rogue: { Assassination: 'dps', Combat: 'dps', Subtlety: 'dps' },
+  Hunter: { 'Beast Mastery': 'dps', Marksmanship: 'dps', Survival: 'dps' },
+  Shaman: { Elemental: 'dps', Enhancement: 'dps', Restoration: 'healer' },
+  'Death Knight': { Blood: 'tank', Frost: 'dps', Unholy: 'dps' },
 };
 
 /** Token expiry buffer in seconds */
@@ -674,6 +708,7 @@ export class BlizzardService {
           quality: { type: string };
           level: { value: number };
           item_subclass?: { name: string };
+          media?: { key?: { href: string } };
           enchantments?: Array<{
             display_string: string;
             enchantment_id?: number;
@@ -699,42 +734,59 @@ export class BlizzardService {
         }>;
       };
 
-      const items: BlizzardEquipmentItem[] = (data.equipped_items ?? [])
-        .filter((item) => item?.slot?.type && item?.item?.id)
-        .map((item) => ({
-          slot: item.slot.type,
-          name: item.name ?? 'Unknown',
-          itemId: item.item.id,
-          quality: (item.quality?.type ?? 'COMMON').toUpperCase(),
-          itemLevel: item.level?.value ?? 0,
-          itemSubclass: item.item_subclass?.name ?? null,
-          enchantments: item.enchantments?.map((e) => ({
-            displayString: e.display_string,
-            enchantmentId: e.enchantment_id,
-          })),
-          sockets: item.sockets?.map((s) => ({
-            socketType: s.socket_type?.type ?? 'UNKNOWN',
-            itemId: s.item?.id,
-          })),
-          stats: item.stats?.map((s) => ({
-            type: s.type.type,
-            name: s.type.name,
-            value: s.value,
-          })),
-          armor: item.armor?.value,
-          binding: item.binding?.type,
-          requiredLevel: item.requirements?.level?.value,
-          weapon: item.weapon
-            ? {
-                damageMin: item.weapon.damage.min_value,
-                damageMax: item.weapon.damage.max_value,
-                attackSpeed: item.weapon.attack_speed.value,
-                dps: item.weapon.dps.value,
-              }
-            : undefined,
-          description: item.description,
-          setName: item.set?.item_set?.name,
-        }));
+      const rawItems = (data.equipped_items ?? []).filter(
+        (item) => item?.slot?.type && item?.item?.id,
+      );
+
+      // Batch-fetch item icon URLs in parallel (non-fatal per item)
+      const iconUrls = await this.fetchItemIconUrls(
+        rawItems
+          .map((item) => ({
+            itemId: item.item.id,
+            mediaHref: item.media?.key?.href,
+          }))
+          .filter((entry) => entry.mediaHref) as Array<{
+          itemId: number;
+          mediaHref: string;
+        }>,
+        token,
+      );
+
+      const items: BlizzardEquipmentItem[] = rawItems.map((item) => ({
+        slot: item.slot.type,
+        name: item.name ?? 'Unknown',
+        itemId: item.item.id,
+        quality: (item.quality?.type ?? 'COMMON').toUpperCase(),
+        itemLevel: item.level?.value ?? 0,
+        itemSubclass: item.item_subclass?.name ?? null,
+        enchantments: item.enchantments?.map((e) => ({
+          displayString: e.display_string,
+          enchantmentId: e.enchantment_id,
+        })),
+        sockets: item.sockets?.map((s) => ({
+          socketType: s.socket_type?.type ?? 'UNKNOWN',
+          itemId: s.item?.id,
+        })),
+        stats: item.stats?.map((s) => ({
+          type: s.type.type,
+          name: s.type.name,
+          value: s.value,
+        })),
+        armor: item.armor?.value,
+        binding: item.binding?.type,
+        requiredLevel: item.requirements?.level?.value,
+        weapon: item.weapon
+          ? {
+              damageMin: item.weapon.damage.min_value,
+              damageMax: item.weapon.damage.max_value,
+              attackSpeed: item.weapon.attack_speed.value,
+              dps: item.weapon.dps.value,
+            }
+          : undefined,
+        description: item.description,
+        setName: item.set?.item_set?.name,
+        iconUrl: iconUrls.get(item.item.id),
+      }));
 
       // Log first few items' quality for debugging Classic API discrepancies
       if (items.length > 0) {
@@ -754,6 +806,156 @@ export class BlizzardService {
     } catch (err) {
       this.logger.warn(`Failed to fetch character equipment: ${err}`);
       return null;
+    }
+  }
+
+  /**
+   * Batch-fetch item icon URLs from Blizzard media endpoints.
+   * Each item's media.key.href from the equipment response points to a media
+   * endpoint that returns the icon CDN URL. Fetches all in parallel (non-fatal).
+   *
+   * The Blizzard CDN for Classic variants (classicann-us, etc.) returns 403 for
+   * some icons, so we normalize all icon URLs to the retail CDN format which is
+   * more reliable: https://render.worldofwarcraft.com/us/icons/56/{icon_name}.jpg
+   */
+  private async fetchItemIconUrls(
+    items: Array<{ itemId: number; mediaHref: string }>,
+    token: string,
+  ): Promise<Map<number, string>> {
+    const result = new Map<number, string>();
+    if (items.length === 0) return result;
+
+    const fetches = items.map(async ({ itemId, mediaHref }) => {
+      try {
+        const res = await fetch(mediaHref, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const media = (await res.json()) as {
+          assets?: Array<{ key: string; value: string }>;
+        };
+        const icon = media.assets?.find((a) => a.key === 'icon');
+        if (icon?.value) {
+          // Normalize to retail CDN — extract icon filename and use us/ base
+          // e.g., ".../classicann-us/icons/56/inv_shoulder_08.jpg"
+          //     → ".../us/icons/56/inv_shoulder_08.jpg"
+          const iconMatch = icon.value.match(/icons\/\d+\/(.+)$/);
+          const normalizedUrl = iconMatch
+            ? `https://render.worldofwarcraft.com/us/icons/56/${iconMatch[1]}`
+            : icon.value;
+          result.set(itemId, normalizedUrl);
+        }
+      } catch {
+        // Non-fatal: item will just not have an icon
+      }
+    });
+
+    await Promise.all(fetches);
+    return result;
+  }
+
+  /**
+   * Infer a character's specialization from the Blizzard specializations endpoint.
+   * For retail: uses active_specialization directly.
+   * For Classic: finds the talent tree with the most points invested and
+   * maps it to a spec name and role.
+   * Returns null fields if the endpoint is unavailable or the character has no talents.
+   */
+  async fetchCharacterSpecializations(
+    name: string,
+    realm: string,
+    region: string,
+    characterClass: string,
+    gameVariant: WowGameVariant = 'retail',
+  ): Promise<InferredSpecialization> {
+    try {
+      const token = await this.getAccessToken(region);
+      const realmSlug = this.normalizeRealmSlug(realm);
+      const charName = name.toLowerCase();
+      const { profile: profilePrefix } = getNamespacePrefixes(gameVariant);
+      const namespace = `${profilePrefix}-${region}`;
+      const baseUrl = `https://${region}.api.blizzard.com`;
+
+      const url = `${baseUrl}/profile/wow/character/${realmSlug}/${charName}/specializations?namespace=${namespace}&locale=en_US`;
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!res.ok) {
+        this.logger.debug(
+          `Specializations endpoint returned ${res.status} for ${charName}-${realmSlug}`,
+        );
+        return { spec: null, role: null };
+      }
+
+      const data = (await res.json()) as {
+        // Retail format
+        active_specialization?: { name: string };
+        // Classic format — array of talent trees with spent point counts
+        specializations?: Array<{
+          specialization_name?: string;
+          spent_points?: number;
+          talents?: Array<unknown>;
+        }>;
+        // Some variants return specialization_groups
+        specialization_groups?: Array<{
+          specializations?: Array<{
+            specialization_name?: string;
+            spent_points?: number;
+            talents?: Array<unknown>;
+          }>;
+        }>;
+      };
+
+      // Retail: if active_specialization is present, use it directly
+      if (data.active_specialization?.name) {
+        const specName = data.active_specialization.name;
+        return {
+          spec: specName,
+          role: this.specToRole(specName),
+        };
+      }
+
+      // Classic: find the talent tree with the most points
+      const trees =
+        data.specializations ??
+        data.specialization_groups?.[0]?.specializations ??
+        [];
+
+      if (trees.length === 0) {
+        return { spec: null, role: null };
+      }
+
+      // Find tree with most spent points
+      let bestTree: { name: string; points: number } | null = null;
+      for (const tree of trees) {
+        const treeName = tree.specialization_name;
+        const points = tree.spent_points ?? tree.talents?.length ?? 0;
+        if (treeName && (!bestTree || points > bestTree.points)) {
+          bestTree = { name: treeName, points };
+        }
+      }
+
+      if (!bestTree || bestTree.points === 0) {
+        return { spec: null, role: null };
+      }
+
+      // Map tree name to role using class-specific lookup
+      const classRoles = CLASSIC_TALENT_TREE_ROLES[characterClass];
+      const role =
+        classRoles?.[bestTree.name] ?? this.specToRole(bestTree.name);
+
+      this.logger.log(
+        `Inferred spec for ${charName}: ${bestTree.name} (${bestTree.points} pts) → ${role ?? 'unknown'}`,
+      );
+
+      return {
+        spec: bestTree.name,
+        role,
+      };
+    } catch (err) {
+      this.logger.debug(`Failed to fetch specializations: ${err}`);
+      return { spec: null, role: null };
     }
   }
 
@@ -1072,9 +1274,7 @@ export class BlizzardService {
 
     // Override with accurate Classic level data when available
     const levelOverride =
-      gameVariant !== 'retail'
-        ? CLASSIC_INSTANCE_LEVELS[data.name]
-        : undefined;
+      gameVariant !== 'retail' ? CLASSIC_INSTANCE_LEVELS[data.name] : undefined;
 
     const detail: WowInstanceDetail = {
       id: data.id,
