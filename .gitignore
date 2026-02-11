@@ -32,6 +32,7 @@ implementation-artifacts/
 scripts/*
 !scripts/deploy_prod.sh
 !scripts/deploy_dev.sh
+!scripts/fix-migration-order.sh
 !/api/scripts/
 implementation_plan.md
 walkthrough.md

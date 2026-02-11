@@ -60,7 +60,10 @@ npm run db:generate -w api           # Generate migrations from schema changes
 npm run db:migrate -w api            # Apply migrations
 npm run db:seed:games -w api         # Seed game data
 npm run db:seed:admin -w api         # Seed admin user
+./scripts/fix-migration-order.sh     # Validate/fix migration timestamp order
 ```
+
+**After generating or merging migrations**, always run `./scripts/fix-migration-order.sh` to ensure journal timestamps are monotonically increasing. Out-of-order timestamps cause Drizzle to silently skip migrations. The script auto-fixes any issues; use `--check` for CI/validation-only mode.
 
 ## Architecture
 
