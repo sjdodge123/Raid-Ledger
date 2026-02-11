@@ -15,18 +15,18 @@ interface PluginSlotProps {
  * When no active plugin fills the slot, renders the fallback.
  */
 export function PluginSlot({ name, context, fallback, className }: PluginSlotProps) {
-    const isPluginActive = usePluginStore((s) => s.isPluginActive);
+    const activeSlugs = usePluginStore((s) => s.activeSlugs);
 
     const registrations = getSlotRegistrations(name)
-        .filter((r) => isPluginActive(r.pluginSlug));
+        .filter((r) => activeSlugs.has(r.pluginSlug));
 
     if (registrations.length === 0) {
         if (!fallback) return null;
         return className ? <div className={className}>{fallback}</div> : <>{fallback}</>;
     }
 
-    const content = registrations.map((r) => (
-        <r.component key={`${r.pluginSlug}:${r.slotName}`} {...context} />
+    const content = registrations.map((r, i) => (
+        <r.component key={`${r.pluginSlug}:${r.slotName}:${i}`} {...context} />
     ));
 
     return className ? <div className={className}>{content}</div> : <>{content}</>;

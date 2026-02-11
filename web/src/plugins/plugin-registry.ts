@@ -6,7 +6,6 @@ export type PluginSlotName =
     | 'character-detail:header-badges'
     | 'character-create:import-form'
     | 'event-create:content-browser'
-    | 'event-create:form-sections'
     | 'event-detail:content-sections'
     | 'event-detail:signup-warnings'
     | 'admin-settings:integration-cards'

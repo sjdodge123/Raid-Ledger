@@ -247,6 +247,12 @@ export function EventDetailPage() {
                 />
             </div>
 
+            {/* Plugin: content instance details (e.g. WoW dungeon/raid chips) */}
+            <PluginSlot
+                name="event-detail:content-sections"
+                context={{ contentInstances: event.contentInstances ?? [] }}
+            />
+
             {/* ROK-192: Collapsed banner (fixed, only visible when scrolled past full banner) */}
             {isBannerCollapsed && (
                 <EventBanner

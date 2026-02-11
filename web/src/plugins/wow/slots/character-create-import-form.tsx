@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { WowArmoryImportForm } from '../../../components/characters/wow-armory-import-form';
 
+const WOW_SLUGS = new Set(['wow', 'wow-classic', 'world-of-warcraft', 'world-of-warcraft-classic']);
+
+function isWowSlug(slug: string): boolean {
+    return WOW_SLUGS.has(slug) || slug.includes('world-of-warcraft');
+}
+
 interface CharacterCreateImportFormProps {
     onClose: () => void;
     gameSlug: string;
@@ -20,6 +26,9 @@ export function CharacterCreateImportForm({
         }
         return 'retail';
     });
+
+    // Only show Armory import for WoW games
+    if (!isWowSlug(gameSlug)) return null;
 
     return (
         <>
