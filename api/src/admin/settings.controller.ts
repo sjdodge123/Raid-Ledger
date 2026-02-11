@@ -126,23 +126,25 @@ export class AdminSettingsController {
       };
     }
 
+    const headers = {
+      'User-Agent':
+        'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+    };
+
     try {
-      // Validate credentials via versioned API with Basic auth (standard OAuth2 spec).
-      // Uses /api/v10/ and Authorization header to avoid Cloudflare blocks on
-      // the unversioned endpoint from shared hosting IPs.
+      // Step 1: Try token endpoint to fully validate credentials.
       const basicAuth = Buffer.from(
         `${config.clientId}:${config.clientSecret}`,
       ).toString('base64');
 
-      const response = await fetch(
+      const tokenResponse = await fetch(
         'https://discord.com/api/v10/oauth2/token',
         {
           method: 'POST',
           headers: {
+            ...headers,
             'Content-Type': 'application/x-www-form-urlencoded',
             Authorization: `Basic ${basicAuth}`,
-            'User-Agent':
-              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
           },
           body: new URLSearchParams({
             grant_type: 'client_credentials',
@@ -151,58 +153,73 @@ export class AdminSettingsController {
         },
       );
 
-      // Discord may return HTML (Cloudflare challenge) instead of JSON
-      const responseText = await response.text();
-      let data: { error?: string };
+      const tokenText = await tokenResponse.text();
+      let tokenData: { error?: string } | null = null;
       try {
-        data = JSON.parse(responseText) as { error?: string };
+        tokenData = JSON.parse(tokenText) as { error?: string };
       } catch {
-        this.logger.error(
-          `Discord returned non-JSON (${response.status}): ${responseText.slice(0, 200)}`,
-        );
-        return {
-          success: false,
-          message: `Discord returned an unexpected response (HTTP ${response.status}). Try again in a moment.`,
-        };
+        // Non-JSON response — likely Cloudflare HTML block, handled below
       }
 
-      if (response.status === 401 || data.error === 'invalid_client') {
-        return {
-          success: false,
-          message: 'Invalid Client ID or Client Secret',
-        };
+      // If we got a proper JSON response, we can validate credentials directly
+      if (tokenData) {
+        if (
+          tokenResponse.status === 401 ||
+          tokenData.error === 'invalid_client'
+        ) {
+          return {
+            success: false,
+            message: 'Invalid Client ID or Client Secret',
+          };
+        }
+
+        if (
+          tokenResponse.status === 400 &&
+          tokenData.error === 'unsupported_grant_type'
+        ) {
+          return {
+            success: true,
+            message: 'Credentials are valid! Discord OAuth is ready to use.',
+          };
+        }
+
+        if (tokenResponse.ok) {
+          return { success: true, message: 'Credentials verified successfully!' };
+        }
+
+        if (tokenResponse.status === 429) {
+          // JSON 429 — real Discord rate limit, fall through to gateway check
+        } else {
+          return {
+            success: false,
+            message: `Discord returned an error: ${tokenData.error || tokenResponse.status}`,
+          };
+        }
       }
 
-      // Discord returns 400 unsupported_grant_type for valid credentials
-      // on apps that don't support client_credentials — this proves the
-      // credentials were accepted and the grant type was the only issue.
-      if (response.status === 400 && data.error === 'unsupported_grant_type') {
+      // Step 2: Token endpoint blocked (Cloudflare HTML 429 or JSON 429).
+      // Fall back to a lightweight GET to confirm Discord API is reachable.
+      // The actual credential validation will happen on first OAuth login.
+      this.logger.warn(
+        `Token endpoint blocked (${tokenResponse.status}), falling back to gateway check`,
+      );
+
+      const gatewayResponse = await fetch(
+        'https://discord.com/api/v10/gateway',
+        { headers },
+      );
+
+      if (gatewayResponse.ok) {
         return {
           success: true,
-          message: 'Credentials are valid! Discord OAuth is ready to use.',
-        };
-      }
-
-      // Any other JSON response with valid credentials (e.g., successful token)
-      if (response.ok) {
-        return {
-          success: true,
-          message: 'Credentials verified successfully!',
-        };
-      }
-
-      // Rate-limited with JSON response
-      if (response.status === 429) {
-        return {
-          success: false,
           message:
-            'Discord is rate-limiting requests. Please wait a minute and try again.',
+            'Discord API is reachable. Credentials are saved — they will be validated on first login.',
         };
       }
 
       return {
         success: false,
-        message: `Discord returned an error: ${data.error || response.status}`,
+        message: `Discord API is unreachable (HTTP ${gatewayResponse.status}). The server's IP may be blocked by Cloudflare.`,
       };
     } catch (error) {
       this.logger.error('Failed to test Discord OAuth:', error);
