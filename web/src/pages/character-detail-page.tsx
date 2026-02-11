@@ -97,10 +97,11 @@ function buildOrderedItems(equipment: CharacterEquipmentDto): EquipmentItemDto[]
 
 interface RoleEditorProps {
     characterId: string;
-    currentRole: CharacterRole | null;
+    effectiveRole: CharacterRole | null;
+    hasOverride: boolean;
 }
 
-function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
+function RoleEditor({ characterId, effectiveRole, hasOverride }: RoleEditorProps) {
     const [isOpen, setIsOpen] = useState(false);
     const updateMutation = useUpdateCharacter();
     const dropdownRef = useRef<HTMLDivElement>(null);
@@ -119,7 +120,7 @@ function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
     function handleRoleChange(newRole: CharacterRole | null) {
         updateMutation.mutate({
             id: characterId,
-            dto: { role: newRole },
+            dto: { roleOverride: newRole },
         });
         setIsOpen(false);
     }
@@ -132,17 +133,26 @@ function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
 
     if (!isOpen) {
         return (
-            <button
-                onClick={() => setIsOpen(true)}
-                className={`px-2 py-0.5 rounded text-xs text-foreground transition-colors ${
-                    currentRole
-                        ? `${ROLE_COLORS[currentRole] ?? 'bg-faint'} hover:opacity-80`
-                        : 'bg-faint/50 text-muted hover:bg-faint border border-dashed border-edge'
-                }`}
-                title="Click to change role"
-            >
-                {currentRole ? currentRole.toUpperCase() : 'Set Role'}
-            </button>
+            <span className="inline-flex items-center gap-1">
+                <button
+                    onClick={() => setIsOpen(true)}
+                    className={`px-2 py-0.5 rounded text-xs text-foreground transition-colors ${
+                        effectiveRole
+                            ? `${ROLE_COLORS[effectiveRole] ?? 'bg-faint'} hover:opacity-80`
+                            : 'bg-faint/50 text-muted hover:bg-faint border border-dashed border-edge'
+                    }`}
+                    title="Click to change role"
+                >
+                    {effectiveRole ? effectiveRole.toUpperCase() : 'Set Role'}
+                </button>
+                {hasOverride && (
+                    <span className="text-xs text-amber-400" title="Manual role override active">
+                        <svg className="w-3 h-3 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                    </span>
+                )}
+            </span>
         );
     }
 
@@ -154,7 +164,7 @@ function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
                         key={r.value}
                         onClick={() => handleRoleChange(r.value)}
                         className={`w-full text-left px-3 py-1.5 text-xs rounded transition-colors flex items-center gap-2 ${
-                            currentRole === r.value
+                            effectiveRole === r.value
                                 ? `${r.color} text-foreground`
                                 : 'text-muted hover:bg-overlay hover:text-foreground'
                         }`}
@@ -162,12 +172,12 @@ function RoleEditor({ characterId, currentRole }: RoleEditorProps) {
                         {r.label}
                     </button>
                 ))}
-                {currentRole && (
+                {hasOverride && (
                     <button
                         onClick={() => handleRoleChange(null)}
                         className="w-full text-left px-3 py-1.5 text-xs rounded text-muted hover:bg-overlay hover:text-foreground mt-1 border-t border-edge"
                     >
-                        Clear Role
+                        Clear Override
                     </button>
                 )}
             </div>
@@ -481,11 +491,12 @@ export function CharacterDetailPage() {
                             {isOwner ? (
                                 <RoleEditor
                                     characterId={character.id}
-                                    currentRole={character.role as CharacterRole | null}
+                                    effectiveRole={character.effectiveRole as CharacterRole | null}
+                                    hasOverride={character.roleOverride != null}
                                 />
-                            ) : character.role ? (
-                                <span className={`px-2 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.role] ?? 'bg-faint'}`}>
-                                    {character.role.toUpperCase()}
+                            ) : character.effectiveRole ? (
+                                <span className={`px-2 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.effectiveRole] ?? 'bg-faint'}`}>
+                                    {character.effectiveRole.toUpperCase()}
                                 </span>
                             ) : null}
                             {character.isMain && (

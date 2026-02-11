@@ -87,8 +87,8 @@ export function SignupConfirmationModal({
     // Check if selected character role mismatches expected role (AC-5)
     const hasRoleMismatch =
         expectedRole &&
-        selectedCharacter?.role &&
-        selectedCharacter.role !== expectedRole;
+        selectedCharacter?.effectiveRole &&
+        selectedCharacter.effectiveRole !== expectedRole;
 
     // Whether WoW Armory import is available (includes Classic variants)
     const isWow = gameSlug?.startsWith('wow') || gameSlug?.startsWith('world-of-warcraft');
@@ -249,7 +249,7 @@ export function SignupConfirmationModal({
                         <div className="text-sm">
                             <p className="font-medium">Role Mismatch</p>
                             <p className="text-amber-400/80">
-                                This character's role ({selectedCharacter?.role}) differs from
+                                This character's role ({selectedCharacter?.effectiveRole}) differs from
                                 the expected role ({expectedRole}). This may affect raid
                                 composition.
                             </p>
@@ -291,7 +291,7 @@ interface CharacterCardProps {
  * Character selection card within the modal.
  */
 function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCardProps) {
-    const role = character.role as CharacterRole | null;
+    const role = character.effectiveRole as CharacterRole | null;
 
     return (
         <button

@@ -39,8 +39,10 @@ export const characters = pgTable(
     class: varchar('class', { length: 50 }),
     /** Specialization (e.g., 'Arcane', 'Protection') */
     spec: varchar('spec', { length: 50 }),
-    /** Role: 'tank', 'healer', 'dps' */
+    /** Role: 'tank', 'healer', 'dps' (synced from Blizzard) */
     role: varchar('role', { length: 20 }),
+    /** User-set role override — takes priority over synced role */
+    roleOverride: varchar('role_override', { length: 20 }),
     /** Is this the user's main character for this game? */
     isMain: boolean('is_main').default(false).notNull(),
     /** Item level / gear score */

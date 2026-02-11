@@ -386,12 +386,18 @@ export class SignupsService {
   private buildCharacterDto(
     character: typeof schema.characters.$inferSelect,
   ): SignupCharacterDto {
+    const roleOverride = character.roleOverride as
+      | 'tank'
+      | 'healer'
+      | 'dps'
+      | null;
+    const role = character.role as 'tank' | 'healer' | 'dps' | null;
     return {
       id: character.id,
       name: character.name,
       class: character.class,
       spec: character.spec,
-      role: character.role as 'tank' | 'healer' | 'dps' | null,
+      role: roleOverride ?? role,
       isMain: character.isMain,
       itemLevel: character.itemLevel,
       level: character.level,
@@ -757,7 +763,7 @@ export class SignupsService {
             id: row.characters.id,
             name: row.characters.name,
             className: row.characters.class,
-            role: row.characters.role,
+            role: row.characters.roleOverride ?? row.characters.role,
             avatarUrl: row.characters.avatarUrl,
           }
         : null,

@@ -587,6 +587,8 @@ export class CharactersService {
    * Map database row to DTO.
    */
   private mapToDto(row: typeof schema.characters.$inferSelect): CharacterDto {
+    const roleOverride = row.roleOverride as CharacterDto['role'];
+    const role = row.role as CharacterDto['role'];
     return {
       id: row.id,
       userId: row.userId,
@@ -595,7 +597,9 @@ export class CharactersService {
       realm: row.realm,
       class: row.class,
       spec: row.spec,
-      role: row.role as CharacterDto['role'],
+      role,
+      roleOverride,
+      effectiveRole: roleOverride ?? role,
       isMain: row.isMain,
       itemLevel: row.itemLevel,
       externalId: row.externalId,

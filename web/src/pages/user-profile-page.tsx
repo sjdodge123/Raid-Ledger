@@ -57,9 +57,9 @@ function PublicCharacterCard({ character }: { character: CharacterDto }) {
                     {character.race && character.class && <span>•</span>}
                     {character.class && <span>{character.class}</span>}
                     {character.spec && <span>• {character.spec}</span>}
-                    {character.role && (
-                        <span className={`px-1.5 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.role] ?? 'bg-faint'}`}>
-                            {character.role.toUpperCase()}
+                    {character.effectiveRole && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.effectiveRole] ?? 'bg-faint'}`}>
+                            {character.effectiveRole.toUpperCase()}
                         </span>
                     )}
                     {character.itemLevel && (

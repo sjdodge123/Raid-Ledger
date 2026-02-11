@@ -127,11 +127,11 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                         {character.race && character.class && <span>•</span>}
                         {character.class && <span>{character.class}</span>}
                         {character.spec && <span>• {character.spec}</span>}
-                        {character.role && (
+                        {character.effectiveRole && (
                             <span
-                                className={`px-1.5 py-0.5 rounded text-xs text-foreground ${roleColors[character.role] || 'bg-faint'}`}
+                                className={`px-1.5 py-0.5 rounded text-xs text-foreground ${roleColors[character.effectiveRole] || 'bg-faint'}`}
                             >
-                                {character.role.toUpperCase()}
+                                {character.effectiveRole.toUpperCase()}
                             </span>
                         )}
                         {character.itemLevel && (

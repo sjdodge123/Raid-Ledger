@@ -178,7 +178,7 @@ export function AddCharacterModal({
                         name: form.name.trim(),
                         class: showMmoFields ? (form.class.trim() || null) : null,
                         spec: showMmoFields ? (form.spec.trim() || null) : null,
-                        role: showMmoFields ? (form.role || null) : null,
+                        roleOverride: showMmoFields ? (form.role || null) : null,
                         realm: showMmoFields ? (form.realm.trim() || null) : null,
                     },
                 },
