@@ -22,10 +22,7 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export const CHANNELS = ['inApp', 'push', 'discord'] as const;
 export type Channel = (typeof CHANNELS)[number];
 
-export type ChannelPrefs = Record<
-  NotificationType,
-  Record<Channel, boolean>
->;
+export type ChannelPrefs = Record<NotificationType, Record<Channel, boolean>>;
 
 /**
  * Default channel preferences matrix.

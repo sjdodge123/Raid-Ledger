@@ -107,6 +107,58 @@ export const GameStreamsResponseSchema = z.object({
 
 export type GameStreamsResponseDto = z.infer<typeof GameStreamsResponseSchema>;
 
+// ============================================================
+// ROK-173: Admin IGDB panel schemas
+// ============================================================
+
+/** IGDB sync status for admin panel */
+export const IgdbSyncStatusSchema = z.object({
+    lastSyncAt: z.string().nullable(),
+    gameCount: z.number(),
+    syncInProgress: z.boolean(),
+});
+
+export type IgdbSyncStatusDto = z.infer<typeof IgdbSyncStatusSchema>;
+
+/** IGDB connection health for admin panel */
+export const IgdbHealthStatusSchema = z.object({
+    tokenStatus: z.enum(['valid', 'expired', 'not_fetched']),
+    tokenExpiresAt: z.string().nullable(),
+    lastApiCallAt: z.string().nullable(),
+    lastApiCallSuccess: z.boolean().nullable(),
+});
+
+export type IgdbHealthStatusDto = z.infer<typeof IgdbHealthStatusSchema>;
+
+/** Admin game list query parameters */
+export const AdminGameListQuerySchema = z.object({
+    search: z.string().optional(),
+    page: z.coerce.number().min(1).default(1),
+    limit: z.coerce.number().min(1).max(100).default(20),
+});
+
+export type AdminGameListQueryDto = z.infer<typeof AdminGameListQuerySchema>;
+
+/** Admin game list response */
+export const AdminGameListResponseSchema = z.object({
+    data: z.array(z.object({
+        id: z.number(),
+        igdbId: z.number(),
+        name: z.string(),
+        slug: z.string(),
+        coverUrl: z.string().nullable(),
+        cachedAt: z.string(),
+    })),
+    meta: z.object({
+        total: z.number(),
+        page: z.number(),
+        limit: z.number(),
+        totalPages: z.number(),
+    }),
+});
+
+export type AdminGameListResponseDto = z.infer<typeof AdminGameListResponseSchema>;
+
 /** Game interest (want-to-play) */
 export const GameInterestResponseSchema = z.object({
     wantToPlay: z.boolean(),

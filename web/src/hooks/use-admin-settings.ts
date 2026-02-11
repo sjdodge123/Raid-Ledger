@@ -18,8 +18,22 @@ interface OAuthTestResponse {
     message: string;
 }
 
+interface IgdbHealthStatus {
+    tokenStatus: 'valid' | 'expired' | 'not_fetched';
+    tokenExpiresAt: string | null;
+    lastApiCallAt: string | null;
+    lastApiCallSuccess: boolean | null;
+}
+
+interface IgdbSyncStatus {
+    lastSyncAt: string | null;
+    gameCount: number;
+    syncInProgress: boolean;
+}
+
 interface IgdbStatusResponse {
     configured: boolean;
+    health?: IgdbHealthStatus;
 }
 
 interface IgdbConfigDto {
@@ -198,6 +212,38 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // IGDB Sync Status (ROK-173)
+    // ============================================================
+
+    const igdbSyncStatus = useQuery<IgdbSyncStatus>({
+        queryKey: ['admin', 'settings', 'igdb', 'sync-status'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/sync-status`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch sync status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 10_000,
+    });
+
+    const syncIgdb = useMutation<ApiResponse & { refreshed: number; discovered: number }, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/sync`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to trigger sync');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb', 'sync-status'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -207,5 +253,7 @@ export function useAdminSettings() {
         updateIgdb,
         testIgdb,
         clearIgdb,
+        igdbSyncStatus,
+        syncIgdb,
     };
 }

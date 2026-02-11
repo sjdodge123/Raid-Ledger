@@ -49,7 +49,7 @@ export function IntegrationCard({
                         className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${isLoading
                             ? 'bg-overlay text-muted'
                             : isConfigured
-                                ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)] animate-pulse'
+                                ? 'bg-emerald-500/20 text-emerald-400 shadow-[0_0_12px_rgba(16,185,129,0.4)]'
                                 : 'bg-red-500/20 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-pulse'
                             }`}
                     >

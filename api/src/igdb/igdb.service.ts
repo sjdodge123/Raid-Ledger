@@ -8,7 +8,12 @@ import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
-import { IgdbGameDto, GameDetailDto } from '@raid-ledger/contract';
+import {
+  IgdbGameDto,
+  GameDetailDto,
+  IgdbSyncStatusDto,
+  IgdbHealthStatusDto,
+} from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
 
 /** IGDB API game response structure (expanded for ROK-229) */
@@ -102,6 +107,11 @@ export class IgdbService {
   private tokenExpiry: Date | null = null;
   private tokenFetchPromise: Promise<string> | null = null;
 
+  // ROK-173: Sync & health tracking
+  private _syncInProgress = false;
+  private _lastApiCallAt: Date | null = null;
+  private _lastApiCallSuccess: boolean | null = null;
+
   constructor(
     private readonly configService: ConfigService,
     @Inject(DrizzleAsyncProvider)
@@ -157,6 +167,15 @@ export class IgdbService {
    * Called by scheduled cron and on initial IGDB config.
    */
   async syncAllGames(): Promise<{ refreshed: number; discovered: number }> {
+    this._syncInProgress = true;
+    try {
+      return await this._doSync();
+    } finally {
+      this._syncInProgress = false;
+    }
+  }
+
+  private async _doSync(): Promise<{ refreshed: number; discovered: number }> {
     let refreshed = 0;
     let discovered = 0;
 
@@ -709,25 +728,35 @@ export class IgdbService {
     const token = await this.getAccessToken();
     const { clientId } = await this.resolveCredentials();
 
-    const response = await fetch('https://api.igdb.com/v4/games', {
-      method: 'POST',
-      headers: {
-        'Client-ID': clientId,
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'text/plain',
-      },
-      body,
-    });
+    try {
+      const response = await fetch('https://api.igdb.com/v4/games', {
+        method: 'POST',
+        headers: {
+          'Client-ID': clientId,
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'text/plain',
+        },
+        body,
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      this.logger.error(`IGDB API error: ${response.status} ${errorText}`);
-      throw new Error(
-        `IGDB API error ${response.status}: ${response.statusText}`,
-      );
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.error(`IGDB API error: ${response.status} ${errorText}`);
+        this._lastApiCallAt = new Date();
+        this._lastApiCallSuccess = false;
+        throw new Error(
+          `IGDB API error ${response.status}: ${response.statusText}`,
+        );
+      }
+
+      this._lastApiCallAt = new Date();
+      this._lastApiCallSuccess = true;
+      return (await response.json()) as IgdbApiGame[];
+    } catch (err) {
+      this._lastApiCallAt = new Date();
+      this._lastApiCallSuccess = false;
+      throw err;
     }
-
-    return (await response.json()) as IgdbApiGame[];
   }
 
   /**
@@ -776,6 +805,42 @@ export class IgdbService {
       .where(sql`${schema.games.igdbId} = ANY(${igdbIds})`);
 
     return results.map((g) => this.mapDbRowToDetail(g));
+  }
+
+  /**
+   * ROK-173: Get sync status for admin panel.
+   */
+  async getSyncStatus(): Promise<IgdbSyncStatusDto> {
+    const result = await this.db
+      .select({
+        count: sql<number>`count(*)::int`,
+        lastSync: sql<string | null>`max(${schema.games.cachedAt})::text`,
+      })
+      .from(schema.games);
+
+    const row = result[0];
+    return {
+      lastSyncAt: row?.lastSync ?? null,
+      gameCount: row?.count ?? 0,
+      syncInProgress: this._syncInProgress,
+    };
+  }
+
+  /**
+   * ROK-173: Get connection health status for admin panel.
+   */
+  getHealthStatus(): IgdbHealthStatusDto {
+    let tokenStatus: 'valid' | 'expired' | 'not_fetched' = 'not_fetched';
+    if (this.accessToken && this.tokenExpiry) {
+      tokenStatus = new Date() < this.tokenExpiry ? 'valid' : 'expired';
+    }
+
+    return {
+      tokenStatus,
+      tokenExpiresAt: this.tokenExpiry?.toISOString() ?? null,
+      lastApiCallAt: this._lastApiCallAt?.toISOString() ?? null,
+      lastApiCallSuccess: this._lastApiCallSuccess,
+    };
   }
 
   /** Expose Redis client and config for controller use */
