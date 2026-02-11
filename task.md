@@ -4,32 +4,23 @@
 <!-- [/] = in progress (pushes In Progress to Linear) -->
 <!-- [ ] = not started (no change in Linear) -->
 
-## Phase 2.5 — Polish & Ship-Ready
+## In Progress
+- [/] ROK-234: Reimagine character creation: inline onboarding, WoW Armory import, and no-character signup UX
 
-### P0 — Must Ship
-- [x] ROK-232: Set browser tab title + favicon  (P0)
-- [ ] ROK-234: Reimagine character creation  (P0)
-- [ ] ROK-233: Expand demo seed data to ~100 players  (P0)
-- [ ] ROK-213: Raid Leader Event Dashboard  (P0)
-
-### P1 — Should Ship
-- [ ] ROK-220: Custom Avatar Upload  (P1)
-- [ ] ROK-229: Auto-Sub Benched Players  (P1)
-- [ ] ROK-223: Event reschedule modal with game time overlay  (P1)
+## Ready for Dev
+- [ ] ROK-233: Expand demo seed data to ~100 players with rich cross-domain data  (P0)
 - [ ] ROK-188: Delete User Account  (P1)
-- [ ] ROK-208: Calendar Default View & Persisted Preference  (P1)
 - [ ] ROK-206: Enforce Single Main Character Per Player  (P1)
-
-### P2 — If Time Allows
-- [ ] ROK-222: Audit & unify avatar references to resolveAvatar()  (P2)
+- [ ] ROK-208: Calendar Default View & Persisted Preference  (P1)
+- [ ] ROK-220: Custom Avatar Upload  (P1)
+- [ ] ROK-223: Event reschedule modal with aggregate game time overlay  (P1)
+- [ ] ROK-229: Auto-Sub Benched Players  (P1)
 - [ ] ROK-209: Roster Auto-Fill & Clear All  (P2)
-- [ ] ROK-210: Attendees Section Redesign  (P2)
+- [ ] ROK-210: Attendees Section Redesign & Assignment Modal Consistency  (P2)
+- [ ] ROK-222: Audit & unify all avatar references to use resolveAvatar()  (P2)
 - [ ] ROK-228: Space Dark Mode Theme  (P2)
-
-## Done This Session
-- [x] ROK-235: Bug: translucent overlay box appears over events in calendar week view
-- [x] ROK-185: Event Reminder Notifications
+- [ ] ROK-180: Discord Bot Welcome & Dispatch
+- [ ] ROK-204: Admin Onboarding Wizard
 
 ## Session Notes
 <!-- Add context, blockers, decisions as you work -->
-- Phase 2.5 sprint locked in — focus on web polish before Discord bot/mobile

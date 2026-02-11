@@ -78,23 +78,9 @@ export interface ExternalContentInstance {
 /** Enriched content instance with detail info */
 export interface ExternalContentInstanceDetail extends ExternalContentInstance {
   minimumLevel: number | null;
-  maximumLevel?: number | null;
+  maximumLevel: number | null;
   maxPlayers: number | null;
   category: 'dungeon' | 'raid';
-}
-
-/** Parameters for importing a character from an external source */
-export interface CharacterImportParams {
-  name: string;
-  realm: string;
-  region: string;
-  gameVariant?: string;
-}
-
-/** Parameters for syncing an existing character from an external source */
-export interface CharacterSyncParams extends CharacterImportParams {
-  characterId: string;
-  class: string;
 }
 
 /** Definition for a cron job provided by a plugin */

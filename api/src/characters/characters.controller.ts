@@ -85,7 +85,7 @@ export class CharactersController {
   }
 
   /**
-   * Import a WoW character from Blizzard Armory (ROK-234).
+   * Import a character from an external game API via adapter (ROK-234, ROK-237).
    * Must be declared before :id routes.
    */
   @Post('import/wow')
@@ -142,7 +142,7 @@ export class CharactersController {
   }
 
   /**
-   * Refresh a character's data from Blizzard Armory (ROK-234).
+   * Refresh a character's data from an external game API via adapter (ROK-234, ROK-237).
    */
   @Post(':id/refresh')
   async refreshFromArmory(

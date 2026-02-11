@@ -43,9 +43,13 @@ export interface CharacterSyncAdapter {
 export interface ContentProvider {
   readonly gameSlugs: string[];
   fetchRealms(region: string, gameVariant?: string): Promise<ExternalRealm[]>;
-  fetchInstances(gameVariant?: string): Promise<ExternalContentInstance[]>;
+  fetchInstances(
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalContentInstance[]>;
   fetchInstanceDetail(
     instanceId: number,
+    region: string,
     gameVariant?: string,
   ): Promise<ExternalContentInstanceDetail | null>;
 }

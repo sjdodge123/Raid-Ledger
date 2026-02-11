@@ -132,7 +132,9 @@ describe('EventsController', () => {
   });
 
   describe('findAll', () => {
-    const mockReq = { user: undefined } as { user?: { id: number; isAdmin: boolean } };
+    const mockReq = { user: undefined } as {
+      user?: { id: number; isAdmin: boolean };
+    };
     const authedReq = { user: { id: 1, isAdmin: false } };
 
     it('should return paginated events', async () => {
@@ -143,7 +145,10 @@ describe('EventsController', () => {
     });
 
     it('should pass query params to service', async () => {
-      await controller.findAll({ page: '2', limit: '10', upcoming: 'true' }, mockReq);
+      await controller.findAll(
+        { page: '2', limit: '10', upcoming: 'true' },
+        mockReq,
+      );
 
       expect(mockEventsService.findAll).toHaveBeenCalledWith(
         expect.objectContaining({ page: 2, limit: 10, upcoming: 'true' }),
@@ -241,10 +246,13 @@ describe('EventsController', () => {
 
       it('should throw BadRequestException when startAfter is after endBefore', async () => {
         await expect(
-          controller.findAll({
-            startAfter: '2026-02-28T00:00:00.000Z',
-            endBefore: '2026-02-01T00:00:00.000Z', // Before startAfter
-          }, mockReq),
+          controller.findAll(
+            {
+              startAfter: '2026-02-28T00:00:00.000Z',
+              endBefore: '2026-02-01T00:00:00.000Z', // Before startAfter
+            },
+            mockReq,
+          ),
         ).rejects.toThrow(BadRequestException);
       });
     });

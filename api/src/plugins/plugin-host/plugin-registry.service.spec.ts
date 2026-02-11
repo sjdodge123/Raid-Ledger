@@ -392,6 +392,22 @@ describe('PluginRegistryService', () => {
       expect(mockDb.update).not.toHaveBeenCalled();
       expect(mockEventEmitter.emit).not.toHaveBeenCalled();
     });
+
+    it('should remove adapters for the plugin gameSlugs on deactivation', async () => {
+      service.registerManifest(testManifest);
+
+      // Register adapters for the manifest's gameSlugs
+      const adapter = { fetchProfile: jest.fn() };
+      service.registerAdapter('character-sync', 'test-game', adapter);
+      expect(service.getAdapter('character-sync', 'test-game')).toBe(adapter);
+
+      selectResults = [{ slug: 'test-plugin', active: true }];
+
+      await service.deactivate('test-plugin');
+
+      // Adapter should be removed after deactivation
+      expect(service.getAdapter('character-sync', 'test-game')).toBeUndefined();
+    });
   });
 
   describe('isActive()', () => {

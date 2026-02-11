@@ -197,6 +197,11 @@ export class PluginRegistryService implements OnModuleInit {
       .set({ active: false, updatedAt: new Date() })
       .where(eq(plugins.slug, slug));
 
+    const manifest = this.manifests.get(slug);
+    if (manifest) {
+      this.removeAdaptersForPlugin(manifest.gameSlugs);
+    }
+
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
@@ -225,7 +230,7 @@ export class PluginRegistryService implements OnModuleInit {
   getAdaptersForExtensionPoint<T>(extensionPoint: string): Map<string, T> {
     const slugMap = this.adapters.get(extensionPoint);
     if (!slugMap) return new Map<string, T>();
-    return slugMap as Map<string, T>;
+    return new Map(slugMap) as Map<string, T>;
   }
 
   removeAdaptersForPlugin(gameSlugs: string[]): void {

@@ -19,9 +19,11 @@ describe('CronManagerService', () => {
 
   beforeEach(async () => {
     mockSchedulerRegistry = {
-      addCronJob: jest.fn().mockImplementation((_name: string, job: CronJob) => {
-        createdJobs.push(job);
-      }),
+      addCronJob: jest
+        .fn()
+        .mockImplementation((_name: string, job: CronJob) => {
+          createdJobs.push(job);
+        }),
       deleteCronJob: jest.fn(),
       getCronJobs: jest.fn().mockReturnValue(new Map()),
     };
@@ -43,7 +45,7 @@ describe('CronManagerService', () => {
 
   afterEach(() => {
     for (const job of createdJobs) {
-      job.stop();
+      void job.stop();
     }
     createdJobs.length = 0;
   });
@@ -62,10 +64,10 @@ describe('CronManagerService', () => {
       service.handlePluginActivated({ slug: 'wow-plugin' });
 
       expect(mockSchedulerRegistry.addCronJob).toHaveBeenCalledTimes(1);
-      const [jobName, cronJob] =
-        mockSchedulerRegistry.addCronJob.mock.calls[0];
-      expect(jobName).toBe('wow-plugin:sync');
-      expect(cronJob).toBeInstanceOf(CronJob);
+      expect(mockSchedulerRegistry.addCronJob).toHaveBeenCalledWith(
+        'wow-plugin:sync',
+        expect.any(CronJob),
+      );
     });
 
     it('should do nothing when plugin has no CronRegistrar adapter', () => {
@@ -93,11 +95,13 @@ describe('CronManagerService', () => {
       service.handlePluginActivated({ slug: 'multi-cron' });
 
       expect(mockSchedulerRegistry.addCronJob).toHaveBeenCalledTimes(2);
-      expect(mockSchedulerRegistry.addCronJob.mock.calls[0][0]).toBe(
+      expect(mockSchedulerRegistry.addCronJob).toHaveBeenCalledWith(
         'multi-cron:sync',
+        expect.any(CronJob),
       );
-      expect(mockSchedulerRegistry.addCronJob.mock.calls[1][0]).toBe(
+      expect(mockSchedulerRegistry.addCronJob).toHaveBeenCalledWith(
         'multi-cron:cleanup',
+        expect.any(CronJob),
       );
     });
 

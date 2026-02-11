@@ -72,6 +72,10 @@ describe('BlizzardCharacterSyncAdapter', () => {
         'wow-classic-era',
       ]);
     });
+
+    it('should return empty array for unknown variant', () => {
+      expect(adapter.resolveGameSlugs('ffxiv')).toEqual([]);
+    });
   });
 
   describe('fetchProfile()', () => {

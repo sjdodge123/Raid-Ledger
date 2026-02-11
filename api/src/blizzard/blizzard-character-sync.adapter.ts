@@ -27,7 +27,10 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     ) {
       return ['wow-classic', 'wow-classic-era'];
     }
-    return ['wow', 'world-of-warcraft'];
+    if (!gameVariant || gameVariant === 'retail') {
+      return ['wow', 'world-of-warcraft'];
+    }
+    return [];
   }
 
   async fetchProfile(

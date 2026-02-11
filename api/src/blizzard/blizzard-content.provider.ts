@@ -30,10 +30,11 @@ export class BlizzardContentProvider implements ContentProvider {
   }
 
   async fetchInstances(
+    region: string,
     gameVariant?: string,
   ): Promise<ExternalContentInstance[]> {
     const result = await this.blizzardService.fetchAllInstances(
-      'us',
+      region,
       (gameVariant as WowGameVariant) ?? 'retail',
     );
     return [...result.dungeons, ...result.raids];
@@ -41,14 +42,20 @@ export class BlizzardContentProvider implements ContentProvider {
 
   async fetchInstanceDetail(
     instanceId: number,
+    region: string,
     gameVariant?: string,
   ): Promise<ExternalContentInstanceDetail | null> {
     try {
-      return await this.blizzardService.fetchInstanceDetail(
+      const result = await this.blizzardService.fetchInstanceDetail(
         instanceId,
-        'us',
+        region,
         (gameVariant as WowGameVariant) ?? 'retail',
       );
+      return {
+        ...result,
+        minimumLevel: result.minimumLevel ?? null,
+        maximumLevel: result.maximumLevel ?? null,
+      };
     } catch {
       return null;
     }

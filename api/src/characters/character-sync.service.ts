@@ -3,7 +3,7 @@ import { Cron } from '@nestjs/schedule';
 import { CharactersService } from './characters.service';
 
 /**
- * Cron service that auto-syncs all Blizzard-linked characters every 12 hours.
+ * Cron service that auto-syncs all externally-linked characters every 12 hours.
  * Fires at 03:00 and 15:00 UTC.
  */
 @Injectable()
