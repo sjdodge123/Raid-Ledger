@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
@@ -11,7 +11,15 @@ import '../components/calendar/calendar-styles.css';
  * ROK-171: Calendar Month View
  */
 export function CalendarPage() {
-    const [currentDate, setCurrentDate] = useState(new Date());
+    const [searchParams] = useSearchParams();
+    const [currentDate, setCurrentDate] = useState(() => {
+        const dateStr = searchParams.get('date');
+        if (dateStr) {
+            const parsed = new Date(dateStr + 'T00:00:00');
+            if (!isNaN(parsed.getTime())) return parsed;
+        }
+        return new Date();
+    });
     const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
     const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
 

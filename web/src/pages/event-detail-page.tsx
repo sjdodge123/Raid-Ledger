@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
@@ -28,7 +28,13 @@ import './event-detail-page.css';
 export function EventDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
+    const location = useLocation();
     const eventId = Number(id);
+    const navState = location.state as { fromCalendar?: boolean; calendarDate?: string; calendarView?: string } | null;
+    // Only treat as "from calendar" if the state includes the calendar date (guards against stale state)
+    const fromCalendar = navState?.fromCalendar === true && !!navState?.calendarDate;
+    // "default" key means direct URL access (no in-app navigation history)
+    const hasHistory = location.key !== 'default';
 
     // ROK-192: IntersectionObserver for collapsible banner
     const bannerRef = useRef<HTMLDivElement>(null);
@@ -189,13 +195,24 @@ export function EventDetailPage() {
 
     return (
         <div className="event-detail-page">
-            {/* Back button */}
+            {/* Back button — contextual based on where the user came from */}
             <button
-                onClick={() => navigate(-1)}
+                onClick={() => {
+                    if (fromCalendar) {
+                        const params = new URLSearchParams();
+                        if (navState?.calendarDate) params.set('date', navState.calendarDate);
+                        if (navState?.calendarView) params.set('view', navState.calendarView);
+                        navigate(`/calendar?${params.toString()}`);
+                    } else if (hasHistory) {
+                        navigate(-1);
+                    } else {
+                        navigate('/calendar');
+                    }
+                }}
                 className="event-detail-back"
-                aria-label="Go back to previous page"
+                aria-label="Go back"
             >
-                ← Back
+                {fromCalendar ? '← Back to Calendar' : '← Back'}
             </button>
 
             {/* ROK-192: Full banner (in-flow, observed for scroll detection) */}

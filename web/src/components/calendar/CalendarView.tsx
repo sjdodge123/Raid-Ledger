@@ -241,12 +241,16 @@ export function CalendarView({
         setCurrentDate(new Date());
     }, [setCurrentDate]);
 
-    // Event click handler — pass state so event detail page can navigate back
+    // Event click handler — pass calendar context so event detail page can navigate back
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
-            navigate(`/events/${event.id}`, { state: { fromCalendar: true } });
+            const viewStr = view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
+            const dateStr = format(currentDate, 'yyyy-MM-dd');
+            navigate(`/events/${event.id}`, {
+                state: { fromCalendar: true, calendarDate: dateStr, calendarView: viewStr },
+            });
         },
-        [navigate]
+        [navigate, view, currentDate]
     );
 
     // Style events based on their game (using shared constants)
