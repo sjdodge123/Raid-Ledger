@@ -15,3 +15,4 @@ export * from './schema/user-preferences';
 export * from './schema/game-time-templates';
 export * from './schema/game-time-overrides';
 export * from './schema/game-interests';
+export * from './schema/event-reminders-sent';

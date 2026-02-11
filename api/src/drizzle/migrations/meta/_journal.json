@@ -1,167 +1,174 @@
 {
-  "version": "7",
-  "dialect": "postgresql",
-  "entries": [
-    {
-      "idx": 0,
-      "version": "7",
-      "when": 1770095687862,
-      "tag": "0000_lumpy_infant_terrible",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1770130087549,
-      "tag": "0001_strange_ben_urich",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1770132238112,
-      "tag": "0002_narrow_enchantress",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1770156900213,
-      "tag": "0003_unique_zuras",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1770160190299,
-      "tag": "0004_smiling_tarot",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1770161224436,
-      "tag": "0005_chunky_lady_bullseye",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1770162167035,
-      "tag": "0006_magical_mojo",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1770181559522,
-      "tag": "0007_fast_marvex",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1770182099914,
-      "tag": "0008_nifty_argent",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1770239037155,
-      "tag": "0009_supreme_medusa",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "7",
-      "when": 1770250659043,
-      "tag": "0010_clear_nocturne",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "7",
-      "when": 1770256000000,
-      "tag": "0011_fix_roster_slot_constraint",
-      "breakpoints": true
-    },
-    {
-      "idx": 12,
-      "version": "7",
-      "when": 1770331088049,
-      "tag": "0012_handy_gorgon",
-      "breakpoints": true
-    },
-    {
-      "idx": 13,
-      "version": "7",
-      "when": 1770354090819,
-      "tag": "0013_mixed_logan",
-      "breakpoints": true
-    },
-    {
-      "idx": 14,
-      "version": "7",
-      "when": 1770400568443,
-      "tag": "0014_serious_marten_broadcloak",
-      "breakpoints": true
-    },
-    {
-      "idx": 15,
-      "version": "7",
-      "when": 1770402979689,
-      "tag": "0015_smiling_infant_terrible",
-      "breakpoints": true
-    },
-    {
-      "idx": 16,
-      "version": "7",
-      "when": 1770483900000,
-      "tag": "0016_rename_local_admins_to_credentials",
-      "breakpoints": true
-    },
-    {
-      "idx": 17,
-      "version": "7",
-      "when": 1770614729080,
-      "tag": "0017_tan_the_call",
-      "breakpoints": true
-    },
-    {
-      "idx": 18,
-      "version": "7",
-      "when": 1770662141437,
-      "tag": "0018_equal_red_wolf",
-      "breakpoints": true
-    },
-    {
-      "idx": 19,
-      "version": "7",
-      "when": 1770671100384,
-      "tag": "0019_sharp_doctor_octopus",
-      "breakpoints": true
-    },
-    {
-      "idx": 20,
-      "version": "7",
-      "when": 1770750086529,
-      "tag": "0020_dapper_polaris",
-      "breakpoints": true
-    },
-    {
-      "idx": 21,
-      "version": "7",
-      "when": 1770753142248,
-      "tag": "0021_spooky_leper_queen",
-      "breakpoints": true
-    },
-    {
-      "idx": 22,
-      "version": "7",
-      "when": 1770840000000,
-      "tag": "0022_notification_prefs_jsonb",
-      "breakpoints": true
-    }
-  ]
+    "version": "7",
+    "dialect": "postgresql",
+    "entries": [
+        {
+            "idx": 0,
+            "version": "7",
+            "when": 1770095687862,
+            "tag": "0000_lumpy_infant_terrible",
+            "breakpoints": true
+        },
+        {
+            "idx": 1,
+            "version": "7",
+            "when": 1770130087549,
+            "tag": "0001_strange_ben_urich",
+            "breakpoints": true
+        },
+        {
+            "idx": 2,
+            "version": "7",
+            "when": 1770132238112,
+            "tag": "0002_narrow_enchantress",
+            "breakpoints": true
+        },
+        {
+            "idx": 3,
+            "version": "7",
+            "when": 1770156900213,
+            "tag": "0003_unique_zuras",
+            "breakpoints": true
+        },
+        {
+            "idx": 4,
+            "version": "7",
+            "when": 1770160190299,
+            "tag": "0004_smiling_tarot",
+            "breakpoints": true
+        },
+        {
+            "idx": 5,
+            "version": "7",
+            "when": 1770161224436,
+            "tag": "0005_chunky_lady_bullseye",
+            "breakpoints": true
+        },
+        {
+            "idx": 6,
+            "version": "7",
+            "when": 1770162167035,
+            "tag": "0006_magical_mojo",
+            "breakpoints": true
+        },
+        {
+            "idx": 7,
+            "version": "7",
+            "when": 1770181559522,
+            "tag": "0007_fast_marvex",
+            "breakpoints": true
+        },
+        {
+            "idx": 8,
+            "version": "7",
+            "when": 1770182099914,
+            "tag": "0008_nifty_argent",
+            "breakpoints": true
+        },
+        {
+            "idx": 9,
+            "version": "7",
+            "when": 1770239037155,
+            "tag": "0009_supreme_medusa",
+            "breakpoints": true
+        },
+        {
+            "idx": 10,
+            "version": "7",
+            "when": 1770250659043,
+            "tag": "0010_clear_nocturne",
+            "breakpoints": true
+        },
+        {
+            "idx": 11,
+            "version": "7",
+            "when": 1770256000000,
+            "tag": "0011_fix_roster_slot_constraint",
+            "breakpoints": true
+        },
+        {
+            "idx": 12,
+            "version": "7",
+            "when": 1770331088049,
+            "tag": "0012_handy_gorgon",
+            "breakpoints": true
+        },
+        {
+            "idx": 13,
+            "version": "7",
+            "when": 1770354090819,
+            "tag": "0013_mixed_logan",
+            "breakpoints": true
+        },
+        {
+            "idx": 14,
+            "version": "7",
+            "when": 1770400568443,
+            "tag": "0014_serious_marten_broadcloak",
+            "breakpoints": true
+        },
+        {
+            "idx": 15,
+            "version": "7",
+            "when": 1770402979689,
+            "tag": "0015_smiling_infant_terrible",
+            "breakpoints": true
+        },
+        {
+            "idx": 16,
+            "version": "7",
+            "when": 1770483900000,
+            "tag": "0016_rename_local_admins_to_credentials",
+            "breakpoints": true
+        },
+        {
+            "idx": 17,
+            "version": "7",
+            "when": 1770614729080,
+            "tag": "0017_tan_the_call",
+            "breakpoints": true
+        },
+        {
+            "idx": 18,
+            "version": "7",
+            "when": 1770662141437,
+            "tag": "0018_equal_red_wolf",
+            "breakpoints": true
+        },
+        {
+            "idx": 19,
+            "version": "7",
+            "when": 1770671100384,
+            "tag": "0019_sharp_doctor_octopus",
+            "breakpoints": true
+        },
+        {
+            "idx": 20,
+            "version": "7",
+            "when": 1770750086529,
+            "tag": "0020_dapper_polaris",
+            "breakpoints": true
+        },
+        {
+            "idx": 21,
+            "version": "7",
+            "when": 1770753142248,
+            "tag": "0021_spooky_leper_queen",
+            "breakpoints": true
+        },
+        {
+            "idx": 22,
+            "version": "7",
+            "when": 1770840000000,
+            "tag": "0022_notification_prefs_jsonb",
+            "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "7",
+            "when": 1770786306461,
+            "tag": "0023_bumpy_nico_minoru",
+            "breakpoints": true
+        }
+    ]
 }
