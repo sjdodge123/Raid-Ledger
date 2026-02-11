@@ -131,6 +131,19 @@ export function CalendarView({
         }, { replace: true });
     }, [currentDate, setSearchParams]);
 
+    // Scroll page to current time indicator when entering week/day view
+    useEffect(() => {
+        if (view !== Views.WEEK && view !== Views.DAY) return;
+        // Wait for RBC to render the time grid
+        const timer = setTimeout(() => {
+            const indicator = document.querySelector('.rbc-current-time-indicator');
+            if (indicator) {
+                indicator.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [view]);
+
     // Calculate date range for current view (month, week, or day)
     const { startAfter, endBefore } = useMemo(() => {
         if (view === Views.DAY) {
@@ -449,6 +462,8 @@ export function CalendarView({
                     onNavigate={handleNavigate}
                     onView={setView}
                     onSelectEvent={handleSelectEvent}
+                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); }}
+                    drilldownView={Views.DAY}
                     eventPropGetter={eventPropGetter}
                     components={{
                         month: { event: MonthEventComponent },
@@ -457,11 +472,15 @@ export function CalendarView({
                         toolbar: () => null, // Hide default toolbar
                     }}
                     getNow={() => new TZDate(Date.now(), resolved)}
+                    allDayAccessor={() => false}
                     popup
-                    selectable={false}
-                    scrollToTime={new Date(0, 0, 0, 8, 0)} // Scroll to 8 AM on mount
-                    min={new Date(0, 0, 0, 6, 0)}   // 6 AM
-                    max={new Date(0, 0, 0, 23, 0)}  // 11 PM
+                    selectable
+                    onSelectSlot={(slotInfo) => {
+                        if (slotInfo.action === 'doubleClick') {
+                            setCurrentDate(slotInfo.start);
+                            setView(Views.DAY);
+                        }
+                    }}
                     style={{ minHeight: '500px' }}
                 />
             </div>
