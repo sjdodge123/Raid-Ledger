@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useMyDashboard, useMySignedUpEvents } from '../hooks/use-my-events';
@@ -27,6 +27,16 @@ export function MyEventsPage() {
     const showTabs = hasOrganizing && hasSignedUp;
 
     const [activeTab, setActiveTab] = useState<Tab>('organizing');
+    const [highlightGaps, setHighlightGaps] = useState(false);
+    const eventsGridRef = useRef<HTMLDivElement>(null);
+
+    const handleNeedsAttentionClick = useCallback(() => {
+        setHighlightGaps(true);
+        // Scroll the events grid into view
+        eventsGridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Clear highlight after 3 seconds
+        setTimeout(() => setHighlightGaps(false), 3000);
+    }, []);
 
     // While loading, show skeleton
     const isLoading = dashboard.isLoading || signedUp.isLoading;
@@ -122,11 +132,14 @@ export function MyEventsPage() {
                             {dashboard.isLoading ? (
                                 <DashboardStatsRowSkeleton />
                             ) : dashboard.data ? (
-                                <DashboardStatsRow stats={dashboard.data.stats} />
+                                <DashboardStatsRow
+                                    stats={dashboard.data.stats}
+                                    onNeedsAttentionClick={handleNeedsAttentionClick}
+                                />
                             ) : null}
 
                             {/* Event Cards Grid */}
-                            <div>
+                            <div ref={eventsGridRef}>
                                 <h2 className="text-xl font-semibold text-foreground mb-4">
                                     {user?.isAdmin ? 'All Upcoming Events' : 'Your Events'}
                                 </h2>
@@ -139,6 +152,7 @@ export function MyEventsPage() {
                                               <DashboardEventCard
                                                   key={event.id}
                                                   event={event}
+                                                  highlighted={highlightGaps && event.missingRoles.length > 0}
                                               />
                                           ))}
                                 </div>

@@ -2,19 +2,33 @@ import type { DashboardStatsDto } from '@raid-ledger/contract';
 
 interface DashboardStatsRowProps {
     stats: DashboardStatsDto;
+    onNeedsAttentionClick?: () => void;
 }
 
 function StatCard({
     label,
     value,
     accent,
+    onClick,
 }: {
     label: string;
     value: string | number;
     accent?: boolean;
+    onClick?: () => void;
 }) {
+    const interactive = !!onClick && value !== 0;
     return (
-        <div className="bg-surface rounded-lg border border-edge p-4">
+        <div
+            role={interactive ? 'button' : undefined}
+            tabIndex={interactive ? 0 : undefined}
+            onClick={interactive ? onClick : undefined}
+            onKeyDown={interactive ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick?.(); }
+            } : undefined}
+            className={`bg-surface rounded-lg border border-edge p-4 ${
+                interactive ? 'cursor-pointer hover:border-amber-500/50 transition-colors' : ''
+            }`}
+        >
             <p className="text-sm text-muted mb-1">{label}</p>
             <p
                 className={`text-2xl font-bold ${accent ? 'text-amber-400' : 'text-foreground'}`}
@@ -25,7 +39,7 @@ function StatCard({
     );
 }
 
-export function DashboardStatsRow({ stats }: DashboardStatsRowProps) {
+export function DashboardStatsRow({ stats, onNeedsAttentionClick }: DashboardStatsRowProps) {
     return (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard label="Upcoming" value={stats.totalUpcomingEvents} />
@@ -38,6 +52,7 @@ export function DashboardStatsRow({ stats }: DashboardStatsRowProps) {
                 label="Needs Attention"
                 value={stats.eventsWithRosterGaps}
                 accent={stats.eventsWithRosterGaps > 0}
+                onClick={onNeedsAttentionClick}
             />
         </div>
     );

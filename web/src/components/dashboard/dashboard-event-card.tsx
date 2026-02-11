@@ -5,6 +5,7 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 
 interface DashboardEventCardProps {
     event: DashboardEventDto;
+    highlighted?: boolean;
 }
 
 function FillBar({ percent }: { percent: number }) {
@@ -36,13 +37,17 @@ function formatTime(dateString: string, timeZone?: string): string {
     }).format(new Date(dateString));
 }
 
-export function DashboardEventCard({ event }: DashboardEventCardProps) {
+export function DashboardEventCard({ event, highlighted }: DashboardEventCardProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const status = getEventStatus(event.startTime, event.endTime);
     const relativeTime = getRelativeTime(event.startTime, event.endTime);
 
     return (
-        <div className="bg-surface rounded-lg border border-edge p-4 hover:border-dim transition-colors">
+        <div className={`bg-surface rounded-lg border p-4 transition-all ${
+            highlighted
+                ? 'border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                : 'border-edge hover:border-dim'
+        }`}>
             <div className="flex items-start justify-between mb-2">
                 <Link
                     to={`/events/${event.id}`}
@@ -95,16 +100,16 @@ export function DashboardEventCard({ event }: DashboardEventCardProps) {
             )}
 
             {/* Quick links */}
-            <div className="flex items-center gap-3 mt-3 pt-3 border-t border-edge-subtle">
+            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-edge-subtle">
                 <Link
                     to={`/events/${event.id}`}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-foreground rounded-md transition-colors"
                 >
                     View
                 </Link>
                 <Link
                     to={`/events/${event.id}/edit`}
-                    className="text-xs text-secondary hover:text-foreground transition-colors"
+                    className="px-3 py-1.5 text-xs font-medium bg-panel hover:bg-overlay text-secondary hover:text-foreground rounded-md border border-edge transition-colors"
                 >
                     Edit
                 </Link>
