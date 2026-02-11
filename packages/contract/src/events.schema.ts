@@ -1,5 +1,31 @@
 import { z } from 'zod';
 import { SignupUserSchema } from './signups.schema.js';
+import { WowInstanceDetailSchema } from './blizzard.schema.js';
+
+// ============================================================
+// Slot Configuration Schema
+// ============================================================
+
+/** Per-event slot configuration. Type determines which role fields are relevant. */
+export const SlotConfigSchema = z.object({
+    type: z.enum(['mmo', 'generic']),
+    tank: z.number().int().min(0).optional(),
+    healer: z.number().int().min(0).optional(),
+    dps: z.number().int().min(0).optional(),
+    flex: z.number().int().min(0).optional(),
+    player: z.number().int().min(0).optional(),
+    bench: z.number().int().min(0).optional(),
+});
+
+export type SlotConfigDto = z.infer<typeof SlotConfigSchema>;
+
+/** Recurrence rule for repeating events */
+export const RecurrenceSchema = z.object({
+    frequency: z.enum(['weekly', 'biweekly', 'monthly']),
+    until: z.string().datetime(), // End date for recurrence
+});
+
+export type RecurrenceDto = z.infer<typeof RecurrenceSchema>;
 
 // ============================================================
 // Event Creation/Update Schemas
@@ -9,9 +35,15 @@ import { SignupUserSchema } from './signups.schema.js';
 export const CreateEventSchema = z.object({
     title: z.string().min(1).max(200),
     description: z.string().max(2000).optional(),
-    gameId: z.number().int().positive().optional(), // Local game ID from IGDB cache
-    startTime: z.string().datetime(), // ISO 8601 datetime
-    endTime: z.string().datetime(), // ISO 8601 datetime
+    gameId: z.number().int().positive().optional(), // IGDB game ID
+    registryGameId: z.string().uuid().optional(), // Game registry UUID (carries gameVariant via slug)
+    startTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
+    endTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
+    slotConfig: SlotConfigSchema.optional(),
+    maxAttendees: z.number().int().min(1).optional(),
+    autoUnbench: z.boolean().optional(),
+    recurrence: RecurrenceSchema.optional(),
+    contentInstances: z.array(WowInstanceDetailSchema).optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -24,8 +56,13 @@ export const UpdateEventSchema = z.object({
     title: z.string().min(1).max(200).optional(),
     description: z.string().max(2000).optional().nullable(),
     gameId: z.number().int().positive().optional().nullable(),
-    startTime: z.string().datetime().optional(),
-    endTime: z.string().datetime().optional(),
+    registryGameId: z.string().uuid().optional().nullable(),
+    startTime: z.string().datetime({ offset: true }).optional(),
+    endTime: z.string().datetime({ offset: true }).optional(),
+    slotConfig: SlotConfigSchema.optional().nullable(),
+    maxAttendees: z.number().int().min(1).optional().nullable(),
+    autoUnbench: z.boolean().optional(),
+    contentInstances: z.array(WowInstanceDetailSchema).optional().nullable(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {
@@ -75,6 +112,11 @@ export const EventResponseSchema = z.object({
     signupCount: z.number(),
     /** Preview of first N signups for calendar view (ROK-177) */
     signupsPreview: z.array(SignupUserSchema).optional(),
+    slotConfig: SlotConfigSchema.nullable().optional(),
+    maxAttendees: z.number().nullable().optional(),
+    autoUnbench: z.boolean().optional(),
+    contentInstances: z.array(WowInstanceDetailSchema).nullable().optional(),
+    recurrenceGroupId: z.string().uuid().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });

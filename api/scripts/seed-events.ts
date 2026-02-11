@@ -55,6 +55,7 @@ async function bootstrap() {
         // Get games from registry
         const games = await db.select().from(schema.gameRegistry);
         const wowGame = games.find((g) => g.slug === 'wow');
+        const wowClassicGame = games.find((g) => g.slug === 'wow-classic');
         const valheimGame = games.find((g) => g.slug === 'valheim');
         const ffxivGame = games.find((g) => g.slug === 'ffxiv');
 
@@ -132,6 +133,24 @@ async function bootstrap() {
                 gameId: '123', // WoW IGDB ID from games-seed.json
                 startTime: hoursFromNow(6),
                 endTime: hoursFromNow(9),
+            },
+            // WOW CLASSIC — UPCOMING EVENT (in 4 hours)
+            {
+                title: 'Molten Core 40-Man',
+                description: 'Full MC clear. Bring fire resist gear. DKP run.',
+                registryGameId: wowClassicGame?.id || null,
+                gameId: '136210', // WoW Classic IGDB ID from games-seed.json
+                startTime: hoursFromNow(4),
+                endTime: hoursFromNow(8),
+            },
+            // WOW CLASSIC — UPCOMING EVENT (in 2 days)
+            {
+                title: 'Classic Deadmines Speed Runs',
+                description: 'Leveling alts through Deadmines. All levels welcome!',
+                registryGameId: wowClassicGame?.id || null,
+                gameId: '136210', // WoW Classic IGDB ID from games-seed.json
+                startTime: daysFromNow(2),
+                endTime: new Date(daysFromNow(2).getTime() + 2 * 60 * 60 * 1000),
             },
         ];
 

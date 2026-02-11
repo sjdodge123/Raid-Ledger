@@ -48,6 +48,49 @@
       "crossplay": false
     },
     {
+      "igdbId": 136210,
+      "name": "World of Warcraft Classic",
+      "slug": "world-of-warcraft-classic",
+      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_cover_big/co2l7z.jpg",
+      "genres": [
+        12,
+        15,
+        31,
+        36
+      ],
+      "summary": "A faithful recreation of the original World of Warcraft experience, allowing players to relive the classic era of Azeroth with original game mechanics, dungeons, and 40-man raids.",
+      "rating": 82,
+      "aggregatedRating": 80,
+      "popularity": 350,
+      "gameModes": [
+        2,
+        3,
+        5
+      ],
+      "themes": [
+        1,
+        17
+      ],
+      "platforms": [
+        6,
+        14
+      ],
+      "screenshots": [],
+      "videos": [
+        {
+          "name": "WoW Classic Announcement",
+          "videoId": "TcZyiYOzsSw"
+        }
+      ],
+      "firstReleaseDate": "2019-08-27T00:00:00.000Z",
+      "playerCount": {
+        "min": 1,
+        "max": 40
+      },
+      "twitchGameId": "510218",
+      "crossplay": false
+    },
+    {
       "igdbId": 14729,
       "name": "Final Fantasy XIV Online",
       "slug": "final-fantasy-xiv-online",

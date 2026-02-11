@@ -18,9 +18,15 @@ export interface IgdbConfig {
   clientSecret: string;
 }
 
+export interface BlizzardConfig {
+  clientId: string;
+  clientSecret: string;
+}
+
 export const SETTINGS_EVENTS = {
   OAUTH_DISCORD_UPDATED: 'settings.oauth.discord.updated',
   IGDB_UPDATED: 'settings.igdb.updated',
+  BLIZZARD_UPDATED: 'settings.blizzard.updated',
   DEMO_MODE_UPDATED: 'settings.demo_mode.updated',
 } as const;
 
@@ -204,6 +210,49 @@ export class SettingsService {
     const [clientIdExists, clientSecretExists] = await Promise.all([
       this.exists(SETTING_KEYS.IGDB_CLIENT_ID),
       this.exists(SETTING_KEYS.IGDB_CLIENT_SECRET),
+    ]);
+
+    return clientIdExists && clientSecretExists;
+  }
+
+  /**
+   * Get Blizzard API configuration (ROK-234)
+   */
+  async getBlizzardConfig(): Promise<BlizzardConfig | null> {
+    const [clientId, clientSecret] = await Promise.all([
+      this.get(SETTING_KEYS.BLIZZARD_CLIENT_ID),
+      this.get(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
+    ]);
+
+    if (!clientId || !clientSecret) {
+      return null;
+    }
+
+    return { clientId, clientSecret };
+  }
+
+  /**
+   * Set Blizzard API configuration (ROK-234)
+   */
+  async setBlizzardConfig(config: BlizzardConfig): Promise<void> {
+    await Promise.all([
+      this.set(SETTING_KEYS.BLIZZARD_CLIENT_ID, config.clientId),
+      this.set(SETTING_KEYS.BLIZZARD_CLIENT_SECRET, config.clientSecret),
+    ]);
+
+    this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, config);
+    this.logger.log(
+      'Blizzard API configuration updated, emitting reload event',
+    );
+  }
+
+  /**
+   * Check if Blizzard API is configured (ROK-234)
+   */
+  async isBlizzardConfigured(): Promise<boolean> {
+    const [clientIdExists, clientSecretExists] = await Promise.all([
+      this.exists(SETTING_KEYS.BLIZZARD_CLIENT_ID),
+      this.exists(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
     ]);
 
     return clientIdExists && clientSecretExists;

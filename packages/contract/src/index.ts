@@ -45,3 +45,9 @@ export * from './game-time.schema.js';
 
 // Admin (ROK-193)
 export * from './admin.schema.js';
+
+// Event Templates
+export * from './templates.schema.js';
+
+// Blizzard Instance Data
+export * from './blizzard.schema.js';

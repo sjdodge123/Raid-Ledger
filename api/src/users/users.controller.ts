@@ -23,6 +23,7 @@ import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
 import {
   UserProfileDto,
+  PlayersListResponseDto,
   UpdatePreferenceSchema,
   GameTimeTemplateInputSchema,
   GameTimeOverrideInputSchema,
@@ -48,6 +49,33 @@ export class UsersController {
     private readonly gameTimeService: GameTimeService,
     private readonly charactersService: CharactersService,
   ) {}
+
+  /**
+   * List all registered players (paginated, with optional search).
+   * Public endpoint for the Players page.
+   */
+  @Get()
+  async listPlayers(
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+    @Query('search') search?: string,
+  ): Promise<PlayersListResponseDto> {
+    const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(limitStr ?? '20', 10) || 20),
+    );
+
+    const result = await this.usersService.findAll(
+      page,
+      limit,
+      search || undefined,
+    );
+    return {
+      data: result.data,
+      meta: { total: result.total, page, limit },
+    };
+  }
 
   /**
    * Get a user's public profile by ID.

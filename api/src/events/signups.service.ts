@@ -5,8 +5,9 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -60,6 +61,19 @@ export class SignupsService {
 
     if (event.length === 0) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Enforce max attendees cap
+    if (event[0].maxAttendees) {
+      const [{ count }] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.eventId, eventId));
+      if (Number(count) >= event[0].maxAttendees) {
+        throw new ConflictException(
+          'Event has reached its maximum attendee limit',
+        );
+      }
     }
 
     // Pre-fetch user data to avoid N+1 after insert
@@ -380,7 +394,10 @@ export class SignupsService {
       role: character.role as 'tank' | 'healer' | 'dps' | null,
       isMain: character.isMain,
       itemLevel: character.itemLevel,
+      level: character.level,
       avatarUrl: character.avatarUrl,
+      race: character.race,
+      faction: character.faction as 'alliance' | 'horde' | null,
     };
   }
 
@@ -632,21 +649,51 @@ export class SignupsService {
       }
     }
 
+    // Use per-event slot config if set, otherwise fall back to genre-based detection
+    const slots = event.slotConfig
+      ? this.slotConfigFromEvent(event.slotConfig as Record<string, unknown>)
+      : await this.getSlotConfigFromGenre(event.gameId);
+
     return {
       eventId,
       pool,
       assignments: assigned,
-      slots: await this.getSlotConfig(event.gameId),
+      slots,
     };
   }
 
   /**
-   * ROK-183: Get slot configuration based on game type.
+   * Extract slot counts from a per-event slot_config jsonb value.
+   * Converts the stored { type, tank, healer, dps, flex, player, bench }
+   * into the RosterWithAssignments['slots'] shape (role counts only).
+   */
+  private slotConfigFromEvent(
+    config: Record<string, unknown>,
+  ): RosterWithAssignments['slots'] {
+    const type = config.type as string;
+    if (type === 'mmo') {
+      return {
+        tank: (config.tank as number) ?? 2,
+        healer: (config.healer as number) ?? 4,
+        dps: (config.dps as number) ?? 14,
+        flex: (config.flex as number) ?? 5,
+        bench: (config.bench as number) ?? 0,
+      };
+    }
+    // Generic
+    return {
+      player: (config.player as number) ?? 10,
+      bench: (config.bench as number) ?? 5,
+    };
+  }
+
+  /**
+   * ROK-183: Get slot configuration based on game type (fallback).
    * Uses IGDB genre data to detect MMO games (genre 36 = MMORPG).
    * MMO games use role-based slots (tank/healer/dps/flex).
    * Other games use generic player slots.
    */
-  private async getSlotConfig(
+  private async getSlotConfigFromGenre(
     gameId: string | null,
   ): Promise<RosterWithAssignments['slots']> {
     // IGDB genre ID for "Massively Multiplayer Online (MMO)"

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import type { IgdbGameDto } from '@raid-ledger/contract';
 import { useGameSearch } from '../../hooks/use-game-search';
 
@@ -6,15 +7,18 @@ interface GameSearchInputProps {
     value: IgdbGameDto | null;
     onChange: (game: IgdbGameDto | null) => void;
     error?: string;
+    /** Games to show immediately when input is focused with no query (e.g. registry games) */
+    initialSuggestions?: IgdbGameDto[];
 }
 
 /**
  * Game search input with autocomplete dropdown.
  * Searches IGDB via backend API with debouncing.
  */
-export function GameSearchInput({ value, onChange, error }: GameSearchInputProps) {
+export function GameSearchInput({ value, onChange, error, initialSuggestions }: GameSearchInputProps) {
     const [query, setQuery] = useState(value?.name ?? '');
     const [isOpen, setIsOpen] = useState(false);
+    const [dropdownPos, setDropdownPos] = useState<{ top: number; left: number; width: number } | null>(null);
     const containerRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
 
@@ -23,19 +27,43 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
     const games = searchResult?.data ?? [];
     const source = searchResult?.meta?.source;
 
-    // Close dropdown on outside click
+    // Measure input position for portal dropdown (fixed positioning = viewport-relative)
+    const updateDropdownPos = useCallback(() => {
+        const el = containerRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        setDropdownPos({
+            top: rect.bottom + 8,
+            left: rect.left,
+            width: rect.width,
+        });
+    }, []);
+
+    // Close dropdown on outside click (portal-aware: check both container and dropdown)
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            if (
+                containerRef.current && !containerRef.current.contains(target) &&
+                !(target instanceof Element && target.closest('[data-game-dropdown]'))
+            ) {
                 setIsOpen(false);
             }
         }
 
         if (isOpen) {
             document.addEventListener('mousedown', handleClickOutside);
+            updateDropdownPos();
+            // Re-measure on scroll/resize so dropdown tracks the input
+            window.addEventListener('scroll', updateDropdownPos, true);
+            window.addEventListener('resize', updateDropdownPos);
         }
-        return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen]);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            window.removeEventListener('scroll', updateDropdownPos, true);
+            window.removeEventListener('resize', updateDropdownPos);
+        };
+    }, [isOpen, updateDropdownPos]);
 
     // Handle game selection
     function handleSelect(game: IgdbGameDto) {
@@ -64,7 +92,9 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
         }
     }
 
-    const showDropdown = isOpen && query.length >= 2;
+    const hasInitialSuggestions = initialSuggestions && initialSuggestions.length > 0;
+    const showDropdown = isOpen && (query.length >= 2 || (hasInitialSuggestions && query.length < 2));
+    const displayGames = query.length >= 2 ? games : (initialSuggestions ?? []);
 
     return (
         <div className="relative" ref={containerRef}>
@@ -78,7 +108,7 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
                     type="text"
                     value={query}
                     onChange={handleInputChange}
-                    onFocus={() => query.length >= 2 && setIsOpen(true)}
+                    onFocus={() => (query.length >= 2 || hasInitialSuggestions) && setIsOpen(true)}
                     placeholder="Search for a game..."
                     className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${error ? 'border-red-500' : value ? 'border-emerald-500' : 'border-edge'
                         }`}
@@ -123,20 +153,24 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
                 </div>
             )}
 
-            {/* Dropdown */}
-            {showDropdown && (
-                <div className="absolute z-50 w-full mt-2 bg-surface border border-edge rounded-lg shadow-xl max-h-64 overflow-y-auto">
-                    {isLoading ? (
+            {/* Dropdown — rendered via portal to escape modal overflow clipping */}
+            {showDropdown && dropdownPos && createPortal(
+                <div
+                    data-game-dropdown
+                    className="fixed z-[9999] bg-surface border border-edge rounded-lg shadow-xl max-h-64 overflow-y-auto"
+                    style={{ top: dropdownPos.top, left: dropdownPos.left, width: dropdownPos.width }}
+                >
+                    {isLoading && query.length >= 2 ? (
                         <div className="p-4 text-center text-muted">
                             Searching...
                         </div>
-                    ) : games.length === 0 ? (
+                    ) : displayGames.length === 0 ? (
                         <div className="p-4 text-center text-muted">
-                            No games found
+                            {query.length >= 2 ? 'No games found' : 'Type to search...'}
                         </div>
                     ) : (
                         <>
-                            {source === 'local' && (
+                            {source === 'local' && query.length >= 2 && (
                                 <div className="px-4 py-2 bg-yellow-900/30 border-b border-edge text-yellow-500 text-xs font-medium flex items-center gap-2">
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
@@ -145,7 +179,7 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
                                 </div>
                             )}
                             <ul role="listbox">
-                                {games.map((game) => (
+                                {displayGames.map((game) => (
                                     <li
                                         key={game.id}
                                         role="option"
@@ -173,7 +207,8 @@ export function GameSearchInput({ value, onChange, error }: GameSearchInputProps
                             </ul>
                         </>
                     )}
-                </div>
+                </div>,
+                document.body,
             )}
 
             {error && (

@@ -19,6 +19,7 @@ import {
   RosterAvailabilityResponse,
   UserWithAvailabilitySlots,
 } from '@raid-ledger/contract';
+import { randomUUID } from 'crypto';
 import { AvailabilityService } from '../availability/availability.service';
 
 /** Constants for events service */
@@ -46,17 +47,64 @@ export class EventsService {
   async create(
     creatorId: number,
     dto: CreateEventDto,
-  ): Promise<EventResponseDto> {
+  ): Promise<EventResponseDto & { allEventIds?: number[] }> {
     const startTime = new Date(dto.startTime);
     const endTime = new Date(dto.endTime);
+    const durationMs = endTime.getTime() - startTime.getTime();
 
+    // Generate recurrence group if recurring
+    const recurrenceGroupId = dto.recurrence ? randomUUID() : null;
+
+    // Build base values shared across all instances
+    const baseValues = {
+      title: dto.title,
+      description: dto.description ?? null,
+      gameId: dto.gameId ? String(dto.gameId) : null,
+      registryGameId: dto.registryGameId ?? null,
+      creatorId,
+      slotConfig: dto.slotConfig ?? null,
+      maxAttendees: dto.maxAttendees ?? null,
+      autoUnbench: dto.autoUnbench ?? true,
+      recurrenceGroupId,
+      recurrenceRule: dto.recurrence ?? null,
+      contentInstances: dto.contentInstances ?? null,
+    };
+
+    if (dto.recurrence) {
+      // Generate all recurring instances
+      const instances = this.generateRecurringDates(
+        startTime,
+        dto.recurrence.frequency,
+        new Date(dto.recurrence.until),
+      );
+
+      const allValues = instances.map((instanceStart) => ({
+        ...baseValues,
+        duration: [
+          instanceStart,
+          new Date(instanceStart.getTime() + durationMs),
+        ] as [Date, Date],
+      }));
+
+      const events = await this.db
+        .insert(schema.events)
+        .values(allValues)
+        .returning();
+
+      this.logger.log(
+        `Recurring event created: ${events.length} instances by user ${creatorId} (group ${recurrenceGroupId})`,
+      );
+
+      // Return the first instance with all IDs for controller to auto-signup
+      const response = await this.findOne(events[0].id);
+      return { ...response, allEventIds: events.map((e) => e.id) };
+    }
+
+    // Single event
     const [event] = await this.db
       .insert(schema.events)
       .values({
-        title: dto.title,
-        description: dto.description ?? null,
-        gameId: dto.gameId ? String(dto.gameId) : null,
-        creatorId,
+        ...baseValues,
         duration: [startTime, endTime],
       })
       .returning();
@@ -64,6 +112,36 @@ export class EventsService {
     this.logger.log(`Event created: ${event.id} by user ${creatorId}`);
 
     return this.findOne(event.id);
+  }
+
+  /**
+   * Generate recurring date instances from a start date.
+   */
+  private generateRecurringDates(
+    start: Date,
+    frequency: 'weekly' | 'biweekly' | 'monthly',
+    until: Date,
+  ): Date[] {
+    const dates: Date[] = [new Date(start)];
+    let current = new Date(start);
+
+    while (true) {
+      const next = new Date(current);
+      if (frequency === 'weekly') {
+        next.setDate(next.getDate() + 7);
+      } else if (frequency === 'biweekly') {
+        next.setDate(next.getDate() + 14);
+      } else {
+        // monthly: same day of month, next month
+        next.setMonth(next.getMonth() + 1);
+      }
+
+      if (next > until) break;
+      dates.push(next);
+      current = next;
+    }
+
+    return dates;
   }
 
   /**
@@ -299,6 +377,14 @@ export class EventsService {
     if (dto.description !== undefined) updateData.description = dto.description;
     if (dto.gameId !== undefined)
       updateData.gameId = dto.gameId ? String(dto.gameId) : null;
+    if (dto.registryGameId !== undefined)
+      updateData.registryGameId = dto.registryGameId ?? null;
+    if (dto.slotConfig !== undefined) updateData.slotConfig = dto.slotConfig;
+    if (dto.maxAttendees !== undefined)
+      updateData.maxAttendees = dto.maxAttendees;
+    if (dto.autoUnbench !== undefined) updateData.autoUnbench = dto.autoUnbench;
+    if (dto.contentInstances !== undefined)
+      updateData.contentInstances = dto.contentInstances;
 
     // Handle time updates with validation
     if (dto.startTime || dto.endTime) {
@@ -603,6 +689,13 @@ export class EventsService {
       game: gameData,
       signupCount: Number(signupCount),
       signupsPreview,
+      slotConfig: (event.slotConfig as EventResponseDto['slotConfig']) ?? null,
+      maxAttendees: event.maxAttendees ?? null,
+      autoUnbench: event.autoUnbench ?? true,
+      contentInstances:
+        (event.contentInstances as EventResponseDto['contentInstances']) ??
+        null,
+      recurrenceGroupId: event.recurrenceGroupId ?? null,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };

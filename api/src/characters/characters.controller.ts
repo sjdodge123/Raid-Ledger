@@ -17,6 +17,8 @@ import { CharactersService } from './characters.service';
 import {
   CreateCharacterSchema,
   UpdateCharacterSchema,
+  ImportWowCharacterSchema,
+  RefreshCharacterSchema,
   CharacterDto,
   CharacterListResponseDto,
 } from '@raid-ledger/contract';
@@ -45,6 +47,9 @@ function handleValidationError(error: unknown): never {
 /**
  * Controller for character management (ROK-130).
  * All endpoints require authentication and operate on the current user's characters.
+ *
+ * IMPORTANT: Static routes (import/wow) must be declared before parameterized
+ * routes (:id) to prevent NestJS from treating "import" as a UUID parameter.
  */
 @Controller('users/me/characters')
 @UseGuards(AuthGuard('jwt'))
@@ -64,17 +69,6 @@ export class CharactersController {
   }
 
   /**
-   * Get a single character by ID.
-   */
-  @Get(':id')
-  async findOne(
-    @Request() req: AuthenticatedRequest,
-    @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<CharacterDto> {
-    return this.charactersService.findOne(req.user.id, id);
-  }
-
-  /**
    * Create a new character.
    */
   @Post()
@@ -88,6 +82,34 @@ export class CharactersController {
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  /**
+   * Import a WoW character from Blizzard Armory (ROK-234).
+   * Must be declared before :id routes.
+   */
+  @Post('import/wow')
+  async importFromWow(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<CharacterDto> {
+    try {
+      const dto = ImportWowCharacterSchema.parse(body);
+      return this.charactersService.importFromBlizzard(req.user.id, dto);
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Get a single character by ID.
+   */
+  @Get(':id')
+  async findOne(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<CharacterDto> {
+    return this.charactersService.findOne(req.user.id, id);
   }
 
   /**
@@ -117,6 +139,23 @@ export class CharactersController {
   ): Promise<{ message: string }> {
     await this.charactersService.delete(req.user.id, id);
     return { message: 'Character deleted successfully' };
+  }
+
+  /**
+   * Refresh a character's data from Blizzard Armory (ROK-234).
+   */
+  @Post(':id/refresh')
+  async refreshFromArmory(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() body: unknown,
+  ): Promise<CharacterDto> {
+    try {
+      const dto = RefreshCharacterSchema.parse(body);
+      return this.charactersService.refreshFromBlizzard(req.user.id, id, dto);
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   /**

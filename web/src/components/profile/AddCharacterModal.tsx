@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
-import type { CharacterRole, CharacterDto, GameRegistryDto } from '@raid-ledger/contract';
+import { useState, useMemo } from 'react';
+import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import { useGameRegistry } from '../../hooks/use-game-registry';
+import { useSystemStatus } from '../../hooks/use-system-status';
+import { GameSearchInput } from '../events/game-search-input';
+import { WowArmoryImportForm } from '../characters/wow-armory-import-form';
 
 interface AddCharacterModalProps {
     isOpen: boolean;
@@ -34,8 +37,7 @@ const getInitialFormState = (char?: CharacterDto | null): FormState => ({
 
 /**
  * Modal for adding or editing a character.
- * ROK-195 AC-6: Dynamic game selection from game registry.
- * Shows/hides MMO-specific fields (Class, Spec, Role, Realm) based on game's hasRoles flag.
+ * ROK-234: IGDB-powered game search, realm autocomplete, preview flow.
  */
 export function AddCharacterModal({
     isOpen,
@@ -46,40 +48,108 @@ export function AddCharacterModal({
 }: AddCharacterModalProps) {
     const createMutation = useCreateCharacter();
     const updateMutation = useUpdateCharacter();
-    const { games } = useGameRegistry();
+    const { games: registryGames } = useGameRegistry();
+    const { data: systemStatus } = useSystemStatus();
     const isEditing = !!editingCharacter;
 
-    // Game selection state
-    const [selectedGameId, setSelectedGameId] = useState<string>(preselectedGameId ?? '');
+    // IGDB game selection state
+    const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
+    // Import tab state
+    const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
 
-    // Use a key-based reset by tracking when the modal opens
+    // Track previous isOpen to reset state synchronously during render (no stale flash)
+    const [prevIsOpen, setPrevIsOpen] = useState(false);
     const [resetKey, setResetKey] = useState(0);
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [error, setError] = useState('');
 
-    // Reset form when modal opens
-    useEffect(() => {
-        if (isOpen) {
-            setResetKey((k) => k + 1);
-        }
-    }, [isOpen]);
+    // Convert registry games to IgdbGameDto-like objects for initial suggestions
+    const registrySuggestions: IgdbGameDto[] = useMemo(() =>
+        registryGames.map((g, i) => ({
+            id: i,
+            igdbId: 0,
+            name: g.name,
+            slug: g.slug,
+            coverUrl: g.iconUrl,
+        })),
+    [registryGames]);
 
-    // Apply the reset when key changes
-    useEffect(() => {
-        if (resetKey > 0) {
-            const newState = getInitialFormState(editingCharacter);
-            setForm(newState);
-            setError('');
-            // Reset game selection to preselected or editing character's game
-            setSelectedGameId(editingCharacter?.gameId ?? preselectedGameId ?? '');
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [resetKey]);
+    // Resolve IGDB game → registry game
+    const registryGame = useMemo(() => {
+        if (!selectedIgdbGame) return undefined;
+        return registryGames.find(
+            (g) =>
+                g.name.toLowerCase() === selectedIgdbGame.name.toLowerCase() ||
+                g.slug === selectedIgdbGame.slug,
+        );
+    }, [selectedIgdbGame, registryGames]);
 
-    // Find the selected game from registry to check hasRoles
-    const selectedGame: GameRegistryDto | undefined = games.find(g => g.id === selectedGameId);
-    const showMmoFields = selectedGame?.hasRoles ?? true; // Default to showing all fields if game unknown
-    const effectiveGameName = selectedGame?.name ?? preselectedGameName ?? 'Unknown Game';
+    // Also find registry game for preselected gameId (editing mode)
+    const preselectedRegistryGame = useMemo(() => {
+        if (!preselectedGameId) return undefined;
+        return registryGames.find((g) => g.id === preselectedGameId);
+    }, [preselectedGameId, registryGames]);
+
+    const effectiveRegistryGame = isEditing ? preselectedRegistryGame : registryGame;
+    const effectiveGameId = effectiveRegistryGame?.id ?? preselectedGameId;
+    const effectiveGameName = effectiveRegistryGame?.name ?? preselectedGameName ?? selectedIgdbGame?.name ?? 'Unknown Game';
+    const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
+
+    // Detect WoW (includes Classic variants)
+    const isWow = effectiveRegistryGame?.slug?.startsWith('wow') ||
+        selectedIgdbGame?.slug?.startsWith('world-of-warcraft');
+    const showImportTab = !isEditing && isWow && systemStatus?.blizzardConfigured;
+
+    // WoW game variant for Blizzard API namespace (user-selectable when WoW is detected)
+    const [wowVariant, setWowVariant] = useState<string>('retail');
+
+    // Auto-set variant based on game slug
+    const [prevEffectiveSlug, setPrevEffectiveSlug] = useState('');
+    const currentSlug = effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug ?? '';
+    if (currentSlug !== prevEffectiveSlug) {
+        setPrevEffectiveSlug(currentSlug);
+        if (currentSlug === 'wow-classic' || currentSlug.includes('world-of-warcraft-classic')) {
+            setWowVariant('classic_anniversary');
+        } else if (currentSlug.startsWith('wow') || currentSlug.startsWith('world-of-warcraft')) {
+            setWowVariant('retail');
+        }
+    }
+
+    // Default to import tab when WoW + Blizzard configured (render-time adjustment)
+    const [prevShowImportTab, setPrevShowImportTab] = useState(false);
+    if (!!showImportTab !== prevShowImportTab) {
+        setPrevShowImportTab(!!showImportTab);
+        setActiveTab(showImportTab ? 'import' : 'manual');
+    }
+
+    // Reset all form state synchronously when modal opens (avoids stale-frame flash).
+    // This is React's recommended "adjust state during render" pattern:
+    // https://react.dev/reference/react/useState#storing-information-from-previous-renders
+    if (isOpen && !prevIsOpen) {
+        setPrevIsOpen(true);
+        setResetKey((k) => k + 1);
+        setForm(getInitialFormState(editingCharacter));
+        setError('');
+        if (!editingCharacter) {
+            if (preselectedGameId) {
+                const match = registryGames.find((g) => g.id === preselectedGameId);
+                if (match) {
+                    setSelectedIgdbGame({
+                        id: 0,
+                        igdbId: 0,
+                        name: match.name,
+                        slug: match.slug,
+                        coverUrl: null,
+                    });
+                }
+            } else {
+                setSelectedIgdbGame(null);
+            }
+        }
+    }
+    if (!isOpen && prevIsOpen) {
+        setPrevIsOpen(false);
+    }
 
     function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
@@ -90,8 +160,13 @@ export function AddCharacterModal({
             return;
         }
 
-        if (!selectedGameId) {
+        if (!effectiveGameId && !selectedIgdbGame) {
             setError('Please select a game');
+            return;
+        }
+
+        if (!effectiveGameId) {
+            setError('This game is not registered in the system. Only a name can be set for generic characters.');
             return;
         }
 
@@ -116,7 +191,7 @@ export function AddCharacterModal({
         } else {
             createMutation.mutate(
                 {
-                    gameId: selectedGameId,
+                    gameId: effectiveGameId!,
                     name: form.name.trim(),
                     class: showMmoFields ? (form.class.trim() || undefined) : undefined,
                     spec: showMmoFields ? (form.spec.trim() || undefined) : undefined,
@@ -135,6 +210,7 @@ export function AddCharacterModal({
                             realm: '',
                             isMain: false,
                         });
+                        setSelectedIgdbGame(null);
                     },
                 }
             );
@@ -154,150 +230,207 @@ export function AddCharacterModal({
             title={isEditing ? 'Edit Character' : 'Add Character'}
         >
             <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Game Selector (AC-6) — Disabled when editing */}
-                <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                        Game <span className="text-red-400">*</span>
-                    </label>
-                    {isEditing ? (
+                {/* Game Selector — IGDB search for create, static text for edit */}
+                {isEditing ? (
+                    <div>
+                        <label className="block text-sm font-medium text-secondary mb-1">
+                            Game
+                        </label>
                         <div className="px-3 py-2 bg-panel/50 border border-edge/50 rounded-lg text-muted text-sm">
                             {effectiveGameName}
                         </div>
-                    ) : (
-                        <select
-                            value={selectedGameId}
-                            onChange={(e) => setSelectedGameId(e.target.value)}
-                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        >
-                            {!selectedGameId && (
-                                <option value="">Select a game...</option>
-                            )}
-                            {games.map((game) => (
-                                <option key={game.id} value={game.id}>
-                                    {game.name}
-                                </option>
-                            ))}
-                        </select>
-                    )}
-                </div>
-
-                {/* Character Name */}
-                <div>
-                    <label className="block text-sm font-medium text-secondary mb-1">
-                        Name <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                        type="text"
-                        value={form.name}
-                        onChange={(e) => updateField('name', e.target.value)}
-                        placeholder="Character name"
-                        maxLength={100}
-                        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    </div>
+                ) : (
+                    <GameSearchInput
+                        key={resetKey}
+                        value={selectedIgdbGame}
+                        onChange={(game) => setSelectedIgdbGame(game)}
+                        error={error && !selectedIgdbGame && !effectiveGameId ? error : undefined}
+                        initialSuggestions={registrySuggestions}
                     />
-                </div>
+                )}
 
-                {/* MMO-specific fields — only shown when game hasRoles */}
-                {showMmoFields && (
+                {/* Tab toggle for WoW import */}
+                {showImportTab && (
+                    <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('manual')}
+                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'manual'
+                                    ? 'bg-overlay text-foreground'
+                                    : 'text-muted hover:text-secondary'
+                            }`}
+                        >
+                            Manual
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setActiveTab('import')}
+                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'import'
+                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                                    : 'text-muted hover:text-secondary'
+                            }`}
+                        >
+                            Import from Armory
+                        </button>
+                    </div>
+                )}
+
+                {/* WoW variant selector (shown when import tab is active) */}
+                {showImportTab && activeTab === 'import' && (
+                    <div>
+                        <label className="block text-sm font-medium text-secondary mb-1">
+                            Game Version
+                        </label>
+                        <select
+                            value={wowVariant}
+                            onChange={(e) => setWowVariant(e.target.value)}
+                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        >
+                            {currentSlug === 'wow-classic' || currentSlug.includes('world-of-warcraft-classic') ? (
+                                <>
+                                    <option value="classic_anniversary">Classic Anniversary (TBC)</option>
+                                    <option value="classic_era">Classic Era / SoD</option>
+                                    <option value="classic">Classic (Cata)</option>
+                                </>
+                            ) : (
+                                <option value="retail">Retail (Live)</option>
+                            )}
+                        </select>
+                    </div>
+                )}
+
+                {/* Import from Armory tab */}
+                {showImportTab && activeTab === 'import' ? (
+                    <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} />
+                ) : (
                     <>
-                        {/* Class & Spec */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-sm font-medium text-secondary mb-1">
-                                    Class
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.class}
-                                    onChange={(e) => updateField('class', e.target.value)}
-                                    placeholder="e.g. Warrior"
-                                    maxLength={50}
-                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-secondary mb-1">
-                                    Spec
-                                </label>
-                                <input
-                                    type="text"
-                                    value={form.spec}
-                                    onChange={(e) => updateField('spec', e.target.value)}
-                                    placeholder="e.g. Arms"
-                                    maxLength={50}
-                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                            </div>
-                        </div>
+                        {/* Only show manual form fields when a game is selected */}
+                        {(selectedIgdbGame || isEditing) && (
+                            <>
+                                {/* Character Name */}
+                                <div>
+                                    <label className="block text-sm font-medium text-secondary mb-1">
+                                        Name <span className="text-red-400">*</span>
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={form.name}
+                                        onChange={(e) => updateField('name', e.target.value)}
+                                        placeholder="Character name"
+                                        maxLength={100}
+                                        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    />
+                                </div>
 
-                        {/* Role */}
-                        <div>
-                            <label className="block text-sm font-medium text-secondary mb-1">
-                                Role
-                            </label>
-                            <select
-                                value={form.role}
-                                onChange={(e) => updateField('role', e.target.value as CharacterRole | '')}
-                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                {/* MMO-specific fields — only shown when game hasRoles */}
+                                {showMmoFields && (
+                                    <>
+                                        {/* Class & Spec */}
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-sm font-medium text-secondary mb-1">
+                                                    Class
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={form.class}
+                                                    onChange={(e) => updateField('class', e.target.value)}
+                                                    placeholder="e.g. Warrior"
+                                                    maxLength={50}
+                                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-secondary mb-1">
+                                                    Spec
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={form.spec}
+                                                    onChange={(e) => updateField('spec', e.target.value)}
+                                                    placeholder="e.g. Arms"
+                                                    maxLength={50}
+                                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {/* Role */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-secondary mb-1">
+                                                Role
+                                            </label>
+                                            <select
+                                                value={form.role}
+                                                onChange={(e) => updateField('role', e.target.value as CharacterRole | '')}
+                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            >
+                                                <option value="">Select role...</option>
+                                                <option value="tank">Tank</option>
+                                                <option value="healer">Healer</option>
+                                                <option value="dps">DPS</option>
+                                            </select>
+                                        </div>
+
+                                        {/* Realm (optional) */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-secondary mb-1">
+                                                Realm/Server
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.realm}
+                                                onChange={(e) => updateField('realm', e.target.value)}
+                                                placeholder="e.g. Illidan"
+                                                maxLength={100}
+                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* Set as Main (only for create) */}
+                                {!isEditing && (
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={form.isMain}
+                                            onChange={(e) => updateField('isMain', e.target.checked)}
+                                            className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500"
+                                        />
+                                        <span className="text-sm text-secondary">Set as main character</span>
+                                    </label>
+                                )}
+                            </>
+                        )}
+
+                        {/* Error */}
+                        {error && (
+                            <p className="text-sm text-red-400">{error}</p>
+                        )}
+
+                        {/* Actions */}
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 text-secondary hover:text-foreground transition-colors"
                             >
-                                <option value="">Select role...</option>
-                                <option value="tank">Tank</option>
-                                <option value="healer">Healer</option>
-                                <option value="dps">DPS</option>
-                            </select>
-                        </div>
-
-                        {/* Realm (optional) */}
-                        <div>
-                            <label className="block text-sm font-medium text-secondary mb-1">
-                                Realm/Server
-                            </label>
-                            <input
-                                type="text"
-                                value={form.realm}
-                                onChange={(e) => updateField('realm', e.target.value)}
-                                placeholder="e.g. Illidan"
-                                maxLength={100}
-                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={isPending}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors"
+                            >
+                                {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Character'}
+                            </button>
                         </div>
                     </>
                 )}
-
-                {/* Set as Main (only for create) */}
-                {!isEditing && (
-                    <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={form.isMain}
-                            onChange={(e) => updateField('isMain', e.target.checked)}
-                            className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500"
-                        />
-                        <span className="text-sm text-secondary">Set as main character</span>
-                    </label>
-                )}
-
-                {/* Error */}
-                {error && (
-                    <p className="text-sm text-red-400">{error}</p>
-                )}
-
-                {/* Actions */}
-                <div className="flex justify-end gap-3 pt-2">
-                    <button
-                        type="button"
-                        onClick={onClose}
-                        className="px-4 py-2 text-secondary hover:text-foreground transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        type="submit"
-                        disabled={isPending}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground font-medium rounded-lg transition-colors"
-                    >
-                        {isPending ? 'Saving...' : isEditing ? 'Save Changes' : 'Add Character'}
-                    </button>
-                </div>
             </form>
         </Modal>
     );

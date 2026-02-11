@@ -32,7 +32,10 @@ export const SignupCharacterSchema = z.object({
     role: z.enum(['tank', 'healer', 'dps']).nullable(),
     isMain: z.boolean(),
     itemLevel: z.number().nullable(),
+    level: z.number().nullable().optional(),
     avatarUrl: z.string().nullable(),
+    race: z.string().nullable().optional(),
+    faction: z.enum(['alliance', 'horde']).nullable().optional(),
 });
 
 export type SignupCharacterDto = z.infer<typeof SignupCharacterSchema>;

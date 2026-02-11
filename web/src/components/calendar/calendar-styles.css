@@ -705,12 +705,17 @@
     border-radius: 50%;
 }
 
-/* Week view event blocks - full width */
+/* Week/day view event blocks - reset the outer .rbc-event wrapper so our
+   custom inner components (WeekEventCard, DayEventCard) handle all styling.
+   eventPropGetter sets inline backgroundColor/border for month-view chips;
+   we must forcefully override those here so they don't bleed through as a
+   translucent box on top of the custom cards (ROK-235). */
 .rbc-time-view .rbc-event {
     border-radius: 0.5rem;
-    border: none;
+    border: none !important;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     background: transparent !important;
+    background-color: transparent !important;
     padding: 0 !important;
     overflow: hidden;
 }
@@ -721,10 +726,8 @@
 }
 
 .rbc-day-slot .rbc-event {
-    width: 100% !important;
-    left: 0 !important;
-    right: 0 !important;
-    /* Visual separation between back-to-back events */
+    /* Let react-big-calendar calculate width/position for overlapping events
+       (side-by-side layout). Only override border for visual separation. */
     border-top: 3px solid rgba(15, 23, 42, 0.95) !important;
 }
 

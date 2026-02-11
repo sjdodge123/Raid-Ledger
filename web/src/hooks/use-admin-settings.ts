@@ -41,6 +41,15 @@ interface IgdbConfigDto {
     clientSecret: string;
 }
 
+interface BlizzardStatusResponse {
+    configured: boolean;
+}
+
+interface BlizzardConfigDto {
+    clientId: string;
+    clientSecret: string;
+}
+
 interface ApiResponse {
     success: boolean;
     message: string;
@@ -233,6 +242,68 @@ export function useAdminSettings() {
     });
 
     // ============================================================
+    // Blizzard API Configuration (ROK-234)
+    // ============================================================
+
+    const blizzardStatus = useQuery<BlizzardStatusResponse>({
+        queryKey: ['admin', 'settings', 'blizzard'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/blizzard`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch Blizzard status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    const updateBlizzard = useMutation<ApiResponse, Error, BlizzardConfigDto>({
+        mutationFn: async (config) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/blizzard`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(config),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update Blizzard configuration' }));
+                throw new Error(error.message || 'Failed to update Blizzard configuration');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'blizzard'] });
+            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        },
+    });
+
+    const testBlizzard = useMutation<OAuthTestResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/blizzard/test`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to test Blizzard configuration');
+            return response.json();
+        },
+    });
+
+    const clearBlizzard = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/blizzard/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to clear Blizzard configuration');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'blizzard'] });
+            queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+        },
+    });
+
+    // ============================================================
     // IGDB Sync Status (ROK-173)
     // ============================================================
 
@@ -322,6 +393,10 @@ export function useAdminSettings() {
         updateIgdb,
         testIgdb,
         clearIgdb,
+        blizzardStatus,
+        updateBlizzard,
+        testBlizzard,
+        clearBlizzard,
         igdbSyncStatus,
         syncIgdb,
         demoDataStatus,

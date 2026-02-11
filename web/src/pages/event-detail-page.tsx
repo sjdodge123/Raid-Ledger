@@ -5,12 +5,14 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, WowInstanceDetailDto } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
+import { CharacterCardCompact } from '../components/characters/character-card-compact';
 import { isMMOSlotConfig } from '../utils/game-utils';
+import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import './event-detail-page.css';
 
@@ -43,6 +45,12 @@ export function EventDetailPage() {
     const { user, isAuthenticated } = useAuth();
     const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
     const { data: roster } = useEventRoster(eventId);
+    const { games } = useGameRegistry();
+
+    // Look up game registry entry for hasRoles/slug (ROK-234)
+    const gameRegistryEntry = games.find(
+        (g) => g.id === event?.game?.registryId || g.slug === event?.game?.slug,
+    );
 
     useEffect(() => {
         const el = bannerRef.current;
@@ -193,27 +201,57 @@ export function EventDetailPage() {
     const confirmedSignups = roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || [];
     const pendingSignups = roster?.signups.filter(s => s.confirmationStatus === 'pending') || [];
 
+    // Level warning computation
+    const contentInstances = (event?.contentInstances as WowInstanceDetailDto[] | null | undefined) ?? [];
+    const minimumLevels = contentInstances
+        .map((i) => i.minimumLevel)
+        .filter((l): l is number => l != null);
+    const lowestMinLevel = minimumLevels.length > 0 ? Math.min(...minimumLevels) : null;
+    const isClassicGame = event?.game?.slug === 'wow-classic';
+
+    function getLevelWarning(characterLevel: number | null | undefined): { type: 'under' | 'over'; label: string } | null {
+        if (characterLevel == null || lowestMinLevel == null) return null;
+        if (characterLevel < lowestMinLevel) {
+            return { type: 'under', label: `Below min level (${lowestMinLevel})` };
+        }
+        if (isClassicGame && characterLevel > lowestMinLevel + 20) {
+            return { type: 'over', label: 'Over-leveled for this content' };
+        }
+        return null;
+    }
+
     return (
         <div className="event-detail-page">
-            {/* Back button — contextual based on where the user came from */}
-            <button
-                onClick={() => {
-                    if (fromCalendar) {
-                        const params = new URLSearchParams();
-                        if (navState?.calendarDate) params.set('date', navState.calendarDate);
-                        if (navState?.calendarView) params.set('view', navState.calendarView);
-                        navigate(`/calendar?${params.toString()}`);
-                    } else if (hasHistory) {
-                        navigate(-1);
-                    } else {
-                        navigate('/calendar');
-                    }
-                }}
-                className="event-detail-back"
-                aria-label="Go back"
-            >
-                {fromCalendar ? '← Back to Calendar' : '← Back'}
-            </button>
+            {/* Back button + Edit button row */}
+            <div className="event-detail-topbar">
+                <button
+                    onClick={() => {
+                        if (fromCalendar) {
+                            const params = new URLSearchParams();
+                            if (navState?.calendarDate) params.set('date', navState.calendarDate);
+                            if (navState?.calendarView) params.set('view', navState.calendarView);
+                            navigate(`/calendar?${params.toString()}`);
+                        } else if (hasHistory) {
+                            navigate(-1);
+                        } else {
+                            navigate('/calendar');
+                        }
+                    }}
+                    className="event-detail-back"
+                    aria-label="Go back"
+                >
+                    {fromCalendar ? '← Back to Calendar' : '← Back'}
+                </button>
+
+                {canManageRoster && (
+                    <button
+                        onClick={() => navigate(`/events/${eventId}/edit`)}
+                        className="btn btn-secondary btn-sm"
+                    >
+                        Edit Event
+                    </button>
+                )}
+            </div>
 
             {/* ROK-192: Full banner (in-flow, observed for scroll detection) */}
             <div ref={bannerRef}>
@@ -354,23 +392,48 @@ export function EventDetailPage() {
                 {confirmedSignups.length > 0 && (
                     <div className="event-detail-roster__group">
                         <h3><span role="img" aria-hidden="true">✓</span> Confirmed ({confirmedSignups.length})</h3>
-                        <div className="event-detail-roster__list">
-                            {confirmedSignups.map(signup => (
-                                <div key={signup.id} className="event-detail-roster__item">
-                                    <UserLink
-                                        userId={signup.user.id}
-                                        username={signup.user.username}
-                                        avatarUrl={signup.user.avatar}
-                                        showAvatar
-                                        size="md"
-                                    />
-                                    {signup.character && (
-                                        <span className="event-detail-roster__character">
-                                            as {signup.character.name}
-                                        </span>
-                                    )}
-                                </div>
-                            ))}
+                        <div className="space-y-2">
+                            {confirmedSignups.map(signup => {
+                                const levelWarn = signup.character ? getLevelWarning(signup.character.level) : null;
+                                return (
+                                    <div key={signup.id} className="space-y-1">
+                                        <div className="flex items-center gap-2">
+                                            <UserLink
+                                                userId={signup.user.id}
+                                                username={signup.user.username}
+                                                avatarUrl={signup.user.avatar}
+                                                showAvatar
+                                                size="md"
+                                            />
+                                            {levelWarn && levelWarn.type === 'under' && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
+                                                    {levelWarn.label}
+                                                </span>
+                                            )}
+                                            {levelWarn && levelWarn.type === 'over' && (
+                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-500/15 text-gray-400 border border-gray-500/20">
+                                                    {levelWarn.label}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {signup.character && (
+                                            <CharacterCardCompact
+                                                id={signup.character.id}
+                                                name={signup.character.name}
+                                                avatarUrl={signup.character.avatarUrl}
+                                                isMain={signup.character.isMain}
+                                                faction={signup.character.faction}
+                                                level={signup.character.level}
+                                                race={signup.character.race}
+                                                className={signup.character.class}
+                                                spec={signup.character.spec}
+                                                role={signup.character.role}
+                                                itemLevel={signup.character.itemLevel}
+                                            />
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 )}
@@ -411,7 +474,10 @@ export function EventDetailPage() {
                     }}
                     eventId={eventId}
                     signupId={pendingSignupId}
-                    gameId={event.game?.id?.toString()}
+                    gameId={gameRegistryEntry?.id ?? event.game?.registryId ?? undefined}
+                    gameName={event.game?.name ?? undefined}
+                    hasRoles={gameRegistryEntry?.hasRoles ?? true}
+                    gameSlug={event.game?.slug ?? undefined}
                 />
             )}
         </div>

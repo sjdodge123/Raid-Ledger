@@ -1,11 +1,13 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
+import { useThemeStore } from './stores/theme-store';
 import { Layout } from './components/layout';
 import { ProtectedRoute } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
+import { EditEventPage } from './pages/edit-event-page';
 import { ProfilePage } from './pages/profile-page';
 import { UserProfilePage } from './pages/user-profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
@@ -13,14 +15,18 @@ import { CalendarPage } from './pages/calendar-page';
 import { AdminSettingsPage } from './pages/admin-settings-page';
 import { GamesPage } from './pages/games-page';
 import { GameDetailPage } from './pages/game-detail-page';
+import { CharacterDetailPage } from './pages/character-detail-page';
+import { PlayersPage } from './pages/players-page';
 import './App.css';
 
 function App() {
+  const isDark = useThemeStore((s) => s.resolved.isDark);
+
   return (
     <BrowserRouter>
       <Toaster
         position="top-right"
-        theme="dark"
+        theme={isDark ? 'dark' : 'light'}
         richColors
         closeButton
         offset="72px"
@@ -34,6 +40,8 @@ function App() {
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/games" element={<GamesPage />} />
           <Route path="/games/:id" element={<GameDetailPage />} />
+          <Route path="/characters/:id" element={<CharacterDetailPage />} />
+          <Route path="/players" element={<PlayersPage />} />
           <Route path="/events" element={<EventsPage />} />
           <Route path="/events/new" element={
             <ProtectedRoute>
@@ -41,6 +49,11 @@ function App() {
             </ProtectedRoute>
           } />
           <Route path="/events/:id" element={<EventDetailPage />} />
+          <Route path="/events/:id/edit" element={
+            <ProtectedRoute>
+              <EditEventPage />
+            </ProtectedRoute>
+          } />
           {/* ROK-181: Public user profiles */}
           <Route path="/users/:userId" element={<UserProfilePage />} />
           <Route path="/profile" element={

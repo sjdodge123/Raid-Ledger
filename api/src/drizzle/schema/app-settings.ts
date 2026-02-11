@@ -22,6 +22,8 @@ export const SETTING_KEYS = {
   DISCORD_CALLBACK_URL: 'discord_callback_url',
   IGDB_CLIENT_ID: 'igdb_client_id',
   IGDB_CLIENT_SECRET: 'igdb_client_secret',
+  BLIZZARD_CLIENT_ID: 'blizzard_client_id',
+  BLIZZARD_CLIENT_SECRET: 'blizzard_client_secret',
   DEMO_MODE: 'demo_mode',
 } as const;
 

@@ -9,6 +9,8 @@ export const SystemStatusSchema = z.object({
     isFirstRun: z.boolean(),
     /** True when Discord OAuth is configured */
     discordConfigured: z.boolean(),
+    /** True when Blizzard API credentials are configured (ROK-234) */
+    blizzardConfigured: z.boolean(),
     /** True when running in demo/test mode */
     demoMode: z.boolean().optional(),
 });

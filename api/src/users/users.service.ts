@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, ilike, asc } from 'drizzle-orm';
 
 @Injectable()
 export class UsersService {
@@ -169,5 +169,46 @@ export class UsersService {
       .select({ count: sql<number>`count(*)` })
       .from(schema.users);
     return Number(result[0].count);
+  }
+
+  /**
+   * Paginated list of all users with optional search.
+   * Used for the Players page.
+   */
+  async findAll(
+    page: number,
+    limit: number,
+    search?: string,
+  ): Promise<{
+    data: Array<{ id: number; username: string; avatar: string | null }>;
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
+
+    const conditions = search
+      ? ilike(schema.users.username, `%${search}%`)
+      : undefined;
+
+    const [countResult] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users)
+      .where(conditions);
+
+    const rows = await this.db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+      })
+      .from(schema.users)
+      .where(conditions)
+      .orderBy(asc(schema.users.username))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      data: rows,
+      total: Number(countResult.count),
+    };
   }
 }

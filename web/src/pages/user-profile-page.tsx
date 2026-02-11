@@ -1,7 +1,78 @@
 import { useParams, Link } from 'react-router-dom';
 import { useUserProfile } from '../hooks/use-user-profile';
 import { formatDistanceToNow } from 'date-fns';
+import type { CharacterDto } from '@raid-ledger/contract';
 import './user-profile-page.css';
+
+const FACTION_STYLES: Record<string, string> = {
+    alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    horde: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+const ROLE_COLORS: Record<string, string> = {
+    tank: 'bg-blue-600',
+    healer: 'bg-emerald-600',
+    dps: 'bg-red-600',
+};
+
+/** Read-only character card matching the profile page style, clickable to detail page */
+function PublicCharacterCard({ character }: { character: CharacterDto }) {
+    return (
+        <Link
+            to={`/characters/${character.id}`}
+            className="bg-panel border border-edge rounded-lg p-4 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
+        >
+            {character.avatarUrl ? (
+                <img
+                    src={character.avatarUrl}
+                    alt={character.name}
+                    className="w-10 h-10 rounded-full bg-overlay flex-shrink-0"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+            ) : (
+                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-muted flex-shrink-0">
+                    👤
+                </div>
+            )}
+            <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground truncate">{character.name}</span>
+                    {character.isMain && (
+                        <span className="text-yellow-400" title="Main character">⭐</span>
+                    )}
+                    {character.faction && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${FACTION_STYLES[character.faction] ?? 'bg-faint text-muted'}`}>
+                            {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted">
+                    {character.level && (
+                        <>
+                            <span className="text-amber-400">Lv.{character.level}</span>
+                            <span>•</span>
+                        </>
+                    )}
+                    {character.race && <span>{character.race}</span>}
+                    {character.race && character.class && <span>•</span>}
+                    {character.class && <span>{character.class}</span>}
+                    {character.spec && <span>• {character.spec}</span>}
+                    {character.role && (
+                        <span className={`px-1.5 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.role] ?? 'bg-faint'}`}>
+                            {character.role.toUpperCase()}
+                        </span>
+                    )}
+                    {character.itemLevel && (
+                        <>
+                            <span>•</span>
+                            <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                        </>
+                    )}
+                </div>
+            </div>
+        </Link>
+    );
+}
 
 /**
  * Public user profile page (ROK-181).
@@ -41,16 +112,6 @@ export function UserProfilePage() {
 
     const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
 
-    // Group characters by game
-    const charactersByGame = profile.characters.reduce((acc, char) => {
-        const gameId = char.gameId;
-        if (!acc[gameId]) {
-            acc[gameId] = [];
-        }
-        acc[gameId].push(char);
-        return acc;
-    }, {} as Record<string, typeof profile.characters>);
-
     return (
         <div className="user-profile-page">
             <div className="user-profile-card">
@@ -78,43 +139,9 @@ export function UserProfilePage() {
                         <h2 className="user-profile-section-title">
                             Characters ({profile.characters.length})
                         </h2>
-                        <div className="user-profile-characters">
-                            {Object.entries(charactersByGame).map(([gameId, chars]) => (
-                                <div key={gameId} className="character-game-group">
-                                    {chars.map((char) => (
-                                        <div key={char.id} className="character-card">
-                                            {char.avatarUrl && (
-                                                <img
-                                                    src={char.avatarUrl}
-                                                    alt=""
-                                                    className="character-card-avatar"
-                                                />
-                                            )}
-                                            <div className="character-card-info">
-                                                <span className="character-card-name">
-                                                    {char.name}
-                                                    {char.isMain && (
-                                                        <span className="character-card-main">Main</span>
-                                                    )}
-                                                </span>
-                                                {char.class && (
-                                                    <span className="character-card-class">
-                                                        {char.class}
-                                                        {char.spec && ` (${char.spec})`}
-                                                    </span>
-                                                )}
-                                                {char.realm && (
-                                                    <span className="character-card-realm">{char.realm}</span>
-                                                )}
-                                            </div>
-                                            {char.role && (
-                                                <span className={`character-card-role role-${char.role}`}>
-                                                    {char.role}
-                                                </span>
-                                            )}
-                                        </div>
-                                    ))}
-                                </div>
+                        <div className="flex flex-col gap-2">
+                            {profile.characters.map((char) => (
+                                <PublicCharacterCard key={char.id} character={char} />
                             ))}
                         </div>
                     </div>

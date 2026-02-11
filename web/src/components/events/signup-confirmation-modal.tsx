@@ -3,6 +3,8 @@ import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useConfirmSignup } from '../../hooks/use-signups';
+import { useSystemStatus } from '../../hooks/use-system-status';
+import { InlineCharacterForm } from '../characters/inline-character-form';
 import { toast } from 'sonner';
 
 interface SignupConfirmationModalProps {
@@ -11,6 +13,12 @@ interface SignupConfirmationModalProps {
     eventId: number;
     signupId: number;
     gameId?: string;
+    /** Game name for display */
+    gameName?: string;
+    /** Whether the game has roles (MMO fields) */
+    hasRoles?: boolean;
+    /** Whether the game slug is WoW */
+    gameSlug?: string;
     /** The expected role for this event (e.g., 'tank', 'healer', 'dps') */
     expectedRole?: CharacterRole;
 }
@@ -32,6 +40,7 @@ const ROLE_ICONS: Record<CharacterRole, string> = {
 /**
  * Modal for confirming which character a user is bringing to an event.
  * Implements ROK-131 AC-2, AC-3, AC-4, AC-5.
+ * Enhanced for ROK-234: inline character creation when no characters exist.
  */
 export function SignupConfirmationModal({
     isOpen,
@@ -39,10 +48,14 @@ export function SignupConfirmationModal({
     eventId,
     signupId,
     gameId,
+    gameName,
+    hasRoles = true,
+    gameSlug,
     expectedRole,
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
     const confirmMutation = useConfirmSignup(eventId);
+    const { data: systemStatus } = useSystemStatus();
 
     const characters = charactersData?.data ?? [];
     const mainCharacter = characters.find((c) => c.isMain);
@@ -51,6 +64,7 @@ export function SignupConfirmationModal({
     // Track a "session key" that increments when modal opens to reset state
     const [sessionKey, setSessionKey] = useState(0);
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+    const [showCreateForm, setShowCreateForm] = useState(false);
 
     // Reset selection when modal opens (increment session key)
     useEffect(() => {
@@ -60,23 +74,27 @@ export function SignupConfirmationModal({
     }, [isOpen]);
 
     // Derive initial selection from main character when session key changes
-    // This uses useMemo to compute the default, then applies it via effect
     const defaultCharacterId = useMemo(() => mainCharacter?.id ?? null, [mainCharacter?.id]);
 
     useEffect(() => {
-        // Apply default selection when session starts (sessionKey changes)
         setSelectedCharacterId(defaultCharacterId);
+        setShowCreateForm(false);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionKey]);
 
     const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
-
 
     // Check if selected character role mismatches expected role (AC-5)
     const hasRoleMismatch =
         expectedRole &&
         selectedCharacter?.role &&
         selectedCharacter.role !== expectedRole;
+
+    // Whether WoW Armory import is available (includes Classic variants)
+    const isWow = gameSlug?.startsWith('wow') || gameSlug?.startsWith('world-of-warcraft');
+    const showArmoryImport = isWow && systemStatus?.blizzardConfigured;
+    const gameVariant = gameSlug === 'wow-classic' || gameSlug?.includes('world-of-warcraft-classic')
+        ? 'classic_era' : 'retail';
 
     const handleConfirm = async () => {
         if (!selectedCharacterId) return;
@@ -88,13 +106,22 @@ export function SignupConfirmationModal({
             });
             toast.success('Character confirmed!');
             onClose();
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to confirm character');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to confirm character');
         }
     };
 
     const handleSelectCharacter = (characterId: string) => {
         setSelectedCharacterId(characterId);
+    };
+
+    const handleCharacterCreated = (character?: CharacterDto) => {
+        setShowCreateForm(false);
+        // If we got a character back, select it
+        if (character?.id) {
+            setSelectedCharacterId(character.id);
+        }
+        // Characters list will refresh via query invalidation
     };
 
     return (
@@ -122,13 +149,35 @@ export function SignupConfirmationModal({
                     </div>
                 )}
 
-                {/* No characters state */}
-                {!isLoadingCharacters && !isError && characters.length === 0 && (
-                    <div className="text-center py-8 text-muted">
-                        <p className="mb-2">No characters found for this game.</p>
-                        <p className="text-sm">
-                            Add characters in your profile to confirm signups.
+                {/* No characters state — inline creation (ROK-234) */}
+                {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
+                    <div className="text-center py-6 text-muted">
+                        <p className="mb-3">
+                            No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
                         </p>
+                        <button
+                            onClick={() => setShowCreateForm(true)}
+                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors"
+                        >
+                            Create Character
+                        </button>
+                    </div>
+                )}
+
+                {/* Inline character creation form (ROK-234) */}
+                {showCreateForm && gameId && (
+                    <div>
+                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                            Create a Character
+                        </h3>
+                        <InlineCharacterForm
+                            gameId={gameId}
+                            hasRoles={hasRoles}
+                            showArmoryImport={showArmoryImport ?? false}
+                            gameVariant={gameVariant}
+                            onCharacterCreated={handleCharacterCreated}
+                            onCancel={() => setShowCreateForm(false)}
+                        />
                     </div>
                 )}
 
@@ -166,6 +215,33 @@ export function SignupConfirmationModal({
                     </div>
                 )}
 
+                {/* Add another character link (ROK-234) */}
+                {characters.length > 0 && !showCreateForm && gameId && (
+                    <button
+                        onClick={() => setShowCreateForm(true)}
+                        className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                        + Add another character
+                    </button>
+                )}
+
+                {/* Inline create form when characters already exist */}
+                {characters.length > 0 && showCreateForm && gameId && (
+                    <div>
+                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                            Add Character
+                        </h3>
+                        <InlineCharacterForm
+                            gameId={gameId}
+                            hasRoles={hasRoles}
+                            showArmoryImport={showArmoryImport ?? false}
+                            gameVariant={gameVariant}
+                            onCharacterCreated={handleCharacterCreated}
+                            onCancel={() => setShowCreateForm(false)}
+                        />
+                    </div>
+                )}
+
                 {/* Role mismatch warning (AC-5) */}
                 {hasRoleMismatch && (
                     <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
@@ -181,22 +257,24 @@ export function SignupConfirmationModal({
                     </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleConfirm}
-                        disabled={!selectedCharacterId || confirmMutation.isPending}
-                        className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
-                    >
-                        {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
-                    </button>
-                </div>
+                {/* Actions — only shown when characters exist and form is not active */}
+                {characters.length > 0 && !showCreateForm && (
+                    <div className="flex gap-3 pt-2">
+                        <button
+                            onClick={onClose}
+                            className="flex-1 px-4 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleConfirm}
+                            disabled={!selectedCharacterId || confirmMutation.isPending}
+                            className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
+                        >
+                            {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
+                        </button>
+                    </div>
+                )}
             </div>
         </Modal>
     );
@@ -247,8 +325,17 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                             ⭐
                         </span>
                     )}
+                    {character.faction && (
+                        <span className={`px-1 py-0.5 rounded text-xs ${
+                            character.faction === 'horde' ? 'text-red-400' : 'text-blue-400'
+                        }`}>
+                            {character.faction === 'horde' ? 'H' : 'A'}
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted">
+                    {character.level && <span>Lv.{character.level}</span>}
+                    {character.level && character.class && <span>·</span>}
                     {character.class && <span>{character.class}</span>}
                     {character.spec && (
                         <>

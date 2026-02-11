@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchGameRegistry } from '../lib/api-client';
+import { fetchGameRegistry, getGameEventTypes } from '../lib/api-client';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 
 /**
@@ -20,4 +20,17 @@ export function useGameRegistry() {
         isLoading,
         error,
     };
+}
+
+/**
+ * Hook to fetch event types for a specific registry game.
+ * Only fetches when registryGameId is provided.
+ */
+export function useEventTypes(registryGameId: string | undefined) {
+    return useQuery({
+        queryKey: ['event-types', registryGameId],
+        queryFn: () => getGameEventTypes(registryGameId!),
+        enabled: !!registryGameId,
+        staleTime: 1000 * 60 * 10,
+    });
 }

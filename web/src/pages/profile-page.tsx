@@ -52,10 +52,9 @@ export function ProfilePage() {
 
     const characters = charactersData?.data ?? [];
 
-    // Default to first game in registry if no game selected
-    const defaultGame = games[0];
-    const activeGameId = editingCharacter?.gameId ?? (selectedGameId || (defaultGame?.id ?? ''));
-    const activeGameName = games.find(g => g.id === activeGameId)?.name || 'Unknown Game';
+    // Pre-selected game: only set when editing or explicitly chosen (single-game shortcut)
+    const activeGameId = editingCharacter?.gameId ?? (selectedGameId || undefined);
+    const activeGameName = activeGameId ? (games.find(g => g.id === activeGameId)?.name || 'Unknown Game') : undefined;
 
     function handleAddCharacter() {
         setEditingCharacter(null);
@@ -147,15 +146,13 @@ export function ProfilePage() {
             </div>
 
             {/* Add/Edit Character Modal */}
-            {activeGameId && (
-                <AddCharacterModal
-                    isOpen={showAddModal}
-                    onClose={handleCloseCharacterModal}
-                    gameId={activeGameId}
-                    gameName={activeGameName}
-                    editingCharacter={editingCharacter}
-                />
-            )}
+            <AddCharacterModal
+                isOpen={showAddModal}
+                onClose={handleCloseCharacterModal}
+                gameId={activeGameId}
+                gameName={activeGameName}
+                editingCharacter={editingCharacter}
+            />
         </div>
     );
 }

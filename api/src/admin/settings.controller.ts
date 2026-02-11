@@ -43,6 +43,20 @@ export interface IgdbStatusResponse {
   health?: IgdbHealthStatusDto;
 }
 
+export interface BlizzardStatusResponse {
+  configured: boolean;
+}
+
+export class BlizzardConfigDto {
+  @IsString()
+  @IsNotEmpty({ message: 'Client ID is required' })
+  clientId!: string;
+
+  @IsString()
+  @IsNotEmpty({ message: 'Client Secret is required' })
+  clientSecret!: string;
+}
+
 export class OAuthConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client ID is required' })
@@ -383,6 +397,124 @@ export class AdminSettingsController {
     return {
       success: true,
       message: 'IGDB configuration cleared.',
+    };
+  }
+
+  // ============================================================
+  // Blizzard API Configuration (ROK-234)
+  // ============================================================
+
+  /**
+   * GET /admin/settings/blizzard
+   * Returns current Blizzard API configuration status.
+   */
+  @Get('blizzard')
+  async getBlizzardStatus(): Promise<BlizzardStatusResponse> {
+    const configured = await this.settingsService.isBlizzardConfigured();
+    return { configured };
+  }
+
+  /**
+   * PUT /admin/settings/blizzard
+   * Update Blizzard API credentials.
+   */
+  @Put('blizzard')
+  @HttpCode(HttpStatus.OK)
+  async updateBlizzardConfig(
+    @Body() body: BlizzardConfigDto,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.setBlizzardConfig({
+      clientId: body.clientId,
+      clientSecret: body.clientSecret,
+    });
+
+    this.logger.log('Blizzard API configuration updated via admin UI');
+
+    return {
+      success: true,
+      message:
+        'Blizzard API configuration saved. WoW Armory import is now enabled.',
+    };
+  }
+
+  /**
+   * POST /admin/settings/blizzard/test
+   * Test Blizzard credentials by fetching a real OAuth token.
+   */
+  @Post('blizzard/test')
+  @HttpCode(HttpStatus.OK)
+  async testBlizzardConfig(): Promise<OAuthTestResponse> {
+    const config = await this.settingsService.getBlizzardConfig();
+
+    if (!config) {
+      return {
+        success: false,
+        message: 'Blizzard API is not configured',
+      };
+    }
+
+    try {
+      const response = await fetch('https://us.battle.net/oauth/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Authorization: `Basic ${Buffer.from(`${config.clientId}:${config.clientSecret}`).toString('base64')}`,
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.warn(
+          `Blizzard test failed: ${response.status} ${errorText}`,
+        );
+        return {
+          success: false,
+          message: 'Invalid Client ID or Client Secret',
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Credentials verified! Blizzard API is ready.',
+      };
+    } catch (error) {
+      this.logger.error('Failed to test Blizzard credentials:', error);
+      return {
+        success: false,
+        message:
+          'Failed to connect to Blizzard API. Please check your network.',
+      };
+    }
+  }
+
+  /**
+   * POST /admin/settings/blizzard/clear
+   * Remove Blizzard API configuration.
+   */
+  @Post('blizzard/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearBlizzardConfig(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    await Promise.all([
+      this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_ID),
+      this.settingsService.delete(SETTING_KEYS.BLIZZARD_CLIENT_SECRET),
+    ]);
+
+    this.settingsService['eventEmitter'].emit(
+      'settings.blizzard.updated',
+      null,
+    );
+
+    this.logger.log('Blizzard API configuration cleared via admin UI');
+
+    return {
+      success: true,
+      message: 'Blizzard API configuration cleared.',
     };
   }
 

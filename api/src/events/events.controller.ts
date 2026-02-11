@@ -77,11 +77,17 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = CreateEventSchema.parse(body);
-      const event = await this.eventsService.create(req.user.id, dto);
+      const result = await this.eventsService.create(req.user.id, dto);
 
-      // AC-5: Auto-signup creator when creating event
-      await this.signupsService.signup(event.id, req.user.id);
+      // AC-5: Auto-signup creator when creating event (all instances for recurring)
+      const eventIds = result.allEventIds ?? [result.id];
+      await Promise.all(
+        eventIds.map((id) => this.signupsService.signup(id, req.user.id)),
+      );
 
+      // Strip internal allEventIds before returning
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { allEventIds, ...event } = result;
       return event;
     } catch (error) {
       handleValidationError(error);

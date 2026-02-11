@@ -6,10 +6,18 @@ import type {
     CharacterListResponseDto,
     GameSearchResponseDto,
     GameRegistryListResponseDto,
+    EventTypesResponseDto,
     CreateEventDto,
+    UpdateEventDto,
     CreateCharacterDto,
     UpdateCharacterDto,
     CharacterDto,
+    ImportWowCharacterInput,
+    RefreshCharacterInput,
+    WowRealmListResponseDto,
+    BlizzardCharacterPreviewDto,
+    WowInstanceListResponseDto,
+    WowInstanceDetailDto,
     AvailabilityListResponseDto,
     AvailabilityWithConflicts,
     CreateAvailabilityInput,
@@ -18,8 +26,12 @@ import type {
     RosterWithAssignments,
     UpdateRosterDto,
     UserProfileDto,
+    PlayersListResponseDto,
     GameTimeResponse,
     GameTimeTemplateInput,
+    CreateTemplateDto,
+    TemplateResponseDto,
+    TemplateListResponseDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -62,7 +74,12 @@ async function fetchApi<T>(
 
     if (!response.ok) {
         const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || `HTTP ${response.status}`);
+        // Include specific validation errors if available (Zod backend errors)
+        const details = Array.isArray(error.errors) ? error.errors.join(', ') : '';
+        const message = details
+            ? `${error.message || 'Request failed'}: ${details}`
+            : error.message || `HTTP ${response.status}`;
+        throw new Error(message);
     }
 
     // Handle 204 No Content
@@ -139,6 +156,17 @@ export async function createEvent(dto: CreateEventDto): Promise<EventResponseDto
     );
 }
 
+export async function updateEvent(id: number, dto: UpdateEventDto): Promise<EventResponseDto> {
+    return fetchApi(
+        `/events/${id}`,
+        {
+            method: 'PATCH',
+            body: JSON.stringify(dto),
+        },
+        EventResponseSchema
+    );
+}
+
 // ============================================================
 // Games API (IGDB Search)
 // ============================================================
@@ -156,6 +184,13 @@ export async function searchGames(query: string): Promise<GameSearchResponseDto>
  */
 export async function fetchGameRegistry(): Promise<GameRegistryListResponseDto> {
     return fetchApi('/game-registry');
+}
+
+/**
+ * Fetch event types for a specific registry game
+ */
+export async function getGameEventTypes(registryGameId: string): Promise<EventTypesResponseDto> {
+    return fetchApi(`/game-registry/${registryGameId}/event-types`);
 }
 
 // ============================================================
@@ -261,6 +296,92 @@ export async function setMainCharacter(characterId: string): Promise<CharacterDt
  */
 export async function deleteCharacter(characterId: string): Promise<void> {
     return fetchApi(`/users/me/characters/${characterId}`, { method: 'DELETE' });
+}
+
+/**
+ * Import a WoW character from Blizzard Armory (ROK-234)
+ */
+export async function importWowCharacter(dto: ImportWowCharacterInput): Promise<CharacterDto> {
+    return fetchApi(
+        '/users/me/characters/import/wow',
+        {
+            method: 'POST',
+            body: JSON.stringify(dto),
+        },
+        CharacterSchema
+    );
+}
+
+/**
+ * Fetch a single character by ID (public — for detail page)
+ */
+export async function getCharacterDetail(characterId: string): Promise<CharacterDto> {
+    return fetchApi(`/characters/${characterId}`, {}, CharacterSchema);
+}
+
+/**
+ * Refresh a character's data from Blizzard Armory (ROK-234)
+ */
+export async function refreshCharacterFromArmory(
+    characterId: string,
+    dto: RefreshCharacterInput
+): Promise<CharacterDto> {
+    return fetchApi(
+        `/users/me/characters/${characterId}/refresh`,
+        {
+            method: 'POST',
+            body: JSON.stringify(dto),
+        },
+        CharacterSchema
+    );
+}
+
+/**
+ * Fetch WoW realm list for autocomplete (ROK-234 UX)
+ */
+export async function fetchWowRealms(
+    region: string,
+    gameVariant?: string,
+): Promise<WowRealmListResponseDto> {
+    const params = new URLSearchParams({ region });
+    if (gameVariant) params.set('gameVariant', gameVariant);
+    return fetchApi(`/blizzard/realms?${params}`);
+}
+
+/**
+ * Preview a WoW character from Blizzard without saving (ROK-234 UX)
+ */
+export async function previewWowCharacter(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+): Promise<BlizzardCharacterPreviewDto> {
+    const params = new URLSearchParams({ name, realm, region });
+    if (gameVariant) params.set('gameVariant', gameVariant);
+    return fetchApi(`/blizzard/character-preview?${params}`);
+}
+
+/**
+ * Fetch WoW dungeon/raid instances for content selection
+ */
+export async function fetchWowInstances(
+    gameVariant: string,
+    type: 'dungeon' | 'raid',
+): Promise<WowInstanceListResponseDto> {
+    const params = new URLSearchParams({ gameVariant, type });
+    return fetchApi(`/blizzard/instances?${params}`);
+}
+
+/**
+ * Fetch detail for a specific WoW instance (level requirements, player count)
+ */
+export async function fetchWowInstanceDetail(
+    instanceId: number,
+    gameVariant: string,
+): Promise<WowInstanceDetailDto> {
+    const params = new URLSearchParams({ gameVariant });
+    return fetchApi(`/blizzard/instance/${instanceId}?${params}`);
 }
 
 // ============================================================
@@ -396,6 +517,17 @@ export async function unlinkDiscord(): Promise<void> {
 // ============================================================
 
 /**
+ * Fetch paginated player list (public)
+ */
+export async function getPlayers(params?: { page?: number; search?: string }): Promise<PlayersListResponseDto> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.search) searchParams.set('search', params.search);
+    const query = searchParams.toString();
+    return fetchApi(`/users${query ? `?${query}` : ''}`);
+}
+
+/**
  * Fetch a user's public profile by ID
  */
 export async function getUserProfile(userId: number): Promise<UserProfileDto> {
@@ -496,4 +628,23 @@ export async function updatePreference(key: string, value: unknown): Promise<voi
         method: 'PATCH',
         body: JSON.stringify({ key, value }),
     });
+}
+
+// ============================================================
+// Event Templates API
+// ============================================================
+
+export async function getEventTemplates(): Promise<TemplateListResponseDto> {
+    return fetchApi<TemplateListResponseDto>('/event-templates');
+}
+
+export async function createEventTemplate(dto: CreateTemplateDto): Promise<TemplateResponseDto> {
+    return fetchApi<TemplateResponseDto>('/event-templates', {
+        method: 'POST',
+        body: JSON.stringify(dto),
+    });
+}
+
+export async function deleteEventTemplate(id: number): Promise<void> {
+    await fetchApi(`/event-templates/${id}`, { method: 'DELETE' });
 }

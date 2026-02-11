@@ -87,35 +87,45 @@ async function bootstrap() {
         // =====================
         console.log('\n🎭 Creating characters with WoW class icons...\n');
 
-        // Get some games from game registry for character creation
-        const registryGames = await db.select().from(schema.gameRegistry).limit(3);
+        // Get games from game registry by slug for character creation
+        const registryGames = await db.select().from(schema.gameRegistry);
 
         if (registryGames.length > 0) {
             // Characters with WoW class/role assignments and Blizzard CDN class icons
             const charactersToCreate = [
-                { username: 'ShadowMage', gameIdx: 0, charName: 'Shadowmage', class: 'Mage', spec: 'Arcane', role: 'dps' as const, wowClass: 'mage' },
-                { username: 'DragonSlayer99', gameIdx: 0, charName: 'Dragonslayer', class: 'Rogue', spec: 'Assassination', role: 'dps' as const, wowClass: 'rogue' },
-                { username: 'HealzForDayz', gameIdx: 0, charName: 'Healzfordays', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
-                { username: 'TankMaster', gameIdx: 0, charName: 'Tankmaster', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
-                { username: 'ProRaider', gameIdx: 0, charName: 'Deathbringer', class: 'Death Knight', spec: 'Unholy', role: 'dps' as const, wowClass: 'deathknight' },
-                { username: 'NightOwlGamer', gameIdx: 0, charName: 'Moonweaver', class: 'Druid', spec: 'Restoration', role: 'healer' as const, wowClass: 'druid' },
-                { username: 'LootGoblin', gameIdx: 0, charName: 'Felstrike', class: 'Warlock', spec: 'Destruction', role: 'dps' as const, wowClass: 'warlock' },
-                { username: 'CasualCarl', gameIdx: 0, charName: 'Shieldwall', class: 'Paladin', spec: 'Protection', role: 'tank' as const, wowClass: 'paladin' },
-                // Second game characters (alts)
-                { username: 'ShadowMage', gameIdx: 1, charName: 'Windwalker', class: 'Monk', spec: 'Windwalker', role: 'dps' as const, wowClass: 'monk' },
-                { username: 'TankMaster', gameIdx: 1, charName: 'Earthguard', class: 'Shaman', spec: 'Restoration', role: 'healer' as const, wowClass: 'shaman' },
-                { username: 'ProRaider', gameIdx: 1, charName: 'Hawkeye', class: 'Hunter', spec: 'Marksmanship', role: 'dps' as const, wowClass: 'hunter' },
-                // Third game characters (alts)
-                { username: 'NightOwlGamer', gameIdx: 2, charName: 'Voidcaller', class: 'Evoker', spec: 'Preservation', role: 'healer' as const, wowClass: 'evoker' },
-                { username: 'LootGoblin', gameIdx: 2, charName: 'Demonbane', class: 'Demon Hunter', spec: 'Havoc', role: 'dps' as const, wowClass: 'demonhunter' },
+                // WoW Retail characters
+                { username: 'ShadowMage', gameSlug: 'wow', charName: 'Shadowmage', class: 'Mage', spec: 'Arcane', role: 'dps' as const, wowClass: 'mage' },
+                { username: 'DragonSlayer99', gameSlug: 'wow', charName: 'Dragonslayer', class: 'Rogue', spec: 'Assassination', role: 'dps' as const, wowClass: 'rogue' },
+                { username: 'HealzForDayz', gameSlug: 'wow', charName: 'Healzfordays', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
+                { username: 'TankMaster', gameSlug: 'wow', charName: 'Tankmaster', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
+                { username: 'ProRaider', gameSlug: 'wow', charName: 'Deathbringer', class: 'Death Knight', spec: 'Unholy', role: 'dps' as const, wowClass: 'deathknight' },
+                { username: 'NightOwlGamer', gameSlug: 'wow', charName: 'Moonweaver', class: 'Druid', spec: 'Restoration', role: 'healer' as const, wowClass: 'druid' },
+                { username: 'LootGoblin', gameSlug: 'wow', charName: 'Felstrike', class: 'Warlock', spec: 'Destruction', role: 'dps' as const, wowClass: 'warlock' },
+                { username: 'CasualCarl', gameSlug: 'wow', charName: 'Shieldwall', class: 'Paladin', spec: 'Protection', role: 'tank' as const, wowClass: 'paladin' },
+                // WoW Classic characters
+                { username: 'ShadowMage', gameSlug: 'wow-classic', charName: 'Frostbolt', class: 'Mage', spec: 'Frost', role: 'dps' as const, wowClass: 'mage' },
+                { username: 'TankMaster', gameSlug: 'wow-classic', charName: 'Ironfist', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
+                { username: 'HealzForDayz', gameSlug: 'wow-classic', charName: 'Lightbringer', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
+                { username: 'ProRaider', gameSlug: 'wow-classic', charName: 'Backstab', class: 'Rogue', spec: 'Combat', role: 'dps' as const, wowClass: 'rogue' },
+                // Valheim characters
+                { username: 'ShadowMage', gameSlug: 'valheim', charName: 'Windwalker', class: 'Monk', spec: 'Windwalker', role: 'dps' as const, wowClass: 'monk' },
+                { username: 'TankMaster', gameSlug: 'valheim', charName: 'Earthguard', class: 'Shaman', spec: 'Restoration', role: 'healer' as const, wowClass: 'shaman' },
+                { username: 'ProRaider', gameSlug: 'valheim', charName: 'Hawkeye', class: 'Hunter', spec: 'Marksmanship', role: 'dps' as const, wowClass: 'hunter' },
+                // FFXIV characters
+                { username: 'NightOwlGamer', gameSlug: 'ffxiv', charName: 'Voidcaller', class: 'Evoker', spec: 'Preservation', role: 'healer' as const, wowClass: 'evoker' },
+                { username: 'LootGoblin', gameSlug: 'ffxiv', charName: 'Demonbane', class: 'Demon Hunter', spec: 'Havoc', role: 'dps' as const, wowClass: 'demonhunter' },
             ];
+
+            // Build slug → game map for lookups
+            const gameBySlug: Record<string, typeof registryGames[number]> = {};
+            for (const g of registryGames) gameBySlug[g.slug] = g;
 
             // Track which users already have a main — only first character per player is main
             const usersWithMain = new Set<string>();
 
             for (const charData of charactersToCreate) {
                 const user = createdUsers.find((u) => u.username === charData.username);
-                const game = registryGames[charData.gameIdx];
+                const game = gameBySlug[charData.gameSlug];
 
                 if (!user || !game) continue;
 

@@ -43,3 +43,18 @@ export const UserPreviewSchema = z.object({
 });
 
 export type UserPreviewDto = z.infer<typeof UserPreviewSchema>;
+
+// ==========================================
+// Players List Response (paginated)
+// ==========================================
+
+export const PlayersListResponseSchema = z.object({
+    data: z.array(UserPreviewSchema),
+    meta: z.object({
+        total: z.number().int(),
+        page: z.number().int(),
+        limit: z.number().int(),
+    }),
+});
+
+export type PlayersListResponseDto = z.infer<typeof PlayersListResponseSchema>;

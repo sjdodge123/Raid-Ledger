@@ -6,6 +6,8 @@ import {
   customType,
   integer,
   uuid,
+  jsonb,
+  boolean,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { gameRegistry } from './game-registry';
@@ -24,9 +26,13 @@ export const tsrange = customType<{
     // Basic parsing logic for Postgres range syntax
     const matches = value.match(/[[(]([^,]+),([^,]+)[)\]]/);
     if (!matches) return [new Date(0), new Date(0)];
+    // tsrange stores timestamps without timezone — toDriver sends UTC via toISOString(),
+    // so we must interpret them as UTC on read (append Z) to avoid local-timezone drift.
+    const raw1 = matches[1].replace(/"/g, '').trim();
+    const raw2 = matches[2].replace(/"/g, '').trim();
     return [
-      new Date(matches[1].replace(/"/g, '')),
-      new Date(matches[2].replace(/"/g, '')),
+      new Date(raw1.endsWith('Z') ? raw1 : raw1 + 'Z'),
+      new Date(raw2.endsWith('Z') ? raw2 : raw2 + 'Z'),
     ];
   },
   // Formatting JS Date tuple to DB driver string
@@ -47,6 +53,18 @@ export const events = pgTable('events', {
     .notNull(),
   // Utilizing tsrange for efficient scheduling and overlap checks
   duration: tsrange('duration').notNull(),
+  /** Per-event slot configuration override (jsonb). Falls back to genre-based detection if null. */
+  slotConfig: jsonb('slot_config'),
+  /** Maximum number of attendees. Null = unlimited. */
+  maxAttendees: integer('max_attendees'),
+  /** Whether benched players should be auto-promoted when a slot opens. Default true. */
+  autoUnbench: boolean('auto_unbench').default(true),
+  /** UUID linking recurring event instances together. Null for one-off events. */
+  recurrenceGroupId: uuid('recurrence_group_id'),
+  /** Stored recurrence rule (jsonb). E.g. { frequency: 'weekly', until: '...' } */
+  recurrenceRule: jsonb('recurrence_rule'),
+  /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
+  contentInstances: jsonb('content_instances'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

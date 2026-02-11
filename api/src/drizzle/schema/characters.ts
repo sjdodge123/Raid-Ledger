@@ -9,6 +9,7 @@ import {
   unique,
   index,
   uniqueIndex,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
@@ -48,6 +49,24 @@ export const characters = pgTable(
     externalId: varchar('external_id', { length: 255 }),
     /** Character avatar URL */
     avatarUrl: text('avatar_url'),
+    /** Full character render URL (Blizzard main-raw asset) */
+    renderUrl: text('render_url'),
+    /** Character level (e.g., from Blizzard Armory) */
+    level: integer('level'),
+    /** Character race (e.g., "Blood Elf") */
+    race: varchar('race', { length: 50 }),
+    /** Faction: "alliance" or "horde" */
+    faction: varchar('faction', { length: 20 }),
+    /** Last time character data was synced from external API */
+    lastSyncedAt: timestamp('last_synced_at'),
+    /** External profile URL (e.g., Blizzard Armory link) */
+    profileUrl: text('profile_url'),
+    /** Blizzard API region (us, eu, kr, tw) — persisted for auto-sync */
+    region: varchar('region', { length: 10 }),
+    /** WoW game variant (retail, classic_era, classic, classic_anniversary) */
+    gameVariant: varchar('game_variant', { length: 30 }),
+    /** Full equipped items data from Blizzard API (JSONB) */
+    equipment: jsonb('equipment'),
     /** Display order for drag-to-reorder UI */
     displayOrder: integer('display_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -21,14 +21,17 @@ export class SystemController {
    */
   @Get('status')
   async getStatus(): Promise<SystemStatusDto> {
-    const [userCount, discordConfigured] = await Promise.all([
-      this.usersService.count(),
-      this.settingsService.isDiscordConfigured(),
-    ]);
+    const [userCount, discordConfigured, blizzardConfigured] =
+      await Promise.all([
+        this.usersService.count(),
+        this.settingsService.isDiscordConfigured(),
+        this.settingsService.isBlizzardConfigured(),
+      ]);
 
     return {
       isFirstRun: userCount === 0,
       discordConfigured,
+      blizzardConfigured,
       demoMode: process.env.DEMO_MODE === 'true',
     };
   }
