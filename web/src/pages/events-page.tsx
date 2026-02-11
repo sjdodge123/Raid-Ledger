@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useEvents } from '../hooks/use-events';
 import { useAuth } from '../hooks/use-auth';
@@ -59,15 +59,36 @@ export function EventsPage() {
         return set;
     }, [gameTimeSlots]);
 
-    // Sort events: game-time overlaps first, then by original order
-    const sortedEvents = useMemo(() => {
-        if (!events || !slotSet) return events;
-        return [...events].sort((a, b) => {
-            const aOverlaps = eventOverlapsGameTime(a, slotSet) ? 0 : 1;
-            const bOverlaps = eventOverlapsGameTime(b, slotSet) ? 0 : 1;
-            return aOverlaps - bOverlaps;
-        });
+    const [filterGameTime, setFilterGameTime] = useState(false);
+
+    // Pre-compute which events overlap with game time
+    const overlapSet = useMemo(() => {
+        if (!events || !slotSet) return null;
+        const set = new Set<number>();
+        for (const event of events) {
+            if (eventOverlapsGameTime(event, slotSet)) {
+                set.add(event.id);
+            }
+        }
+        return set;
     }, [events, slotSet]);
+
+    // Sort events: game-time overlaps first, then filter if toggle is on
+    const displayEvents = useMemo(() => {
+        if (!events) return events;
+        let result = events;
+        if (overlapSet) {
+            result = [...result].sort((a, b) => {
+                const aOverlaps = overlapSet.has(a.id) ? 0 : 1;
+                const bOverlaps = overlapSet.has(b.id) ? 0 : 1;
+                return aOverlaps - bOverlaps;
+            });
+        }
+        if (filterGameTime && overlapSet) {
+            result = result.filter((e) => overlapSet.has(e.id));
+        }
+        return result;
+    }, [events, overlapSet, filterGameTime]);
 
     if (error) {
         return (
@@ -106,23 +127,59 @@ export function EventsPage() {
                     )}
                 </div>
 
+                {/* Game Time Filter */}
+                {slotSet && (
+                    <div className="mb-6">
+                        <button
+                            onClick={() => setFilterGameTime((v) => !v)}
+                            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${
+                                filterGameTime
+                                    ? 'bg-cyan-500/15 text-cyan-300 border-cyan-500/40'
+                                    : 'bg-surface text-muted border-edge hover:text-foreground hover:border-dim'
+                            }`}
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            My Game Time
+                            {overlapSet && (
+                                <span className={`px-1.5 py-0.5 text-xs rounded-full ${
+                                    filterGameTime ? 'bg-cyan-500/30' : 'bg-panel'
+                                }`}>
+                                    {overlapSet.size}
+                                </span>
+                            )}
+                        </button>
+                    </div>
+                )}
+
                 {/* Events Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                     {isLoading ? (
-                        // Show skeletons while loading
                         Array.from({ length: 8 }).map((_, i) => (
                             <EventCardSkeleton key={i} />
                         ))
-                    ) : (sortedEvents ?? data?.data)?.length === 0 ? (
-                        // Empty state with illustration and CTA
-                        <EventsEmptyState />
+                    ) : (displayEvents ?? data?.data)?.length === 0 ? (
+                        filterGameTime ? (
+                            <div className="col-span-full text-center py-12">
+                                <p className="text-muted">No events match your game time schedule.</p>
+                                <button
+                                    onClick={() => setFilterGameTime(false)}
+                                    className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                                >
+                                    Clear filter
+                                </button>
+                            </div>
+                        ) : (
+                            <EventsEmptyState />
+                        )
                     ) : (
-                        // Event cards — sorted by game time overlap when authenticated
-                        (sortedEvents ?? data?.data)?.map((event) => (
+                        (displayEvents ?? data?.data)?.map((event) => (
                             <EventCard
                                 key={event.id}
                                 event={event}
                                 signupCount={event.signupCount}
+                                matchesGameTime={overlapSet?.has(event.id)}
                                 onClick={() => navigate(`/events/${event.id}`)}
                             />
                         ))

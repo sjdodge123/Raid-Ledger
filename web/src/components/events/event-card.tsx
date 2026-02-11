@@ -7,6 +7,8 @@ interface EventCardProps {
     event: EventResponseDto;
     signupCount?: number;
     onClick?: () => void;
+    /** Show a "Fits your schedule" badge when event overlaps with game time */
+    matchesGameTime?: boolean;
 }
 
 type EventStatus = 'upcoming' | 'live' | 'ended';
@@ -84,7 +86,7 @@ function getPlaceholderPath(slug: string | undefined): string {
 /**
  * Event card component displaying event info with game cover
  */
-export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
+export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const gameCoverUrl = event.game?.coverUrl || null;
     const status = getEventStatus(event.startTime, event.endTime);
@@ -124,6 +126,17 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
                         alt={event.game?.name || 'Gaming Event'}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
+                )}
+                {/* Game Time badge - top left */}
+                {matchesGameTime && (
+                    <div className="absolute top-2 left-2">
+                        <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            My Time
+                        </span>
+                    </div>
                 )}
                 {/* Status Badge - top right */}
                 <div className="absolute top-2 right-2">
