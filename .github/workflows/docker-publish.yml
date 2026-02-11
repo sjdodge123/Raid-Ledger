@@ -78,21 +78,27 @@ jobs:
           generate_release_notes: true
           body: |
             ## Quick Deploy
-            
+
             ```bash
-            docker run -d -p 80:80 ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker run -d -p 80:80 \
+              -v raid-ledger-data:/data \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ```
-            
-            Check container logs for admin credentials.
-            
+
+            Check container logs for admin credentials. The `-v` mount ensures data persists across container updates (e.g. Watchtower).
+
             **Optional:**
             ```bash
-            docker run -d -p 8080:80 -e DEMO_MODE=true ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker run -d -p 8080:80 -e DEMO_MODE=true \
+              -v raid-ledger-data:/data \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ```
 
             **Reset admin password:**
             ```bash
-            docker run -d -p 80:80 -e ADMIN_PASSWORD=mynewpassword ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            docker run -d -p 80:80 -e ADMIN_PASSWORD=mynewpassword \
+              -v raid-ledger-data:/data \
+              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
             ```
 
             See [README](https://github.com/${{ github.repository }}#readme) for full setup.

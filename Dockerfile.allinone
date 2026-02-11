@@ -2,12 +2,15 @@
 # Raid Ledger All-In-One Docker Image
 # ====================
 # Complete stack: PostgreSQL + Redis + API + Nginx
-# Usage: docker run -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
+# Usage: docker run -p 80:80 -v raid-ledger-data:/data ghcr.io/sjdodge123/raid-ledger:main
 #
 # Environment Variables:
 #   PORT           - External port (default: 80)
 #   DEMO_MODE      - Set "true" to seed sample data (default: false)
 #   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
+#
+# Data is persisted under /data (PostgreSQL + Redis). Mount a volume to
+# retain data across container updates (e.g. Watchtower).
 # ====================
 
 # ====================
@@ -62,17 +65,14 @@ RUN addgroup -g 1001 -S app && \
 WORKDIR /app
 
 # ==================
-# PostgreSQL Setup
+# Persistent data volume — mount as -v raid-ledger-data:/data
 # ==================
-ENV PGDATA=/var/lib/postgresql/data
-RUN mkdir -p /var/lib/postgresql/data /run/postgresql && \
-  chown -R postgres:postgres /var/lib/postgresql /run/postgresql
+RUN mkdir -p /data/postgresql /data/redis /run/postgresql /run/redis && \
+  chown -R postgres:postgres /data/postgresql /run/postgresql && \
+  chown -R redis:redis /data/redis /run/redis
+VOLUME /data
 
-# ==================
-# Redis Setup
-# ==================
-RUN mkdir -p /var/lib/redis /run/redis && \
-  chown -R redis:redis /var/lib/redis /run/redis
+ENV PGDATA=/data/postgresql
 
 # ==================
 # Nginx Setup
@@ -131,7 +131,7 @@ loglevel=warn
 pidfile=/run/supervisord.pid
 
 [program:postgres]
-command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /var/lib/postgresql/data -c log_min_messages=FATAL
+command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL
 autostart=true
 autorestart=true
 priority=10
@@ -144,7 +144,7 @@ killasgroup=true
 stopasgroup=true
 
 [program:redis]
-command=/usr/bin/redis-server --dir /var/lib/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700
+command=/usr/bin/redis-server --dir /data/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700
 user=redis
 autostart=true
 autorestart=true
@@ -233,6 +233,12 @@ RUN chmod +x /app/init-db.sh
 COPY <<'EOF' /app/entrypoint.sh
 #!/bin/bash
 set -e
+
+# Ensure /data subdirectories exist and have correct ownership
+# (volume mounts may arrive as root-owned empty dirs)
+mkdir -p /data/postgresql /data/redis
+chown -R postgres:postgres /data/postgresql
+chown -R redis:redis /data/redis
 
 # Initialize database on first run
 /app/init-db.sh
