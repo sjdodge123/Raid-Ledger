@@ -127,23 +127,31 @@ export class AdminSettingsController {
     }
 
     try {
-      // Make a test request to Discord's token endpoint
-      // We use a grant_type that will fail, but will tell us if credentials are valid
-      const response = await fetch('https://discord.com/api/oauth2/token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
-        },
-        body: new URLSearchParams({
-          client_id: config.clientId,
-          client_secret: config.clientSecret,
-          grant_type: 'client_credentials',
-          scope: 'identify',
-        }),
-      });
+      // Validate credentials via versioned API with Basic auth (standard OAuth2 spec).
+      // Uses /api/v10/ and Authorization header to avoid Cloudflare blocks on
+      // the unversioned endpoint from shared hosting IPs.
+      const basicAuth = Buffer.from(
+        `${config.clientId}:${config.clientSecret}`,
+      ).toString('base64');
 
-      // Discord may return HTML (Cloudflare page, rate-limit) instead of JSON
+      const response = await fetch(
+        'https://discord.com/api/v10/oauth2/token',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            Authorization: `Basic ${basicAuth}`,
+            'User-Agent':
+              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+          },
+          body: new URLSearchParams({
+            grant_type: 'client_credentials',
+            scope: 'identify',
+          }),
+        },
+      );
+
+      // Discord may return HTML (Cloudflare challenge) instead of JSON
       const responseText = await response.text();
       let data: { error?: string };
       try {
@@ -158,14 +166,16 @@ export class AdminSettingsController {
         };
       }
 
-      if (response.status === 401) {
+      if (response.status === 401 || data.error === 'invalid_client') {
         return {
           success: false,
           message: 'Invalid Client ID or Client Secret',
         };
       }
 
-      // Even if grant type fails, if we get a proper response, credentials are valid
+      // Discord returns 400 unsupported_grant_type for valid credentials
+      // on apps that don't support client_credentials — this proves the
+      // credentials were accepted and the grant type was the only issue.
       if (response.status === 400 && data.error === 'unsupported_grant_type') {
         return {
           success: true,
@@ -173,17 +183,26 @@ export class AdminSettingsController {
         };
       }
 
-      if (data.error === 'invalid_client') {
+      // Any other JSON response with valid credentials (e.g., successful token)
+      if (response.ok) {
         return {
-          success: false,
-          message: 'Invalid Client ID or Client Secret',
+          success: true,
+          message: 'Credentials verified successfully!',
         };
       }
 
-      // Successful token response (unlikely for bots)
+      // Rate-limited with JSON response
+      if (response.status === 429) {
+        return {
+          success: false,
+          message:
+            'Discord is rate-limiting requests. Please wait a minute and try again.',
+        };
+      }
+
       return {
-        success: true,
-        message: 'Credentials verified successfully!',
+        success: false,
+        message: `Discord returned an error: ${data.error || response.status}`,
       };
     } catch (error) {
       this.logger.error('Failed to test Discord OAuth:', error);
