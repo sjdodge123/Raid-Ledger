@@ -18,7 +18,6 @@ export function Header() {
         { to: '/calendar', label: 'Calendar' },
         { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
-        ...(user ? [{ to: '/my-events', label: 'My Events' }] : []),
         { to: '/players', label: 'Players' },
     ];
 
@@ -49,6 +48,20 @@ export function Header() {
                                 {label}
                             </Link>
                         ))}
+                        {user && (
+                            <>
+                                <span className="w-px h-5 bg-edge" aria-hidden="true" />
+                                <Link
+                                    to="/my-events"
+                                    className={`font-medium transition-colors ${location.pathname === '/my-events'
+                                        ? 'text-emerald-400'
+                                        : 'text-secondary hover:text-foreground'
+                                        }`}
+                                >
+                                    My Events
+                                </Link>
+                            </>
+                        )}
                     </nav>
 
                     {/* Right side: Notification Bell + User menu (desktop) + Hamburger (mobile) */}
