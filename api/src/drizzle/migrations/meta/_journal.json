@@ -218,6 +218,13 @@
       "when": 1770840800000,
       "tag": "0030_odd_ozymandias",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1770839680525,
+      "tag": "0031_smiling_forge",
+      "breakpoints": true
     }
   ]
 }

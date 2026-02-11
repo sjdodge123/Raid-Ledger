@@ -18,6 +18,7 @@ import { RedisModule } from './redis/redis.module';
 import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
+import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { NotificationModule } from './notifications/notification.module';
     ScheduleModule.forRoot(),
     DrizzleModule,
     RedisModule,
+    PluginHostModule,
     UsersModule,
     AuthModule,
     AdminModule,

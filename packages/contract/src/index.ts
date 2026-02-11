@@ -51,3 +51,6 @@ export * from './templates.schema.js';
 
 // Blizzard Instance Data
 export * from './blizzard.schema.js';
+
+// Plugins (ROK-236)
+export * from './plugins.schema.js';

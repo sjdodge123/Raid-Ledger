@@ -17,3 +17,4 @@ export * from './schema/game-time-overrides';
 export * from './schema/game-interests';
 export * from './schema/event-reminders-sent';
 export * from './schema/event-templates';
+export * from './schema/plugins';
