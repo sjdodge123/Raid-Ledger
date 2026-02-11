@@ -18,6 +18,7 @@ export function Header() {
         { to: '/calendar', label: 'Calendar' },
         { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
+        ...(user ? [{ to: '/my-events', label: 'My Events' }] : []),
         { to: '/players', label: 'Players' },
     ];
 

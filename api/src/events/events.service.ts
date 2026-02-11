@@ -16,6 +16,8 @@ import {
   EventResponseDto,
   EventListResponseDto,
   EventListQueryDto,
+  DashboardResponseDto,
+  DashboardEventDto,
   RosterAvailabilityResponse,
   UserWithAvailabilitySlots,
 } from '@raid-ledger/contract';
@@ -146,11 +148,15 @@ export class EventsService {
 
   /**
    * Get paginated list of events.
-   * Supports filtering by date range (ROK-174) and game ID.
+   * Supports filtering by date range (ROK-174), game ID, creatorId, signedUpAs (ROK-213).
    * @param query - Pagination and filter options
+   * @param authenticatedUserId - ID of the requesting user (if authenticated)
    * @returns Paginated event list
    */
-  async findAll(query: EventListQueryDto): Promise<EventListResponseDto> {
+  async findAll(
+    query: EventListQueryDto,
+    authenticatedUserId?: number,
+  ): Promise<EventListResponseDto> {
     const page = query.page ?? 1;
     const limit = Math.min(
       query.limit ?? EVENTS_CONFIG.DEFAULT_PAGE_SIZE,
@@ -194,6 +200,26 @@ export class EventsService {
     // gameId filter
     if (query.gameId) {
       conditions.push(eq(schema.events.gameId, query.gameId));
+    }
+
+    // ROK-213: creatorId filter — "me" resolves to authenticated user
+    if (query.creatorId) {
+      const resolvedCreatorId =
+        query.creatorId === 'me'
+          ? authenticatedUserId
+          : Number(query.creatorId);
+      if (resolvedCreatorId) {
+        conditions.push(eq(schema.events.creatorId, resolvedCreatorId));
+      }
+    }
+
+    // ROK-213: signedUpAs filter — "me" resolves to authenticated user
+    if (query.signedUpAs && query.signedUpAs === 'me' && authenticatedUserId) {
+      const signedUpEventIds = this.db
+        .select({ eventId: schema.eventSignups.eventId })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.userId, authenticatedUserId));
+      conditions.push(inArray(schema.events.id, signedUpEventIds));
     }
 
     // Combine all conditions with AND
@@ -335,6 +361,205 @@ export class EventsService {
     }
 
     return this.mapToResponse(results[0]);
+  }
+
+  /**
+   * Get organizer dashboard with aggregate stats and enriched event cards (ROK-213).
+   * Admins see all upcoming events; regular users see only events they created.
+   * @param userId - ID of the requesting user
+   * @param isAdmin - Whether the user is an admin
+   * @returns Dashboard with stats and enriched events
+   */
+  async getMyDashboard(
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<DashboardResponseDto> {
+    // 1. Build condition: upcoming events only, scoped by user/admin
+    const now = new Date().toISOString();
+    const conditions: ReturnType<typeof gte>[] = [
+      gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
+    ];
+    if (!isAdmin) {
+      conditions.push(eq(schema.events.creatorId, userId));
+    }
+    const whereCondition = and(...conditions);
+
+    // 2. Get events with signup counts (reuse findAll pattern)
+    const signupCountSubquery = this.db
+      .select({
+        eventId: schema.eventSignups.eventId,
+        count: sql<number>`count(*)`.as('signup_count'),
+      })
+      .from(schema.eventSignups)
+      .groupBy(schema.eventSignups.eventId)
+      .as('signup_counts');
+
+    const events = await this.db
+      .select({
+        events: schema.events,
+        users: schema.users,
+        games: schema.games,
+        gameRegistry: schema.gameRegistry,
+        signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
+      })
+      .from(schema.events)
+      .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
+      .leftJoin(
+        schema.games,
+        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
+      )
+      .leftJoin(
+        schema.gameRegistry,
+        eq(schema.events.registryGameId, schema.gameRegistry.id),
+      )
+      .leftJoin(
+        signupCountSubquery,
+        eq(schema.events.id, signupCountSubquery.eventId),
+      )
+      .where(whereCondition)
+      .orderBy(asc(sql`lower(${schema.events.duration})`));
+
+    if (events.length === 0) {
+      return {
+        stats: {
+          totalUpcomingEvents: 0,
+          totalSignups: 0,
+          averageFillRate: 0,
+          eventsWithRosterGaps: 0,
+        },
+        events: [],
+      };
+    }
+
+    const eventIds = events.map((e) => e.events.id);
+
+    // 3. Batch query: unconfirmed signups per event
+    const unconfirmedRows = await this.db
+      .select({
+        eventId: schema.eventSignups.eventId,
+        count: sql<number>`count(*)`.as('unconfirmed_count'),
+      })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          inArray(schema.eventSignups.eventId, eventIds),
+          eq(schema.eventSignups.confirmationStatus, 'pending'),
+        ),
+      )
+      .groupBy(schema.eventSignups.eventId);
+
+    const unconfirmedMap = new Map(
+      unconfirmedRows.map((r) => [r.eventId, Number(r.count)]),
+    );
+
+    // 4. Batch query: roster assignments per event+role
+    const assignmentRows = await this.db
+      .select({
+        eventId: schema.rosterAssignments.eventId,
+        role: schema.rosterAssignments.role,
+        count: sql<number>`count(*)`.as('assigned_count'),
+      })
+      .from(schema.rosterAssignments)
+      .where(inArray(schema.rosterAssignments.eventId, eventIds))
+      .groupBy(schema.rosterAssignments.eventId, schema.rosterAssignments.role);
+
+    // Group assignments: eventId -> { role -> count }
+    const assignmentMap = new Map<number, Map<string, number>>();
+    for (const row of assignmentRows) {
+      if (!assignmentMap.has(row.eventId)) {
+        assignmentMap.set(row.eventId, new Map());
+      }
+      assignmentMap
+        .get(row.eventId)!
+        .set(row.role ?? 'player', Number(row.count));
+    }
+
+    // 5. Compute per-event metrics and build response
+    let totalSignups = 0;
+    let totalFillRateSum = 0;
+    let eventsWithSlots = 0;
+    let eventsWithGaps = 0;
+
+    const dashboardEvents: DashboardEventDto[] = events.map((row) => {
+      const base = this.mapToResponse(row);
+      const signupCount = Number(row.signupCount);
+      totalSignups += signupCount;
+
+      const slotConfig = row.events.slotConfig as {
+        type?: string;
+        tank?: number;
+        healer?: number;
+        dps?: number;
+        flex?: number;
+        player?: number;
+        bench?: number;
+      } | null;
+
+      let rosterFillPercent = 0;
+      const missingRoles: string[] = [];
+
+      if (slotConfig) {
+        const assignments =
+          assignmentMap.get(row.events.id) ?? new Map<string, number>();
+        const roles =
+          slotConfig.type === 'mmo'
+            ? (['tank', 'healer', 'dps', 'flex'] as const)
+            : (['player'] as const);
+
+        let totalSlots = 0;
+        let filledSlots = 0;
+
+        for (const role of roles) {
+          const needed = slotConfig[role] ?? 0;
+          if (needed === 0) continue;
+          totalSlots += needed;
+          const assigned = assignments.get(role) ?? 0;
+          filledSlots += Math.min(assigned, needed);
+          if (assigned < needed) {
+            missingRoles.push(`${needed - assigned} ${role}`);
+          }
+        }
+
+        rosterFillPercent =
+          totalSlots > 0 ? Math.round((filledSlots / totalSlots) * 100) : 0;
+        eventsWithSlots++;
+        totalFillRateSum += rosterFillPercent;
+
+        if (missingRoles.length > 0) {
+          eventsWithGaps++;
+        }
+      } else if (row.events.maxAttendees) {
+        // No slot config but has max attendees — use signup count as fill
+        rosterFillPercent = Math.round(
+          (signupCount / row.events.maxAttendees) * 100,
+        );
+        eventsWithSlots++;
+        totalFillRateSum += rosterFillPercent;
+        if (signupCount < row.events.maxAttendees) {
+          eventsWithGaps++;
+        }
+      }
+
+      return {
+        ...base,
+        rosterFillPercent,
+        unconfirmedCount: unconfirmedMap.get(row.events.id) ?? 0,
+        missingRoles,
+      };
+    });
+
+    return {
+      stats: {
+        totalUpcomingEvents: events.length,
+        totalSignups,
+        averageFillRate:
+          eventsWithSlots > 0
+            ? Math.round(totalFillRateSum / eventsWithSlots)
+            : 0,
+        eventsWithRosterGaps: eventsWithGaps,
+      },
+      events: dashboardEvents,
+    };
   }
 
   /**

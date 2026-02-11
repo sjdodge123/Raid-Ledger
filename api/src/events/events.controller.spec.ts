@@ -132,18 +132,31 @@ describe('EventsController', () => {
   });
 
   describe('findAll', () => {
+    const mockReq = { user: undefined } as { user?: { id: number; isAdmin: boolean } };
+    const authedReq = { user: { id: 1, isAdmin: false } };
+
     it('should return paginated events', async () => {
-      const result = await controller.findAll({});
+      const result = await controller.findAll({}, mockReq);
 
       expect(result.data).toHaveLength(1);
       expect(result.meta.total).toBe(1);
     });
 
     it('should pass query params to service', async () => {
-      await controller.findAll({ page: '2', limit: '10', upcoming: 'true' });
+      await controller.findAll({ page: '2', limit: '10', upcoming: 'true' }, mockReq);
 
       expect(mockEventsService.findAll).toHaveBeenCalledWith(
         expect.objectContaining({ page: 2, limit: 10, upcoming: 'true' }),
+        undefined,
+      );
+    });
+
+    it('should pass authenticated userId to service (ROK-213)', async () => {
+      await controller.findAll({}, authedReq);
+
+      expect(mockEventsService.findAll).toHaveBeenCalledWith(
+        expect.any(Object),
+        1,
       );
     });
 
@@ -151,38 +164,42 @@ describe('EventsController', () => {
     describe('date range filtering (ROK-174)', () => {
       it('should pass startAfter query param to service', async () => {
         const startAfter = '2026-02-01T00:00:00.000Z';
-        await controller.findAll({ startAfter });
+        await controller.findAll({ startAfter }, mockReq);
 
         expect(mockEventsService.findAll).toHaveBeenCalledWith(
           expect.objectContaining({ startAfter }),
+          undefined,
         );
       });
 
       it('should pass endBefore query param to service', async () => {
         const endBefore = '2026-02-28T23:59:59.000Z';
-        await controller.findAll({ endBefore });
+        await controller.findAll({ endBefore }, mockReq);
 
         expect(mockEventsService.findAll).toHaveBeenCalledWith(
           expect.objectContaining({ endBefore }),
+          undefined,
         );
       });
 
       it('should pass both startAfter and endBefore for range queries', async () => {
         const startAfter = '2026-02-01T00:00:00.000Z';
         const endBefore = '2026-02-28T23:59:59.000Z';
-        await controller.findAll({ startAfter, endBefore });
+        await controller.findAll({ startAfter, endBefore }, mockReq);
 
         expect(mockEventsService.findAll).toHaveBeenCalledWith(
           expect.objectContaining({ startAfter, endBefore }),
+          undefined,
         );
       });
 
       it('should pass gameId filter to service', async () => {
         const gameId = '123';
-        await controller.findAll({ gameId });
+        await controller.findAll({ gameId }, mockReq);
 
         expect(mockEventsService.findAll).toHaveBeenCalledWith(
           expect.objectContaining({ gameId }),
+          undefined,
         );
       });
 
@@ -195,7 +212,7 @@ describe('EventsController', () => {
           page: '1',
           limit: '50',
         };
-        await controller.findAll(query);
+        await controller.findAll(query, mockReq);
 
         expect(mockEventsService.findAll).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -206,18 +223,19 @@ describe('EventsController', () => {
             page: 1,
             limit: 50,
           }),
+          undefined,
         );
       });
 
       it('should throw BadRequestException for invalid startAfter date format', async () => {
         await expect(
-          controller.findAll({ startAfter: 'not-a-date' }),
+          controller.findAll({ startAfter: 'not-a-date' }, mockReq),
         ).rejects.toThrow(BadRequestException);
       });
 
       it('should throw BadRequestException for invalid endBefore date format', async () => {
         await expect(
-          controller.findAll({ endBefore: 'invalid-date' }),
+          controller.findAll({ endBefore: 'invalid-date' }, mockReq),
         ).rejects.toThrow(BadRequestException);
       });
 
@@ -226,7 +244,7 @@ describe('EventsController', () => {
           controller.findAll({
             startAfter: '2026-02-28T00:00:00.000Z',
             endBefore: '2026-02-01T00:00:00.000Z', // Before startAfter
-          }),
+          }, mockReq),
         ).rejects.toThrow(BadRequestException);
       });
     });

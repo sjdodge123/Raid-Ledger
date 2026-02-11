@@ -136,7 +136,7 @@ export const EventListResponseSchema = z.object({
 
 export type EventListResponseDto = z.infer<typeof EventListResponseSchema>;
 
-/** Query params for event list (ROK-174: Date Range Filtering, ROK-177: Signups Preview) */
+/** Query params for event list (ROK-174: Date Range Filtering, ROK-177: Signups Preview, ROK-213: Dashboard Filters) */
 export const EventListQuerySchema = z.object({
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100).default(20),
@@ -146,6 +146,10 @@ export const EventListQuerySchema = z.object({
     gameId: z.string().optional(), // Filter by game ID (string, since gameId is stored as text)
     /** Include first N signups preview for calendar views (ROK-177) */
     includeSignups: z.enum(['true', 'false']).optional(),
+    /** Filter events by creator. Use "me" to resolve to authenticated user (ROK-213) */
+    creatorId: z.string().optional(),
+    /** Filter events the user has signed up for. Use "me" (ROK-213) */
+    signedUpAs: z.string().optional(),
 }).refine(
     (data) => {
         if (data.startAfter && data.endBefore) {
@@ -157,4 +161,35 @@ export const EventListQuerySchema = z.object({
 );
 
 export type EventListQueryDto = z.infer<typeof EventListQuerySchema>;
+
+// ============================================================
+// Dashboard Schemas (ROK-213)
+// ============================================================
+
+/** Aggregate stats for the organizer dashboard */
+export const DashboardStatsSchema = z.object({
+    totalUpcomingEvents: z.number(),
+    totalSignups: z.number(),
+    averageFillRate: z.number(),
+    eventsWithRosterGaps: z.number(),
+});
+
+export type DashboardStatsDto = z.infer<typeof DashboardStatsSchema>;
+
+/** Extended event data for dashboard cards */
+export const DashboardEventSchema = EventResponseSchema.extend({
+    rosterFillPercent: z.number(),
+    unconfirmedCount: z.number(),
+    missingRoles: z.array(z.string()),
+});
+
+export type DashboardEventDto = z.infer<typeof DashboardEventSchema>;
+
+/** Full dashboard response */
+export const DashboardResponseSchema = z.object({
+    stats: DashboardStatsSchema,
+    events: z.array(DashboardEventSchema),
+});
+
+export type DashboardResponseDto = z.infer<typeof DashboardResponseSchema>;
 

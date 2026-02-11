@@ -13,6 +13,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import {
@@ -23,6 +24,7 @@ import {
   ConfirmSignupSchema,
   EventResponseDto,
   EventListResponseDto,
+  DashboardResponseDto,
   SignupResponseDto,
   EventRosterDto,
   RosterAvailabilityResponse,
@@ -96,18 +98,33 @@ export class EventsController {
 
   /**
    * Get paginated list of events.
-   * Public endpoint.
+   * Public endpoint; optional JWT resolves "me" in creatorId/signedUpAs filters (ROK-213).
    */
   @Get()
+  @UseGuards(OptionalJwtGuard)
   async findAll(
     @Query() query: Record<string, string>,
+    @Request() req: { user?: { id: number; isAdmin: boolean } },
   ): Promise<EventListResponseDto> {
     try {
       const dto = EventListQuerySchema.parse(query);
-      return this.eventsService.findAll(dto);
+      return this.eventsService.findAll(dto, req.user?.id);
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  /**
+   * Get organizer dashboard with stats (ROK-213).
+   * Requires authentication. Admins see all events, others see only their own.
+   * MUST be registered before :id to avoid route conflict.
+   */
+  @Get('my-dashboard')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyDashboard(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<DashboardResponseDto> {
+    return this.eventsService.getMyDashboard(req.user.id, req.user.isAdmin);
   }
 
   /**

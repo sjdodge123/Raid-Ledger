@@ -17,6 +17,7 @@ import { GamesPage } from './pages/games-page';
 import { GameDetailPage } from './pages/game-detail-page';
 import { CharacterDetailPage } from './pages/character-detail-page';
 import { PlayersPage } from './pages/players-page';
+import { MyEventsPage } from './pages/my-events-page';
 import './App.css';
 
 function App() {
@@ -43,6 +44,12 @@ function App() {
           <Route path="/characters/:id" element={<CharacterDetailPage />} />
           <Route path="/players" element={<PlayersPage />} />
           <Route path="/events" element={<EventsPage />} />
+          {/* ROK-213: My Events dashboard */}
+          <Route path="/my-events" element={
+            <ProtectedRoute>
+              <MyEventsPage />
+            </ProtectedRoute>
+          } />
           <Route path="/events/new" element={
             <ProtectedRoute>
               <CreateEventPage />

@@ -1,0 +1,170 @@
+import { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../hooks/use-auth';
+import { useMyDashboard, useMySignedUpEvents } from '../hooks/use-my-events';
+import {
+    DashboardStatsRow,
+    DashboardStatsRowSkeleton,
+} from '../components/dashboard/dashboard-stats-row';
+import {
+    DashboardEventCard,
+    DashboardEventCardSkeleton,
+} from '../components/dashboard/dashboard-event-card';
+import { ActivityFeed } from '../components/dashboard/activity-feed';
+import { SignedUpEventsGrid } from '../components/dashboard/signed-up-events-grid';
+
+type Tab = 'organizing' | 'signed-up';
+
+export function MyEventsPage() {
+    const { user } = useAuth();
+    const dashboard = useMyDashboard();
+    const signedUp = useMySignedUpEvents();
+
+    const hasOrganizing =
+        dashboard.data && dashboard.data.events.length > 0;
+    const hasSignedUp =
+        signedUp.data && signedUp.data.data.length > 0;
+    const showTabs = hasOrganizing && hasSignedUp;
+
+    const [activeTab, setActiveTab] = useState<Tab>('organizing');
+
+    // While loading, show skeleton
+    const isLoading = dashboard.isLoading || signedUp.isLoading;
+
+    // Error state
+    if (dashboard.error && signedUp.error) {
+        return (
+            <div className="min-h-[50vh] flex items-center justify-center">
+                <div className="text-center">
+                    <h2 className="text-xl font-semibold text-red-400 mb-2">
+                        Failed to load dashboard
+                    </h2>
+                    <p className="text-muted">
+                        {dashboard.error?.message || signedUp.error?.message}
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Empty state — no events at all
+    if (!isLoading && !hasOrganizing && !hasSignedUp) {
+        return (
+            <div className="py-8 px-4">
+                <div className="max-w-7xl mx-auto">
+                    <h1 className="text-3xl font-bold text-foreground mb-8">
+                        My Events
+                    </h1>
+                    <div className="text-center py-16">
+                        <p className="text-lg text-muted mb-4">
+                            You don't have any events yet.
+                        </p>
+                        <div className="flex items-center justify-center gap-4">
+                            <Link
+                                to="/events"
+                                className="px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors"
+                            >
+                                Browse Events
+                            </Link>
+                            <Link
+                                to="/events/new"
+                                className="px-6 py-3 bg-panel hover:bg-overlay text-foreground font-semibold rounded-lg transition-colors border border-edge"
+                            >
+                                Create Event
+                            </Link>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="py-8 px-4">
+            <div className="max-w-7xl mx-auto">
+                <h1 className="text-3xl font-bold text-foreground mb-8">
+                    My Events
+                </h1>
+
+                {/* Tabs (only when user has both) */}
+                {showTabs && (
+                    <div className="flex gap-1 mb-6 bg-panel rounded-lg p-1 w-fit">
+                        <button
+                            onClick={() => setActiveTab('organizing')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'organizing'
+                                    ? 'bg-surface text-foreground shadow-sm'
+                                    : 'text-muted hover:text-foreground'
+                            }`}
+                        >
+                            Organizing
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('signed-up')}
+                            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                                activeTab === 'signed-up'
+                                    ? 'bg-surface text-foreground shadow-sm'
+                                    : 'text-muted hover:text-foreground'
+                            }`}
+                        >
+                            Signed Up
+                        </button>
+                    </div>
+                )}
+
+                {/* Organizer Dashboard */}
+                {((!showTabs && hasOrganizing) ||
+                    (showTabs && activeTab === 'organizing') ||
+                    isLoading) &&
+                    !(showTabs && activeTab === 'signed-up') && (
+                        <div className="space-y-8">
+                            {/* Stats Row */}
+                            {dashboard.isLoading ? (
+                                <DashboardStatsRowSkeleton />
+                            ) : dashboard.data ? (
+                                <DashboardStatsRow stats={dashboard.data.stats} />
+                            ) : null}
+
+                            {/* Event Cards Grid */}
+                            <div>
+                                <h2 className="text-xl font-semibold text-foreground mb-4">
+                                    {user?.isAdmin ? 'All Upcoming Events' : 'Your Events'}
+                                </h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {dashboard.isLoading
+                                        ? Array.from({ length: 3 }).map((_, i) => (
+                                              <DashboardEventCardSkeleton key={i} />
+                                          ))
+                                        : dashboard.data?.events.map((event) => (
+                                              <DashboardEventCard
+                                                  key={event.id}
+                                                  event={event}
+                                              />
+                                          ))}
+                                </div>
+                            </div>
+
+                            {/* Activity Feed */}
+                            <div>
+                                <h2 className="text-xl font-semibold text-foreground mb-4">
+                                    Recent Activity
+                                </h2>
+                                <div className="bg-surface rounded-lg border border-edge p-4">
+                                    <ActivityFeed />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                {/* Signed Up Grid */}
+                {((!showTabs && hasSignedUp && !hasOrganizing) ||
+                    (showTabs && activeTab === 'signed-up')) && (
+                    <SignedUpEventsGrid
+                        data={signedUp.data}
+                        isLoading={signedUp.isLoading}
+                    />
+                )}
+            </div>
+        </div>
+    );
+}

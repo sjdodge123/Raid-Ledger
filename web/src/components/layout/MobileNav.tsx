@@ -63,6 +63,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     const navLinks = [
         { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
+        ...(isAuthenticated ? [{ to: '/my-events', label: 'My Events' }] : []),
         { to: '/players', label: 'Players' },
     ];
 

@@ -2,6 +2,7 @@ import type {
     EventListResponseDto,
     EventResponseDto,
     EventRosterDto,
+    DashboardResponseDto,
     SignupResponseDto,
     CharacterListResponseDto,
     GameSearchResponseDto,
@@ -116,6 +117,10 @@ export interface EventListParams {
     gameId?: string;
     /** Include first N signups preview for calendar views (ROK-177) */
     includeSignups?: boolean;
+    /** Filter by creator ID — use "me" for current user (ROK-213) */
+    creatorId?: string;
+    /** Filter events user signed up for — use "me" (ROK-213) */
+    signedUpAs?: string;
 }
 
 export async function getEvents(params: EventListParams = {}): Promise<EventListResponseDto> {
@@ -127,6 +132,8 @@ export async function getEvents(params: EventListParams = {}): Promise<EventList
     if (params.endBefore) searchParams.set('endBefore', params.endBefore);
     if (params.gameId) searchParams.set('gameId', params.gameId);
     if (params.includeSignups) searchParams.set('includeSignups', 'true');
+    if (params.creatorId) searchParams.set('creatorId', params.creatorId);
+    if (params.signedUpAs) searchParams.set('signedUpAs', params.signedUpAs);
 
     const query = searchParams.toString();
     const endpoint = `/events${query ? `?${query}` : ''}`;
@@ -165,6 +172,13 @@ export async function updateEvent(id: number, dto: UpdateEventDto): Promise<Even
         },
         EventResponseSchema
     );
+}
+
+/**
+ * Fetch organizer dashboard data (ROK-213)
+ */
+export async function getMyDashboard(): Promise<DashboardResponseDto> {
+    return fetchApi('/events/my-dashboard');
 }
 
 // ============================================================
