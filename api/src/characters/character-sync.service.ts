@@ -24,7 +24,7 @@ export class CharacterSyncService {
     this.logger.log('Starting auto-sync of Blizzard characters...');
 
     try {
-      const result = await this.charactersService.syncAllBlizzardCharacters();
+      const result = await this.charactersService.syncAllCharacters();
       this.logger.log(
         `Auto-sync complete: ${result.synced} synced, ${result.failed} failed`,
       );

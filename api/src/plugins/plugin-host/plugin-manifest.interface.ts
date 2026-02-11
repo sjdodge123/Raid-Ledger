@@ -31,3 +31,6 @@ export const PLUGIN_EVENTS = {
   DEACTIVATED: 'plugin.deactivated',
   CONFIG_UPDATED: 'plugin.config.updated',
 } as const;
+
+export * from './extension-types';
+export * from './extension-points';

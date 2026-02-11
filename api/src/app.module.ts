@@ -19,6 +19,7 @@ import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
+import { BlizzardModule } from './blizzard/blizzard.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
     SystemModule,
     SettingsModule,
     NotificationModule,
+    BlizzardModule,
   ],
   controllers: [AppController],
   providers: [AppService],

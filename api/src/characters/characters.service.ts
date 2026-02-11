@@ -20,7 +20,9 @@ import {
   ImportWowCharacterDto,
   RefreshCharacterDto,
 } from '@raid-ledger/contract';
-import { BlizzardService } from '../blizzard/blizzard.service';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
+import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -33,8 +35,30 @@ export class CharactersService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-    private readonly blizzardService: BlizzardService,
+    private readonly pluginRegistry: PluginRegistryService,
   ) {}
+
+  /**
+   * Find a CharacterSyncAdapter that can handle the given game variant.
+   */
+  private findCharacterSyncAdapter(
+    gameVariant?: string,
+  ): CharacterSyncAdapter | undefined {
+    const adapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<CharacterSyncAdapter>(
+        EXTENSION_POINTS.CHARACTER_SYNC,
+      );
+
+    // De-duplicate adapters (same adapter may be registered for multiple slugs)
+    const seen = new Set<CharacterSyncAdapter>();
+    for (const [, adapter] of adapters) {
+      if (seen.has(adapter)) continue;
+      seen.add(adapter);
+      const slugs = adapter.resolveGameSlugs(gameVariant);
+      if (slugs.length > 0) return adapter;
+    }
+    return undefined;
+  }
 
   /**
    * Get all characters for a user.
@@ -242,23 +266,30 @@ export class CharactersService {
   }
 
   /**
-   * Import a WoW character from the Blizzard Armory API (ROK-234).
+   * Import a character from an external game API via adapter (ROK-234, ROK-237).
    */
-  async importFromBlizzard(
+  async importExternal(
     userId: number,
     dto: ImportWowCharacterDto,
   ): Promise<CharacterDto> {
-    // Fetch character data from Blizzard (variant-aware namespace)
-    const profile = await this.blizzardService.fetchCharacterProfile(
+    const adapter = this.findCharacterSyncAdapter(dto.gameVariant);
+    if (!adapter) {
+      throw new NotFoundException(
+        'No character sync adapter found for this game variant',
+      );
+    }
+
+    // Fetch character data via adapter
+    const profile = await adapter.fetchProfile(
       dto.name,
       dto.realm,
       dto.region,
       dto.gameVariant,
     );
 
-    // If Blizzard didn't return an active_spec (common for Classic), infer from talents
+    // If adapter didn't return a spec, infer from talents
     if (!profile.spec && profile.class) {
-      const inferred = await this.blizzardService.fetchCharacterSpecializations(
+      const inferred = await adapter.fetchSpecialization(
         dto.name,
         dto.realm,
         dto.region,
@@ -270,31 +301,28 @@ export class CharactersService {
     }
 
     // Fetch equipment (non-fatal)
-    const equipment = await this.blizzardService.fetchCharacterEquipment(
+    const equipment = await adapter.fetchEquipment(
       dto.name,
       dto.realm,
       dto.region,
       dto.gameVariant,
     );
 
-    // Find the WoW game in the registry by slug based on variant
-    const slugCandidates =
-      dto.gameVariant === 'retail'
-        ? ['wow', 'world-of-warcraft']
-        : ['wow-classic', 'wow-classic-era'];
-    const [wowGame] = await this.db
+    // Find the game in the registry by slug based on variant
+    const slugCandidates = adapter.resolveGameSlugs(dto.gameVariant);
+    const [game] = await this.db
       .select()
       .from(schema.gameRegistry)
       .where(inArray(schema.gameRegistry.slug, slugCandidates))
       .limit(1);
 
-    if (!wowGame) {
+    if (!game) {
       throw new NotFoundException(
-        'World of Warcraft is not registered in the game registry',
+        'Game is not registered in the game registry',
       );
     }
 
-    // Create the character with Blizzard data
+    // Create the character with external data
     try {
       return await this.db.transaction(async (tx) => {
         if (dto.isMain) {
@@ -304,7 +332,7 @@ export class CharactersService {
             .where(
               and(
                 eq(schema.characters.userId, userId),
-                eq(schema.characters.gameId, wowGame.id),
+                eq(schema.characters.gameId, game.id),
                 eq(schema.characters.isMain, true),
               ),
             );
@@ -314,7 +342,7 @@ export class CharactersService {
           .insert(schema.characters)
           .values({
             userId,
-            gameId: wowGame.id,
+            gameId: game.id,
             name: profile.name,
             realm: profile.realm,
             class: profile.class,
@@ -336,7 +364,7 @@ export class CharactersService {
           .returning();
 
         this.logger.log(
-          `User ${userId} imported WoW character ${character.id} (${profile.name}-${profile.realm})`,
+          `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})`,
         );
         return this.mapToDto(character);
       });
@@ -351,10 +379,10 @@ export class CharactersService {
   }
 
   /**
-   * Refresh a character's data from the Blizzard Armory API (ROK-234).
+   * Refresh a character's data from an external game API via adapter (ROK-234, ROK-237).
    * Enforces a 5-minute cooldown between manual refreshes.
    */
-  async refreshFromBlizzard(
+  async refreshExternal(
     userId: number,
     characterId: string,
     dto: RefreshCharacterDto,
@@ -363,7 +391,7 @@ export class CharactersService {
 
     if (!character.realm) {
       throw new NotFoundException(
-        'Character has no realm — cannot refresh from Armory',
+        'Character has no realm — cannot refresh from external source',
       );
     }
 
@@ -387,16 +415,23 @@ export class CharactersService {
       (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
       dto.gameVariant;
 
-    const profile = await this.blizzardService.fetchCharacterProfile(
+    const adapter = this.findCharacterSyncAdapter(gameVariant);
+    if (!adapter) {
+      throw new NotFoundException(
+        'No character sync adapter found for this game variant',
+      );
+    }
+
+    const profile = await adapter.fetchProfile(
       character.name,
       character.realm,
       region,
       gameVariant,
     );
 
-    // If Blizzard didn't return an active_spec (common for Classic), infer from talents
+    // If adapter didn't return a spec, infer from talents
     if (!profile.spec && profile.class) {
-      const inferred = await this.blizzardService.fetchCharacterSpecializations(
+      const inferred = await adapter.fetchSpecialization(
         character.name,
         character.realm,
         region,
@@ -407,7 +442,7 @@ export class CharactersService {
       if (inferred.role) profile.role = inferred.role;
     }
 
-    const equipment = await this.blizzardService.fetchCharacterEquipment(
+    const equipment = await adapter.fetchEquipment(
       character.name,
       character.realm,
       region,
@@ -437,7 +472,7 @@ export class CharactersService {
       .returning();
 
     this.logger.log(
-      `User ${userId} refreshed character ${characterId} from Armory`,
+      `User ${userId} refreshed character ${characterId} from external source`,
     );
     return this.mapToDto(updated);
   }
@@ -461,14 +496,14 @@ export class CharactersService {
   }
 
   /**
-   * Sync all Blizzard-linked characters (for auto-sync cron).
-   * Iterates characters with persisted region + gameVariant and refreshes from Blizzard.
+   * Sync all externally-linked characters (for auto-sync cron).
+   * Iterates characters with persisted region + gameVariant and refreshes via adapters.
    */
-  async syncAllBlizzardCharacters(): Promise<{
+  async syncAllCharacters(): Promise<{
     synced: number;
     failed: number;
   }> {
-    const blizzardCharacters = await this.db
+    const externalCharacters = await this.db
       .select()
       .from(schema.characters)
       .where(
@@ -481,36 +516,38 @@ export class CharactersService {
     let synced = 0;
     let failed = 0;
 
-    for (const char of blizzardCharacters) {
+    for (const char of externalCharacters) {
       try {
-        const variant = char.gameVariant as
-          | 'retail'
-          | 'classic_era'
-          | 'classic'
-          | 'classic_anniversary';
+        const variant = char.gameVariant as string;
+        const adapter = this.findCharacterSyncAdapter(variant);
+        if (!adapter) {
+          this.logger.debug(
+            `No adapter found for character ${char.id} (variant: ${variant}), skipping`,
+          );
+          continue;
+        }
 
-        const profile = await this.blizzardService.fetchCharacterProfile(
+        const profile = await adapter.fetchProfile(
           char.name,
           char.realm!,
           char.region!,
           variant,
         );
 
-        // Infer spec/role from talents if Blizzard didn't return active_spec
+        // Infer spec/role from talents if adapter didn't return active_spec
         if (!profile.spec && profile.class) {
-          const inferred =
-            await this.blizzardService.fetchCharacterSpecializations(
-              char.name,
-              char.realm!,
-              char.region!,
-              profile.class,
-              variant,
-            );
+          const inferred = await adapter.fetchSpecialization(
+            char.name,
+            char.realm!,
+            char.region!,
+            profile.class,
+            variant,
+          );
           if (inferred.spec) profile.spec = inferred.spec;
           if (inferred.role) profile.role = inferred.role;
         }
 
-        const equipment = await this.blizzardService.fetchCharacterEquipment(
+        const equipment = await adapter.fetchEquipment(
           char.name,
           char.realm!,
           char.region!,
@@ -549,26 +586,6 @@ export class CharactersService {
     }
 
     return { synced, failed };
-  }
-
-  /**
-   * Demote existing main character for a game.
-   * Called before creating/setting a new main.
-   */
-  private async demoteExistingMain(
-    userId: number,
-    gameId: string,
-  ): Promise<void> {
-    await this.db
-      .update(schema.characters)
-      .set({ isMain: false, updatedAt: new Date() })
-      .where(
-        and(
-          eq(schema.characters.userId, userId),
-          eq(schema.characters.gameId, gameId),
-          eq(schema.characters.isMain, true),
-        ),
-      );
   }
 
   /**

@@ -20,6 +20,7 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
   private manifests = new Map<string, PluginManifest>();
   private activeSlugs = new Set<string>();
+  private adapters = new Map<string, Map<string, unknown>>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -199,6 +200,41 @@ export class PluginRegistryService implements OnModuleInit {
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
+  }
+
+  registerAdapter<T>(
+    extensionPoint: string,
+    gameSlug: string,
+    adapter: T,
+  ): void {
+    let slugMap = this.adapters.get(extensionPoint);
+    if (!slugMap) {
+      slugMap = new Map<string, unknown>();
+      this.adapters.set(extensionPoint, slugMap);
+    }
+    slugMap.set(gameSlug, adapter);
+    this.logger.log(
+      `Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`,
+    );
+  }
+
+  getAdapter<T>(extensionPoint: string, gameSlug: string): T | undefined {
+    return this.adapters.get(extensionPoint)?.get(gameSlug) as T | undefined;
+  }
+
+  getAdaptersForExtensionPoint<T>(extensionPoint: string): Map<string, T> {
+    const slugMap = this.adapters.get(extensionPoint);
+    if (!slugMap) return new Map<string, T>();
+    return slugMap as Map<string, T>;
+  }
+
+  removeAdaptersForPlugin(gameSlugs: string[]): void {
+    for (const [, slugMap] of this.adapters) {
+      for (const slug of gameSlugs) {
+        slugMap.delete(slug);
+      }
+    }
+    this.logger.log(`Removed adapters for game slugs: ${gameSlugs.join(', ')}`);
   }
 
   isActive(slug: string): boolean {

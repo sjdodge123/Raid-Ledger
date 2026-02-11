@@ -6,10 +6,14 @@ import {
 } from '@nestjs/common';
 import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 
 describe('CharactersService', () => {
   let service: CharactersService;
   let mockDb: Record<string, jest.Mock>;
+  let mockPluginRegistry: {
+    getAdaptersForExtensionPoint: jest.Mock;
+  };
 
   const mockGame = {
     id: 'game-uuid-1',
@@ -54,6 +58,10 @@ describe('CharactersService', () => {
       update: jest.fn(),
       delete: jest.fn(),
       transaction: jest.fn(),
+    };
+
+    mockPluginRegistry = {
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
     };
 
     // Default select chain
@@ -121,6 +129,7 @@ describe('CharactersService', () => {
       providers: [
         CharactersService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: PluginRegistryService, useValue: mockPluginRegistry },
       ],
     }).compile();
 
@@ -316,6 +325,23 @@ describe('CharactersService', () => {
 
       expect(result.isMain).toBe(true);
       expect(mockDb.transaction).toHaveBeenCalled();
+    });
+  });
+
+  describe('importExternal', () => {
+    it('should throw NotFoundException when no adapter found', async () => {
+      mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+        new Map(),
+      );
+
+      await expect(
+        service.importExternal(1, {
+          name: 'Thrall',
+          realm: 'area-52',
+          region: 'us',
+          gameVariant: 'retail',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

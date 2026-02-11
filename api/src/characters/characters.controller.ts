@@ -95,7 +95,7 @@ export class CharactersController {
   ): Promise<CharacterDto> {
     try {
       const dto = ImportWowCharacterSchema.parse(body);
-      return this.charactersService.importFromBlizzard(req.user.id, dto);
+      return this.charactersService.importExternal(req.user.id, dto);
     } catch (error) {
       handleValidationError(error);
     }
@@ -152,7 +152,7 @@ export class CharactersController {
   ): Promise<CharacterDto> {
     try {
       const dto = RefreshCharacterSchema.parse(body);
-      return this.charactersService.refreshFromBlizzard(req.user.id, id, dto);
+      return this.charactersService.refreshExternal(req.user.id, id, dto);
     } catch (error) {
       handleValidationError(error);
     }

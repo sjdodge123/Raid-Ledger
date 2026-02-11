@@ -1,0 +1,83 @@
+import { Injectable } from '@nestjs/common';
+import { BlizzardService } from './blizzard.service';
+import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import type {
+  ExternalCharacterProfile,
+  ExternalInferredSpecialization,
+  ExternalCharacterEquipment,
+} from '../plugins/plugin-host/extension-types';
+import type { WowGameVariant } from '@raid-ledger/contract';
+
+@Injectable()
+export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
+  readonly gameSlugs = [
+    'wow',
+    'world-of-warcraft',
+    'wow-classic',
+    'wow-classic-era',
+  ];
+
+  constructor(private readonly blizzardService: BlizzardService) {}
+
+  resolveGameSlugs(gameVariant?: string): string[] {
+    if (
+      gameVariant === 'classic_era' ||
+      gameVariant === 'classic' ||
+      gameVariant === 'classic_anniversary'
+    ) {
+      return ['wow-classic', 'wow-classic-era'];
+    }
+    return ['wow', 'world-of-warcraft'];
+  }
+
+  async fetchProfile(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterProfile> {
+    return this.blizzardService.fetchCharacterProfile(
+      name,
+      realm,
+      region,
+      (gameVariant as WowGameVariant) ?? 'retail',
+    );
+  }
+
+  async fetchSpecialization(
+    name: string,
+    realm: string,
+    region: string,
+    characterClass: string,
+    gameVariant?: string,
+  ): Promise<ExternalInferredSpecialization> {
+    return this.blizzardService.fetchCharacterSpecializations(
+      name,
+      realm,
+      region,
+      characterClass,
+      (gameVariant as WowGameVariant) ?? 'retail',
+    );
+  }
+
+  async fetchEquipment(
+    name: string,
+    realm: string,
+    region: string,
+    gameVariant?: string,
+  ): Promise<ExternalCharacterEquipment> {
+    const result = await this.blizzardService.fetchCharacterEquipment(
+      name,
+      realm,
+      region,
+      (gameVariant as WowGameVariant) ?? 'retail',
+    );
+    return (
+      result ?? {
+        equippedItemLevel: null,
+        items: [],
+        syncedAt: new Date().toISOString(),
+      }
+    );
+  }
+}
