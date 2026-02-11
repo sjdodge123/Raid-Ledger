@@ -6,6 +6,9 @@ import type { IgdbGameDto, CreateEventDto } from '@raid-ledger/contract';
 import { createEvent } from '../../lib/api-client';
 import { GameSearchInput } from './game-search-input';
 import { TeamAvailabilityPicker } from '../features/heatmap';
+import { useTimezoneStore } from '../../stores/timezone-store';
+import { getTimezoneAbbr } from '../../lib/timezone-utils';
+import { TZDate } from '@date-fns/tz';
 
 interface FormState {
     title: string;
@@ -32,6 +35,8 @@ interface FormErrors {
 export function CreateEventForm() {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzAbbr = getTimezoneAbbr(resolved);
 
     // Form state
     const [form, setForm] = useState<FormState>({
@@ -81,10 +86,10 @@ export function CreateEventForm() {
             newErrors.endTime = 'End time is required';
         }
 
-        // Check if end is after start
+        // Check if end is after start (interpret in user timezone)
         if (form.startDate && form.startTime && form.endDate && form.endTime) {
-            const start = new Date(`${form.startDate}T${form.startTime}`);
-            const end = new Date(`${form.endDate}T${form.endTime}`);
+            const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
+            const end = new TZDate(`${form.endDate}T${form.endTime}`, resolved);
             if (end <= start) {
                 newErrors.datetime = 'End time must be after start time';
             }
@@ -100,9 +105,9 @@ export function CreateEventForm() {
 
         if (!validate()) return;
 
-        // Build ISO datetime strings
-        const startTime = new Date(`${form.startDate}T${form.startTime}`).toISOString();
-        const endTime = new Date(`${form.endDate}T${form.endTime}`).toISOString();
+        // Build ISO datetime strings (interpret inputs in user's timezone)
+        const startTime = new TZDate(`${form.startDate}T${form.startTime}`, resolved).toISOString();
+        const endTime = new TZDate(`${form.endDate}T${form.endTime}`, resolved).toISOString();
 
         const dto: CreateEventDto = {
             title: form.title.trim(),
@@ -129,8 +134,8 @@ export function CreateEventForm() {
         if (!form.startDate || !form.startTime || !form.endDate || !form.endTime) {
             return null;
         }
-        const start = new Date(`${form.startDate}T${form.startTime}`);
-        const end = new Date(`${form.endDate}T${form.endTime}`);
+        const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
+        const end = new TZDate(`${form.endDate}T${form.endTime}`, resolved);
         const diffMs = end.getTime() - start.getTime();
         if (diffMs <= 0) return null;
 
@@ -189,6 +194,7 @@ export function CreateEventForm() {
             />
 
             {/* Date/Time Section */}
+            <p className="text-xs text-muted -mb-4">Times in {tzAbbr}</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Start Date */}
                 <div>
@@ -278,8 +284,8 @@ export function CreateEventForm() {
             {/* Your Availability (ROK-182) */}
             {form.startDate && form.startTime && form.endDate && form.endTime && (
                 <TeamAvailabilityPicker
-                    eventStartTime={new Date(`${form.startDate}T${form.startTime}`).toISOString()}
-                    eventEndTime={new Date(`${form.endDate}T${form.endTime}`).toISOString()}
+                    eventStartTime={new TZDate(`${form.startDate}T${form.startTime}`, resolved).toISOString()}
+                    eventEndTime={new TZDate(`${form.endDate}T${form.endTime}`, resolved).toISOString()}
                     gameId={form.game?.id?.toString()}
                 />
             )}

@@ -411,11 +411,11 @@ export async function getUserProfile(userId: number): Promise<UserProfileDto> {
  * Fetch current user's game time (composite view: template + event commitments).
  * Automatically sends browser timezone offset so event overlays render in local time.
  */
-export async function getMyGameTime(week?: string): Promise<GameTimeResponse> {
+export async function getMyGameTime(week?: string, tzOffsetOverride?: number): Promise<GameTimeResponse> {
     const searchParams = new URLSearchParams();
     if (week) searchParams.set('week', week);
-    // Send browser timezone offset so backend converts UTC event times to local grid cells
-    searchParams.set('tzOffset', String(new Date().getTimezoneOffset()));
+    // Send timezone offset so backend converts UTC event times to local grid cells
+    searchParams.set('tzOffset', String(tzOffsetOverride ?? new Date().getTimezoneOffset()));
     const query = searchParams.toString();
     const response = await fetchApi<{ data: GameTimeResponse }>(`/users/me/game-time?${query}`);
     return response.data;

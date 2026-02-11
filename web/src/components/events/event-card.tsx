@@ -1,6 +1,7 @@
 import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
+import { useTimezoneStore } from '../../stores/timezone-store';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -38,9 +39,9 @@ function StatusBadge({ status }: { status: EventStatus }) {
 }
 
 /**
- * Format date/time in user's local timezone
+ * Format date/time in user's preferred timezone
  */
-function formatEventTime(dateString: string): string {
+function formatEventTime(dateString: string, timeZone?: string): string {
     const date = new Date(dateString);
     return new Intl.DateTimeFormat('en-US', {
         weekday: 'short',
@@ -49,6 +50,7 @@ function formatEventTime(dateString: string): string {
         hour: 'numeric',
         minute: '2-digit',
         timeZoneName: 'short',
+        ...(timeZone ? { timeZone } : {}),
     }).format(date);
 }
 
@@ -83,6 +85,7 @@ function getPlaceholderPath(slug: string | undefined): string {
  * Event card component displaying event info with game cover
  */
 export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
+    const resolved = useTimezoneStore((s) => s.resolved);
     const gameCoverUrl = event.game?.coverUrl || null;
     const status = getEventStatus(event.startTime, event.endTime);
     const relativeTime = getRelativeTime(event.startTime, event.endTime);
@@ -142,7 +145,7 @@ export function EventCard({ event, signupCount = 0, onClick }: EventCardProps) {
 
                 <div className="flex items-center gap-2 mb-3">
                     <p className="text-muted text-sm">
-                        {formatEventTime(event.startTime)}
+                        {formatEventTime(event.startTime, resolved)}
                     </p>
                     <span className="text-faint">•</span>
                     <p data-testid="relative-time" className="text-sm text-dim">

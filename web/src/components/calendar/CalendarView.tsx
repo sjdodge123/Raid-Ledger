@@ -21,6 +21,9 @@ import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
+import { useTimezoneStore } from '../../stores/timezone-store';
+import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
+import { TZDate } from '@date-fns/tz';
 import { DayEventCard } from './DayEventCard';
 import { WeekEventCard } from './WeekEventCard';
 import type { EventResponseDto } from '@raid-ledger/contract';
@@ -76,7 +79,16 @@ export function CalendarView({
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
-    const [internalDate, setInternalDate] = useState(new Date());
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzAbbr = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
+    const [internalDate, setInternalDate] = useState(() => {
+        const dateStr = searchParams.get('date');
+        if (dateStr) {
+            const parsed = new Date(dateStr + 'T00:00:00');
+            if (!isNaN(parsed.getTime())) return parsed;
+        }
+        return new Date();
+    });
 
     // Use controlled date if provided, otherwise internal state
     const currentDate = controlledDate ?? internalDate;
@@ -108,6 +120,16 @@ export function CalendarView({
             return next;
         }, { replace: true });
     }, [setSearchParams]);
+
+    // Sync date changes to URL (same replace pattern as view)
+    useEffect(() => {
+        const dateStr = format(currentDate, 'yyyy-MM-dd');
+        setSearchParams(prev => {
+            const next = new URLSearchParams(prev);
+            next.set('date', dateStr);
+            return next;
+        }, { replace: true });
+    }, [currentDate, setSearchParams]);
 
     // Calculate date range for current view (month, week, or day)
     const { startAfter, endBefore } = useMemo(() => {
@@ -182,11 +204,11 @@ export function CalendarView({
             .map((event) => ({
                 id: event.id,
                 title: event.title,
-                start: new Date(event.startTime),
-                end: event.endTime ? new Date(event.endTime) : new Date(event.startTime),
+                start: toZonedDate(event.startTime, resolved),
+                end: event.endTime ? toZonedDate(event.endTime, resolved) : toZonedDate(event.startTime, resolved),
                 resource: event,
             }));
-    }, [eventsData, selectedGames]);
+    }, [eventsData, selectedGames, resolved]);
 
     // Navigation handlers
     const handleNavigate = useCallback((date: Date) => {
@@ -219,10 +241,10 @@ export function CalendarView({
         setCurrentDate(new Date());
     }, [setCurrentDate]);
 
-    // Event click handler
+    // Event click handler — pass state so event detail page can navigate back
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
-            navigate(`/events/${event.id}`);
+            navigate(`/events/${event.id}`, { state: { fromCalendar: true } });
         },
         [navigate]
     );
@@ -373,6 +395,9 @@ export function CalendarView({
                     }
                 </h2>
                 <div className="toolbar-views" role="group" aria-label="Calendar view">
+                    <span className="toolbar-btn text-xs text-muted pointer-events-none" aria-label={`Times shown in ${tzAbbr}`}>
+                        {tzAbbr}
+                    </span>
                     <button
                         type="button"
                         className={`toolbar-btn ${view === Views.MONTH ? 'active' : ''}`}
@@ -427,6 +452,7 @@ export function CalendarView({
                         day: { event: DayEventWrapper }, // ROK-191: Interactive day view with quick-join
                         toolbar: () => null, // Hide default toolbar
                     }}
+                    getNow={() => new TZDate(Date.now(), resolved)}
                     popup
                     selectable={false}
                     scrollToTime={new Date(0, 0, 0, 8, 0)} // Scroll to 8 AM on mount

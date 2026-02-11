@@ -7,10 +7,10 @@ export const GAME_TIME_QUERY_KEY = ['me', 'game-time'];
 /**
  * Fetch current user's game time (composite view: template + event commitments).
  */
-export function useGameTime(options?: { enabled?: boolean; week?: string }) {
+export function useGameTime(options?: { enabled?: boolean; week?: string; tzOffset?: number }) {
     return useQuery({
-        queryKey: [...GAME_TIME_QUERY_KEY, options?.week ?? 'current'],
-        queryFn: () => getMyGameTime(options?.week),
+        queryKey: [...GAME_TIME_QUERY_KEY, options?.week ?? 'current', options?.tzOffset],
+        queryFn: () => getMyGameTime(options?.week, options?.tzOffset),
         enabled: options?.enabled ?? true,
         staleTime: 0,
         refetchOnMount: 'always',

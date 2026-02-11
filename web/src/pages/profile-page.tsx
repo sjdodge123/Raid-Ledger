@@ -7,6 +7,7 @@ import { useGameRegistry } from '../hooks/use-game-registry';
 import { useThemeStore } from '../stores/theme-store';
 import { IntegrationHub } from '../components/profile/IntegrationHub';
 import { CharacterList, AddCharacterModal, NotificationPreferencesSection } from '../components/profile';
+import { TimezoneSection } from '../components/profile/TimezoneSection';
 import { GameTimePanel } from '../components/features/game-time';
 import '../components/profile/integration-hub.css';
 
@@ -100,6 +101,9 @@ export function ProfilePage() {
 
                 {/* Appearance Section (ROK-124) */}
                 <AppearanceSection />
+
+                {/* Timezone Section (ROK-187) */}
+                <TimezoneSection />
 
                 {/* Notification Preferences Section (ROK-179) */}
                 <NotificationPreferencesSection />

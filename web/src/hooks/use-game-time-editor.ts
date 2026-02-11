@@ -2,6 +2,8 @@ import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useGameTime, useSaveGameTime, useSaveGameTimeOverrides } from './use-game-time';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { toast } from 'sonner';
+import { useTimezoneStore } from '../stores/timezone-store';
+import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils';
 
 export interface UseGameTimeEditorOptions {
     enabled?: boolean;
@@ -43,28 +45,25 @@ function getNextWeekStart(): string {
 export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTimeEditorReturn {
     const enabled = options?.enabled ?? true;
     const rolling = options?.rolling ?? false;
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
 
     // Memoize next week start so the query key is stable across renders
     const nextWeekStart = useMemo(() => getNextWeekStart(), []);
 
-    const { data: gameTimeData, isLoading } = useGameTime({ enabled });
+    const { data: gameTimeData, isLoading } = useGameTime({ enabled, tzOffset });
     const { data: nextWeekData } = useGameTime({
         enabled: enabled && rolling,
         week: nextWeekStart,
+        tzOffset,
     });
 
     const saveGameTime = useSaveGameTime();
     const saveOverrides = useSaveGameTimeOverrides();
     const [editSlots, setEditSlots] = useState<GameTimeSlot[] | null>(null);
 
-    // Timezone label
-    const tzLabel = useMemo(
-        () =>
-            new Intl.DateTimeFormat('en-US', { timeZoneName: 'short' })
-                .formatToParts(new Date())
-                .find((p) => p.type === 'timeZoneName')?.value ?? '',
-        [],
-    );
+    // Timezone label — uses user's preferred timezone
+    const tzLabel = useMemo(() => getTimezoneAbbr(resolved), [resolved]);
 
     // Today / current time tracking
     const [now, setNow] = useState(() => new Date());

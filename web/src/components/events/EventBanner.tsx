@@ -1,5 +1,6 @@
 import { UserLink } from '../common/UserLink';
 import { formatDuration } from '../../utils/game-utils';
+import { useTimezoneStore } from '../../stores/timezone-store';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -34,21 +35,24 @@ export function EventBanner({
     description,
     isCollapsed = false,
 }: EventBannerProps) {
+    const resolved = useTimezoneStore((s) => s.resolved);
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
 
-    // Format date/time compactly
+    // Format date/time compactly in user's preferred timezone
     const dateStr = new Intl.DateTimeFormat('en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric',
         year: 'numeric',
+        timeZone: resolved,
     }).format(startDate);
 
     const timeStr = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         timeZoneName: 'short',
+        timeZone: resolved,
     }).format(startDate);
 
     // Calculate duration using shared utility
