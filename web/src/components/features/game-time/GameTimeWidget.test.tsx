@@ -66,16 +66,17 @@ function renderWidget(props: {
 
 describe('GameTimeWidget', () => {
     it('shows overlap message when template matches event hours', () => {
+        // 2026-02-09 is Monday → JS getDay()=1 → game-time dayOfWeek=0
         mockEditorReturn.mockReturnValue(makeEditorData({
             slots: [
-                { dayOfWeek: 1, hour: 19, status: 'available' },
-                { dayOfWeek: 1, hour: 20, status: 'available' },
+                { dayOfWeek: 0, hour: 19, status: 'available' },
+                { dayOfWeek: 0, hour: 20, status: 'available' },
             ],
         }));
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
 
-        expect(screen.getByText('Online')).toBeInTheDocument();
+        expect(screen.getByText('Inside Game Time')).toBeInTheDocument();
     });
 
     it('shows no-overlap message when template does not match', () => {
@@ -87,12 +88,12 @@ describe('GameTimeWidget', () => {
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
 
-        expect(screen.getByText('Outside game time')).toBeInTheDocument();
+        expect(screen.getByText('Outside Game Time')).toBeInTheDocument();
     });
 
     it('click opens read-only modal with GameTimeGrid', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
-            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
@@ -105,7 +106,7 @@ describe('GameTimeWidget', () => {
 
     it('modal shows preview block overlay for the current event', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
-            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
@@ -119,7 +120,7 @@ describe('GameTimeWidget', () => {
 
     it('modal shows event title in the detail card below the grid', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
-            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
 
         renderWidget({
@@ -160,7 +161,7 @@ describe('GameTimeWidget', () => {
 
     it('modal has "Edit my game time" link to profile', () => {
         mockEditorReturn.mockReturnValue(makeEditorData({
-            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            slots: [{ dayOfWeek: 0, hour: 19, status: 'available' }],
         }));
 
         renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });

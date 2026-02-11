@@ -90,9 +90,11 @@ export function GameTimeWidget({
         if (cursor < start) cursor.setHours(cursor.getHours() + 1);
 
         while (cursor < end) {
-            const gridDay = cursor.getDay();
+            // Convert JS getDay (0=Sunday) to game-time dayOfWeek (0=Monday)
+            const jsDay = cursor.getDay();
+            const gameDay = jsDay === 0 ? 6 : jsDay - 1;
             const hour = cursor.getHours();
-            if (templateSet.has(`${gridDay}:${hour}`)) return true;
+            if (templateSet.has(`${gameDay}:${hour}`)) return true;
             cursor.setHours(cursor.getHours() + 1);
         }
         return false;
@@ -188,14 +190,14 @@ export function GameTimeWidget({
                         <svg className="w-4 h-4 text-emerald-400 shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(52, 211, 153, 0.6))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                         </svg>
-                        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Online</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-emerald-300">Inside Game Time</span>
                     </>
                 ) : (
                     <>
                         <svg className="w-4 h-4 text-amber-400 shrink-0" style={{ filter: 'drop-shadow(0 0 4px rgba(251, 191, 36, 0.5))' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Outside game time</span>
+                        <span className="text-xs font-semibold uppercase tracking-wide text-muted">Outside Game Time</span>
                     </>
                 )}
                 <svg className="w-3 h-3 text-dim ml-auto shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">

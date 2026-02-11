@@ -141,7 +141,7 @@ export function EventsPage() {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
-                            My Game Time
+                            Inside Game Time
                             {overlapSet && (
                                 <span className={`px-1.5 py-0.5 text-xs rounded-full ${
                                     filterGameTime ? 'bg-cyan-500/30' : 'bg-panel'
