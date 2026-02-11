@@ -13,6 +13,8 @@ export const SystemStatusSchema = z.object({
     blizzardConfigured: z.boolean(),
     /** True when running in demo/test mode */
     demoMode: z.boolean().optional(),
+    /** Active plugin slugs for frontend slot rendering (ROK-238) */
+    activePlugins: z.array(z.string()).optional().default([]),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;

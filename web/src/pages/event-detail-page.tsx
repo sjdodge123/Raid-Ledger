@@ -5,7 +5,7 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
 import { useAuth } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse, RosterRole, WowInstanceDetailDto } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
@@ -14,6 +14,7 @@ import { CharacterCardCompact } from '../components/characters/character-card-co
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
+import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
 /**
@@ -201,25 +202,6 @@ export function EventDetailPage() {
     const confirmedSignups = roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || [];
     const pendingSignups = roster?.signups.filter(s => s.confirmationStatus === 'pending') || [];
 
-    // Level warning computation
-    const contentInstances = (event?.contentInstances as WowInstanceDetailDto[] | null | undefined) ?? [];
-    const minimumLevels = contentInstances
-        .map((i) => i.minimumLevel)
-        .filter((l): l is number => l != null);
-    const lowestMinLevel = minimumLevels.length > 0 ? Math.min(...minimumLevels) : null;
-    const isClassicGame = event?.game?.slug === 'wow-classic';
-
-    function getLevelWarning(characterLevel: number | null | undefined): { type: 'under' | 'over'; label: string } | null {
-        if (characterLevel == null || lowestMinLevel == null) return null;
-        if (characterLevel < lowestMinLevel) {
-            return { type: 'under', label: `Below min level (${lowestMinLevel})` };
-        }
-        if (isClassicGame && characterLevel > lowestMinLevel + 20) {
-            return { type: 'over', label: 'Over-leveled for this content' };
-        }
-        return null;
-    }
-
     return (
         <div className="event-detail-page">
             {/* Back button + Edit button row */}
@@ -393,9 +375,7 @@ export function EventDetailPage() {
                     <div className="event-detail-roster__group">
                         <h3><span role="img" aria-hidden="true">✓</span> Confirmed ({confirmedSignups.length})</h3>
                         <div className="space-y-2">
-                            {confirmedSignups.map(signup => {
-                                const levelWarn = signup.character ? getLevelWarning(signup.character.level) : null;
-                                return (
+                            {confirmedSignups.map(signup => (
                                     <div key={signup.id} className="space-y-1">
                                         <div className="flex items-center gap-2">
                                             <UserLink
@@ -405,16 +385,14 @@ export function EventDetailPage() {
                                                 showAvatar
                                                 size="md"
                                             />
-                                            {levelWarn && levelWarn.type === 'under' && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/20">
-                                                    {levelWarn.label}
-                                                </span>
-                                            )}
-                                            {levelWarn && levelWarn.type === 'over' && (
-                                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-500/15 text-gray-400 border border-gray-500/20">
-                                                    {levelWarn.label}
-                                                </span>
-                                            )}
+                                            <PluginSlot
+                                                name="event-detail:signup-warnings"
+                                                context={{
+                                                    characterLevel: signup.character?.level,
+                                                    contentInstances: event.contentInstances ?? [],
+                                                    gameSlug: event.game?.slug,
+                                                }}
+                                            />
                                         </div>
                                         {signup.character && (
                                             <CharacterCardCompact
@@ -432,8 +410,7 @@ export function EventDetailPage() {
                                             />
                                         )}
                                     </div>
-                                );
-                            })}
+                            ))}
                         </div>
                     </div>
                 )}

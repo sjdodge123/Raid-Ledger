@@ -2,8 +2,8 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto, WowInstanceDetailDto, WowInstanceDto } from '@raid-ledger/contract';
-import { createEvent, updateEvent, fetchWowInstanceDetail } from '../../lib/api-client';
+import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto, WowInstanceDetailDto } from '@raid-ledger/contract';
+import { createEvent, updateEvent } from '../../lib/api-client';
 import { GameSearchInput } from './game-search-input';
 import { TeamAvailabilityPicker } from '../features/heatmap';
 import { useTimezoneStore } from '../../stores/timezone-store';
@@ -12,7 +12,8 @@ import { TZDate } from '@date-fns/tz';
 import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
 import { useGameRegistry, useEventTypes } from '../../hooks/use-game-registry';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
-import { useWowInstances } from '../../hooks/use-wow-instances';
+import { PluginSlot } from '../../plugins';
+import { getWowVariant, getContentType } from '../../plugins/wow/utils';
 
 // Duration presets in minutes
 const DURATION_PRESETS = [
@@ -58,19 +59,7 @@ function getCompositionForCap(cap: number): Pick<FormState, 'slotTank' | 'slotHe
     return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: flex, slotBench: 0 };
 }
 
-/** Map registry slug to WoW game variant for Blizzard API */
-function getWowVariant(slug: string): string | null {
-    if (slug === 'wow') return 'retail';
-    if (slug === 'wow-classic') return 'classic';
-    return null;
-}
-
-/** Map event type slug to content category for instance browsing */
-function getContentType(slug: string): 'dungeon' | 'raid' | null {
-    if (/raid/.test(slug)) return 'raid';
-    if (/dungeon|mythic-plus/.test(slug)) return 'dungeon';
-    return null;
-}
+// getWowVariant and getContentType imported from plugin slot (ROK-238)
 
 interface FormState {
     title: string;
@@ -254,8 +243,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     const [errors, setErrors] = useState<FormErrors>({});
     const [saveTemplateName, setSaveTemplateName] = useState('');
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-    const [contentSearch, setContentSearch] = useState('');
-    const [loadingInstanceId, setLoadingInstanceId] = useState<number | null>(null);
+    // Content search state moved to plugin slot (ROK-238)
 
     // Track previous auto-suggestions to detect manual edits
     const prevSuggestionRef = useRef('');
@@ -286,26 +274,10 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     const igdbId = form.game?.igdbId;
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(igdbId);
 
-    // WoW content browsing
+    // WoW content browsing (ROK-238: logic delegated to plugin slot)
     const wowVariant = registrySlug ? getWowVariant(registrySlug) : null;
     const selectedEventType = eventTypes.find((t) => t.id === form.eventTypeId);
     const contentType = selectedEventType?.slug ? getContentType(selectedEventType.slug) : null;
-    const { data: instancesData, isLoading: instancesLoading } = useWowInstances(
-        wowVariant ?? undefined,
-        contentType ?? undefined,
-    );
-    // Filter instances by search
-    const filteredInstances = useMemo(() => {
-        const allInstances = instancesData?.data ?? [];
-        if (!contentSearch.trim()) return allInstances;
-        const q = contentSearch.toLowerCase();
-        return allInstances.filter(
-            (i) =>
-                i.name.toLowerCase().includes(q) ||
-                i.expansion.toLowerCase().includes(q) ||
-                (i.shortName && i.shortName.toLowerCase().includes(q)),
-        );
-    }, [instancesData?.data, contentSearch]);
 
     // Title auto-suggestion — uses shortNames for concise titles
     const computeSuggestion = useCallback((): string => {
@@ -390,7 +362,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 slotBench: GENERIC_DEFAULTS.bench!,
                 maxAttendees: '',
             }));
-            setContentSearch('');
             return;
         }
         const et = eventTypes.find((t) => t.id === eventTypeId);
@@ -417,67 +388,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             updates.slotType = 'generic';
         }
         setForm((prev) => ({ ...prev, ...updates }));
-        setContentSearch('');
-    }
-
-    // Handle instance selection — fetch detail to enrich with level data
-    async function handleInstanceToggle(instance: WowInstanceDto) {
-        // If already selected, remove it
-        if (form.selectedInstances.some((i) => i.id === instance.id)) {
-            setForm((prev) => ({
-                ...prev,
-                selectedInstances: prev.selectedInstances.filter((i) => i.id !== instance.id),
-            }));
-            return;
-        }
-
-        // If instance already has level data from the list (e.g., sub-instances), use directly
-        if (instance.minimumLevel != null) {
-            setForm((prev) => ({
-                ...prev,
-                selectedInstances: [...prev.selectedInstances, {
-                    id: instance.id,
-                    name: instance.name,
-                    shortName: instance.shortName,
-                    expansion: instance.expansion,
-                    minimumLevel: instance.minimumLevel ?? null,
-                    maximumLevel: instance.maximumLevel,
-                    maxPlayers: null,
-                    category: contentType ?? 'dungeon',
-                }],
-            }));
-            return;
-        }
-
-        // Fetch detail to get minimumLevel/maxPlayers
-        setLoadingInstanceId(instance.id);
-        try {
-            const detail = await fetchWowInstanceDetail(instance.id, wowVariant ?? 'retail');
-            // Preserve shortName from the list if the detail doesn't have one
-            if (instance.shortName && !detail.shortName) {
-                detail.shortName = instance.shortName;
-            }
-            setForm((prev) => ({
-                ...prev,
-                selectedInstances: [...prev.selectedInstances, detail],
-            }));
-        } catch {
-            // Fallback: add without detail enrichment
-            setForm((prev) => ({
-                ...prev,
-                selectedInstances: [...prev.selectedInstances, {
-                    id: instance.id,
-                    name: instance.name,
-                    shortName: instance.shortName,
-                    expansion: instance.expansion,
-                    minimumLevel: null,
-                    maxPlayers: null,
-                    category: contentType ?? 'dungeon',
-                }],
-            }));
-        } finally {
-            setLoadingInstanceId(null);
-        }
     }
 
     // Load template into form
@@ -749,7 +659,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                             selectedInstances: [],
                             titleIsAutoSuggested: prev.titleIsAutoSuggested,
                         }));
-                        setContentSearch('');
                     }}
                 />
 
@@ -786,102 +695,17 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     </div>
                 )}
 
-                {/* Content Selection — WoW games only, when event type maps to a content category */}
+                {/* Content Selection — plugin-provided (ROK-238) */}
                 {wowVariant && contentType && (
-                    <div>
-                        <label className="block text-sm font-medium text-secondary mb-2">
-                            {contentType === 'dungeon' ? 'Dungeons' : 'Raids'}
-                        </label>
-
-                        {/* Selected chips */}
-                        {form.selectedInstances.length > 0 && (
-                            <div className="flex flex-wrap gap-2 mb-3">
-                                {form.selectedInstances.map((inst) => (
-                                    <span
-                                        key={inst.id}
-                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600/20 border border-emerald-500/30 text-xs text-emerald-300"
-                                    >
-                                        {inst.shortName || inst.name}
-                                        {inst.minimumLevel != null && (
-                                            <span className="text-emerald-500/60">
-                                                Lv{inst.minimumLevel}{inst.maximumLevel ? `-${inst.maximumLevel}` : '+'}
-                                            </span>
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={() => setForm((prev) => ({
-                                                ...prev,
-                                                selectedInstances: prev.selectedInstances.filter((i) => i.id !== inst.id),
-                                            }))}
-                                            className="ml-0.5 text-emerald-400 hover:text-white transition-colors"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                            </svg>
-                                        </button>
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Search input */}
-                        <input
-                            type="text"
-                            value={contentSearch}
-                            onChange={(e) => setContentSearch(e.target.value)}
-                            placeholder={`Search ${contentType}s...`}
-                            className="w-full px-4 py-2.5 bg-panel border border-edge rounded-lg text-foreground placeholder-dim text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors mb-2"
-                        />
-
-                        {/* Instance list */}
-                        {instancesLoading ? (
-                            <p className="text-xs text-dim py-2">Loading {contentType}s...</p>
-                        ) : (
-                            <div className="max-h-48 overflow-y-auto rounded-lg border border-edge bg-panel/50 divide-y divide-edge-subtle">
-                                {filteredInstances.length === 0 ? (
-                                    <p className="text-xs text-dim px-4 py-3">
-                                        {contentSearch ? 'No matches found' : `No ${contentType}s available`}
-                                    </p>
-                                ) : (
-                                    filteredInstances.map((inst) => {
-                                        const isSelected = form.selectedInstances.some((i) => i.id === inst.id);
-                                        const isLoading = loadingInstanceId === inst.id;
-                                        return (
-                                            <button
-                                                key={inst.id}
-                                                type="button"
-                                                disabled={isLoading}
-                                                onClick={() => handleInstanceToggle(inst)}
-                                                className={`w-full flex items-center justify-between px-4 py-2.5 text-left text-sm transition-colors ${
-                                                    isSelected
-                                                        ? 'bg-emerald-600/10 text-emerald-300'
-                                                        : 'text-secondary hover:bg-panel hover:text-foreground'
-                                                } ${isLoading ? 'opacity-50' : ''}`}
-                                            >
-                                                <div>
-                                                    <span className="font-medium">{inst.name}</span>
-                                                    <span className="ml-2 text-xs text-dim">{inst.expansion}</span>
-                                                    {inst.minimumLevel != null && (
-                                                        <span className="ml-2 text-xs text-muted">
-                                                            Lv{inst.minimumLevel}{inst.maximumLevel ? `-${inst.maximumLevel}` : '+'}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                                {isSelected && (
-                                                    <svg className="w-4 h-4 text-emerald-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                                    </svg>
-                                                )}
-                                                {isLoading && (
-                                                    <span className="text-xs text-dim animate-pulse">Loading...</span>
-                                                )}
-                                            </button>
-                                        );
-                                    })
-                                )}
-                            </div>
-                        )}
-                    </div>
+                    <PluginSlot
+                        name="event-create:content-browser"
+                        context={{
+                            wowVariant,
+                            contentType,
+                            selectedInstances: form.selectedInstances,
+                            onInstancesChange: (instances: WowInstanceDetailDto[]) => setForm(prev => ({...prev, selectedInstances: instances})),
+                        }}
+                    />
                 )}
             </FormSection>
 

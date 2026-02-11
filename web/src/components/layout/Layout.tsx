@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { ImpersonationBanner } from '../auth';
 import { useThemeSync } from '../../hooks/use-theme-sync';
+import { usePluginHydration } from '../../hooks/use-plugins';
 
 interface LayoutProps {
     children: ReactNode;
@@ -14,6 +15,7 @@ interface LayoutProps {
  */
 export function Layout({ children }: LayoutProps) {
     useThemeSync();
+    usePluginHydration();
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop">

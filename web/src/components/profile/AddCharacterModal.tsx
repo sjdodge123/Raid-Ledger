@@ -3,9 +3,8 @@ import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/cont
 import { Modal } from '../ui/modal';
 import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
 import { useGameRegistry } from '../../hooks/use-game-registry';
-import { useSystemStatus } from '../../hooks/use-system-status';
 import { GameSearchInput } from '../events/game-search-input';
-import { WowArmoryImportForm } from '../characters/wow-armory-import-form';
+import { PluginSlot } from '../../plugins';
 
 interface AddCharacterModalProps {
     isOpen: boolean;
@@ -49,7 +48,6 @@ export function AddCharacterModal({
     const createMutation = useCreateCharacter();
     const updateMutation = useUpdateCharacter();
     const { games: registryGames } = useGameRegistry();
-    const { data: systemStatus } = useSystemStatus();
     const isEditing = !!editingCharacter;
 
     // IGDB game selection state
@@ -95,32 +93,7 @@ export function AddCharacterModal({
     const effectiveGameName = effectiveRegistryGame?.name ?? preselectedGameName ?? selectedIgdbGame?.name ?? 'Unknown Game';
     const showMmoFields = effectiveRegistryGame?.hasRoles ?? (selectedIgdbGame ? false : true);
 
-    // Detect WoW (includes Classic variants)
-    const isWow = effectiveRegistryGame?.slug?.startsWith('wow') ||
-        selectedIgdbGame?.slug?.startsWith('world-of-warcraft');
-    const showImportTab = !isEditing && isWow && systemStatus?.blizzardConfigured;
-
-    // WoW game variant for Blizzard API namespace (user-selectable when WoW is detected)
-    const [wowVariant, setWowVariant] = useState<string>('retail');
-
-    // Auto-set variant based on game slug
-    const [prevEffectiveSlug, setPrevEffectiveSlug] = useState('');
     const currentSlug = effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug ?? '';
-    if (currentSlug !== prevEffectiveSlug) {
-        setPrevEffectiveSlug(currentSlug);
-        if (currentSlug === 'wow-classic' || currentSlug.includes('world-of-warcraft-classic')) {
-            setWowVariant('classic_anniversary');
-        } else if (currentSlug.startsWith('wow') || currentSlug.startsWith('world-of-warcraft')) {
-            setWowVariant('retail');
-        }
-    }
-
-    // Default to import tab when WoW + Blizzard configured (render-time adjustment)
-    const [prevShowImportTab, setPrevShowImportTab] = useState(false);
-    if (!!showImportTab !== prevShowImportTab) {
-        setPrevShowImportTab(!!showImportTab);
-        setActiveTab(showImportTab ? 'import' : 'manual');
-    }
 
     // Reset all form state synchronously when modal opens (avoids stale-frame flash).
     // This is React's recommended "adjust state during render" pattern:
@@ -250,62 +223,20 @@ export function AddCharacterModal({
                     />
                 )}
 
-                {/* Tab toggle for WoW import */}
-                {showImportTab && (
-                    <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab('manual')}
-                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                activeTab === 'manual'
-                                    ? 'bg-overlay text-foreground'
-                                    : 'text-muted hover:text-secondary'
-                            }`}
-                        >
-                            Manual
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setActiveTab('import')}
-                            className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                                activeTab === 'import'
-                                    ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                    : 'text-muted hover:text-secondary'
-                            }`}
-                        >
-                            Import from Armory
-                        </button>
-                    </div>
+                {/* Plugin: Import form tab toggle + variant + import form (ROK-238) */}
+                {!isEditing && currentSlug && (
+                    <PluginSlot
+                        name="character-create:import-form"
+                        context={{
+                            onClose,
+                            gameSlug: currentSlug,
+                            activeTab,
+                            onTabChange: setActiveTab,
+                        }}
+                    />
                 )}
 
-                {/* WoW variant selector (shown when import tab is active) */}
-                {showImportTab && activeTab === 'import' && (
-                    <div>
-                        <label className="block text-sm font-medium text-secondary mb-1">
-                            Game Version
-                        </label>
-                        <select
-                            value={wowVariant}
-                            onChange={(e) => setWowVariant(e.target.value)}
-                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                        >
-                            {currentSlug === 'wow-classic' || currentSlug.includes('world-of-warcraft-classic') ? (
-                                <>
-                                    <option value="classic_anniversary">Classic Anniversary (TBC)</option>
-                                    <option value="classic_era">Classic Era / SoD</option>
-                                    <option value="classic">Classic (Cata)</option>
-                                </>
-                            ) : (
-                                <option value="retail">Retail (Live)</option>
-                            )}
-                        </select>
-                    </div>
-                )}
-
-                {/* Import from Armory tab */}
-                {showImportTab && activeTab === 'import' ? (
-                    <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} />
-                ) : (
+                {activeTab === 'manual' && (
                     <>
                         {/* Only show manual form fields when a game is selected */}
                         {(selectedIgdbGame || isEditing) && (
