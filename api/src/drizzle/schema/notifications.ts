@@ -22,7 +22,15 @@ export const notifications = pgTable(
       .notNull(),
     /** Notification type for categorization and filtering */
     type: text('type', {
-      enum: ['slot_vacated', 'event_reminder', 'new_event', 'subscribed_game'],
+      enum: [
+        'slot_vacated',
+        'event_reminder',
+        'new_event',
+        'subscribed_game',
+        'achievement_unlocked',
+        'level_up',
+        'missed_event_nudge',
+      ],
     }).notNull(),
     title: text('title').notNull(),
     message: text('message').notNull(),

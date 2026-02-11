@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 
@@ -14,13 +15,26 @@ export interface Notification {
     expiresAt?: string;
 }
 
+export type NotificationType =
+    | 'slot_vacated'
+    | 'event_reminder'
+    | 'new_event'
+    | 'subscribed_game'
+    | 'achievement_unlocked'
+    | 'level_up'
+    | 'missed_event_nudge';
+
+export type Channel = 'inApp' | 'push' | 'discord';
+
+export type ChannelPrefs = Record<NotificationType, Record<Channel, boolean>>;
+
 export interface NotificationPreferences {
     userId: number;
-    inAppEnabled: boolean;
-    slotVacated: boolean;
-    eventReminders: boolean;
-    newEvents: boolean;
-    subscribedGames: boolean;
+    channelPrefs: ChannelPrefs;
+}
+
+export interface UpdatePreferencesInput {
+    channelPrefs: Partial<Record<NotificationType, Partial<Record<Channel, boolean>>>>;
 }
 
 /**
@@ -124,8 +138,8 @@ async function fetchPreferences(): Promise<NotificationPreferences> {
 /**
  * Update notification preferences
  */
-async function updatePreferences(
-    prefs: Partial<NotificationPreferences>,
+async function patchPreferences(
+    input: UpdatePreferencesInput,
 ): Promise<NotificationPreferences> {
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
@@ -136,7 +150,7 @@ async function updatePreferences(
             Authorization: `Bearer ${token}`,
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify(prefs),
+        body: JSON.stringify(input),
     });
 
     if (!response.ok) {
@@ -152,20 +166,10 @@ const PREFERENCES_STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Hook for managing notifications
- * @param limit - Maximum number of notifications to fetch (default: 20)
- * @param offset - Pagination offset (default: 0)
- * @returns Object containing:
- *   - notifications: Array of notification objects
- *   - unreadCount: Number of unread notifications
- *   - isLoading: Loading state for initial fetch
- *   - error: Error object if fetch failed
- *   - markRead: Function to mark a single notification as read (notificationId: string) => void
- *   - markAllRead: Function to mark all notifications as read () => void
  */
 export function useNotifications(limit = 20, offset = 0) {
     const queryClient = useQueryClient();
 
-    // Fetch all notifications
     const {
         data: notifications = [],
         isLoading,
@@ -176,14 +180,12 @@ export function useNotifications(limit = 20, offset = 0) {
         staleTime: NOTIFICATION_STALE_TIME,
     });
 
-    // Fetch unread count
     const { data: unreadCount = 0 } = useQuery({
         queryKey: ['notifications', 'unread-count'],
         queryFn: fetchUnreadCount,
         staleTime: NOTIFICATION_STALE_TIME,
     });
 
-    // Mark single notification as read
     const markReadMutation = useMutation({
         mutationFn: markNotificationRead,
         onSuccess: () => {
@@ -191,7 +193,6 @@ export function useNotifications(limit = 20, offset = 0) {
         },
     });
 
-    // Mark all as read
     const markAllReadMutation = useMutation({
         mutationFn: markAllNotificationsRead,
         onSuccess: () => {
@@ -210,32 +211,62 @@ export function useNotifications(limit = 20, offset = 0) {
 }
 
 /**
- * Hook for managing notification preferences
- * @returns Object containing:
- *   - preferences: User's notification preferences object
- *   - isLoading: Loading state for initial fetch
- *   - error: Error object if fetch failed
- *   - updatePreferences: Function to update preferences (prefs: Partial<NotificationPreferences>) => void
+ * Hook for managing notification preferences with optimistic updates
  */
 export function useNotificationPreferences() {
     const queryClient = useQueryClient();
+    const queryKey = ['notifications', 'preferences'];
 
     const {
         data: preferences,
         isLoading,
         error,
     } = useQuery({
-        queryKey: ['notifications', 'preferences'],
+        queryKey,
         queryFn: fetchPreferences,
         staleTime: PREFERENCES_STALE_TIME,
     });
 
     const updateMutation = useMutation({
-        mutationFn: updatePreferences,
+        mutationFn: patchPreferences,
+        onMutate: async (input: UpdatePreferencesInput) => {
+            await queryClient.cancelQueries({ queryKey });
+            const previous = queryClient.getQueryData<NotificationPreferences>(queryKey);
+
+            // Optimistic update: deep-merge input into current prefs
+            if (previous) {
+                const optimistic: NotificationPreferences = {
+                    ...previous,
+                    channelPrefs: { ...previous.channelPrefs },
+                };
+                for (const [type, channels] of Object.entries(input.channelPrefs)) {
+                    const t = type as NotificationType;
+                    if (optimistic.channelPrefs[t] && channels) {
+                        optimistic.channelPrefs[t] = {
+                            ...optimistic.channelPrefs[t],
+                            ...channels,
+                        };
+                    }
+                }
+                queryClient.setQueryData<NotificationPreferences>(queryKey, optimistic);
+            }
+
+            return { previous };
+        },
         onSuccess: () => {
-            queryClient.invalidateQueries({
-                queryKey: ['notifications', 'preferences'],
-            });
+            toast.success('Preferences updated', { id: 'notif-prefs' });
+        },
+        onError: (_err, _vars, context) => {
+            if ((context as { previous?: NotificationPreferences })?.previous) {
+                queryClient.setQueryData(
+                    queryKey,
+                    (context as { previous: NotificationPreferences }).previous,
+                );
+            }
+            toast.error('Failed to update preferences', { id: 'notif-prefs' });
+        },
+        onSettled: () => {
+            queryClient.invalidateQueries({ queryKey });
         },
     });
 
@@ -246,4 +277,3 @@ export function useNotificationPreferences() {
         updatePreferences: updateMutation.mutate,
     };
 }
-

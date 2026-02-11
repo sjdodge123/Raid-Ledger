@@ -9,10 +9,18 @@ import { eq, and, isNull, desc, lt, not } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import {
+  DEFAULT_CHANNEL_PREFS,
+  type ChannelPrefs,
+  type NotificationType,
+} from '../drizzle/schema/notification-preferences';
+
+export type { ChannelPrefs, NotificationType };
+export type Channel = 'inApp' | 'push' | 'discord';
 
 export interface CreateNotificationInput {
   userId: number;
-  type: 'slot_vacated' | 'event_reminder' | 'new_event' | 'subscribed_game';
+  type: NotificationType;
   title: string;
   message: string;
   payload?: Record<string, any>;
@@ -33,23 +41,17 @@ export interface NotificationDto {
 
 export interface NotificationPreferencesDto {
   userId: number;
-  inAppEnabled: boolean;
-  slotVacated: boolean;
-  eventReminders: boolean;
-  newEvents: boolean;
-  subscribedGames: boolean;
+  channelPrefs: ChannelPrefs;
 }
 
 export interface UpdatePreferencesInput {
-  inAppEnabled?: boolean;
-  slotVacated?: boolean;
-  eventReminders?: boolean;
-  newEvents?: boolean;
-  subscribedGames?: boolean;
+  channelPrefs: Partial<
+    Record<NotificationType, Partial<Record<Channel, boolean>>>
+  >;
 }
 
 /**
- * Service for managing user notifications (ROK-197).
+ * Service for managing user notifications (ROK-197, ROK-179).
  * Handles in-app notification CRUD and user preferences.
  */
 @Injectable()
@@ -73,19 +75,10 @@ export class NotificationService {
     // Check user preferences
     const prefs = await this.getPreferences(input.userId);
 
-    // Respect master toggle
-    if (!prefs.inAppEnabled) {
+    // Check in-app channel preference for this type
+    if (!this.isCategoryEnabled(input.type, prefs)) {
       this.logger.debug(
-        `Skipping notification for user ${input.userId}: in-app disabled`,
-      );
-      return null;
-    }
-
-    // Check category-specific preference
-    const categoryEnabled = this.isCategoryEnabled(input.type, prefs);
-    if (!categoryEnabled) {
-      this.logger.debug(
-        `Skipping notification for user ${input.userId}: ${input.type} disabled`,
+        `Skipping notification for user ${input.userId}: ${input.type} in-app disabled`,
       );
       return null;
     }
@@ -215,6 +208,7 @@ export class NotificationService {
   /**
    * Get notification preferences for a user.
    * Creates default preferences if they don't exist.
+   * Merges with defaults to handle new types added after user's prefs were created.
    * @param userId - User ID
    * @returns User preferences
    */
@@ -241,20 +235,30 @@ export class NotificationService {
 
   /**
    * Update notification preferences for a user.
+   * Deep-merges incoming partial with stored JSONB.
    * @param userId - User ID
-   * @param input - Preference updates
+   * @param input - Preference updates (partial channelPrefs)
    * @returns Updated preferences
    */
   async updatePreferences(
     userId: number,
     input: UpdatePreferencesInput,
   ): Promise<NotificationPreferencesDto> {
-    // Ensure preferences exist
-    await this.getPreferences(userId);
+    // Ensure preferences exist and get current state
+    const current = await this.getPreferences(userId);
+
+    // Deep-merge: only overwrite keys provided
+    const merged: ChannelPrefs = { ...current.channelPrefs };
+    for (const [type, channels] of Object.entries(input.channelPrefs)) {
+      const notifType = type as NotificationType;
+      if (merged[notifType] && channels) {
+        merged[notifType] = { ...merged[notifType], ...channels };
+      }
+    }
 
     const [updated] = await this.db
       .update(schema.userNotificationPreferences)
-      .set(input)
+      .set({ channelPrefs: merged })
       .where(eq(schema.userNotificationPreferences.userId, userId))
       .returning();
 
@@ -284,24 +288,13 @@ export class NotificationService {
   }
 
   /**
-   * Check if a notification category is enabled for a user.
+   * Check if in-app notifications are enabled for a given type.
    */
   private isCategoryEnabled(
-    type: string,
+    type: NotificationType,
     prefs: NotificationPreferencesDto,
   ): boolean {
-    switch (type) {
-      case 'slot_vacated':
-        return prefs.slotVacated;
-      case 'event_reminder':
-        return prefs.eventReminders;
-      case 'new_event':
-        return prefs.newEvents;
-      case 'subscribed_game':
-        return prefs.subscribedGames;
-      default:
-        return true;
-    }
+    return prefs.channelPrefs[type]?.inApp ?? true;
   }
 
   /**
@@ -325,17 +318,27 @@ export class NotificationService {
 
   /**
    * Map preferences row to DTO.
+   * Merges stored JSONB with defaults to handle new types.
    */
   private mapPreferencesToDto(
     row: typeof schema.userNotificationPreferences.$inferSelect,
   ): NotificationPreferencesDto {
+    const stored = (row.channelPrefs ?? {}) as Partial<ChannelPrefs>;
+    // Merge defaults with stored: defaults fill in any missing types
+    const merged: ChannelPrefs = { ...DEFAULT_CHANNEL_PREFS };
+    for (const [type, channels] of Object.entries(stored)) {
+      const notifType = type as NotificationType;
+      if (merged[notifType] && channels) {
+        merged[notifType] = {
+          ...merged[notifType],
+          ...(channels as Record<Channel, boolean>),
+        };
+      }
+    }
+
     return {
       userId: row.userId,
-      inAppEnabled: row.inAppEnabled,
-      slotVacated: row.slotVacated,
-      eventReminders: row.eventReminders,
-      newEvents: row.newEvents,
-      subscribedGames: row.subscribedGames,
+      channelPrefs: merged,
     };
   }
 }

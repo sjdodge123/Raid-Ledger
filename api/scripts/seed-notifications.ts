@@ -166,11 +166,6 @@ async function bootstrap() {
                 if (!existing) {
                     await db.insert(schema.userNotificationPreferences).values({
                         userId: user.id,
-                        inAppEnabled: true,
-                        slotVacated: true,
-                        eventReminders: true,
-                        newEvents: true,
-                        subscribedGames: true,
                     });
                     console.log(`  ✅ Created preferences for ${user.username}`);
                 } else {

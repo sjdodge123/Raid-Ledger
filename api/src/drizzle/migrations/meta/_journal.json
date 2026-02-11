@@ -155,6 +155,13 @@
       "when": 1770753142248,
       "tag": "0021_spooky_leper_queen",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1770840000000,
+      "tag": "0022_notification_prefs_jsonb",
+      "breakpoints": true
     }
   ]
 }
