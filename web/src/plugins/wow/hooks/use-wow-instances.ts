@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchWowInstances, fetchWowInstanceDetail } from '../lib/api-client';
+import { fetchWowInstances, fetchWowInstanceDetail } from '../api-client';
 
 /**
  * Hook to fetch WoW dungeon or raid instance lists for content selection.

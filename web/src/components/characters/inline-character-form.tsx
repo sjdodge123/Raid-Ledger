@@ -1,16 +1,14 @@
 import { useState } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
-import { WowArmoryImportForm } from './wow-armory-import-form';
+import { PluginSlot } from '../../plugins';
 
 interface InlineCharacterFormProps {
     gameId: string;
     hasRoles?: boolean;
     hasSpecs?: boolean;
-    /** Whether WoW Armory import is available */
-    showArmoryImport?: boolean;
-    /** Game variant for Blizzard API namespace (retail, classic_era, classic) */
-    gameVariant?: string;
+    /** Game slug for plugin slot context (enables WoW import when plugin active) */
+    gameSlug?: string;
     onCharacterCreated?: (character: CharacterDto) => void;
     onCancel?: () => void;
 }
@@ -23,13 +21,11 @@ interface InlineCharacterFormProps {
 export function InlineCharacterForm({
     gameId,
     hasRoles = true,
-    showArmoryImport = false,
-    gameVariant,
+    gameSlug,
     onCharacterCreated,
     onCancel,
 }: InlineCharacterFormProps) {
     const createMutation = useCreateCharacter();
-    const [mode, setMode] = useState<'manual' | 'import'>(showArmoryImport ? 'import' : 'manual');
     const [name, setName] = useState('');
     const [charClass, setCharClass] = useState('');
     const [spec, setSpec] = useState('');
@@ -69,122 +65,92 @@ export function InlineCharacterForm({
 
     return (
         <div className="space-y-3">
-            {/* Mode toggle for WoW */}
-            {showArmoryImport && (
-                <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
+            {/* Plugin slot for WoW import mode toggle + form */}
+            <PluginSlot
+                name="character-create:inline-import"
+                context={{
+                    onSuccess: onCharacterCreated,
+                    isMain: true,
+                    gameSlug,
+                }}
+            />
+
+            <form onSubmit={handleManualSubmit} className="space-y-3">
+                <div>
+                    <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="Character name"
+                        maxLength={100}
+                        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    />
+                </div>
+
+                {hasRoles && (
+                    <>
+                        <div className="grid grid-cols-2 gap-2">
+                            <input
+                                type="text"
+                                value={charClass}
+                                onChange={(e) => setCharClass(e.target.value)}
+                                placeholder="Class"
+                                maxLength={50}
+                                className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            />
+                            <input
+                                type="text"
+                                value={spec}
+                                onChange={(e) => setSpec(e.target.value)}
+                                placeholder="Spec"
+                                maxLength={50}
+                                className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                            <select
+                                value={role}
+                                onChange={(e) => setRole(e.target.value as CharacterRole | '')}
+                                className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            >
+                                <option value="">Role...</option>
+                                <option value="tank">Tank</option>
+                                <option value="healer">Healer</option>
+                                <option value="dps">DPS</option>
+                            </select>
+                            <input
+                                type="text"
+                                value={realm}
+                                onChange={(e) => setRealm(e.target.value)}
+                                placeholder="Realm"
+                                maxLength={100}
+                                className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                            />
+                        </div>
+                    </>
+                )}
+
+                {error && <p className="text-xs text-red-400">{error}</p>}
+
+                <div className="flex gap-2">
+                    {onCancel && (
+                        <button
+                            type="button"
+                            onClick={onCancel}
+                            className="flex-1 px-3 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors text-sm"
+                        >
+                            Cancel
+                        </button>
+                    )}
                     <button
-                        type="button"
-                        onClick={() => setMode('import')}
-                        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                            mode === 'import'
-                                ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                                : 'text-muted hover:text-secondary'
-                        }`}
+                        type="submit"
+                        disabled={createMutation.isPending}
+                        className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors text-sm"
                     >
-                        Import from Armory
-                    </button>
-                    <button
-                        type="button"
-                        onClick={() => setMode('manual')}
-                        className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                            mode === 'manual'
-                                ? 'bg-overlay text-foreground'
-                                : 'text-muted hover:text-secondary'
-                        }`}
-                    >
-                        Manual
+                        {createMutation.isPending ? 'Creating...' : 'Create Character'}
                     </button>
                 </div>
-            )}
-
-            {mode === 'import' && showArmoryImport ? (
-                <WowArmoryImportForm
-                    isMain
-                    gameVariant={gameVariant}
-                    onSuccess={() => {
-                        // The mutation will invalidate queries; we rely on the
-                        // parent re-fetching characters to pick up the new one.
-                        onCharacterCreated?.(undefined as unknown as CharacterDto);
-                    }}
-                />
-            ) : (
-                <form onSubmit={handleManualSubmit} className="space-y-3">
-                    <div>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="Character name"
-                            maxLength={100}
-                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                        />
-                    </div>
-
-                    {hasRoles && (
-                        <>
-                            <div className="grid grid-cols-2 gap-2">
-                                <input
-                                    type="text"
-                                    value={charClass}
-                                    onChange={(e) => setCharClass(e.target.value)}
-                                    placeholder="Class"
-                                    maxLength={50}
-                                    className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                                />
-                                <input
-                                    type="text"
-                                    value={spec}
-                                    onChange={(e) => setSpec(e.target.value)}
-                                    placeholder="Spec"
-                                    maxLength={50}
-                                    className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                                />
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <select
-                                    value={role}
-                                    onChange={(e) => setRole(e.target.value as CharacterRole | '')}
-                                    className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                                >
-                                    <option value="">Role...</option>
-                                    <option value="tank">Tank</option>
-                                    <option value="healer">Healer</option>
-                                    <option value="dps">DPS</option>
-                                </select>
-                                <input
-                                    type="text"
-                                    value={realm}
-                                    onChange={(e) => setRealm(e.target.value)}
-                                    placeholder="Realm"
-                                    maxLength={100}
-                                    className="px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                                />
-                            </div>
-                        </>
-                    )}
-
-                    {error && <p className="text-xs text-red-400">{error}</p>}
-
-                    <div className="flex gap-2">
-                        {onCancel && (
-                            <button
-                                type="button"
-                                onClick={onCancel}
-                                className="flex-1 px-3 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors text-sm"
-                            >
-                                Cancel
-                            </button>
-                        )}
-                        <button
-                            type="submit"
-                            disabled={createMutation.isPending}
-                            className="flex-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors text-sm"
-                        >
-                            {createMutation.isPending ? 'Creating...' : 'Create Character'}
-                        </button>
-                    </div>
-                </form>
-            )}
+            </form>
         </div>
     );
 }

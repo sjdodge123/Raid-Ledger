@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { WowInstanceDetailDto, WowInstanceDto } from '@raid-ledger/contract';
-import { useWowInstances } from '../../../hooks/use-wow-instances';
-import { fetchWowInstanceDetail } from '../../../lib/api-client';
+import { useWowInstances } from '../hooks/use-wow-instances';
+import { fetchWowInstanceDetail } from '../api-client';
 
 interface EventCreateContentBrowserProps {
     wowVariant: string;

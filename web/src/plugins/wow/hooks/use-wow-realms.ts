@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchWowRealms, previewWowCharacter } from '../lib/api-client';
+import { fetchWowRealms, previewWowCharacter } from '../api-client';
 
 /**
  * Hook to fetch WoW realm list for a given region and game variant.

@@ -3,7 +3,6 @@ import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useConfirmSignup } from '../../hooks/use-signups';
-import { useSystemStatus } from '../../hooks/use-system-status';
 import { InlineCharacterForm } from '../characters/inline-character-form';
 import { toast } from 'sonner';
 
@@ -55,8 +54,6 @@ export function SignupConfirmationModal({
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
     const confirmMutation = useConfirmSignup(eventId);
-    const { data: systemStatus } = useSystemStatus();
-
     const characters = charactersData?.data ?? [];
     const mainCharacter = characters.find((c) => c.isMain);
     const altCharacters = characters.filter((c) => !c.isMain);
@@ -89,12 +86,6 @@ export function SignupConfirmationModal({
         expectedRole &&
         selectedCharacter?.effectiveRole &&
         selectedCharacter.effectiveRole !== expectedRole;
-
-    // Whether WoW Armory import is available (includes Classic variants)
-    const isWow = gameSlug?.startsWith('wow') || gameSlug?.startsWith('world-of-warcraft');
-    const showArmoryImport = isWow && systemStatus?.blizzardConfigured;
-    const gameVariant = gameSlug === 'wow-classic' || gameSlug?.includes('world-of-warcraft-classic')
-        ? 'classic_era' : 'retail';
 
     const handleConfirm = async () => {
         if (!selectedCharacterId) return;
@@ -173,8 +164,7 @@ export function SignupConfirmationModal({
                         <InlineCharacterForm
                             gameId={gameId}
                             hasRoles={hasRoles}
-                            showArmoryImport={showArmoryImport ?? false}
-                            gameVariant={gameVariant}
+                            gameSlug={gameSlug}
                             onCharacterCreated={handleCharacterCreated}
                             onCancel={() => setShowCreateForm(false)}
                         />
@@ -234,8 +224,7 @@ export function SignupConfirmationModal({
                         <InlineCharacterForm
                             gameId={gameId}
                             hasRoles={hasRoles}
-                            showArmoryImport={showArmoryImport ?? false}
-                            gameVariant={gameVariant}
+                            gameSlug={gameSlug}
                             onCharacterCreated={handleCharacterCreated}
                             onCancel={() => setShowCreateForm(false)}
                         />

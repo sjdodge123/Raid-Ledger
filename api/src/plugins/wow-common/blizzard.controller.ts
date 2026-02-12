@@ -13,13 +13,20 @@ import { AuthGuard } from '@nestjs/passport';
 import { BlizzardService } from './blizzard.service';
 import { WowRegionSchema, WowGameVariantSchema } from '@raid-ledger/contract';
 import type { WowGameVariant } from '@raid-ledger/contract';
+import {
+  RequirePlugin,
+  PluginActiveGuard,
+} from '../plugin-host/plugin-active.guard';
 
 /**
  * Controller for Blizzard API endpoints (ROK-234 UX refinements).
+ * All routes require the blizzard plugin to be active (ROK-242).
  * - Realm list: public (realm names aren't sensitive)
  * - Character preview: requires auth (calls Blizzard API on user's behalf)
  */
 @Controller('blizzard')
+@RequirePlugin('blizzard')
+@UseGuards(PluginActiveGuard)
 export class BlizzardController {
   private readonly logger = new Logger(BlizzardController.name);
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useWowheadTooltips, isWowheadLoaded } from '../../../hooks/use-wowhead-tooltips';
-import { ItemFallbackTooltip } from '../../../components/characters/item-fallback-tooltip';
-import { ItemDetailModal } from '../../../components/characters/item-detail-modal';
+import { useWowheadTooltips, isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
+import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
+import { ItemDetailModal } from '../components/item-detail-modal';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 
 /** Quality color mapping for WoW item quality */

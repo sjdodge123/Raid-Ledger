@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useWowRealms } from '../../hooks/use-wow-realms';
+import { useWowRealms } from '../hooks/use-wow-realms';
 
 interface RealmAutocompleteProps {
     region: string;

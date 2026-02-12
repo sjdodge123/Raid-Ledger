@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { WowArmoryImportForm } from '../../../components/characters/wow-armory-import-form';
+import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 
 const WOW_SLUGS = new Set(['wow', 'wow-classic', 'world-of-warcraft', 'world-of-warcraft-classic']);
 

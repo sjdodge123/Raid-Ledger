@@ -23,6 +23,10 @@ import {
   CharacterListResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
+import {
+  RequirePlugin,
+  PluginActiveGuard,
+} from '../plugins/plugin-host/plugin-active.guard';
 
 interface AuthenticatedRequest {
   user: {
@@ -87,8 +91,11 @@ export class CharactersController {
   /**
    * Import a character from an external game API via adapter (ROK-234, ROK-237).
    * Must be declared before :id routes.
+   * Requires blizzard plugin active (ROK-242).
    */
   @Post('import/wow')
+  @RequirePlugin('blizzard')
+  @UseGuards(PluginActiveGuard)
   async importFromWow(
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
@@ -143,8 +150,11 @@ export class CharactersController {
 
   /**
    * Refresh a character's data from an external game API via adapter (ROK-234, ROK-237).
+   * Requires blizzard plugin active (ROK-242).
    */
   @Post(':id/refresh')
+  @RequirePlugin('blizzard')
+  @UseGuards(PluginActiveGuard)
   async refreshFromArmory(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,

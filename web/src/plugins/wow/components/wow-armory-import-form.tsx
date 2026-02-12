@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { WowRegion, BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
-import { useImportWowCharacter } from '../../hooks/use-character-mutations';
-import { previewWowCharacter } from '../../lib/api-client';
+import { useImportWowCharacter } from '../hooks/use-wow-mutations';
+import { previewWowCharacter } from '../api-client';
 import { RealmAutocomplete } from './realm-autocomplete';
 
 interface WowArmoryImportFormProps {

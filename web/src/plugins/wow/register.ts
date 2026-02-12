@@ -2,6 +2,7 @@ import { registerSlotComponent } from '../plugin-registry';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
+import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
 import { EventCreateContentBrowser } from './slots/event-create-content-browser';
 import { EventDetailContentSections } from './slots/event-detail-content-sections';
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
@@ -31,6 +32,13 @@ if (!registered) {
         pluginSlug: 'blizzard',
         slotName: 'character-create:import-form',
         component: CharacterCreateImportForm,
+        priority: 0,
+    });
+
+    registerSlotComponent({
+        pluginSlug: 'blizzard',
+        slotName: 'character-create:inline-import',
+        component: CharacterCreateInlineImport,
         priority: 0,
     });
 

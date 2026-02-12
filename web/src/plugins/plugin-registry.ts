@@ -5,6 +5,7 @@ export type PluginSlotName =
     | 'character-detail:sections'
     | 'character-detail:header-badges'
     | 'character-create:import-form'
+    | 'character-create:inline-import'
     | 'event-create:content-browser'
     | 'event-detail:content-sections'
     | 'event-detail:signup-warnings'
