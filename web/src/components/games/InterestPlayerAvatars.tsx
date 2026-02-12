@@ -32,10 +32,16 @@ export function InterestPlayerAvatars({
     const overflowCount = totalCount - visiblePlayers.length;
 
     if (visiblePlayers.length === 0) {
-        return (
-            <span className="text-sm text-muted">
-                {totalCount} player{totalCount !== 1 ? 's' : ''} interested
-            </span>
+        const countText = `${totalCount} player${totalCount !== 1 ? 's' : ''} interested`;
+        return gameId ? (
+            <Link
+                to={`/players?gameId=${gameId}`}
+                className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+                {countText}
+            </Link>
+        ) : (
+            <span className="text-sm text-muted">{countText}</span>
         );
     }
 
@@ -78,13 +84,15 @@ export function InterestPlayerAvatars({
                 })}
             </div>
 
-            {/* Count / overflow text */}
-            {overflowCount > 0 && gameId ? (
+            {/* Count / overflow text — always link to filtered players page when gameId is available */}
+            {gameId ? (
                 <Link
                     to={`/players?gameId=${gameId}`}
                     className="text-sm text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors"
                 >
-                    +{overflowCount} more
+                    {overflowCount > 0
+                        ? `+${overflowCount} more`
+                        : `${totalCount} player${totalCount !== 1 ? 's' : ''} interested`}
                 </Link>
             ) : (
                 <span className="text-sm text-muted whitespace-nowrap">
