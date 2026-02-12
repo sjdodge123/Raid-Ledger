@@ -32,7 +32,24 @@ Also read `task.md` and extract any `[x]` (Done) or `[/]` (In Progress) entries 
 
 ---
 
-## Step 2: Push to Linear
+## Step 2: Merge & Clean Up Branches
+
+If on a feature branch with completed work:
+1. `git checkout main`
+2. `git merge <feature-branch>`
+3. `git branch -d <feature-branch>`
+
+Then clean up any other stale merged branches:
+```bash
+git branch --merged main | grep -v '^\* main$' | grep -v '^  main$'
+```
+Delete any listed branches with `git branch -d`. Also drop stale stashes (`git stash list` → `git stash drop` if irrelevant).
+
+If the feature branch has **incomplete** work (story still In Progress), do **not** merge — leave the branch for the next session.
+
+---
+
+## Step 3: Push to Linear
 
 For each story identified in Step 1:
 1. `mcp__linear__get_issue` — check current status
@@ -43,7 +60,7 @@ Track: **pushed**, **already-correct**, **errors**.
 
 ---
 
-## Step 3: Regenerate sprint-status.yaml
+## Step 4: Regenerate sprint-status.yaml
 
 **Delegate to a subagent** (`subagent_type: "general-purpose"`) with these instructions:
 
@@ -72,13 +89,15 @@ development_status:
 
 ---
 
-## Step 4: Report
+## Step 5: Report
 
 Display a compact summary:
 
 ```
 === Handover ===
 Branch: <branch> @ <sha>
+Merged: <branch> → main (or "stayed on <branch> — incomplete")
+Cleanup: deleted N branches, dropped N stashes (or "none")
 Linear: X pushed, Y already correct, Z errors
 Cache: sprint-status.yaml regenerated (<total> issues)
 Stories: ROK-XXX (Done), ROK-YYY (In Progress), ...
