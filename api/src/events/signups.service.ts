@@ -12,6 +12,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
+import { BenchPromotionService } from './bench-promotion.service';
 import type {
   SignupResponseDto,
   EventRosterDto,
@@ -36,6 +37,7 @@ export class SignupsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private notificationService: NotificationService,
+    private benchPromotionService: BenchPromotionService,
   ) {}
 
   /**
@@ -138,6 +140,15 @@ export class SignupsService {
           this.logger.log(
             `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
           );
+
+          // ROK-229: Cancel any pending bench promotion for this slot
+          if (slotRole !== 'bench') {
+            await this.benchPromotionService.cancelPromotion(
+              eventId,
+              slotRole,
+              position,
+            );
+          }
         }
 
         return inserted;
@@ -339,6 +350,20 @@ export class SignupsService {
         message: `${notifyData.displayName} left the ${slotLabel} slot for ${notifyData.eventTitle}`,
         payload: { eventId },
       });
+
+      // ROK-229: Schedule bench promotion for vacated non-bench slot
+      if (
+        assignment &&
+        assignment.role &&
+        assignment.role !== 'bench' &&
+        (await this.benchPromotionService.isEligible(eventId))
+      ) {
+        await this.benchPromotionService.schedulePromotion(
+          eventId,
+          assignment.role,
+          assignment.position,
+        );
+      }
     }
   }
 
@@ -545,6 +570,19 @@ export class SignupsService {
       payload: { eventId },
     });
 
+    // ROK-229: Schedule bench promotion for vacated non-bench slot
+    if (
+      assignment.role &&
+      assignment.role !== 'bench' &&
+      (await this.benchPromotionService.isEligible(eventId))
+    ) {
+      await this.benchPromotionService.schedulePromotion(
+        eventId,
+        assignment.role,
+        assignment.position,
+      );
+    }
+
     return this.getRosterWithAssignments(eventId);
   }
 
@@ -621,6 +659,17 @@ export class SignupsService {
       });
 
       await this.db.insert(schema.rosterAssignments).values(assignmentValues);
+
+      // ROK-229: Cancel pending bench promotions for any non-bench slots that are now filled
+      for (const a of dto.assignments) {
+        if (a.slot && a.slot !== 'bench') {
+          await this.benchPromotionService.cancelPromotion(
+            eventId,
+            a.slot,
+            a.position,
+          );
+        }
+      }
     }
 
     this.logger.log(

@@ -7,11 +7,17 @@ import {
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
+import { BenchPromotionService } from './bench-promotion.service';
 
 describe('SignupsService', () => {
   let service: SignupsService;
   let mockDb: Record<string, jest.Mock>;
   let mockNotificationService: { create: jest.Mock };
+  let mockBenchPromotionService: {
+    schedulePromotion: jest.Mock;
+    cancelPromotion: jest.Mock;
+    isEligible: jest.Mock;
+  };
 
   const mockUser = {
     id: 1,
@@ -50,6 +56,11 @@ describe('SignupsService', () => {
 
   beforeEach(async () => {
     mockNotificationService = { create: jest.fn().mockResolvedValue(null) };
+    mockBenchPromotionService = {
+      schedulePromotion: jest.fn().mockResolvedValue(undefined),
+      cancelPromotion: jest.fn().mockResolvedValue(undefined),
+      isEligible: jest.fn().mockResolvedValue(false),
+    };
 
     mockDb = {
       select: jest.fn(),
@@ -115,6 +126,10 @@ describe('SignupsService', () => {
         SignupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
+        {
+          provide: BenchPromotionService,
+          useValue: mockBenchPromotionService,
+        },
       ],
     }).compile();
 
