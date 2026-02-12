@@ -5,14 +5,22 @@ import { MobileNav } from './MobileNav';
 import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
 import { useAuth } from '../../hooks/use-auth';
+import { useSystemStatus } from '../../hooks/use-system-status';
+import { API_BASE_URL } from '../../lib/config';
 
 /**
- * Site header with logo, navigation, and user menu.
+ * Site header with logo, navigation, and user menu (ROK-271 branding).
  */
 export function Header() {
     const location = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
     const { user } = useAuth();
+    const { data: systemStatus } = useSystemStatus();
+
+    const communityName = systemStatus?.communityName || 'Raid Ledger';
+    const communityLogoUrl = systemStatus?.communityLogoUrl
+        ? `${API_BASE_URL}${systemStatus.communityLogoUrl}`
+        : null;
 
     const navLinks = [
         { to: '/calendar', label: 'Calendar' },
@@ -25,13 +33,21 @@ export function Header() {
         <>
             <header className="sticky top-0 z-40 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                    {/* Logo */}
+                    {/* Logo (ROK-271: custom branding) */}
                     <Link
                         to="/"
                         className="flex items-center gap-2 text-xl font-bold text-foreground hover:text-emerald-400 transition-colors"
                     >
-                        <span className="text-2xl">⚔️</span>
-                        Raid Ledger
+                        {communityLogoUrl ? (
+                            <img
+                                src={communityLogoUrl}
+                                alt={communityName}
+                                className="w-8 h-8 rounded-lg object-contain"
+                            />
+                        ) : (
+                            <span className="text-2xl">&#x2694;&#xFE0F;</span>
+                        )}
+                        {communityName}
                     </Link>
 
                     {/* Desktop Navigation */}

@@ -67,6 +67,15 @@ async function bootstrap() {
       : path.join(process.cwd(), 'uploads', 'avatars'));
   app.useStaticAssets(avatarDir, { prefix: '/avatars/', maxAge: '7d' });
 
+  // Serve community branding uploads as static files (ROK-271)
+  const brandingDir = isProduction
+    ? '/data/uploads/branding'
+    : path.join(process.cwd(), 'uploads', 'branding');
+  app.useStaticAssets(brandingDir, {
+    prefix: '/uploads/branding/',
+    maxAge: '1d',
+  });
+
   app.useGlobalFilters(new ThrottlerExceptionFilter());
 
   await app.listen(process.env.PORT ?? 3000);

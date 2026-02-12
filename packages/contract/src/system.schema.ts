@@ -15,6 +15,12 @@ export const SystemStatusSchema = z.object({
     demoMode: z.boolean().optional(),
     /** Active plugin slugs for frontend slot rendering (ROK-238) */
     activePlugins: z.array(z.string()).optional().default([]),
+    /** Community display name (ROK-271) */
+    communityName: z.string().optional(),
+    /** Community logo URL path (ROK-271) */
+    communityLogoUrl: z.string().optional(),
+    /** Community accent color hex (ROK-271) */
+    communityAccentColor: z.string().optional(),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
