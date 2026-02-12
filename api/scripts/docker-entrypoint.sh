@@ -51,6 +51,23 @@ if [ -n "$DATABASE_URL" ]; then
     
     echo "✅ Games seeded"
 
+    # Flush stale IGDB search cache so seed data takes precedence
+    if command -v redis-cli > /dev/null 2>&1; then
+        # Allinone image: Redis on Unix socket
+        redis-cli -s /tmp/redis.sock KEYS 'igdb:*' 2>/dev/null | \
+            xargs -r redis-cli -s /tmp/redis.sock DEL > /dev/null 2>&1 && \
+            echo "🗑️ IGDB Redis cache flushed" || true
+    elif [ -n "$REDIS_URL" ]; then
+        # Docker compose: Redis on TCP
+        node -e "
+          const Redis = require('ioredis');
+          const r = new Redis(process.env.REDIS_URL);
+          r.keys('igdb:*').then(k => k.length ? r.del(...k) : 0)
+            .then(() => { console.log('🗑️ IGDB Redis cache flushed'); r.disconnect(); })
+            .catch(() => r.disconnect());
+        " 2>/dev/null || true
+    fi
+
 fi
 
 # Execute the main command
