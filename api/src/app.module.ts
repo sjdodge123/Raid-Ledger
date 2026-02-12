@@ -22,6 +22,7 @@ import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
 import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
+import { RelayModule } from './relay/relay.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { QueueModule } from './queue/queue.module';
     SettingsModule,
     NotificationModule,
     WowCommonModule,
+    RelayModule,
   ],
   controllers: [AppController],
   providers: [AppService],
