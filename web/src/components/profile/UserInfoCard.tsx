@@ -1,6 +1,7 @@
 import type { User } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { toast } from '../../lib/toast';
+import { RoleBadge } from '../ui/role-badge';
 
 interface UserInfoCardProps {
     user: User;
@@ -51,11 +52,7 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-2xl font-bold text-foreground">{user.username}</h2>
-                            {user.isAdmin && (
-                                <span className="px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
-                                    Admin
-                                </span>
-                            )}
+                            <RoleBadge role={user.role} />
                         </div>
                         {hasDiscordLinked ? (
                             <p className="text-muted flex items-center gap-2">

@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useMyDashboard, useMySignedUpEvents } from '../hooks/use-my-events';
 import {
     DashboardStatsRow,
@@ -141,7 +141,7 @@ export function MyEventsPage() {
                             {/* Event Cards Grid */}
                             <div ref={eventsGridRef}>
                                 <h2 className="text-xl font-semibold text-foreground mb-4">
-                                    {user?.isAdmin ? 'All Upcoming Events' : 'Your Events'}
+                                    {isOperatorOrAdmin(user) ? 'All Upcoming Events' : 'Your Events'}
                                 </h2>
                                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                                     {dashboard.isLoading

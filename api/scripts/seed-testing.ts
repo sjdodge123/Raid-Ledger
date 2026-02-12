@@ -70,7 +70,7 @@ async function bootstrap() {
                     .values({
                         username: gamer.username,
                         avatar: gamer.avatar,
-                        isAdmin: false,
+                        role: 'member',
                     })
                     .returning();
                 user = newUser;
@@ -299,7 +299,7 @@ async function bootstrap() {
         const adminUser = await db
             .select()
             .from(schema.users)
-            .where(eq(schema.users.isAdmin, true))
+            .where(eq(schema.users.role, 'admin'))
             .limit(1)
             .then((rows) => rows[0]);
 

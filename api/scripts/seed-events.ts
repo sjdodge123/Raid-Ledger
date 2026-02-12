@@ -43,7 +43,7 @@ async function bootstrap() {
                 .insert(schema.users)
                 .values({
                     username: 'SeedAdmin',
-                    isAdmin: true,
+                    role: 'admin',
                 })
                 .returning();
             seedUser = newUser;

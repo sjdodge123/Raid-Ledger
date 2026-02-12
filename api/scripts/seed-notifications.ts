@@ -57,7 +57,7 @@ async function bootstrap() {
         const fakeUsers = await db
             .select()
             .from(schema.users)
-            .where(eq(schema.users.isAdmin, false))
+            .where(eq(schema.users.role, 'member'))
             .limit(3);
 
         // =====================

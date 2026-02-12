@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup } from '../hooks/use-signups';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
@@ -80,8 +80,8 @@ export function EventDetailPage() {
 
     // ROK-114/183: Roster management
     const isEventCreator = user?.id === event?.creator?.id;
-    const isAdmin = user?.isAdmin === true;
-    const canManageRoster = isEventCreator || isAdmin;
+    const canManageEvent = isOperatorOrAdmin(user);
+    const canManageRoster = isEventCreator || canManageEvent;
     // ROK-208: Admins use assignment popup, not click-to-join
     const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster;
     const { data: rosterAssignments } = useRoster(eventId);

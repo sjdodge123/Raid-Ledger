@@ -4,8 +4,10 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthenticatedRequest {
-  user: { id: number; isAdmin: boolean };
+  user: { id: number; role: UserRole };
 }
 
 describe('EventsController', () => {
@@ -38,7 +40,7 @@ describe('EventsController', () => {
     signedUpAt: '2026-02-01T00:00:00.000Z',
   };
 
-  const mockUser = { id: 1, isAdmin: false };
+  const mockUser = { id: 1, role: 'member' as UserRole };
 
   beforeEach(async () => {
     mockEventsService = {
@@ -133,9 +135,9 @@ describe('EventsController', () => {
 
   describe('findAll', () => {
     const mockReq = { user: undefined } as {
-      user?: { id: number; isAdmin: boolean };
+      user?: { id: number; role: UserRole };
     };
-    const authedReq = { user: { id: 1, isAdmin: false } };
+    const authedReq = { user: { id: 1, role: 'member' as UserRole } };
 
     it('should return paginated events', async () => {
       const result = await controller.findAll({}, mockReq);
@@ -281,7 +283,7 @@ describe('EventsController', () => {
       expect(mockEventsService.update).toHaveBeenCalledWith(
         1,
         mockUser.id,
-        mockUser.isAdmin,
+        false,
         expect.any(Object),
       );
     });
@@ -297,7 +299,7 @@ describe('EventsController', () => {
       expect(mockEventsService.delete).toHaveBeenCalledWith(
         1,
         mockUser.id,
-        mockUser.isAdmin,
+        false,
       );
     });
   });

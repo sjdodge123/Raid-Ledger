@@ -8,8 +8,10 @@ import {
 } from '../queue/queue-health.service';
 import type { Request } from 'express';
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthenticatedRequest extends Request {
-  user: { id: number; username: string; isAdmin: boolean };
+  user: { id: number; username: string; role: UserRole };
 }
 
 @RateLimit('admin')

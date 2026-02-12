@@ -82,7 +82,7 @@ async function bootstrapAdmin() {
             .values({
                 discordId: `local:${DEFAULT_EMAIL}`,
                 username: 'Admin',
-                isAdmin: true,
+                role: 'admin',
             })
             .returning();
 

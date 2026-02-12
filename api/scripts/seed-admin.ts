@@ -30,12 +30,14 @@ async function bootstrap() {
     console.log(`Promoting user with Discord ID: ${discordId} to ADMIN...`);
 
     try {
-        const user = await usersService.setAdminStatus(discordId, true);
-        if (user) {
-            console.log('✅ User promoted successfully:', user.username);
-        } else {
+        const user = await usersService.findByDiscordId(discordId);
+        if (!user) {
             console.error('❌ User not found. Please login via Discord first to create the account.');
+            await app.close();
+            process.exit(1);
         }
+        const updated = await usersService.setRole(user.id, 'admin');
+        console.log('✅ User promoted successfully:', updated.username);
     } catch (err) {
         console.error('❌ Failed to promote user:', err);
     } finally {

@@ -24,11 +24,13 @@ import * as crypto from 'crypto';
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
 class DiscordAuthGuard extends AuthGuard('discord') {}
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface RequestWithUser extends Request {
   user: {
     id: number;
     username: string;
-    isAdmin: boolean;
+    role: UserRole;
     impersonatedBy?: number | null;
   };
 }
@@ -325,7 +327,7 @@ export class AuthController {
       username: user.username,
       avatar: user.avatar,
       customAvatarUrl: user.customAvatarUrl,
-      isAdmin: user.isAdmin,
+      role: user.role,
     };
   }
 }

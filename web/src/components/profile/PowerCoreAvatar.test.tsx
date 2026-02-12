@@ -24,14 +24,20 @@ describe('PowerCoreAvatar', () => {
         expect(screen.getByText('TestUser')).toBeInTheDocument();
     });
 
-    it('shows admin badge when isAdmin is true', () => {
-        render(<PowerCoreAvatar {...defaultProps} isAdmin />);
+    it('shows admin badge when role is admin', () => {
+        render(<PowerCoreAvatar {...defaultProps} role="admin" />);
         expect(screen.getByText('Admin')).toBeInTheDocument();
     });
 
-    it('does not show admin badge when isAdmin is false', () => {
-        render(<PowerCoreAvatar {...defaultProps} isAdmin={false} />);
+    it('shows operator badge when role is operator', () => {
+        render(<PowerCoreAvatar {...defaultProps} role="operator" />);
+        expect(screen.getByText('Operator')).toBeInTheDocument();
+    });
+
+    it('does not show role badge when role is member', () => {
+        render(<PowerCoreAvatar {...defaultProps} role="member" />);
         expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+        expect(screen.queryByText('Operator')).not.toBeInTheDocument();
     });
 
     it('calls onEdit when edit button is clicked', () => {

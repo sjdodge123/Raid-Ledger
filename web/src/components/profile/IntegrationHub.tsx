@@ -10,6 +10,7 @@ import { PowerCoreAvatar } from './PowerCoreAvatar';
 import { IntegrationSpoke, type SpokeStatus } from './IntegrationSpoke';
 import { OrbitRing } from './OrbitRing';
 import { GhostNode } from './GhostNode';
+import { RoleBadge } from '../ui/role-badge';
 import { AvatarSelectorModal } from './AvatarSelectorModal';
 import { DiscordDetailsModal } from './DiscordDetailsModal';
 import { useOrbitalAnimation } from './use-orbital-animation';
@@ -314,11 +315,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                         </div>
                         <div className="mt-2 text-center">
                             <span className="text-base font-bold text-foreground">{user.username}</span>
-                            {user.isAdmin && (
-                                <span className="ml-2 inline-block px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
-                                    Admin
-                                </span>
-                            )}
+                            <RoleBadge role={user.role} className="ml-2" />
                         </div>
                         {avatarOptions.length > 1 && (
                             <div className="flex items-center gap-3 mt-2">
@@ -432,7 +429,7 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                 <PowerCoreAvatar
                     avatarUrl={currentAvatarUrl}
                     username={user.username}
-                    isAdmin={user.isAdmin}
+                    role={user.role}
                     onEdit={() => setShowAvatarModal(true)}
                     onCyclePrev={() => cycleAvatar(-1)}
                     onCycleNext={() => cycleAvatar(1)}

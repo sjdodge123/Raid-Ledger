@@ -708,3 +708,38 @@ export async function activatePlugin(slug: string): Promise<void> {
 export async function deactivatePlugin(slug: string): Promise<void> {
     await fetchApi(`/admin/plugins/${slug}/deactivate`, { method: 'POST' });
 }
+
+// ============================================================
+// User Management API (ROK-272)
+// ============================================================
+
+import type { UserManagementListResponseDto, UserRole } from '@raid-ledger/contract';
+
+/**
+ * Fetch paginated list of users with role info (admin-only).
+ */
+export async function getUsersForManagement(params?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+}): Promise<UserManagementListResponseDto> {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', String(params.page));
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.search) searchParams.set('search', params.search);
+    const query = searchParams.toString();
+    return fetchApi(`/users/management${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Update a user's role (admin-only). Only member <-> operator.
+ */
+export async function updateUserRole(
+    userId: number,
+    role: Exclude<UserRole, 'admin'>,
+): Promise<{ data: { id: number; username: string; role: UserRole } }> {
+    return fetchApi(`/users/${userId}/role`, {
+        method: 'PATCH',
+        body: JSON.stringify({ role }),
+    });
+}

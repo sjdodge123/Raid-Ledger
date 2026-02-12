@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { toast } from '../lib/toast';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isAdmin as isAdminCheck } from '../hooks/use-auth';
 import { useAdminSettings } from '../hooks/use-admin-settings';
 import { usePluginAdmin } from '../hooks/use-plugin-admin';
 import { useNewBadge } from '../hooks/use-new-badge';
@@ -11,6 +11,7 @@ import { DiscordOAuthForm } from '../components/admin/DiscordOAuthForm';
 import { IgdbForm } from '../components/admin/IgdbForm';
 import { DemoDataCard } from '../components/admin/DemoDataCard';
 import { RelayHubCard } from '../components/admin/RelayHubCard';
+import { RoleManagementCard } from '../components/admin/RoleManagementCard';
 import { NewBadge } from '../components/ui/new-badge';
 import { Modal } from '../components/ui/modal';
 import { PluginSlot } from '../plugins';
@@ -63,7 +64,7 @@ export function AdminSettingsPage() {
     }
 
     // Access control
-    if (!user?.isAdmin) {
+    if (!isAdminCheck(user)) {
         return (
             <div className="max-w-2xl mx-auto px-4 py-8">
                 <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-6">
@@ -168,6 +169,9 @@ export function AdminSettingsPage() {
 
                 {/* Relay Hub (ROK-273) */}
                 <RelayHubCard />
+
+                {/* Role Management (ROK-272) */}
+                <RoleManagementCard />
             </AdminPluginSection>
 
             {/* ===== Real Plugins ===== */}

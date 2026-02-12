@@ -1,7 +1,10 @@
+import type { UserRole } from '@raid-ledger/contract';
+import { RoleBadge } from '../ui/role-badge';
+
 interface PowerCoreAvatarProps {
     avatarUrl: string;
     username: string;
-    isAdmin?: boolean;
+    role?: UserRole;
     onEdit: () => void;
     onCyclePrev: () => void;
     onCycleNext: () => void;
@@ -17,7 +20,7 @@ interface PowerCoreAvatarProps {
 export function PowerCoreAvatar({
     avatarUrl,
     username,
-    isAdmin,
+    role,
     onEdit,
     onCyclePrev,
     onCycleNext,
@@ -77,11 +80,7 @@ export function PowerCoreAvatar({
             {/* Username + badges */}
             <div className="power-core__username">
                 {username}
-                {isAdmin && (
-                    <span className="ml-2 inline-block px-2 py-0.5 text-xs font-medium bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">
-                        Admin
-                    </span>
-                )}
+                <RoleBadge role={role} className="ml-2" />
             </div>
         </div>
     );

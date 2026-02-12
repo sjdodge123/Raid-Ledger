@@ -1,11 +1,12 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
 import { Injectable } from '@nestjs/common';
+import type { UserRole } from '@raid-ledger/contract';
 
 interface JwtPayload {
   sub: number;
   username: string;
-  isAdmin: boolean;
+  role: UserRole;
   impersonatedBy?: number | null;
 }
 
@@ -23,7 +24,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       id: payload.sub,
       username: payload.username,
-      isAdmin: payload.isAdmin,
+      role: payload.role,
       impersonatedBy: payload.impersonatedBy || null,
     };
   }

@@ -1,5 +1,5 @@
 import { useParams, useNavigate, Navigate } from 'react-router-dom';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useEvent } from '../hooks/use-events';
 import { CreateEventForm } from '../components/events/create-event-form';
 
@@ -29,7 +29,7 @@ export function EditEventPage() {
     }
 
     // Redirect if not creator or admin
-    if (event && user && event.creator.id !== user.id && !user.isAdmin) {
+    if (event && user && event.creator.id !== user.id && !isOperatorOrAdmin(user)) {
         return <Navigate to={`/events/${eventId}`} replace />;
     }
 

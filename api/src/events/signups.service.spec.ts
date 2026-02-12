@@ -18,7 +18,7 @@ describe('SignupsService', () => {
     username: 'testuser',
     avatar: 'avatar.png',
     discordId: '123',
-    isAdmin: false,
+    role: 'member',
   };
   const mockEvent = { id: 1, title: 'Test Event', creatorId: 1 };
   const mockSignup = {

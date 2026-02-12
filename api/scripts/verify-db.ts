@@ -19,7 +19,7 @@ async function verify() {
         const result = await db.insert(schema.users).values({
             discordId: 'verify-bot-123',
             username: 'VerifyBot',
-            isAdmin: true,
+            role: 'admin',
         }).returning();
 
         console.log('User created:', result[0]);

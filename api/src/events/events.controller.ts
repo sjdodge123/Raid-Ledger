@@ -36,10 +36,17 @@ import {
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
+import type { UserRole } from '@raid-ledger/contract';
+
+/** Helper: check if user has operator-or-above role */
+function isOperatorOrAdmin(role: UserRole): boolean {
+  return role === 'operator' || role === 'admin';
+}
+
 interface AuthenticatedRequest {
   user: {
     id: number;
-    isAdmin: boolean;
+    role: UserRole;
   };
 }
 
@@ -106,7 +113,7 @@ export class EventsController {
   @UseGuards(OptionalJwtGuard)
   async findAll(
     @Query() query: Record<string, string>,
-    @Request() req: { user?: { id: number; isAdmin: boolean } },
+    @Request() req: { user?: { id: number; role: UserRole } },
   ): Promise<EventListResponseDto> {
     try {
       const dto = EventListQuerySchema.parse(query);
@@ -126,7 +133,7 @@ export class EventsController {
   async getMyDashboard(
     @Request() req: AuthenticatedRequest,
   ): Promise<DashboardResponseDto> {
-    return this.eventsService.getMyDashboard(req.user.id, req.user.isAdmin);
+    return this.eventsService.getMyDashboard(req.user.id, isOperatorOrAdmin(req.user.role));
   }
 
   /**
@@ -153,7 +160,7 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = UpdateEventSchema.parse(body);
-      return this.eventsService.update(id, req.user.id, req.user.isAdmin, dto);
+      return this.eventsService.update(id, req.user.id, isOperatorOrAdmin(req.user.role), dto);
     } catch (error) {
       handleValidationError(error);
     }
@@ -188,7 +195,7 @@ export class EventsController {
       return this.eventsService.reschedule(
         id,
         req.user.id,
-        req.user.isAdmin,
+        isOperatorOrAdmin(req.user.role),
         dto,
       );
     } catch (error) {
@@ -206,7 +213,7 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ message: string }> {
-    await this.eventsService.delete(id, req.user.id, req.user.isAdmin);
+    await this.eventsService.delete(id, req.user.id, isOperatorOrAdmin(req.user.role));
     return { message: 'Event deleted successfully' };
   }
 
@@ -277,7 +284,7 @@ export class EventsController {
       return this.signupsService.updateRoster(
         eventId,
         req.user.id,
-        req.user.isAdmin,
+        isOperatorOrAdmin(req.user.role),
         dto,
       );
     } catch (error) {

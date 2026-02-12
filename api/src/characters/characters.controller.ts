@@ -28,10 +28,12 @@ import {
   PluginActiveGuard,
 } from '../plugins/plugin-host/plugin-active.guard';
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthenticatedRequest {
   user: {
     id: number;
-    isAdmin: boolean;
+    role: UserRole;
   };
 }
 

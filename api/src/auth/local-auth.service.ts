@@ -6,11 +6,12 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
+import { eq, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.provider';
 import { localCredentials, users } from '../drizzle/schema';
 import * as schema from '../drizzle/schema';
+import type { UserRole } from '@raid-ledger/contract';
 
 const SALT_ROUNDS = 12;
 
@@ -95,7 +96,7 @@ export class LocalAuthService {
         .values({
           discordId: `local:${email}`, // Unique placeholder for local-only users
           username: username || email.split('@')[0],
-          isAdmin: true,
+          role: 'admin',
         })
         .returning();
 
@@ -131,7 +132,7 @@ export class LocalAuthService {
     const payload = {
       username: user.username,
       sub: user.id,
-      isAdmin: user.isAdmin,
+      role: user.role,
     };
     return {
       access_token: this.jwtService.sign(payload),
@@ -139,7 +140,7 @@ export class LocalAuthService {
         id: user.id,
         username: user.username,
         avatar: user.avatar,
-        isAdmin: user.isAdmin,
+        role: user.role,
       },
     };
   }
@@ -147,7 +148,7 @@ export class LocalAuthService {
   /**
    * Create a local login for an existing user (non-admin).
    * Links an existing user to a local_credentials entry with password credentials.
-   * Does NOT create a new user or modify isAdmin status.
+   * Does NOT create a new user or modify role.
    */
   async createLocalUser(
     email: string,
@@ -169,7 +170,7 @@ export class LocalAuthService {
    * plus a token to restore the admin session.
    */
   async impersonate(
-    adminUser: { id: number; username: string; isAdmin: boolean },
+    adminUser: { id: number; username: string; role: UserRole },
     targetUserId: number,
   ): Promise<{
     access_token: string;
@@ -178,7 +179,7 @@ export class LocalAuthService {
       id: number;
       username: string;
       avatar: string | null;
-      isAdmin: boolean;
+      role: UserRole;
     };
   }> {
     // Look up target user
@@ -192,7 +193,7 @@ export class LocalAuthService {
       throw new UnauthorizedException('Target user not found');
     }
 
-    if (target.isAdmin) {
+    if (target.role === 'admin') {
       throw new UnauthorizedException('Cannot impersonate admin users');
     }
 
@@ -204,14 +205,14 @@ export class LocalAuthService {
     const impersonatedPayload = {
       username: target.username,
       sub: target.id,
-      isAdmin: target.isAdmin,
+      role: target.role,
       impersonatedBy: adminUser.id,
     };
 
     const originalPayload = {
       username: adminUser.username,
       sub: adminUser.id,
-      isAdmin: adminUser.isAdmin,
+      role: adminUser.role,
     };
 
     return {
@@ -223,7 +224,7 @@ export class LocalAuthService {
         id: target.id,
         username: target.username,
         avatar: target.avatar,
-        isAdmin: target.isAdmin,
+        role: target.role,
       },
     };
   }
@@ -241,7 +242,7 @@ export class LocalAuthService {
         avatar: users.avatar,
       })
       .from(users)
-      .where(eq(users.isAdmin, false));
+      .where(ne(users.role, 'admin'));
 
     return result;
   }

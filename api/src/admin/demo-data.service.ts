@@ -123,14 +123,14 @@ export class DemoDataService {
       // ── 1. Create SeedAdmin ──────────────────────────────────────────
       const [seedAdmin] = await this.db
         .insert(schema.users)
-        .values({ username: 'SeedAdmin', isAdmin: true })
+        .values({ username: 'SeedAdmin', role: 'admin' })
         .returning();
 
       // ── 2. Batch insert fake gamers (~100 users) ─────────────────────
       const gamerValues = FAKE_GAMERS.map((g) => ({
         username: g.username,
         avatar: g.avatar,
-        isAdmin: false,
+        role: 'member' as const,
       }));
       const insertedGamers = (await this.batchInsertReturning(
         schema.users,
@@ -660,7 +660,7 @@ export class DemoDataService {
 
       // Reassign ~30% of generated events to random non-admin users
       const eventReassignRng = createRng(0xeee);
-      const nonAdminUsers = allUsers.filter((u) => !u.isAdmin);
+      const nonAdminUsers = allUsers.filter((u) => u.role !== 'admin');
       if (nonAdminUsers.length > 0) {
         const reassignByCreator = new Map<number, number[]>();
         for (const event of genEvents) {

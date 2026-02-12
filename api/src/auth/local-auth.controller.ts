@@ -37,11 +37,13 @@ const LocalLoginSchema = z
 
 type LocalLoginDto = z.infer<typeof LocalLoginSchema>;
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthenticatedRequest {
   user: {
     id: number;
     username: string;
-    isAdmin: boolean;
+    role: UserRole;
     impersonatedBy: number | null;
   };
 }

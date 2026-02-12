@@ -1,6 +1,7 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
+import type { UserRole } from '@raid-ledger/contract';
 
 @Injectable()
 export class AuthService {
@@ -36,11 +37,11 @@ export class AuthService {
     return user;
   }
 
-  login(user: { id: number; username: string; isAdmin: boolean }) {
+  login(user: { id: number; username: string; role: UserRole }) {
     const payload = {
       username: user.username,
       sub: user.id,
-      isAdmin: user.isAdmin,
+      role: user.role,
     };
     return {
       access_token: this.jwtService.sign(payload),

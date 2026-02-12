@@ -29,16 +29,20 @@ import { CharactersService } from '../characters/characters.service';
 import {
   UserProfileDto,
   PlayersListResponseDto,
+  UserManagementListResponseDto,
   UpdatePreferenceSchema,
+  UpdateUserRoleSchema,
   GameTimeTemplateInputSchema,
   GameTimeOverrideInputSchema,
   GameTimeAbsenceInputSchema,
 } from '@raid-ledger/contract';
+import type { UserRole } from '@raid-ledger/contract';
+import { AdminGuard } from '../auth/admin.guard';
 
 interface AuthenticatedRequest {
   user: {
     id: number;
-    isAdmin: boolean;
+    role: UserRole;
   };
 }
 
@@ -337,7 +341,7 @@ export class UsersController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    if (!req.user.isAdmin) {
+    if (req.user.role !== 'admin') {
       throw new ForbiddenException('Admin access required');
     }
     const user = await this.usersService.findById(id);
@@ -348,6 +352,76 @@ export class UsersController {
       await this.avatarService.delete(user.customAvatarUrl);
       await this.usersService.setCustomAvatar(id, null);
     }
+  }
+
+  /**
+   * List all users with role information (admin-only, ROK-272).
+   * Used for the role management panel in admin settings.
+   */
+  @Get('management')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async listUsersForManagement(
+    @Query('page') pageStr?: string,
+    @Query('limit') limitStr?: string,
+    @Query('search') search?: string,
+  ): Promise<UserManagementListResponseDto> {
+    const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(limitStr ?? '20', 10) || 20),
+    );
+
+    const result = await this.usersService.findAllWithRoles(
+      page,
+      limit,
+      search || undefined,
+    );
+    return {
+      data: result.data.map((u) => ({
+        ...u,
+        createdAt: u.createdAt.toISOString(),
+      })),
+      meta: { total: result.total, page, limit },
+    };
+  }
+
+  /**
+   * Update a user's role (admin-only, ROK-272).
+   * Can only promote/demote between member and operator.
+   * Cannot promote to admin (only seed script or direct DB).
+   */
+  @Patch(':id/role')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  async updateUserRole(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    const dto = UpdateUserRoleSchema.parse(body);
+
+    // Cannot change own role
+    if (id === req.user.id) {
+      throw new ForbiddenException('Cannot change your own role');
+    }
+
+    const targetUser = await this.usersService.findById(id);
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Cannot change admin role via API
+    if (targetUser.role === 'admin') {
+      throw new ForbiddenException('Cannot modify admin role via API');
+    }
+
+    const updated = await this.usersService.setRole(id, dto.role);
+    return {
+      data: {
+        id: updated.id,
+        username: updated.username,
+        role: updated.role,
+      },
+    };
   }
 
   /**

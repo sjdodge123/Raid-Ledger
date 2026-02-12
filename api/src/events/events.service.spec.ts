@@ -13,7 +13,7 @@ describe('EventsService', () => {
     username: 'testuser',
     avatar: null,
     discordId: '123',
-    isAdmin: false,
+    role: 'member',
   };
   const mockGame = {
     id: 1,

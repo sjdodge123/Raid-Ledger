@@ -7,17 +7,22 @@ import {
 import { Observable } from 'rxjs';
 import type { UserRole } from '@raid-ledger/contract';
 
+const ROLE_HIERARCHY: Record<UserRole, number> = {
+  member: 1,
+  operator: 2,
+  admin: 3,
+};
+
 interface RequestWithUser {
   user?: { id: number; username: string; role: UserRole };
 }
 
 /**
- * Guard that restricts access to admin-only endpoints.
- * Preserved for backward compatibility — new code should use
- * @Roles('admin') with RolesGuard instead.
+ * Guard that restricts access to operator or admin users.
+ * Allows both operator and admin roles (role hierarchy).
  */
 @Injectable()
-export class AdminGuard implements CanActivate {
+export class OperatorGuard implements CanActivate {
   canActivate(
     context: ExecutionContext,
   ): boolean | Promise<boolean> | Observable<boolean> {
@@ -25,12 +30,12 @@ export class AdminGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      // User not authenticated or JwtGuard not run before this
       return false;
     }
 
-    if (user.role !== 'admin') {
-      throw new ForbiddenException('Admin access required');
+    const userLevel = ROLE_HIERARCHY[user.role] ?? 0;
+    if (userLevel < ROLE_HIERARCHY.operator) {
+      throw new ForbiddenException('Operator access required');
     }
 
     return true;

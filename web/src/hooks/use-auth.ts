@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
+import type { UserRole } from '@raid-ledger/contract';
 
 const TOKEN_KEY = 'raid_ledger_token';
 const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
@@ -10,7 +11,17 @@ export interface User {
     username: string;
     avatar: string | null;
     customAvatarUrl: string | null;
-    isAdmin?: boolean;
+    role?: UserRole;
+}
+
+/** Check if user has admin role */
+export function isAdmin(user: User | null | undefined): boolean {
+    return user?.role === 'admin';
+}
+
+/** Check if user has operator or admin role */
+export function isOperatorOrAdmin(user: User | null | undefined): boolean {
+    return user?.role === 'operator' || user?.role === 'admin';
 }
 
 /**

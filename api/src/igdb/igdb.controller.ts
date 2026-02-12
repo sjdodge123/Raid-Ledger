@@ -31,8 +31,10 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthRequest extends Request {
-  user: { id: number; isAdmin: boolean };
+  user: { id: number; role: UserRole };
 }
 
 /**

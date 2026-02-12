@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGamesDiscover } from '../hooks/use-games-discover';
 import { useGameSearch } from '../hooks/use-game-search';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isAdmin as isAdminCheck } from '../hooks/use-auth';
 import { GameCarousel } from '../components/games/GameCarousel';
 import { GameCard } from '../components/games/GameCard';
 import { GameLibraryTable } from '../components/admin/GameLibraryTable';
@@ -26,7 +26,7 @@ type GamesTab = 'discover' | 'manage';
 
 export function GamesPage() {
     const { user } = useAuth();
-    const isAdmin = !!user?.isAdmin;
+    const isAdmin = isAdminCheck(user);
     const [activeTab, setActiveTab] = useState<GamesTab>('discover');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGenre, setSelectedGenre] = useState<number | null>(null);

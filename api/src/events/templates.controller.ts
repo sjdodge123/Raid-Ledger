@@ -19,8 +19,10 @@ import {
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
+import type { UserRole } from '@raid-ledger/contract';
+
 interface AuthenticatedRequest {
-  user: { id: number; isAdmin: boolean };
+  user: { id: number; role: UserRole };
 }
 
 function handleValidationError(error: unknown): never {

@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
 import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
+import { RoleBadge } from '../ui/role-badge';
 
 interface ImpersonateUser {
     id: number;
@@ -41,7 +42,7 @@ export function UserMenu() {
             if (!res.ok) return [];
             return res.json();
         },
-        enabled: !!user?.isAdmin && !isImpersonating,
+        enabled: isAdmin(user) && !isImpersonating,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -150,7 +151,10 @@ export function UserMenu() {
             {isOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
                     <div className="p-3 border-b border-edge">
-                        <p className="text-foreground font-medium">{user.username}</p>
+                        <div className="flex items-center gap-2">
+                            <p className="text-foreground font-medium">{user.username}</p>
+                            <RoleBadge role={user.role} />
+                        </div>
                         {isImpersonating && (
                             <p className="text-amber-400 text-xs mt-1">Impersonating</p>
                         )}
@@ -177,7 +181,7 @@ export function UserMenu() {
                             Profile
                         </Link>
 
-                        {user.isAdmin && !isImpersonating && (
+                        {isAdmin(user) && !isImpersonating && (
                             <>
                                 <Link
                                     to="/admin/settings"

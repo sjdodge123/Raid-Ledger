@@ -1,4 +1,4 @@
-import { pgTable, serial, text, timestamp, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, serial, text, timestamp } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: serial('id').primaryKey(),
@@ -6,7 +6,9 @@ export const users = pgTable('users', {
   username: text('username').notNull(),
   avatar: text('avatar'),
   customAvatarUrl: text('custom_avatar_url'),
-  isAdmin: boolean('is_admin').default(false).notNull(),
+  role: text('role', { enum: ['member', 'operator', 'admin'] })
+    .default('member')
+    .notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
