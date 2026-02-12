@@ -79,11 +79,13 @@ export function useAuth() {
     const login = async (token: string): Promise<boolean> => {
         localStorage.setItem(TOKEN_KEY, token);
         try {
-            // Refetch user data and wait for it to complete before returning
-            await queryClient.refetchQueries({ queryKey: ['auth', 'me'] });
-            return true;
+            // Fetch user and populate cache directly to avoid race condition
+            // between refetchQueries and useQuery observers mounting on navigation
+            const user = await fetchCurrentUser();
+            queryClient.setQueryData(['auth', 'me'], user);
+            return !!user;
         } catch (error) {
-            // If refetch fails, token is already stored so user will be fetched on next page load
+            // Token is stored — will be fetched on next page load
             console.error('Failed to fetch user after login:', error);
             return false;
         }
