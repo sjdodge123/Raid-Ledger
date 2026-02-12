@@ -26,11 +26,9 @@ if [ -n "$DATABASE_URL" ]; then
         console.error('Migration error:', err);
         process.exit(1);
       });
-    " 2>&1 || {
-        echo "⚠️ Migration failed, continuing anyway"
-    }
-    
-    echo "✅ Migrations check complete"
+    " 2>&1
+
+    echo "✅ Migrations complete"
 
     # Bootstrap admin account on first run, or sync password if ADMIN_PASSWORD is set
     echo "👤 Checking admin account..."
