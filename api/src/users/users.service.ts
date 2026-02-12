@@ -2,7 +2,8 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc } from 'drizzle-orm';
+import { eq, sql, ilike, asc, ne } from 'drizzle-orm';
+import type { UserRole } from '@raid-ledger/contract';
 
 @Injectable()
 export class UsersService {
@@ -56,13 +57,65 @@ export class UsersService {
     });
   }
 
-  async setAdminStatus(discordId: string, isAdmin: boolean) {
+  async setRole(userId: number, role: UserRole) {
     const [updated] = await this.db
       .update(schema.users)
-      .set({ isAdmin, updatedAt: new Date() })
-      .where(eq(schema.users.discordId, discordId))
+      .set({ role, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
       .returning();
     return updated;
+  }
+
+  /**
+   * List all users with role information for admin management panel.
+   */
+  async findAllWithRoles(
+    page: number,
+    limit: number,
+    search?: string,
+  ): Promise<{
+    data: Array<{
+      id: number;
+      username: string;
+      avatar: string | null;
+      discordId: string | null;
+      customAvatarUrl: string | null;
+      role: UserRole;
+      createdAt: Date;
+    }>;
+    total: number;
+  }> {
+    const offset = (page - 1) * limit;
+
+    const conditions = search
+      ? ilike(schema.users.username, `%${search}%`)
+      : undefined;
+
+    const [countResult] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users)
+      .where(conditions);
+
+    const rows = await this.db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        discordId: schema.users.discordId,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        role: schema.users.role,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(conditions)
+      .orderBy(asc(schema.users.username))
+      .limit(limit)
+      .offset(offset);
+
+    return {
+      data: rows,
+      total: Number(countResult.count),
+    };
   }
 
   /**

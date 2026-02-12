@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { usePlayers } from '../hooks/use-players';
+import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 
 export function PlayersPage() {
     const [search, setSearch] = useState('');
@@ -62,20 +63,34 @@ export function PlayersPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                    {players.map((player) => (
-                        <Link
-                            key={player.id}
-                            to={`/users/${player.id}`}
-                            className="bg-panel border border-edge rounded-lg p-4 hover:bg-overlay transition-colors text-center group"
-                        >
-                            <div className="w-16 h-16 rounded-full mx-auto bg-overlay flex items-center justify-center text-2xl text-muted">
-                                {player.username.charAt(0).toUpperCase()}
-                            </div>
-                            <div className="mt-3 text-sm font-medium text-foreground group-hover:text-emerald-400 transition-colors truncate">
-                                {player.username}
-                            </div>
-                        </Link>
-                    ))}
+                    {players.map((player) => {
+                        const avatar = resolveAvatar(toAvatarUser(player));
+                        return (
+                            <Link
+                                key={player.id}
+                                to={`/users/${player.id}`}
+                                className="bg-panel border border-edge rounded-lg p-4 hover:bg-overlay transition-colors text-center group"
+                            >
+                                {avatar.url ? (
+                                    <img
+                                        src={avatar.url}
+                                        alt={player.username}
+                                        className="w-16 h-16 rounded-full mx-auto bg-overlay object-cover"
+                                        onError={(e) => {
+                                            e.currentTarget.style.display = 'none';
+                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                    />
+                                ) : null}
+                                <div className={`w-16 h-16 rounded-full mx-auto bg-overlay flex items-center justify-center text-2xl text-muted ${avatar.url ? 'hidden' : ''}`}>
+                                    {player.username.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="mt-3 text-sm font-medium text-foreground group-hover:text-emerald-400 transition-colors truncate">
+                                    {player.username}
+                                </div>
+                            </Link>
+                        );
+                    })}
                 </div>
             )}
 

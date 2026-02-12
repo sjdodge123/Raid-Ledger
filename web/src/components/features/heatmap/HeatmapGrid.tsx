@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import type { RosterAvailabilityResponse, AvailabilityStatus } from '@raid-ledger/contract';
 import { AvailabilityCell } from './AvailabilityCell';
 import { HeatmapTooltip } from './HeatmapTooltip';
-import { resolveAvatar } from '../../../lib/avatar';
+import { resolveAvatar, toAvatarUser } from '../../../lib/avatar';
 
 interface HeatmapGridProps {
     data: RosterAvailabilityResponse;
@@ -126,7 +126,7 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
                 {/* Header row with user avatars */}
                 <div className="h-10" /> {/* Empty corner cell */}
                 {data.users.map((user) => {
-                    const userAvatar = resolveAvatar({ avatar: user.avatar });
+                    const userAvatar = resolveAvatar(toAvatarUser(user));
                     return (
                         <div
                             key={user.id}

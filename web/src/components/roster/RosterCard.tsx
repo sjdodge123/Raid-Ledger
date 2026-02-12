@@ -38,6 +38,7 @@ export function RosterCard({ item, onRemove }: RosterCardProps) {
                     const base = toAvatarUser({
                         avatar: item.avatar,
                         discordId: item.discordId,
+                        customAvatarUrl: item.customAvatarUrl,
                     });
                     // If there's a character portrait, include it so resolveAvatar can pick it up
                     if (item.character?.avatarUrl) {

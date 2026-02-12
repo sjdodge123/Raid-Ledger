@@ -83,6 +83,7 @@ export const EventCreatorSchema = z.object({
     id: z.number(),
     username: z.string(),
     avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
 });
 
 export type EventCreatorDto = z.infer<typeof EventCreatorSchema>;

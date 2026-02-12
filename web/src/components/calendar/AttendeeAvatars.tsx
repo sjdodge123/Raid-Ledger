@@ -5,6 +5,8 @@ interface SignupPreview {
     id: number;
     username: string;
     avatar: string | null;
+    /** Custom uploaded avatar URL (ROK-220) */
+    customAvatarUrl?: string | null;
     /** Discord user ID for avatar URL resolution (ROK-222) */
     discordId?: string | null;
     /** Optional characters for avatar resolution (ROK-194) */

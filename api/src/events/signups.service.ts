@@ -798,6 +798,7 @@ export class SignupsService {
       discordId: row.users?.discordId ?? '',
       username: row.users?.username ?? 'Unknown',
       avatar: row.users?.avatar ?? null,
+      customAvatarUrl: row.users?.customAvatarUrl ?? null,
       slot: (assignment?.role as RosterRole) ?? null,
       position: assignment?.position ?? 0,
       isOverride: assignment?.isOverride === 1,

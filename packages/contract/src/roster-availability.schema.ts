@@ -20,6 +20,8 @@ export const UserWithAvailabilitySlotsSchema = z.object({
     id: z.number(),
     username: z.string(),
     avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
     slots: z.array(UserAvailabilitySlotSchema),
 });
 export type UserWithAvailabilitySlots = z.infer<typeof UserWithAvailabilitySlotsSchema>;

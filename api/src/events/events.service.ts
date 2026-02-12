@@ -295,6 +295,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        customAvatarUrl?: string | null;
         characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     > = new Map();
@@ -733,6 +734,8 @@ export class EventsService {
           id: s.user!.id,
           username: s.user!.username,
           avatar: s.user!.avatar,
+          discordId: s.user!.discordId,
+          customAvatarUrl: s.user!.customAvatarUrl,
           slots: userAvailability.map((a) => ({
             start: a.timeRange.start,
             end: a.timeRange.end,
@@ -909,6 +912,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        customAvatarUrl?: string | null;
         characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     >
@@ -923,6 +927,7 @@ export class EventsService {
         discordId: schema.users.discordId,
         username: schema.users.username,
         avatar: schema.users.avatar,
+        customAvatarUrl: schema.users.customAvatarUrl,
         signedUpAt: schema.eventSignups.signedUpAt,
       })
       .from(schema.eventSignups)
@@ -969,6 +974,7 @@ export class EventsService {
         discordId: string;
         username: string;
         avatar: string | null;
+        customAvatarUrl?: string | null;
         characters?: { gameId: string; avatarUrl: string | null }[];
       }[]
     >();
@@ -984,6 +990,7 @@ export class EventsService {
           discordId: signup.discordId ?? '',
           username: signup.username,
           avatar: signup.avatar,
+          customAvatarUrl: signup.customAvatarUrl,
           characters: userCharacters,
         });
       }
@@ -1010,6 +1017,7 @@ export class EventsService {
       discordId: string;
       username: string;
       avatar: string | null;
+      customAvatarUrl?: string | null;
       characters?: { gameId: string; avatarUrl: string | null }[];
     }[],
   ): EventResponseDto {
@@ -1054,6 +1062,7 @@ export class EventsService {
         id: creator?.id ?? 0,
         username: creator?.username ?? 'Unknown',
         avatar: creator?.avatar ?? null,
+        customAvatarUrl: creator?.customAvatarUrl ?? null,
       },
       game: gameData,
       signupCount: Number(signupCount),

@@ -45,6 +45,7 @@ export const RosterAssignmentResponseSchema = z.object({
     discordId: z.string(),
     username: z.string(),
     avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
     slot: RosterRoleSchema.nullable(),
     position: z.number(),
     isOverride: z.boolean(),

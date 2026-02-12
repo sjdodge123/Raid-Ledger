@@ -100,7 +100,10 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
     const showPlaceholder = !gameCoverUrl || imageError;
 
     // ROK-222: Resolve creator avatar through unified pipeline
-    const creatorAvatar = resolveAvatar({ avatar: event.creator.avatar });
+    const creatorAvatar = resolveAvatar({
+        avatar: event.creator.avatar,
+        customAvatarUrl: event.creator.customAvatarUrl,
+    });
 
     return (
         <div

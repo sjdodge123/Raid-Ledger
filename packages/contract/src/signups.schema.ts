@@ -14,6 +14,7 @@ export const SignupUserSchema = z.object({
     discordId: z.string(),
     username: z.string(),
     avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
     /** Optional characters array for avatar resolution (ROK-194) */
     characters: z.array(z.object({
         gameId: z.string().uuid(),
