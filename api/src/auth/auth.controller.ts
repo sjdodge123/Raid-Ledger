@@ -7,6 +7,7 @@ import {
   Query,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -34,6 +35,8 @@ interface RequestWithUser extends Request {
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(
     private authService: AuthService,
     private usersService: UsersService,
@@ -247,7 +250,7 @@ export class AuthController {
 
       if (!tokenResponse.ok) {
         const errorBody = await tokenResponse.text();
-        console.error(
+        this.logger.error(
           `Discord token exchange failed: ${tokenResponse.status} ${errorBody}`,
         );
         throw new Error('Failed to exchange code for token');
@@ -300,7 +303,7 @@ export class AuthController {
       // Redirect to profile with success
       res.redirect(`${clientUrl}/profile?linked=success`);
     } catch (error) {
-      console.error('Discord link error:', error);
+      this.logger.error('Discord link error:', error);
       res.redirect(
         `${clientUrl}/profile?linked=error&message=${encodeURIComponent(error instanceof Error ? error.message : 'Link failed')}`,
       );

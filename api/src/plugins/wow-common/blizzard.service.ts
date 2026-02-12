@@ -1145,7 +1145,7 @@ export class BlizzardService {
       expiresAt: Date.now() + INSTANCE_CACHE_TTL,
     });
 
-    this.logger.log(
+    this.logger.debug(
       `Cached ${dungeons.length} dungeons + ${raids.length} raids for ${cacheKey}`,
     );
     return { dungeons, raids };
@@ -1358,7 +1358,7 @@ export class BlizzardService {
       Date.now() + (data.expires_in - TOKEN_EXPIRY_BUFFER) * 1000,
     );
 
-    this.logger.log('Blizzard access token refreshed');
+    this.logger.debug('Blizzard access token refreshed');
     return this.accessToken;
   }
 }

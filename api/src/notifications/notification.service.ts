@@ -226,7 +226,7 @@ export class NotificationService {
         .values({ userId })
         .returning();
 
-      this.logger.log(`Created default preferences for user ${userId}`);
+      this.logger.debug(`Created default preferences for user ${userId}`);
       return this.mapPreferencesToDto(created);
     }
 

@@ -134,7 +134,7 @@ export class IgdbService {
     this.accessToken = null;
     this.tokenExpiry = null;
     this.tokenFetchPromise = null;
-    this.logger.log('IGDB config updated — cached token cleared');
+    this.logger.debug('IGDB config updated — cached token cleared');
 
     // Trigger immediate sync when credentials are set (not cleared)
     if (config) {
@@ -481,7 +481,7 @@ export class IgdbService {
       Date.now() + (data.expires_in - IGDB_CONFIG.TOKEN_EXPIRY_BUFFER) * 1000,
     );
 
-    this.logger.log('IGDB access token refreshed');
+    this.logger.debug('IGDB access token refreshed');
     return this.accessToken;
   }
 

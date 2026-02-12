@@ -695,7 +695,8 @@ export class DemoDataService {
         notifications: notificationsCreated,
       };
 
-      this.logger.log(`Demo data installed: ${JSON.stringify(counts)}`);
+      this.logger.log('Demo data installed');
+      this.logger.debug(`Demo data counts: ${JSON.stringify(counts)}`);
 
       return {
         success: true,
@@ -805,7 +806,10 @@ export class DemoDataService {
       // 8. Set demo_mode = false
       await this.settingsService.setDemoMode(false);
 
-      this.logger.log(`Demo data cleared: ${JSON.stringify(countsBefore)}`);
+      this.logger.log('Demo data cleared');
+      this.logger.debug(
+        `Demo data counts before clear: ${JSON.stringify(countsBefore)}`,
+      );
 
       return {
         success: true,

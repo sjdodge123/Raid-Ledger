@@ -75,16 +75,16 @@ export class DynamicDiscordStrategy
       _callbackURL: string;
     };
 
-    this.logger.log(`Updating callback URL to: ${config.callbackUrl}`);
+    this.logger.debug(`Updating callback URL to: ${config.callbackUrl}`);
 
     if (strategy._oauth2) {
       strategy._oauth2._clientId = config.clientId;
       strategy._oauth2._clientSecret = config.clientSecret;
-      this.logger.log(`Updated OAuth2 client credentials`);
+      this.logger.debug(`Updated OAuth2 client credentials`);
     }
 
     strategy._callbackURL = config.callbackUrl;
-    this.logger.log(`_callbackURL is now: ${strategy._callbackURL}`);
+    this.logger.debug(`_callbackURL is now: ${strategy._callbackURL}`);
   }
 
   /**

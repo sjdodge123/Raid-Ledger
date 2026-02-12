@@ -34,7 +34,7 @@ export class PluginRegistryService implements OnModuleInit {
 
   registerManifest(manifest: PluginManifest): void {
     this.manifests.set(manifest.id, manifest);
-    this.logger.log(
+    this.logger.debug(
       `Registered plugin manifest: ${manifest.id} v${manifest.version}`,
     );
   }
@@ -67,7 +67,7 @@ export class PluginRegistryService implements OnModuleInit {
     });
 
     await this.refreshActiveCache();
-    this.logger.log(`Auto-installed built-in plugin: ${slug}`);
+    this.logger.debug(`Auto-installed built-in plugin: ${slug}`);
   }
 
   getManifest(slug: string): PluginManifest | undefined {
@@ -250,7 +250,7 @@ export class PluginRegistryService implements OnModuleInit {
       this.adapters.set(extensionPoint, slugMap);
     }
     slugMap.set(gameSlug, adapter);
-    this.logger.log(
+    this.logger.debug(
       `Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`,
     );
   }
@@ -271,7 +271,9 @@ export class PluginRegistryService implements OnModuleInit {
         slugMap.delete(slug);
       }
     }
-    this.logger.log(`Removed adapters for game slugs: ${gameSlugs.join(', ')}`);
+    this.logger.debug(
+      `Removed adapters for game slugs: ${gameSlugs.join(', ')}`,
+    );
   }
 
   isActive(slug: string): boolean {
@@ -338,7 +340,7 @@ export class PluginRegistryService implements OnModuleInit {
     }
 
     if (keysToDelete.length > 0) {
-      this.logger.log(
+      this.logger.debug(
         `Cleaned up ${keysToDelete.length} setting(s) for plugin "${manifest.id}"`,
       );
     }
