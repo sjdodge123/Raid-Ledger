@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
+import { useSystemStatus } from '../../../hooks/use-system-status';
 
 const WOW_SLUGS = new Set(['wow', 'wow-classic', 'world-of-warcraft', 'world-of-warcraft-classic']);
 
@@ -20,12 +21,22 @@ export function CharacterCreateImportForm({
     activeTab,
     onTabChange,
 }: CharacterCreateImportFormProps) {
+    const systemStatus = useSystemStatus();
+    const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
+
     const [wowVariant, setWowVariant] = useState<string>(() => {
         if (gameSlug === 'wow-classic' || gameSlug.includes('world-of-warcraft-classic')) {
             return 'classic_anniversary';
         }
         return 'retail';
     });
+
+    // Default to import tab when Blizzard is configured
+    useEffect(() => {
+        if (blizzardConfigured) {
+            onTabChange('import');
+        }
+    }, [blizzardConfigured, onTabChange]);
 
     // Only show Armory import for WoW games
     if (!isWowSlug(gameSlug)) return null;
@@ -58,8 +69,8 @@ export function CharacterCreateImportForm({
                 </button>
             </div>
 
-            {/* Variant selector (only when import tab active) */}
-            {activeTab === 'import' && (
+            {/* Variant selector (only when import tab active and Blizzard configured) */}
+            {activeTab === 'import' && blizzardConfigured && (
                 <div>
                     <label className="block text-sm font-medium text-secondary mb-1">
                         Game Version
@@ -82,9 +93,17 @@ export function CharacterCreateImportForm({
                 </div>
             )}
 
-            {/* Import form (replaces manual form when import tab active) */}
+            {/* Import form or config warning */}
             {activeTab === 'import' && (
-                <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} />
+                blizzardConfigured ? (
+                    <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} />
+                ) : (
+                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                        <p className="text-sm text-amber-400">
+                            Blizzard API not configured — ask an admin to set it up in Plugins.
+                        </p>
+                    </div>
+                )
             )}
         </>
     );

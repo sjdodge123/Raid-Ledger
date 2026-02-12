@@ -7,6 +7,8 @@ interface IntegrationCardProps {
     isConfigured: boolean;
     isLoading?: boolean;
     defaultExpanded?: boolean;
+    badge?: ReactNode;
+    onMouseEnter?: () => void;
     children: ReactNode;
 }
 
@@ -21,12 +23,17 @@ export function IntegrationCard({
     isConfigured,
     isLoading = false,
     defaultExpanded = false,
+    badge,
+    onMouseEnter,
     children,
 }: IntegrationCardProps) {
     const [isExpanded, setIsExpanded] = useState(defaultExpanded);
 
     return (
-        <div className="bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 overflow-hidden">
+        <div
+            className="bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 overflow-hidden"
+            onMouseEnter={onMouseEnter}
+        >
             {/* Header - Always Visible, Clickable */}
             <button
                 type="button"
@@ -38,7 +45,10 @@ export function IntegrationCard({
                         {icon}
                     </div>
                     <div className="text-left">
-                        <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+                        <div className="flex items-center gap-2">
+                            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+                            {badge}
+                        </div>
                         <p className="text-sm text-muted">{description}</p>
                     </div>
                 </div>

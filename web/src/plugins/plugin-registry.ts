@@ -10,6 +10,7 @@ export type PluginSlotName =
     | 'event-detail:content-sections'
     | 'event-detail:signup-warnings'
     | 'admin-settings:integration-cards'
+    | 'admin-settings:plugin-content'
     | 'profile:character-actions';
 
 export interface SlotRegistration {

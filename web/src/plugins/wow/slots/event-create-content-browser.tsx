@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { WowInstanceDetailDto, WowInstanceDto } from '@raid-ledger/contract';
 import { useWowInstances } from '../hooks/use-wow-instances';
 import { fetchWowInstanceDetail } from '../api-client';
+import { useSystemStatus } from '../../../hooks/use-system-status';
 
 interface EventCreateContentBrowserProps {
     wowVariant: string;
@@ -16,6 +17,9 @@ export function EventCreateContentBrowser({
     selectedInstances,
     onInstancesChange,
 }: EventCreateContentBrowserProps) {
+    const systemStatus = useSystemStatus();
+    const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? true; // default true to avoid flash
+
     const [contentSearch, setContentSearch] = useState('');
     const [loadingInstanceId, setLoadingInstanceId] = useState<number | null>(null);
 
@@ -76,6 +80,21 @@ export function EventCreateContentBrowser({
         } finally {
             setLoadingInstanceId(null);
         }
+    }
+
+    if (!blizzardConfigured) {
+        return (
+            <div>
+                <label className="block text-sm font-medium text-secondary mb-2">
+                    {contentType === 'dungeon' ? 'Dungeons' : 'Raids'}
+                </label>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                    <p className="text-sm text-amber-400">
+                        Blizzard API not configured — ask an admin to set it up in Plugins.
+                    </p>
+                </div>
+            </div>
+        );
     }
 
     return (

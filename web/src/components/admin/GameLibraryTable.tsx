@@ -37,8 +37,8 @@ export function GameLibraryTable() {
     };
 
     return (
-        <div className="mt-8">
-            <h2 className="text-xl font-semibold text-foreground mb-4">Game Library</h2>
+        <div className="mb-8">
+            <h2 className="text-xl font-semibold text-foreground mb-4">Manage Library</h2>
 
             {/* Search */}
             <div className="mb-4">

@@ -65,7 +65,7 @@ if (!registered) {
 
     registerSlotComponent({
         pluginSlug: 'blizzard',
-        slotName: 'admin-settings:integration-cards',
+        slotName: 'admin-settings:plugin-content',
         component: BlizzardIntegrationSlot,
         priority: 0,
     });
