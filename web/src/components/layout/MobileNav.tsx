@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { useThemeStore } from '../../stores/theme-store';
 import { API_BASE_URL } from '../../lib/config';
@@ -10,6 +10,12 @@ import { DiscordIcon } from '../icons/DiscordIcon';
 interface MobileNavProps {
     isOpen: boolean;
     onClose: () => void;
+}
+
+/** Returns true if `pathname` matches `to` (exact for /, prefix for others). */
+function isActive(pathname: string, to: string): boolean {
+    if (to === '/') return pathname === '/';
+    return pathname === to || pathname.startsWith(to + '/');
 }
 
 /**
@@ -25,12 +31,16 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
     const discordConfigured = systemStatus?.discordConfigured ?? false;
 
-    // Close on route change
+    // Close on route change (but not on initial mount)
+    const prevPathRef = useRef(location.pathname);
     useEffect(() => {
-        onClose();
+        if (prevPathRef.current !== location.pathname) {
+            prevPathRef.current = location.pathname;
+            onClose();
+        }
     }, [location.pathname, onClose]);
 
-    // Close on Escape key
+    // Close on Escape key and lock body scroll while open
     useEffect(() => {
         function handleEscape(event: KeyboardEvent) {
             if (event.key === 'Escape') {
@@ -54,30 +64,37 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         navigate('/', { replace: true });
     };
 
-    if (!isOpen) return null;
-
     // ROK-222: Use resolveAvatar for unified avatar resolution
     const avatarResolved = user ? resolveAvatar(toAvatarUser(user)) : null;
     const avatarUrl = avatarResolved?.url;
 
     const navLinks = [
+        { to: '/calendar', label: 'Calendar' },
         { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
         ...(isAuthenticated ? [{ to: '/my-events', label: 'My Events' }] : []),
         { to: '/players', label: 'Players' },
     ];
 
+    const activeLinkClass = 'bg-emerald-600/20 text-emerald-400';
+    const inactiveLinkClass = 'text-secondary hover:bg-panel hover:text-foreground';
+
     return (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div
+            className={`fixed inset-0 z-50 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
+            aria-hidden={!isOpen}
+        >
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'}`}
                 onClick={onClose}
                 aria-hidden="true"
             />
 
             {/* Drawer */}
-            <div className="absolute top-0 right-0 w-72 h-full bg-surface border-l border-edge-subtle shadow-2xl">
+            <div
+                className={`absolute top-0 right-0 w-72 h-full bg-surface border-l border-edge-subtle shadow-2xl transform transition-transform duration-200 ease-out ${isOpen ? 'translate-x-0' : 'translate-x-full'}`}
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-edge-subtle">
                     <span className="text-lg font-semibold text-foreground">Menu</span>
@@ -116,15 +133,12 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 )}
 
                 {/* Navigation links */}
-                <nav className="p-4 space-y-1">
+                <nav className="p-4 space-y-1 overflow-y-auto" style={{ maxHeight: 'calc(100% - 10rem)' }}>
                     {navLinks.map(({ to, label }) => (
                         <Link
                             key={to}
                             to={to}
-                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${location.pathname === to
-                                ? 'bg-emerald-600/20 text-emerald-400'
-                                : 'text-secondary hover:bg-panel hover:text-foreground'
-                                }`}
+                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, to) ? activeLinkClass : inactiveLinkClass}`}
                         >
                             {label}
                         </Link>
@@ -133,12 +147,18 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                     {isAuthenticated && (
                         <Link
                             to="/profile"
-                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${location.pathname === '/profile'
-                                ? 'bg-emerald-600/20 text-emerald-400'
-                                : 'text-secondary hover:bg-panel hover:text-foreground'
-                                }`}
+                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, '/profile') ? activeLinkClass : inactiveLinkClass}`}
                         >
                             Profile
+                        </Link>
+                    )}
+
+                    {isAdmin(user) && (
+                        <Link
+                            to="/admin/settings"
+                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, '/admin') ? activeLinkClass : inactiveLinkClass}`}
+                        >
+                            Admin Settings
                         </Link>
                     )}
 

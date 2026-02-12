@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { MobileNav } from './MobileNav';
@@ -14,6 +14,7 @@ import { API_BASE_URL } from '../../lib/config';
 export function Header() {
     const location = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
     const { user } = useAuth();
     const { data: systemStatus } = useSystemStatus();
 
@@ -114,7 +115,7 @@ export function Header() {
             </header>
 
             {/* Mobile Navigation Drawer */}
-            <MobileNav isOpen={mobileNavOpen} onClose={() => setMobileNavOpen(false)} />
+            <MobileNav isOpen={mobileNavOpen} onClose={closeMobileNav} />
         </>
     );
 }
