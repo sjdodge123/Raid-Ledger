@@ -312,6 +312,7 @@ export class AuthController {
       discordId: user.discordId,
       username: user.username,
       avatar: user.avatar,
+      customAvatarUrl: user.customAvatarUrl,
       isAdmin: user.isAdmin,
     };
   }

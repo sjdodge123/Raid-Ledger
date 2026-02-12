@@ -52,6 +52,8 @@ services:
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+    volumes:
+      - avatar_data:/data/avatars
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:
@@ -85,5 +87,6 @@ services:
 
 volumes:
   db_data:
+  avatar_data:
 
 

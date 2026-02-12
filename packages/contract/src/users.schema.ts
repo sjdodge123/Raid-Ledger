@@ -13,6 +13,7 @@ export const UserProfileSchema = z.object({
     id: z.number().int(),
     username: z.string(),
     avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
     createdAt: z.string().datetime(),
     characters: z.array(CharacterSchema),
 });
@@ -40,6 +41,7 @@ export const UserPreviewSchema = z.object({
     id: z.number().int(),
     username: z.string(),
     avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable().optional(),
 });
 
 export type UserPreviewDto = z.infer<typeof UserPreviewSchema>;

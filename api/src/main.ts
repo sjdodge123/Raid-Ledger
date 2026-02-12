@@ -1,8 +1,10 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'path';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, {
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger:
       process.env.NODE_ENV === 'production'
         ? ['error', 'warn', 'log']
@@ -52,6 +54,14 @@ async function bootstrap() {
     const httpAdapter = app.getHttpAdapter();
     httpAdapter.getInstance().set('trust proxy', 1);
   }
+
+  // Serve uploaded avatars as static files (ROK-220)
+  const avatarDir =
+    process.env.AVATAR_UPLOAD_DIR ||
+    (isProduction
+      ? '/data/avatars'
+      : path.join(process.cwd(), 'uploads', 'avatars'));
+  app.useStaticAssets(avatarDir, { prefix: '/avatars/', maxAge: '7d' });
 
   await app.listen(process.env.PORT ?? 3000);
 }

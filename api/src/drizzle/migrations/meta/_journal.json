@@ -225,6 +225,13 @@
       "when": 1770840900000,
       "tag": "0031_smiling_forge",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1770912450339,
+      "tag": "0032_natural_layla_miller",
+      "breakpoints": true
     }
   ]
 }

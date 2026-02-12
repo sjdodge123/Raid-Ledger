@@ -60,6 +60,9 @@ yarn-error.log*
 .dev-logs/
 .dev-pids
 
+# Avatar uploads (local dev)
+uploads/
+
 # Project state
 task.md
 project-context.md

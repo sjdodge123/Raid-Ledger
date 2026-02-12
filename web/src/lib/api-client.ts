@@ -58,10 +58,16 @@ export async function fetchApi<T>(
         authHeaders['Authorization'] = `Bearer ${token}`;
     }
 
+    // Don't set Content-Type for FormData — browser will set it with boundary
+    const isFormData = options.body instanceof FormData;
+    const contentHeaders: Record<string, string> = isFormData
+        ? {}
+        : { 'Content-Type': 'application/json' };
+
     const response = await fetch(url, {
         ...options,
         headers: {
-            'Content-Type': 'application/json',
+            ...contentHeaders,
             ...authHeaders,
             ...options.headers,
         },
@@ -91,6 +97,78 @@ export async function fetchApi<T>(
     }
 
     return data as T;
+}
+
+// ============================================================
+// Avatar API (ROK-220)
+// ============================================================
+
+/**
+ * Upload a custom avatar image with optional progress tracking.
+ * Uses XMLHttpRequest for upload progress when onProgress is provided.
+ */
+export async function uploadAvatar(
+    file: File,
+    onProgress?: (percent: number) => void,
+): Promise<{ customAvatarUrl: string }> {
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    if (onProgress) {
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', `${API_BASE_URL}/users/me/avatar`);
+
+            const token = getAuthToken();
+            if (token) {
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            }
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    onProgress(Math.round((e.loaded / e.total) * 100));
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    const response = JSON.parse(xhr.responseText) as { data: { customAvatarUrl: string } };
+                    resolve(response.data);
+                } else {
+                    try {
+                        const error = JSON.parse(xhr.responseText) as { message?: string };
+                        reject(new Error(error.message || `HTTP ${xhr.status}`));
+                    } catch {
+                        reject(new Error(`HTTP ${xhr.status}`));
+                    }
+                }
+            });
+
+            xhr.addEventListener('error', () => reject(new Error('Upload failed')));
+            xhr.send(formData);
+        });
+    }
+
+    const response = await fetchApi<{ data: { customAvatarUrl: string } }>('/users/me/avatar', {
+        method: 'POST',
+        body: formData,
+        headers: {}, // Let browser set Content-Type with boundary
+    });
+    return response.data;
+}
+
+/**
+ * Delete the current user's custom avatar.
+ */
+export async function deleteCustomAvatar(): Promise<void> {
+    return fetchApi('/users/me/avatar', { method: 'DELETE' });
+}
+
+/**
+ * Admin: remove any user's custom avatar.
+ */
+export async function adminRemoveAvatar(userId: number): Promise<void> {
+    return fetchApi(`/users/${userId}/avatar`, { method: 'DELETE' });
 }
 
 // ============================================================

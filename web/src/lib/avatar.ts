@@ -1,17 +1,23 @@
 /**
  * Avatar resolution utility for ROK-194: Dynamic Avatar Resolution
- * 
+ * Updated for ROK-220: Custom Avatar Upload (highest priority)
+ *
  * Resolves avatars based on context:
+ * - Custom upload: Always highest priority when set
  * - Game context: Show character portrait if available
  * - General context: Show Discord avatar
  * - Fallback: Initials (handled by component)
  */
 
+import { API_BASE_URL } from './config';
+
+export type AvatarType = 'custom' | 'character' | 'discord' | 'initials';
+
 export interface ResolvedAvatar {
     /** Avatar URL or null if no avatar available */
     url: string | null;
     /** Type of avatar resolved */
-    type: 'character' | 'discord' | 'initials';
+    type: AvatarType;
 }
 
 /**
@@ -21,6 +27,8 @@ export interface ResolvedAvatar {
 export interface AvatarUser {
     /** Discord avatar URL */
     avatar: string | null;
+    /** Custom uploaded avatar (relative path like /avatars/...) */
+    customAvatarUrl?: string | null;
     /** User's characters (optional) */
     characters?: Array<{
         gameId: string;
@@ -30,30 +38,12 @@ export interface AvatarUser {
 
 /**
  * Resolves the most appropriate avatar for a user based on context.
- * 
+ *
  * Priority:
- * 1. Character portrait (if gameId provided and character exists for that game)
- * 2. Discord avatar
- * 3. Initials (returns null, component handles initials)
- * 
- * @param user - User object with avatar and optional characters
- * @param gameId - Optional game ID for context-aware resolution
- * @returns Resolved avatar with URL and type
- * 
- * @example
- * // Game context - returns character portrait
- * resolveAvatar(user, 'game-uuid-123')
- * // => { url: 'https://...', type: 'character' }
- * 
- * @example
- * // General context - returns Discord avatar
- * resolveAvatar(user)
- * // => { url: 'https://discord.com/...', type: 'discord' }
- * 
- * @example
- * // No avatar - returns null for initials fallback
- * resolveAvatar({ avatar: null })
- * // => { url: null, type: 'initials' }
+ * 1. Custom uploaded avatar (ROK-220)
+ * 2. Character portrait (if gameId provided and character exists for that game)
+ * 3. Discord avatar
+ * 4. Initials (returns null, component handles initials)
  */
 export function resolveAvatar(
     user: AvatarUser | null | undefined,
@@ -62,6 +52,11 @@ export function resolveAvatar(
     // Handle null/undefined user
     if (!user) {
         return { url: null, type: 'initials' };
+    }
+
+    // Custom avatar has highest priority (ROK-220)
+    if (user.customAvatarUrl) {
+        return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
     }
 
     // If gameId provided, try to find character portrait

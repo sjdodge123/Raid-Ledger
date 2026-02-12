@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import type { User } from '../../hooks/use-auth';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../lib/config';
+import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { PowerCoreAvatar } from './PowerCoreAvatar';
 import { IntegrationSpoke, type SpokeStatus } from './IntegrationSpoke';
 import { OrbitRing } from './OrbitRing';
@@ -37,6 +38,14 @@ function useIsMobile(breakpoint = MOBILE_BREAKPOINT) {
 /** Build the list of avatar options from user data and characters */
 function buildAvatarOptions(user: User, characters: CharacterDto[]) {
     const options: { url: string; label: string }[] = [];
+
+    // Custom avatar (highest priority — ROK-220)
+    if (user.customAvatarUrl) {
+        options.push({
+            url: `${API_BASE_URL}${user.customAvatarUrl}`,
+            label: 'Custom',
+        });
+    }
 
     // Discord avatar
     const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
@@ -150,6 +159,38 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
     const [activatePulse, setActivatePulse] = useState(
         () => searchParams.get('linked') === 'success',
     );
+
+    // Avatar upload (ROK-220)
+    const {
+        upload: uploadAvatarFile,
+        deleteAvatar,
+        isUploading,
+        uploadProgress,
+    } = useAvatarUpload();
+
+    const handleUpload = useCallback((file: File) => {
+        uploadAvatarFile(file, {
+            onSuccess: () => {
+                toast.success('Avatar uploaded successfully!');
+                onRefresh?.();
+            },
+            onError: (err) => {
+                toast.error(err instanceof Error ? err.message : 'Upload failed');
+            },
+        });
+    }, [uploadAvatarFile, onRefresh]);
+
+    const handleRemoveCustomAvatar = useCallback(() => {
+        deleteAvatar(undefined, {
+            onSuccess: () => {
+                toast.success('Custom avatar removed');
+                onRefresh?.();
+            },
+            onError: (err) => {
+                toast.error(err instanceof Error ? err.message : 'Failed to remove avatar');
+            },
+        });
+    }, [deleteAvatar, onRefresh]);
 
     // Avatar preference from localStorage
     const [avatarIndex, setAvatarIndex] = useState(() => {
@@ -351,6 +392,11 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                     currentAvatarUrl={currentAvatarUrl}
                     avatarOptions={avatarOptions}
                     onSelect={handleAvatarSelect}
+                    customAvatarDisplayUrl={user.customAvatarUrl ? `${API_BASE_URL}${user.customAvatarUrl}` : null}
+                    onUpload={handleUpload}
+                    onRemoveCustom={handleRemoveCustomAvatar}
+                    isUploading={isUploading}
+                    uploadProgress={uploadProgress}
                 />
 
                 {/* Discord Details Modal */}

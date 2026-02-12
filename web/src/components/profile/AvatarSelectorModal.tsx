@@ -1,3 +1,5 @@
+import { AvatarUploadZone } from './AvatarUploadZone';
+
 interface AvatarOption {
     url: string;
     label: string;
@@ -9,12 +11,17 @@ interface AvatarSelectorModalProps {
     currentAvatarUrl: string;
     avatarOptions: AvatarOption[];
     onSelect: (url: string) => void;
+    /** Full URL for displaying the custom avatar */
+    customAvatarDisplayUrl?: string | null;
+    onUpload?: (file: File) => void;
+    onRemoveCustom?: () => void;
+    isUploading?: boolean;
+    uploadProgress?: number;
 }
 
 /**
  * Modal for selecting primary avatar from available sources.
- * Shows a grid of avatar options (Discord, character portraits).
- * Selected avatar stored in localStorage as MVP.
+ * Shows upload zone at top (ROK-220) and a grid of existing avatars below.
  */
 export function AvatarSelectorModal({
     isOpen,
@@ -22,6 +29,11 @@ export function AvatarSelectorModal({
     currentAvatarUrl,
     avatarOptions,
     onSelect,
+    customAvatarDisplayUrl,
+    onUpload,
+    onRemoveCustom,
+    isUploading = false,
+    uploadProgress = 0,
 }: AvatarSelectorModalProps) {
     if (!isOpen) return null;
 
@@ -32,7 +44,7 @@ export function AvatarSelectorModal({
                 if (e.target === e.currentTarget) onClose();
             }}
         >
-            <div className="bg-surface border border-edge rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
+            <div className="bg-surface border border-edge rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl max-h-[90vh] overflow-y-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-semibold text-foreground">Choose Avatar</h3>
@@ -47,17 +59,35 @@ export function AvatarSelectorModal({
                     </button>
                 </div>
 
-                <p className="text-sm text-muted mb-4">
-                    Select your primary avatar from linked accounts and character portraits.
-                </p>
+                {/* Upload zone (ROK-220) */}
+                {onUpload && onRemoveCustom && (
+                    <div className="mb-4">
+                        <AvatarUploadZone
+                            onFileSelected={onUpload}
+                            isUploading={isUploading}
+                            uploadProgress={uploadProgress}
+                            currentCustomUrl={customAvatarDisplayUrl ?? null}
+                            onRemove={onRemoveCustom}
+                        />
+                    </div>
+                )}
+
+                {/* Divider */}
+                {avatarOptions.length > 0 && (
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="flex-1 h-px bg-edge-subtle" />
+                        <span className="text-xs text-dim">or select existing</span>
+                        <div className="flex-1 h-px bg-edge-subtle" />
+                    </div>
+                )}
 
                 {/* Avatar grid */}
-                {avatarOptions.length === 0 ? (
+                {avatarOptions.length === 0 && !onUpload ? (
                     <div className="text-center py-8 text-dim">
                         <p>No avatar options available.</p>
                         <p className="text-xs mt-1">Link accounts or add characters to get avatar options.</p>
                     </div>
-                ) : (
+                ) : avatarOptions.length > 0 ? (
                     <div className="avatar-selector-grid">
                         {avatarOptions.map((option) => (
                             <button
@@ -80,7 +110,7 @@ export function AvatarSelectorModal({
                             </button>
                         ))}
                     </div>
-                )}
+                ) : null}
 
                 {/* Footer */}
                 <div className="mt-4 pt-3 border-t border-edge-subtle flex justify-end">

@@ -180,7 +180,12 @@ export class UsersService {
     limit: number,
     search?: string,
   ): Promise<{
-    data: Array<{ id: number; username: string; avatar: string | null }>;
+    data: Array<{
+      id: number;
+      username: string;
+      avatar: string | null;
+      customAvatarUrl: string | null;
+    }>;
     total: number;
   }> {
     const offset = (page - 1) * limit;
@@ -199,6 +204,7 @@ export class UsersService {
         id: schema.users.id,
         username: schema.users.username,
         avatar: schema.users.avatar,
+        customAvatarUrl: schema.users.customAvatarUrl,
       })
       .from(schema.users)
       .where(conditions)
@@ -210,5 +216,14 @@ export class UsersService {
       data: rows,
       total: Number(countResult.count),
     };
+  }
+
+  async setCustomAvatar(userId: number, url: string | null) {
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ customAvatarUrl: url, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    return updated;
   }
 }

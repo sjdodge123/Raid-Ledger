@@ -66,6 +66,9 @@ COPY --from=builder /app/api/dist/scripts ./dist/scripts
 # Copy seed data files (games-seed.json for ROK-160)
 COPY --from=builder /app/api/seeds ./dist/seeds
 
+# Create avatar upload directory
+RUN mkdir -p /data/avatars && chown nestjs:nodejs /data/avatars
+
 # Switch to non-root user
 USER nestjs
 

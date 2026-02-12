@@ -11,13 +11,18 @@ import {
   ParseIntPipe,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Request,
   HttpCode,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ZodError } from 'zod';
 import { UsersService } from './users.service';
+import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
@@ -45,6 +50,7 @@ interface AuthenticatedRequest {
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
+    private readonly avatarService: AvatarService,
     private readonly preferencesService: PreferencesService,
     private readonly gameTimeService: GameTimeService,
     private readonly charactersService: CharactersService,
@@ -99,6 +105,7 @@ export class UsersController {
         id: user.id,
         username: user.username,
         avatar: user.avatar || null,
+        customAvatarUrl: user.customAvatarUrl || null,
         createdAt: user.createdAt.toISOString(),
         characters: charactersResult.data,
       },
@@ -271,6 +278,76 @@ export class UsersController {
   async getAbsences(@Request() req: AuthenticatedRequest) {
     const absences = await this.gameTimeService.getAbsences(req.user.id);
     return { data: absences };
+  }
+
+  /**
+   * Upload a custom avatar (ROK-220).
+   * Validates image, processes to 256x256 WebP, saves to disk.
+   */
+  @Post('me/avatar')
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(
+    FileInterceptor('avatar', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async uploadAvatar(
+    @Request() req: AuthenticatedRequest,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No file uploaded');
+    }
+
+    await this.avatarService.checkRateLimit(req.user.id);
+
+    const processed = await this.avatarService.validateAndProcess(file.buffer);
+
+    // Delete old custom avatar if exists
+    const existing = await this.usersService.findById(req.user.id);
+    if (existing?.customAvatarUrl) {
+      await this.avatarService.delete(existing.customAvatarUrl);
+    }
+
+    const relativePath = await this.avatarService.save(req.user.id, processed);
+    await this.usersService.setCustomAvatar(req.user.id, relativePath);
+
+    return { data: { customAvatarUrl: relativePath } };
+  }
+
+  /**
+   * Remove current user's custom avatar (ROK-220).
+   */
+  @Delete('me/avatar')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async deleteAvatar(@Request() req: AuthenticatedRequest) {
+    const user = await this.usersService.findById(req.user.id);
+    if (user?.customAvatarUrl) {
+      await this.avatarService.delete(user.customAvatarUrl);
+      await this.usersService.setCustomAvatar(req.user.id, null);
+    }
+  }
+
+  /**
+   * Admin: remove any user's custom avatar (ROK-220 content moderation).
+   */
+  @Delete(':id/avatar')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async adminDeleteAvatar(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    if (!req.user.isAdmin) {
+      throw new ForbiddenException('Admin access required');
+    }
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+    if (user.customAvatarUrl) {
+      await this.avatarService.delete(user.customAvatarUrl);
+      await this.usersService.setCustomAvatar(id, null);
+    }
   }
 
   /**

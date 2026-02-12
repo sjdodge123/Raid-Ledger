@@ -9,6 +9,7 @@ export interface User {
     discordId: string;
     username: string;
     avatar: string | null;
+    customAvatarUrl: string | null;
     isAdmin?: boolean;
 }
 
