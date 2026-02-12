@@ -467,10 +467,22 @@ export function EventDetailPage() {
                     </div>
                 )}
 
+                {/* AC-5: Empty state with actionable message */}
                 {roster?.signups.length === 0 && (
-                    <p className="event-detail-roster__empty">
-                        No one has signed up yet. Be the first!
-                    </p>
+                    <div className="event-detail-roster__empty">
+                        <p>No players signed up yet — share the event!</p>
+                        <button
+                            onClick={() => {
+                                const url = window.location.href;
+                                navigator.clipboard.writeText(url).then(() => {
+                                    toast.success('Event link copied to clipboard!');
+                                });
+                            }}
+                            className="btn btn-secondary btn-sm mt-2"
+                        >
+                            Copy Event Link
+                        </button>
+                    </div>
                 )}
             </div>
 

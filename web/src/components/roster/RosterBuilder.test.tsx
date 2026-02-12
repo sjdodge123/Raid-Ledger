@@ -140,7 +140,7 @@ describe('RosterBuilder', () => {
         expect(joinButtons.length).toBeGreaterThan(0);
     });
 
-    it('shows "Empty" text for non-interactive empty slots', () => {
+    it('shows muted "+" for non-interactive empty slots', () => {
         render(
             <RosterBuilder
                 pool={[]}
@@ -151,8 +151,8 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // Empty slots without click handler show "Empty"
-        const emptySlots = screen.getAllByText('Empty');
+        // Empty slots without click handler show a muted "+" icon (ROK-210 AC-7)
+        const emptySlots = screen.getAllByText('+');
         expect(emptySlots.length).toBeGreaterThan(0);
     });
 

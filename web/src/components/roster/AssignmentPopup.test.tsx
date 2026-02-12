@@ -141,7 +141,7 @@ describe('AssignmentPopup', () => {
             />
         );
 
-        expect(screen.getByText('Remove to Unassigned')).toBeInTheDocument();
+        expect(screen.getByText('Remove')).toBeInTheDocument();
         expect(screen.getByText('OccupantPlayer')).toBeInTheDocument();
     });
 
@@ -175,7 +175,7 @@ describe('AssignmentPopup', () => {
             />
         );
 
-        expect(screen.getByText('All players are assigned.')).toBeInTheDocument();
+        expect(screen.getByText(/All players are assigned to slots/)).toBeInTheDocument();
     });
 
     it('does not render when closed', () => {
