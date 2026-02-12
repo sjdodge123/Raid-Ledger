@@ -78,7 +78,7 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 
 ## Critical Rules
 
-- **Branch-per-story** — Multiple agents may work in this repo concurrently. **Always** create a new branch from `main` when starting a new story or feature (e.g., `git checkout -b rok-123-feature-name`). Commit work to the feature branch. When the story is complete, merge the feature branch into `main` (`git checkout main && git merge <branch>`). Never commit directly to `main` for story/feature work.
+- **Branch-per-story** — Multiple agents may work in this repo concurrently. **Always** create a new branch from `main` when starting a new story or feature (e.g., `git checkout -b rok-123-feature-name`). Commit work to the feature branch. When the story is complete, merge the feature branch into `main` (`git checkout main && git merge <branch>`) and delete the branch (`git branch -d <branch>`). Never commit directly to `main` for story/feature work. Never leave stale merged branches — clean them up immediately after merging.
 - **Zod-first validation** — All data validation uses Zod schemas from the contract package
 - **TypeScript strict mode** — No `any` allowed in either api or web
 - **Naming conventions** — Files: `kebab-case`, Classes: `PascalCase`, Variables: `camelCase`, DB columns: `snake_case` (mapped in Drizzle)
