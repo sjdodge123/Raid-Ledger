@@ -23,6 +23,15 @@ interface RescheduleModalProps {
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+// Duration presets — same as create-event-form
+const DURATION_PRESETS = [
+    { label: '1h', minutes: 60 },
+    { label: '1.5h', minutes: 90 },
+    { label: '2h', minutes: 120 },
+    { label: '3h', minutes: 180 },
+    { label: '4h', minutes: 240 },
+] as const;
+
 function formatHour(hour: number): string {
     if (hour === 0 || hour === 24) return '12:00 AM';
     if (hour === 12) return '12:00 PM';
@@ -75,25 +84,29 @@ export function RescheduleModal({
     const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
     const reschedule = useRescheduleEvent(eventId);
 
-    // New start/end times — null means nothing selected yet
+    // New start time — null means nothing selected yet
     const [newStartTime, setNewStartTime] = useState<string | null>(null);
-    const [newEndTime, setNewEndTime] = useState<string | null>(null);
     // Track if selection came from grid click (for preview block display)
     const [gridSelection, setGridSelection] = useState<{ day: number; hour: number } | null>(null);
 
-    // Compute current event's day/hour
+    // Compute current event's day/hour and original duration
     const currentStart = useMemo(() => new Date(currentStartTime), [currentStartTime]);
     const currentEnd = useMemo(() => new Date(currentEndTime), [currentEndTime]);
-    const durationMs = useMemo(
-        () => currentEnd.getTime() - currentStart.getTime(),
+    const originalDurationMinutes = useMemo(
+        () => Math.max(60, Math.round((currentEnd.getTime() - currentStart.getTime()) / (1000 * 60))),
         [currentStart, currentEnd],
-    );
-    const durationHours = useMemo(
-        () => Math.max(1, Math.round(durationMs / (1000 * 60 * 60))),
-        [durationMs],
     );
     const currentDayOfWeek = currentStart.getDay(); // 0=Sun
     const currentHour = currentStart.getHours();
+
+    // Duration state — initialized to original event duration
+    const [durationMinutes, setDurationMinutes] = useState(originalDurationMinutes);
+    const [customDuration, setCustomDuration] = useState(
+        () => !DURATION_PRESETS.some(p => p.minutes === originalDurationMinutes),
+    );
+
+    const durationMs = durationMinutes * 60 * 1000;
+    const durationHours = Math.max(1, Math.round(durationMinutes / 60));
 
     // Current event as a calendar chip
     const currentEventBlocks = useMemo((): GameTimeEventBlock[] => [{
@@ -141,40 +154,28 @@ export function RescheduleModal({
         return [rangeStart, 24];
     }, [currentHour, gridSelection, gameTimeData]);
 
-    // Grid cell click → set both grid selection and datetime inputs
+    // Grid cell click → set grid selection and start time input
     const handleCellClick = (dayOfWeek: number, hour: number) => {
         if (dayOfWeek === currentDayOfWeek && hour === currentHour) return;
         setGridSelection({ day: dayOfWeek, hour });
         const start = nextOccurrence(dayOfWeek, hour);
-        const end = new Date(start.getTime() + durationMs);
         setNewStartTime(toLocalInput(start));
-        setNewEndTime(toLocalInput(end));
     };
 
-    // Manual input change → clear grid selection, update times
+    // Manual start input change → clear grid selection
     const handleStartChange = (value: string) => {
         setNewStartTime(value);
         setGridSelection(null);
-        // Auto-compute end time preserving duration
-        if (value) {
-            const start = new Date(value);
-            if (!isNaN(start.getTime())) {
-                const end = new Date(start.getTime() + durationMs);
-                setNewEndTime(toLocalInput(end));
-            }
-        }
     };
 
-    const handleEndChange = (value: string) => {
-        setNewEndTime(value);
-        setGridSelection(null);
-    };
-
-    const hasSelection = !!newStartTime && !!newEndTime;
+    // Derived end time from start + duration
     const parsedStart = newStartTime ? new Date(newStartTime) : null;
-    const parsedEnd = newEndTime ? new Date(newEndTime) : null;
+    const parsedEnd = parsedStart && !isNaN(parsedStart.getTime())
+        ? new Date(parsedStart.getTime() + durationMs)
+        : null;
+    const hasSelection = !!newStartTime;
     const isValid = parsedStart && parsedEnd
-        && !isNaN(parsedStart.getTime()) && !isNaN(parsedEnd.getTime())
+        && !isNaN(parsedStart.getTime())
         && parsedStart < parsedEnd
         && parsedStart > new Date();
 
@@ -193,7 +194,6 @@ export function RescheduleModal({
                 description: `Moved to ${dayLabel} at ${hourLabel}`,
             });
             setNewStartTime(null);
-            setNewEndTime(null);
             setGridSelection(null);
             onClose();
         } catch (err) {
@@ -205,7 +205,6 @@ export function RescheduleModal({
 
     const handleClose = () => {
         setNewStartTime(null);
-        setNewEndTime(null);
         setGridSelection(null);
         onClose();
     };
@@ -230,13 +229,21 @@ export function RescheduleModal({
                 <div className="flex items-center gap-4 text-xs text-muted">
                     {gridSelection && (
                         <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-sm border-2 border-solid border-emerald-500/80" />
+                            <div className="w-3 h-3 rounded-sm border-2 border-solid border-amber-400/80" />
                             <span>New time</span>
                         </div>
                     )}
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(16, 185, 129, 0.4)' }} />
-                        <span>Player availability</span>
+                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.4)' }} />
+                        <span>Few</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(234, 179, 8, 0.45)' }} />
+                        <span>Some</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.55)' }} />
+                        <span>All available</span>
                     </div>
                 </div>
 
@@ -282,16 +289,57 @@ export function RescheduleModal({
                             />
                         </div>
                         <div className="flex-1">
-                            <label htmlFor="reschedule-end" className="block text-xs text-muted mb-1">
-                                New end
-                            </label>
-                            <input
-                                id="reschedule-end"
-                                type="datetime-local"
-                                value={newEndTime ?? ''}
-                                onChange={(e) => handleEndChange(e.target.value)}
-                                className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
+                            <label className="block text-xs text-muted mb-1">Duration</label>
+                            <div className="flex items-center gap-1.5">
+                                {DURATION_PRESETS.map((p) => (
+                                    <button
+                                        key={p.minutes}
+                                        type="button"
+                                        onClick={() => { setDurationMinutes(p.minutes); setCustomDuration(false); }}
+                                        className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                            !customDuration && durationMinutes === p.minutes
+                                                ? 'bg-emerald-600 text-white'
+                                                : 'bg-panel border border-edge text-secondary hover:text-foreground'
+                                        }`}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                                <button
+                                    type="button"
+                                    onClick={() => setCustomDuration(true)}
+                                    className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                        customDuration
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-panel border border-edge text-secondary hover:text-foreground'
+                                    }`}
+                                >
+                                    Custom
+                                </button>
+                            </div>
+                            {customDuration && (
+                                <div className="flex items-center gap-2 mt-1.5">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={23}
+                                        value={Math.floor(durationMinutes / 60)}
+                                        onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
+                                        className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <span className="text-xs text-muted">hr</span>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={59}
+                                        step={15}
+                                        value={durationMinutes % 60}
+                                        onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
+                                        className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                                    />
+                                    <span className="text-xs text-muted">min</span>
+                                </div>
+                            )}
                         </div>
                     </div>
 
@@ -323,7 +371,6 @@ export function RescheduleModal({
                                 <button
                                     onClick={() => {
                                         setNewStartTime(null);
-                                        setNewEndTime(null);
                                         setGridSelection(null);
                                     }}
                                     className="btn btn-secondary btn-sm"

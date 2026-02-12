@@ -650,9 +650,14 @@ export function GameTimeGrid({
                                 }
                             }
 
-                            // Heatmap background style
+                            // Heatmap background: red → yellow → green gradient
+                            // Round down: e.g. 2/4 (0.5) = red, 3/4 (0.75) = yellow, 4/4 (1.0) = green
                             const heatmapBg = heatmapData
-                                ? `rgba(16, 185, 129, ${(heatmapIntensity * 0.6).toFixed(2)})`
+                                ? heatmapIntensity >= 1.0
+                                    ? `rgba(34, 197, 94, ${(0.3 + heatmapIntensity * 0.35).toFixed(2)})`   // green — all available
+                                    : heatmapIntensity > 0.5
+                                        ? `rgba(234, 179, 8, ${(0.25 + heatmapIntensity * 0.35).toFixed(2)})` // yellow — most available
+                                        : `rgba(239, 68, 68, ${(0.2 + heatmapIntensity * 0.35).toFixed(2)})`  // red — half or fewer
                                 : undefined;
 
                             const cellStyle: React.CSSProperties = {
@@ -926,14 +931,12 @@ export function GameTimeGrid({
                         (ev) => ev.dayOfWeek === block.dayOfWeek && ev.startHour < block.endHour && ev.endHour > block.startHour,
                     );
 
-                    // ROK-223: variant styling
+                    // ROK-223: variant styling — both use amber/gold border
                     const isSelected = block.variant === 'selected';
                     const borderStyle = isSelected
-                        ? '2px solid rgba(16, 185, 129, 0.8)'
+                        ? '2px solid rgba(251, 191, 36, 0.8)'
                         : '2px dashed rgba(251, 191, 36, 0.7)';
-                    const shadowStyle = isSelected
-                        ? '0 0 12px rgba(16, 185, 129, 0.3), inset 0 0 8px rgba(16, 185, 129, 0.1)'
-                        : '0 0 12px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.08)';
+                    const shadowStyle = '0 0 12px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.08)';
 
                     return (
                         <div
