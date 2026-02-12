@@ -483,6 +483,12 @@ export function EventDetailPage() {
                     currentStartTime={event.startTime}
                     currentEndTime={event.endTime}
                     eventTitle={event.title}
+                    gameSlug={event.game?.slug}
+                    gameName={event.game?.name}
+                    coverUrl={event.game?.coverUrl}
+                    description={event.description}
+                    creatorUsername={event.creator?.username}
+                    signupCount={event.signupCount}
                 />
             )}
         </div>

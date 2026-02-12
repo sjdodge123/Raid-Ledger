@@ -8,13 +8,15 @@ interface ModalProps {
     children: ReactNode;
     /** Override the default max-width (default: 'max-w-md') */
     maxWidth?: string;
+    /** Override body overflow/height classes (default: scrollable body) */
+    bodyClassName?: string;
 }
 
 /**
  * Simple modal component for dialogs.
  * Uses portal pattern for proper z-index stacking.
  */
-export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' }: ModalProps) {
+export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName }: ModalProps) {
     // Close on Escape key
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -81,7 +83,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md' 
                 </div>
 
                 {/* Body */}
-                <div className="p-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+                <div className={bodyClassName ?? "p-4 overflow-y-auto max-h-[calc(90vh-8rem)]"}>
                     {children}
                 </div>
             </div>
