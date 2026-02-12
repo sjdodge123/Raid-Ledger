@@ -17,6 +17,8 @@ export const CreateFeedbackSchema = z.object({
         .min(10, 'Feedback must be at least 10 characters')
         .max(2000, 'Feedback must be at most 2000 characters'),
     pageUrl: z.string().url().optional(),
+    /** Base64-encoded screenshot PNG (data URL prefix stripped) */
+    screenshotBase64: z.string().max(5_000_000).optional(),
 });
 export type CreateFeedbackDto = z.infer<typeof CreateFeedbackSchema>;
 

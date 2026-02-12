@@ -64,7 +64,7 @@ export class FeedbackController {
     }
 
     const userId = req.user.id;
-    const { category, message, pageUrl } = parsed.data;
+    const { category, message, pageUrl, screenshotBase64 } = parsed.data;
 
     // Insert feedback into local DB first
     const [inserted] = await this.db
@@ -98,6 +98,7 @@ export class FeedbackController {
         username,
         pageUrl: pageUrl ?? null,
         feedbackId: inserted.id,
+        screenshotBase64: screenshotBase64 ?? null,
       });
 
       if (result.success && result.issueUrl) {
