@@ -38,8 +38,8 @@ export function useBranding() {
                 body: JSON.stringify(data),
             });
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['admin', 'branding'] });
+        onSuccess: (data: BrandingData) => {
+            queryClient.setQueryData(['admin', 'branding'], data);
             void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
             toast.success('Branding updated');
         },
@@ -57,8 +57,8 @@ export function useBranding() {
                 body: formData,
             });
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['admin', 'branding'] });
+        onSuccess: (data: BrandingData) => {
+            queryClient.setQueryData(['admin', 'branding'], data);
             void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
             toast.success('Logo uploaded');
         },
@@ -73,8 +73,8 @@ export function useBranding() {
                 method: 'POST',
             });
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: ['admin', 'branding'] });
+        onSuccess: (data: BrandingData) => {
+            queryClient.setQueryData(['admin', 'branding'], data);
             void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
             toast.success('Branding reset to defaults');
         },
