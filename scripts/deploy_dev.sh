@@ -259,9 +259,9 @@ start_dev() {
     mkdir -p "$LOG_DIR"
     > "$PID_FILE"
 
-    # Start native API in background
+    # Start native API in background (DEBUG=true for verbose logging in dev)
     echo "Starting API server (watch mode)..."
-    npm run start:dev -w api > "$LOG_DIR/api.log" 2>&1 &
+    DEBUG=true npm run start:dev -w api > "$LOG_DIR/api.log" 2>&1 &
     echo $! >> "$PID_FILE"
     print_success "API starting on http://localhost:3000 (PID: $!)"
 

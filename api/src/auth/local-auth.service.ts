@@ -1,4 +1,9 @@
-import { Injectable, Inject, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Inject,
+  UnauthorizedException,
+  Logger,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
@@ -11,6 +16,8 @@ const SALT_ROUNDS = 12;
 
 @Injectable()
 export class LocalAuthService {
+  private readonly logger = new Logger(LocalAuthService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
@@ -189,8 +196,8 @@ export class LocalAuthService {
       throw new UnauthorizedException('Cannot impersonate admin users');
     }
 
-    console.log(
-      `🔄 IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) → "${target.username}" (id:${target.id})`,
+    this.logger.log(
+      `IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) -> "${target.username}" (id:${target.id})`,
     );
 
     // Issue JWT for target user with impersonatedBy claim (1hr expiry)

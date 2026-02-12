@@ -45,6 +45,7 @@ docker run -e ADMIN_PASSWORD=mynewpassword -p 80:80 ghcr.io/sjdodge123/raid-ledg
 |----------|---------|-------------|
 | `PORT` | `80` | Port to expose the application |
 | `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
+| `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
 
 **Example with custom port:**
 ```bash

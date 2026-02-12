@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import type { User } from '../../hooks/use-auth';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../lib/config';

@@ -83,7 +83,7 @@ export class SettingsService {
         },
       });
 
-    this.logger.log(`Setting ${key} updated`);
+    this.logger.debug(`Setting ${key} updated`);
   }
 
   /**
@@ -91,7 +91,7 @@ export class SettingsService {
    */
   async delete(key: SettingKey): Promise<void> {
     await this.db.delete(appSettings).where(eq(appSettings.key, key));
-    this.logger.log(`Setting ${key} deleted`);
+    this.logger.debug(`Setting ${key} deleted`);
   }
 
   /**

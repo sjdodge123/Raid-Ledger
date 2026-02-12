@@ -1,15 +1,18 @@
 import { NestFactory } from '@nestjs/core';
+import type { LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import { AppModule } from './app.module';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 
 async function bootstrap() {
+  const isDebug = process.env.DEBUG === 'true';
+  const logLevels: LogLevel[] = isDebug
+    ? ['error', 'warn', 'log', 'debug', 'verbose']
+    : ['error', 'warn', 'log'];
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger:
-      process.env.NODE_ENV === 'production'
-        ? ['error', 'warn', 'log']
-        : ['error', 'warn', 'log', 'debug', 'verbose'],
+    logger: logLevels,
   });
 
   // CORS configuration with environment validation

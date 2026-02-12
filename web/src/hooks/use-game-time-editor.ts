@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { useGameTime, useSaveGameTime, useSaveGameTimeOverrides } from './use-game-time';
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { useTimezoneStore } from '../stores/timezone-store';
 import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils';
 

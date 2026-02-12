@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { AvailabilityDto, AvailabilityStatus } from '@raid-ledger/contract';
 import { useCreateAvailability, useUpdateAvailability } from '../../../hooks/use-availability';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 interface AvailabilityFormProps {
     isOpen: boolean;

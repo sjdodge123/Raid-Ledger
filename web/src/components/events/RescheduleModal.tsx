@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { Modal } from '../ui/modal';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-reschedule';

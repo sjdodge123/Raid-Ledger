@@ -5,7 +5,7 @@ import { GameTimeGrid } from './GameTimeGrid';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 interface GameTimePanelProps {
     /** Controls header/buttons: 'profile' has save/clear, 'modal' has confirm-on-close, 'picker' is read-only */
