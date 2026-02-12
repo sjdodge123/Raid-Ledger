@@ -46,7 +46,7 @@ interface GameCardProps {
 
 export function GameCard({ game, compact = false }: GameCardProps) {
     const { isAuthenticated } = useAuth();
-    const { wantToPlay, toggle, isToggling } = useWantToPlay(
+    const { wantToPlay, count, toggle, isToggling } = useWantToPlay(
         isAuthenticated ? game.id : undefined,
     );
 
@@ -116,7 +116,7 @@ export function GameCard({ game, compact = false }: GameCardProps) {
                 {isAuthenticated && (
                     <button
                         onClick={handleWantToPlay}
-                        className="absolute top-2 left-2 p-1.5 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
+                        className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-black/50 hover:bg-black/70 transition-colors"
                         aria-label={wantToPlay ? 'Remove from want to play' : 'Add to want to play'}
                     >
                         <svg
@@ -128,6 +128,9 @@ export function GameCard({ game, compact = false }: GameCardProps) {
                         >
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                         </svg>
+                        {count > 0 && (
+                            <span className="text-[10px] font-bold text-white/90 pr-0.5">{count}</span>
+                        )}
                     </button>
                 )}
             </div>

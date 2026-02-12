@@ -25,33 +25,53 @@ export function PowerCoreAvatar({
 }: PowerCoreAvatarProps) {
     return (
         <div className="power-core">
-            {/* Avatar with glow ring */}
-            <div className="power-core__ring">
-                <img
-                    src={avatarUrl}
-                    alt={username}
-                    className="power-core__avatar"
-                    onError={(e) => {
-                        e.currentTarget.src = '/default-avatar.svg';
-                    }}
-                />
+            {/* Avatar with glow ring + flanking nav arrows */}
+            <div className="power-core__ring-row">
+                {hasMultipleAvatars && (
+                    <button
+                        className="power-core__nav-btn"
+                        onClick={onCyclePrev}
+                        aria-label="Previous avatar"
+                    >
+                        ‹
+                    </button>
+                )}
+                <div className="power-core__ring">
+                    <img
+                        src={avatarUrl}
+                        alt={username}
+                        className="power-core__avatar"
+                        onError={(e) => {
+                            e.currentTarget.src = '/default-avatar.svg';
+                        }}
+                    />
 
-                {/* Edit overlay */}
-                <button
-                    className="power-core__edit"
-                    onClick={onEdit}
-                    aria-label="Change avatar"
-                    title="Change avatar"
-                >
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                        />
-                    </svg>
-                </button>
+                    {/* Edit overlay */}
+                    <button
+                        className="power-core__edit"
+                        onClick={onEdit}
+                        aria-label="Change avatar"
+                        title="Change avatar"
+                    >
+                        <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                            />
+                        </svg>
+                    </button>
+                </div>
+                {hasMultipleAvatars && (
+                    <button
+                        className="power-core__nav-btn"
+                        onClick={onCycleNext}
+                        aria-label="Next avatar"
+                    >
+                        ›
+                    </button>
+                )}
             </div>
 
             {/* Username + badges */}
@@ -63,27 +83,6 @@ export function PowerCoreAvatar({
                     </span>
                 )}
             </div>
-
-            {/* Avatar cycle nav */}
-            {hasMultipleAvatars && (
-                <div className="power-core__nav">
-                    <button
-                        className="power-core__nav-btn"
-                        onClick={onCyclePrev}
-                        aria-label="Previous avatar"
-                    >
-                        ‹
-                    </button>
-                    <span className="text-xs text-dim">Change Avatar</span>
-                    <button
-                        className="power-core__nav-btn"
-                        onClick={onCycleNext}
-                        aria-label="Next avatar"
-                    >
-                        ›
-                    </button>
-                </div>
-            )}
         </div>
     );
 }
