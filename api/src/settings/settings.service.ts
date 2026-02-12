@@ -23,6 +23,12 @@ export interface BlizzardConfig {
   clientSecret: string;
 }
 
+export interface BrandingConfig {
+  communityName: string | null;
+  communityLogoPath: string | null;
+  communityAccentColor: string | null;
+}
+
 export const SETTINGS_EVENTS = {
   OAUTH_DISCORD_UPDATED: 'settings.oauth.discord.updated',
   IGDB_UPDATED: 'settings.igdb.updated',
@@ -257,4 +263,58 @@ export class SettingsService {
 
     return clientIdExists && clientSecretExists;
   }
+
+  /**
+   * Get community branding settings (ROK-271)
+   */
+  async getBranding(): Promise<BrandingConfig> {
+    const [name, logoPath, accentColor] = await Promise.all([
+      this.get(SETTING_KEYS.COMMUNITY_NAME),
+      this.get(SETTING_KEYS.COMMUNITY_LOGO_PATH),
+      this.get(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
+    ]);
+
+    return {
+      communityName: name,
+      communityLogoPath: logoPath,
+      communityAccentColor: accentColor,
+    };
+  }
+
+  /**
+   * Set community display name (ROK-271)
+   */
+  async setCommunityName(name: string): Promise<void> {
+    await this.set(SETTING_KEYS.COMMUNITY_NAME, name);
+    this.logger.log('Community name updated');
+  }
+
+  /**
+   * Set community logo file path (ROK-271)
+   */
+  async setCommunityLogoPath(filePath: string): Promise<void> {
+    await this.set(SETTING_KEYS.COMMUNITY_LOGO_PATH, filePath);
+    this.logger.log('Community logo path updated');
+  }
+
+  /**
+   * Set community accent color (ROK-271)
+   */
+  async setCommunityAccentColor(color: string): Promise<void> {
+    await this.set(SETTING_KEYS.COMMUNITY_ACCENT_COLOR, color);
+    this.logger.log('Community accent color updated');
+  }
+
+  /**
+   * Clear all branding settings (ROK-271)
+   */
+  async clearBranding(): Promise<void> {
+    await Promise.all([
+      this.delete(SETTING_KEYS.COMMUNITY_NAME),
+      this.delete(SETTING_KEYS.COMMUNITY_LOGO_PATH),
+      this.delete(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
+    ]);
+    this.logger.log('Community branding reset to defaults');
+  }
+
 }

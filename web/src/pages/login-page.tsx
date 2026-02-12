@@ -25,7 +25,10 @@ export function LoginPage() {
 
     const isFirstRun = systemStatus?.isFirstRun ?? false;
     const discordConfigured = systemStatus?.discordConfigured ?? false;
-    const communityName = import.meta.env.VITE_COMMUNITY_NAME || 'Raid-Ledger';
+    const communityName = systemStatus?.communityName || 'Raid Ledger';
+    const communityLogoUrl = systemStatus?.communityLogoUrl
+        ? `${API_BASE_URL}${systemStatus.communityLogoUrl}`
+        : null;
 
     const handleLocalLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -89,9 +92,17 @@ export function LoginPage() {
         <div className="min-h-[70vh] flex items-center justify-center px-4">
             <div className="w-full max-w-md">
                 <div className="bg-panel/50 backdrop-blur-sm rounded-2xl shadow-xl border border-edge/50 p-8">
-                    {/* Logo and Community Name (AC-2, AC-3) */}
+                    {/* Logo and Community Name (AC-2, AC-3, ROK-271) */}
                     <div className="text-center mb-8">
-                        <span className="text-4xl">⚔️</span>
+                        {communityLogoUrl ? (
+                            <img
+                                src={communityLogoUrl}
+                                alt={communityName}
+                                className="w-16 h-16 mx-auto rounded-xl object-contain"
+                            />
+                        ) : (
+                            <span className="text-4xl">&#x2694;&#xFE0F;</span>
+                        )}
                         <h1 className="text-2xl font-bold text-foreground mt-2">
                             {communityName}
                         </h1>
