@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
+import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
@@ -19,6 +20,7 @@ export function Layout({ children }: LayoutProps) {
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop">
+            <SpaceEffects />
             <ImpersonationBanner />
             <Header />
             <main className="flex-1">

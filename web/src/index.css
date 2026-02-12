@@ -94,9 +94,9 @@ html {
     --color-muted: #9898c8;
     --color-secondary: #c0c0e0;
     --color-foreground: #e8e8ff;
-    --color-edge: #2a2a55;
-    --color-edge-strong: #3d3d6b;
-    --color-edge-subtle: #1a1a3e;
+    --color-edge: #2d2a66;
+    --color-edge-strong: #45408a;
+    --color-edge-subtle: #1e1a4a;
 
     /* Game Time Grid inline-style tokens */
     --gt-widget-bg: rgba(26, 26, 62, 0.7);
@@ -295,4 +295,112 @@ body {
     transition-property: color, background-color, border-color, box-shadow, opacity, transform;
     transition-duration: 150ms;
     transition-timing-function: ease-out;
+}
+
+/* ============================================
+   Space Theme — Neon Border Effects (ROK-228)
+   Sci-fi inspired cyan/purple/magenta glow on
+   edges, panels, inputs, and interactive elements.
+   pointer-events: none on pseudo-elements.
+   ============================================ */
+
+[data-scheme="space"] {
+    --neon-cyan: rgba(56, 189, 248, 0.4);
+    --neon-purple: rgba(139, 92, 246, 0.35);
+    --neon-magenta: rgba(217, 70, 239, 0.3);
+}
+
+/* Panel / card neon border glow */
+[data-scheme="space"] .bg-surface,
+[data-scheme="space"] .glass-card {
+    box-shadow:
+        0 0 1px var(--neon-purple),
+        inset 0 0 15px rgba(139, 92, 246, 0.03);
+}
+
+/* Stronger glow on explicit bordered panels */
+[data-scheme="space"] .border-edge,
+[data-scheme="space"] .border-edge-subtle {
+    border-color: rgba(139, 92, 246, 0.25);
+}
+
+[data-scheme="space"] .border-edge-strong {
+    border-color: rgba(139, 92, 246, 0.35);
+}
+
+/* Rounded cards get a subtle outer neon glow */
+[data-scheme="space"] .rounded-xl {
+    box-shadow:
+        0 0 2px rgba(139, 92, 246, 0.2),
+        0 0 8px rgba(56, 189, 248, 0.06);
+}
+
+/* Primary action buttons: emerald with cyan accent */
+[data-scheme="space"] .bg-emerald-600 {
+    box-shadow:
+        0 0 12px rgba(16, 185, 129, 0.3),
+        0 0 20px rgba(56, 189, 248, 0.1);
+}
+
+[data-scheme="space"] .bg-emerald-600:hover {
+    box-shadow:
+        0 0 16px rgba(16, 185, 129, 0.45),
+        0 0 30px rgba(56, 189, 248, 0.15);
+}
+
+/* Indigo buttons: purple+magenta accent */
+[data-scheme="space"] .bg-indigo-600 {
+    box-shadow:
+        0 0 12px rgba(99, 102, 241, 0.3),
+        0 0 20px rgba(217, 70, 239, 0.1);
+}
+
+[data-scheme="space"] .bg-indigo-600:hover {
+    box-shadow:
+        0 0 16px rgba(99, 102, 241, 0.45),
+        0 0 30px rgba(217, 70, 239, 0.15);
+}
+
+/* Header bar */
+[data-scheme="space"] header {
+    border-bottom-color: rgba(139, 92, 246, 0.2);
+    box-shadow: 0 1px 8px rgba(139, 92, 246, 0.1);
+}
+
+/* Form inputs get a subtle neon focus ring */
+[data-scheme="space"] input:focus,
+[data-scheme="space"] select:focus,
+[data-scheme="space"] textarea:focus {
+    box-shadow:
+        0 0 0 2px rgba(139, 92, 246, 0.25),
+        0 0 8px rgba(56, 189, 248, 0.1);
+}
+
+/* Dividers / horizontal rules */
+[data-scheme="space"] hr,
+[data-scheme="space"] .divide-edge > :not(:first-child) {
+    border-color: rgba(139, 92, 246, 0.15);
+}
+
+/* Links: subtle cyan underline glow on hover */
+[data-scheme="space"] a:hover {
+    text-shadow: 0 0 6px rgba(56, 189, 248, 0.3);
+}
+
+/* Scrollbar — thin neon track */
+[data-scheme="space"] ::-webkit-scrollbar {
+    width: 6px;
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-track {
+    background: rgba(10, 10, 26, 0.5);
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-thumb {
+    background: rgba(139, 92, 246, 0.3);
+    border-radius: 3px;
+}
+
+[data-scheme="space"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(139, 92, 246, 0.5);
 }

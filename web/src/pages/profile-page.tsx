@@ -253,7 +253,7 @@ function AppearanceSection() {
             )}
             {showDarkPicker && (
                 <ThemePicker
-                    label={themeMode === 'auto' ? 'Dark Mode Theme' : undefined}
+                    label={themeMode === 'auto' ? 'Dark Mode Theme' : 'Dark Themes'}
                     themes={darkThemes}
                     activeId={darkTheme}
                     onSelect={setDarkTheme}

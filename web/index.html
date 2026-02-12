@@ -15,16 +15,21 @@
     <script>
       // No-flash theme script — sets data-scheme before first paint (ROK-280, ROK-228)
       // Reads new three-key model, falls back to legacy key, then system preference.
-      // Supports: light, dark, space, auto modes.
+      // Space is a dark sub-theme: mode='dark' + darkTheme='space' -> data-scheme='space'.
       (function() {
         var mode = localStorage.getItem('raid_ledger_theme_mode');
+        var darkTheme = localStorage.getItem('raid_ledger_dark_theme') || 'default-dark';
         var scheme;
-        if (mode === 'light' || mode === 'dark') {
-          scheme = mode;
-        } else if (mode === 'space') {
-          scheme = 'space';
+        if (mode === 'light') {
+          scheme = 'light';
+        } else if (mode === 'dark') {
+          scheme = darkTheme === 'space' ? 'space' : 'dark';
         } else if (mode === 'auto') {
-          scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          scheme = prefersDark ? (darkTheme === 'space' ? 'space' : 'dark') : 'light';
+        } else if (mode === 'space') {
+          // Legacy: space-as-mode migration (handled by JS store too)
+          scheme = 'space';
         } else {
           // Fallback: legacy scheme key or system preference
           scheme = localStorage.getItem('raid_ledger_scheme');
