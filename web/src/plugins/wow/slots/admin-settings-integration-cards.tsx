@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../../../lib/toast';
 import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAdminSettings } from '../../../hooks/use-admin-settings';
 import { useNewBadge } from '../../../hooks/use-new-badge';

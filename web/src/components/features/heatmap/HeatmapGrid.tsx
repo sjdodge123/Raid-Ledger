@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { RosterAvailabilityResponse, AvailabilityStatus } from '@raid-ledger/contract';
 import { AvailabilityCell } from './AvailabilityCell';
 import { HeatmapTooltip } from './HeatmapTooltip';
+import { resolveAvatar } from '../../../lib/avatar';
 
 interface HeatmapGridProps {
     data: RosterAvailabilityResponse;
@@ -74,7 +75,8 @@ function getSlotStatus(
 
 /**
  * Heatmap grid showing team availability (ROK-113).
- * Displays time slots (rows) × users (columns) with color-coded cells.
+ * Displays time slots (rows) x users (columns) with color-coded cells.
+ * ROK-222: Uses resolveAvatar() for user avatars.
  */
 export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps) {
     const [tooltip, setTooltip] = useState<TooltipInfo | null>(null);
@@ -123,25 +125,34 @@ export function HeatmapGrid({ data, slotDurationMinutes = 30 }: HeatmapGridProps
             >
                 {/* Header row with user avatars */}
                 <div className="h-10" /> {/* Empty corner cell */}
-                {data.users.map((user) => (
-                    <div
-                        key={user.id}
-                        className="flex flex-col items-center justify-center h-10"
-                        title={user.username}
-                    >
-                        <img
-                            src={user.avatar || '/default-avatar.svg'}
-                            alt={user.username}
-                            className="w-6 h-6 rounded-full"
-                            onError={(e) => {
-                                e.currentTarget.src = '/default-avatar.svg';
-                            }}
-                        />
-                        <span className="text-xs text-muted truncate max-w-full">
-                            {user.username.slice(0, 6)}
-                        </span>
-                    </div>
-                ))}
+                {data.users.map((user) => {
+                    const userAvatar = resolveAvatar({ avatar: user.avatar });
+                    return (
+                        <div
+                            key={user.id}
+                            className="flex flex-col items-center justify-center h-10"
+                            title={user.username}
+                        >
+                            {userAvatar.url ? (
+                                <img
+                                    src={userAvatar.url}
+                                    alt={user.username}
+                                    className="w-6 h-6 rounded-full"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            ) : (
+                                <div className="w-6 h-6 rounded-full bg-overlay flex items-center justify-center text-[9px] font-semibold text-muted">
+                                    {user.username.charAt(0).toUpperCase()}
+                                </div>
+                            )}
+                            <span className="text-xs text-muted truncate max-w-full">
+                                {user.username.slice(0, 6)}
+                            </span>
+                        </div>
+                    );
+                })}
 
                 {/* Time slots rows */}
                 {timeSlots.map((slot, slotIndex) => (

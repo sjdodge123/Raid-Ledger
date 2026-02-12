@@ -1,6 +1,7 @@
 /**
  * Avatar resolution utility for ROK-194: Dynamic Avatar Resolution
  * Updated for ROK-220: Custom Avatar Upload (highest priority)
+ * Updated for ROK-222: Unified avatar helpers (buildDiscordAvatarUrl, toAvatarUser)
  *
  * Resolves avatars based on context:
  * - Custom upload: Always highest priority when set
@@ -25,7 +26,7 @@ export interface ResolvedAvatar {
  * Used by resolveAvatar to determine the most appropriate avatar to display.
  */
 export interface AvatarUser {
-    /** Discord avatar URL */
+    /** Discord avatar URL (full URL, not hash) */
     avatar: string | null;
     /** Custom uploaded avatar (relative path like /avatars/...) */
     customAvatarUrl?: string | null;
@@ -34,6 +35,40 @@ export interface AvatarUser {
         gameId: string;
         avatarUrl: string | null;
     }>;
+}
+
+/**
+ * Build a full Discord CDN avatar URL from a discordId and avatar hash.
+ * Returns null if either value is missing.
+ * If the hash is already a full URL, returns it as-is.
+ */
+export function buildDiscordAvatarUrl(
+    discordId: string | null | undefined,
+    avatarHash: string | null | undefined,
+): string | null {
+    if (!discordId || !avatarHash) return null;
+    if (avatarHash.startsWith('http')) return avatarHash;
+    return `https://cdn.discordapp.com/avatars/${discordId}/${avatarHash}.png`;
+}
+
+/**
+ * Bridge function that converts API response shapes (which store Discord avatar
+ * as a hash) into the AvatarUser interface expected by resolveAvatar().
+ *
+ * Use this when passing data from API DTOs (SignupUserDto, User, RosterAssignmentResponse)
+ * that have `avatar` as a Discord hash and `discordId` as a separate field.
+ */
+export function toAvatarUser(user: {
+    avatar: string | null;
+    discordId?: string | null;
+    customAvatarUrl?: string | null;
+    characters?: Array<{ gameId: string; avatarUrl: string | null }>;
+}): AvatarUser {
+    return {
+        avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? user.avatar,
+        customAvatarUrl: user.customAvatarUrl,
+        characters: user.characters,
+    };
 }
 
 /**

@@ -32,6 +32,22 @@
     box-shadow: 0 4px 24px rgba(139, 92, 246, 0.2);
 }
 
+/* Initials fallback when no avatar is available (ROK-222) */
+.user-profile-avatar--initials {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 700;
+    color: #a1a1aa;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+[data-scheme="light"] .user-profile-avatar--initials {
+    color: #64748b;
+    background: rgba(0, 0, 0, 0.06);
+}
+
 .user-profile-info {
     flex: 1;
 }

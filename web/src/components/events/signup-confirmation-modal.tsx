@@ -4,7 +4,7 @@ import { Modal } from '../ui/modal';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useConfirmSignup } from '../../hooks/use-signups';
 import { InlineCharacterForm } from '../characters/inline-character-form';
-import { toast } from 'sonner';
+import { toast } from '../../lib/toast';
 
 interface SignupConfirmationModalProps {
     isOpen: boolean;

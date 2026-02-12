@@ -48,6 +48,23 @@
     flex-shrink: 0;
 }
 
+/* Initials fallback when no avatar is available (ROK-222) */
+.user-link__avatar--initials {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+    font-size: 0.625rem;
+    color: #a1a1aa;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+[data-scheme="light"] .user-link__avatar--initials {
+    color: #64748b;
+    background: rgba(0, 0, 0, 0.06);
+    border-color: rgba(203, 213, 225, 0.3);
+}
+
 /* Username text */
 .user-link__name {
     max-width: 150px;

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
+import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
@@ -16,6 +17,7 @@ interface ImpersonateUser {
 /**
  * User menu dropdown showing avatar, username, and actions.
  * Includes admin impersonation dropdown (ROK-212).
+ * ROK-222: Uses resolveAvatar() for unified avatar resolution.
  */
 export function UserMenu() {
     const { user, isAuthenticated, isImpersonating, logout, impersonate, exitImpersonation } = useAuth();
@@ -106,10 +108,9 @@ export function UserMenu() {
         );
     }
 
-    // Only use Discord CDN if user has both discordId AND avatar hash
-    const avatarUrl = user.discordId && user.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
-        : '/default-avatar.svg';
+    // ROK-222: Use resolveAvatar for unified avatar resolution
+    const resolved = resolveAvatar(toAvatarUser(user));
+    const avatarUrl = resolved.url;
 
     return (
         <div className="relative" ref={menuRef}>
@@ -119,14 +120,20 @@ export function UserMenu() {
                 aria-expanded={isOpen}
                 aria-haspopup="true"
             >
-                <img
-                    src={avatarUrl}
-                    alt={user.username}
-                    className="w-8 h-8 rounded-full bg-overlay"
-                    onError={(e) => {
-                        e.currentTarget.src = '/default-avatar.svg';
-                    }}
-                />
+                {avatarUrl ? (
+                    <img
+                        src={avatarUrl}
+                        alt={user.username}
+                        className="w-8 h-8 rounded-full bg-overlay"
+                        onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                        }}
+                    />
+                ) : (
+                    <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-xs font-semibold text-muted">
+                        {user.username.charAt(0).toUpperCase()}
+                    </div>
+                )}
                 <span className="text-foreground font-medium hidden sm:block">
                     {user.username}
                 </span>
@@ -145,7 +152,7 @@ export function UserMenu() {
                     <div className="p-3 border-b border-edge">
                         <p className="text-foreground font-medium">{user.username}</p>
                         {isImpersonating && (
-                            <p className="text-amber-400 text-xs mt-1">🔄 Impersonating</p>
+                            <p className="text-amber-400 text-xs mt-1">Impersonating</p>
                         )}
                     </div>
                     <div className="py-1">
@@ -209,21 +216,30 @@ export function UserMenu() {
                                     {showImpersonateMenu && (
                                         <div className="max-h-48 overflow-y-auto bg-panel/50">
                                             {impersonateUsers && impersonateUsers.length > 0 ? (
-                                                impersonateUsers.map((u) => (
-                                                    <button
-                                                        key={u.id}
-                                                        onClick={() => handleImpersonate(u.id)}
-                                                        className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
-                                                    >
-                                                        <img
-                                                            src={u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : '/default-avatar.svg'}
-                                                            alt={u.username}
-                                                            className="w-5 h-5 rounded-full bg-faint"
-                                                            onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
-                                                        />
-                                                        {u.username}
-                                                    </button>
-                                                ))
+                                                impersonateUsers.map((u) => {
+                                                    const impAvatar = buildDiscordAvatarUrl(String(u.id), u.avatar);
+                                                    return (
+                                                        <button
+                                                            key={u.id}
+                                                            onClick={() => handleImpersonate(u.id)}
+                                                            className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
+                                                        >
+                                                            {impAvatar ? (
+                                                                <img
+                                                                    src={impAvatar}
+                                                                    alt={u.username}
+                                                                    className="w-5 h-5 rounded-full bg-faint"
+                                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                />
+                                                            ) : (
+                                                                <div className="w-5 h-5 rounded-full bg-faint flex items-center justify-center text-[10px] font-semibold text-muted">
+                                                                    {u.username.charAt(0).toUpperCase()}
+                                                                </div>
+                                                            )}
+                                                            {u.username}
+                                                        </button>
+                                                    );
+                                                })
                                             ) : (
                                                 <p className="px-6 py-2 text-xs text-dim">No users available</p>
                                             )}

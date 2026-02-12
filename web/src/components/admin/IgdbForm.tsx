@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 
 /** Format ISO date as relative time (e.g., "5m ago") */

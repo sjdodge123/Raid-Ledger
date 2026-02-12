@@ -1,11 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { toast, Toaster } from 'sonner';
+import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
-
-// Patch toast.error to persist until manually dismissed (AC-2)
-const _originalError = toast.error.bind(toast);
-toast.error = ((message: Parameters<typeof _originalError>[0], opts?: Parameters<typeof _originalError>[1]) =>
-  _originalError(message, { duration: Infinity, ...opts })) as typeof toast.error;
 import { Layout } from './components/layout';
 import { ProtectedRoute } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
@@ -38,7 +33,6 @@ function App() {
         closeButton
         offset="72px"
         duration={5000}
-        toastOptions={{}}
       />
       <Layout>
         <Routes>

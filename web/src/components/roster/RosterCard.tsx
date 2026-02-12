@@ -1,5 +1,7 @@
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
+import { toAvatarUser } from '../../lib/avatar';
+import type { AvatarUser } from '../../lib/avatar';
 
 interface RosterCardProps {
     item: RosterAssignmentResponse;
@@ -30,9 +32,23 @@ export function RosterCard({ item, onRemove }: RosterCardProps) {
         <div
             className="flex items-center gap-3 rounded-lg border border-edge bg-panel/50 p-2 transition-all"
         >
-            {/* Avatar - ROK-194: Use character portrait with Discord fallback */}
+            {/* Avatar - ROK-222: Use resolveAvatar via AvatarWithFallback user prop */}
             <AvatarWithFallback
-                avatarUrl={item.character?.avatarUrl ?? item.avatar}
+                user={(() => {
+                    const base = toAvatarUser({
+                        avatar: item.avatar,
+                        discordId: item.discordId,
+                    });
+                    // If there's a character portrait, include it so resolveAvatar can pick it up
+                    if (item.character?.avatarUrl) {
+                        return {
+                            ...base,
+                            characters: [{ gameId: '__roster__', avatarUrl: item.character.avatarUrl }],
+                        } satisfies AvatarUser;
+                    }
+                    return base;
+                })()}
+                gameId={item.character?.avatarUrl ? '__roster__' : undefined}
                 username={item.username}
             />
 
