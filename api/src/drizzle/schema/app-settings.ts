@@ -25,6 +25,10 @@ export const SETTING_KEYS = {
   BLIZZARD_CLIENT_ID: 'blizzard_client_id',
   BLIZZARD_CLIENT_SECRET: 'blizzard_client_secret',
   DEMO_MODE: 'demo_mode',
+  RELAY_ENABLED: 'relay_enabled',
+  RELAY_URL: 'relay_url',
+  RELAY_INSTANCE_ID: 'relay_instance_id',
+  RELAY_TOKEN: 'relay_token',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
