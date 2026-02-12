@@ -142,7 +142,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                         </Link>
                     )}
 
-                    {/* Theme toggle — cycles mode: light -> dark -> auto */}
+                    {/* Theme toggle — cycles mode: dark -> light -> space -> auto */}
                     <button
                         onClick={cycleTheme}
                         className="flex items-center gap-3 w-full px-4 py-3 rounded-lg font-medium text-secondary hover:bg-panel hover:text-foreground transition-colors"
@@ -150,6 +150,10 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                         {themeMode === 'light' ? (
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                            </svg>
+                        ) : themeMode === 'space' ? (
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.631 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-6.233 0c-1.296 1.296-1.436 3.297-.376 4.753l.117.146c1.164 1.37 3.31 1.37 4.473 0 1.164-1.37 1.164-3.383 0-4.753l-.117-.146z" />
                             </svg>
                         ) : themeMode === 'auto' ? (
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -160,7 +164,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                             </svg>
                         )}
-                        {themeMode === 'light' ? 'Light mode' : themeMode === 'auto' ? 'Auto (system)' : 'Dark mode'}
+                        {themeMode === 'light' ? 'Light mode' : themeMode === 'space' ? 'Space mode' : themeMode === 'auto' ? 'Auto (system)' : 'Dark mode'}
                     </button>
                 </nav>
 

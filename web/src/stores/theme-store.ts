@@ -6,7 +6,7 @@ import { getAuthToken } from '../hooks/use-auth';
 // Theme Registry (AC-1)
 // ============================================================
 
-export type ThemeMode = 'light' | 'dark';
+export type ThemeMode = 'light' | 'dark' | 'space';
 
 export interface ThemeDefinition {
     id: string;
@@ -37,6 +37,14 @@ const THEME_REGISTRY: ThemeDefinition[] = [
         preview: { surface: '#ffffff', accent: '#10b981' },
         tokens: {},
     },
+    {
+        id: 'space',
+        name: 'Space',
+        mode: 'space',
+        isDark: true,
+        preview: { surface: '#0a0a1a', accent: '#8b5cf6' },
+        tokens: {},
+    },
 ];
 
 export { THEME_REGISTRY };
@@ -55,9 +63,9 @@ export function getDarkThemes(): ThemeDefinition[] {
 // User Preference Model (AC-2 / AC-3)
 // ============================================================
 
-export type ThemeModePreference = 'light' | 'dark' | 'auto';
+export type ThemeModePreference = 'light' | 'dark' | 'space' | 'auto';
 
-const MODE_CYCLE: ThemeModePreference[] = ['light', 'dark', 'auto'];
+const MODE_CYCLE: ThemeModePreference[] = ['dark', 'light', 'space', 'auto'];
 
 // New localStorage keys
 const LS_MODE_KEY = 'raid_ledger_theme_mode';
@@ -81,6 +89,10 @@ function resolveTheme(
     lightThemeId: string,
     darkThemeId: string,
 ): ThemeDefinition {
+    // Space mode resolves directly to the space theme
+    if (mode === 'space') {
+        return THEME_REGISTRY.find((t) => t.id === 'space') ?? THEME_REGISTRY[0];
+    }
     const effectiveMode: ThemeMode = mode === 'auto' ? resolveSystemScheme() : mode;
     const targetId = effectiveMode === 'light' ? lightThemeId : darkThemeId;
     // Find in registry; fall back to the first theme of that mode, then absolute fallback
@@ -93,10 +105,11 @@ function resolveTheme(
 
 function applyTheme(theme: ThemeDefinition, previousTokens: string[]) {
     const html = document.documentElement;
-    const scheme = theme.mode;
+    // Space theme uses its own data-scheme; color-scheme stays 'dark' for native elements
+    const scheme = theme.mode === 'space' ? 'space' : theme.mode;
 
     html.setAttribute('data-scheme', scheme);
-    html.style.colorScheme = scheme;
+    html.style.colorScheme = theme.mode === 'space' ? 'dark' : scheme;
 
     // Clear previous theme-specific overrides
     for (const prop of previousTokens) {
@@ -119,7 +132,9 @@ function persistToLocalStorage(
     localStorage.setItem(LS_LIGHT_THEME_KEY, lightTheme);
     localStorage.setItem(LS_DARK_THEME_KEY, darkTheme);
     // Keep legacy scheme key for the no-flash script
-    localStorage.setItem(LS_LEGACY_SCHEME_KEY, resolvedScheme);
+    // Space uses its own scheme value for data-scheme attribute
+    const schemeForFlashScript = resolvedScheme === 'space' ? 'space' : resolvedScheme;
+    localStorage.setItem(LS_LEGACY_SCHEME_KEY, schemeForFlashScript);
 }
 
 function syncToServer(key: string, value: string) {
@@ -172,7 +187,7 @@ function initFromLocalStorage(): {
 } {
     // Check for new keys first
     const storedMode = localStorage.getItem(LS_MODE_KEY) as ThemeModePreference | null;
-    if (storedMode && ['light', 'dark', 'auto'].includes(storedMode)) {
+    if (storedMode && ['light', 'dark', 'space', 'auto'].includes(storedMode)) {
         return {
             mode: storedMode,
             lightTheme: localStorage.getItem(LS_LIGHT_THEME_KEY) ?? 'default-light',
@@ -211,6 +226,7 @@ function initFromLocalStorage(): {
 /** Map mode to a legacy themeId string for backward compat */
 function modeToLegacyId(mode: ThemeModePreference): string {
     if (mode === 'auto') return 'auto';
+    if (mode === 'space') return 'space';
     return mode === 'light' ? 'default-light' : 'default-dark';
 }
 
@@ -300,6 +316,9 @@ export const useThemeStore = create<ThemeState>((set, get) => {
             } else if (id === 'default-dark') {
                 applyAndPersist('dark', state.lightTheme, state.darkTheme);
                 syncToServer('themeMode', 'dark');
+            } else if (id === 'space') {
+                applyAndPersist('space', state.lightTheme, state.darkTheme);
+                syncToServer('themeMode', 'space');
             } else {
                 // A specific theme ID — figure out if it's light or dark
                 const theme = THEME_REGISTRY.find((t) => t.id === id);
