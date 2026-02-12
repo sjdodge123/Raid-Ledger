@@ -22,6 +22,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
+import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
 import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
 import { DayEventCard } from './DayEventCard';
@@ -94,32 +95,24 @@ export function CalendarView({
     const currentDate = controlledDate ?? internalDate;
     const setCurrentDate = onDateChange ?? setInternalDate;
 
-    // View state with URL sync and localStorage persistence
-    const getInitialView = (): View => {
-        const urlView = searchParams.get('view');
-        if (urlView === 'week') return Views.WEEK;
-        if (urlView === 'day') return Views.DAY;
-        if (urlView === 'month') return Views.MONTH;
-        // Fallback to localStorage
-        const stored = localStorage.getItem('calendar-view');
-        if (stored === 'week') return Views.WEEK;
-        if (stored === 'day') return Views.DAY;
-        return Views.MONTH;
-    };
+    // View state from Zustand store, with URL param override
+    const viewPref = useCalendarViewStore((s) => s.viewPref);
+    const setViewPref = useCalendarViewStore((s) => s.setViewPref);
 
-    const [view, setViewState] = useState<View>(getInitialView);
+    const VIEW_MAP: Record<string, View> = { week: Views.WEEK, day: Views.DAY, month: Views.MONTH };
+    const urlViewParam = searchParams.get('view');
+    const urlView = urlViewParam ? VIEW_MAP[urlViewParam] : undefined;
+    const view: View = urlView ?? VIEW_MAP[viewPref] ?? Views.WEEK;
 
-    // Sync view changes to URL and localStorage
     const setView = useCallback((newView: View) => {
-        setViewState(newView);
-        const viewStr = newView === Views.WEEK ? 'week' : newView === Views.DAY ? 'day' : 'month';
-        localStorage.setItem('calendar-view', viewStr);
+        const viewStr: CalendarViewPref = newView === Views.WEEK ? 'week' : newView === Views.DAY ? 'day' : 'month';
+        setViewPref(viewStr);
         setSearchParams(prev => {
             const next = new URLSearchParams(prev);
             next.set('view', viewStr);
             return next;
         }, { replace: true });
-    }, [setSearchParams]);
+    }, [setViewPref, setSearchParams]);
 
     // Sync date changes to URL (same replace pattern as view)
     useEffect(() => {

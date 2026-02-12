@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CalendarView } from './CalendarView';
+import { useCalendarViewStore } from '../../stores/calendar-view-store';
 
 // Mock useEvents hook
 vi.mock('../../hooks/use-events', () => ({
@@ -31,6 +32,8 @@ const renderWithProviders = (ui: React.ReactElement, initialRoute = '/calendar')
 describe('CalendarView', () => {
     beforeEach(() => {
         localStorage.clear();
+        // Reset Zustand store to default (week) after clearing localStorage
+        useCalendarViewStore.setState({ viewPref: 'week' });
         vi.useFakeTimers();
         vi.setSystemTime(new Date('2026-02-10T12:00:00Z'));
     });
@@ -40,11 +43,11 @@ describe('CalendarView', () => {
     });
 
     describe('View Toggle', () => {
-        it('renders month view by default', () => {
+        it('renders week view by default', () => {
             renderWithProviders(<CalendarView />);
 
-            const monthBtn = screen.getByRole('button', { name: 'Month' });
-            expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
+            const weekBtn = screen.getByRole('button', { name: 'Week' });
+            expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
         it('clicking Week button activates week view', () => {
@@ -72,42 +75,43 @@ describe('CalendarView', () => {
         it('persists view preference to localStorage', () => {
             renderWithProviders(<CalendarView />);
 
-            const weekBtn = screen.getByRole('button', { name: 'Week' });
-            fireEvent.click(weekBtn);
+            const dayBtn = screen.getByRole('button', { name: 'Day' });
+            fireEvent.click(dayBtn);
 
-            expect(localStorage.getItem('calendar-view')).toBe('week');
+            expect(localStorage.getItem('raid_ledger_calendar_view')).toBe('day');
         });
 
-        it('respects localStorage preference on mount', () => {
-            localStorage.setItem('calendar-view', 'week');
+        it('respects stored preference on mount', () => {
+            localStorage.setItem('raid_ledger_calendar_view', 'month');
+            useCalendarViewStore.setState({ viewPref: 'month' });
             renderWithProviders(<CalendarView />);
 
-            const weekBtn = screen.getByRole('button', { name: 'Week' });
-            expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
+            const monthBtn = screen.getByRole('button', { name: 'Month' });
+            expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
 
         it('respects URL param over localStorage', () => {
-            localStorage.setItem('calendar-view', 'month');
-            renderWithProviders(<CalendarView />, '/calendar?view=week');
+            localStorage.setItem('raid_ledger_calendar_view', 'day');
+            renderWithProviders(<CalendarView />, '/calendar?view=month');
 
-            const weekBtn = screen.getByRole('button', { name: 'Week' });
-            expect(weekBtn).toHaveAttribute('aria-pressed', 'true');
+            const monthBtn = screen.getByRole('button', { name: 'Month' });
+            expect(monthBtn).toHaveAttribute('aria-pressed', 'true');
         });
     });
 
     describe('Empty State', () => {
-        it('shows correct empty text for month view', () => {
+        it('shows correct empty text for week view (default)', () => {
             renderWithProviders(<CalendarView />);
-            expect(screen.getByText('No events this month')).toBeInTheDocument();
+            expect(screen.getByText('No events this week')).toBeInTheDocument();
         });
 
-        it('shows correct empty text for week view', () => {
+        it('shows correct empty text for month view', () => {
             renderWithProviders(<CalendarView />);
 
-            const weekBtn = screen.getByRole('button', { name: 'Week' });
-            fireEvent.click(weekBtn);
+            const monthBtn = screen.getByRole('button', { name: 'Month' });
+            fireEvent.click(monthBtn);
 
-            expect(screen.getByText('No events this week')).toBeInTheDocument();
+            expect(screen.getByText('No events this month')).toBeInTheDocument();
         });
     });
 
@@ -117,17 +121,17 @@ describe('CalendarView', () => {
             expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
         });
 
-        it('previous button has correct aria-label for month view', () => {
+        it('previous button has correct aria-label for week view (default)', () => {
             renderWithProviders(<CalendarView />);
-            expect(screen.getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
         });
 
-        it('previous button has correct aria-label for week view', () => {
+        it('previous button has correct aria-label for month view', () => {
             renderWithProviders(<CalendarView />);
 
-            fireEvent.click(screen.getByRole('button', { name: 'Week' }));
+            fireEvent.click(screen.getByRole('button', { name: 'Month' }));
 
-            expect(screen.getByRole('button', { name: 'Previous week' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
         });
     });
 });
