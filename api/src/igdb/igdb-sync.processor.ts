@@ -4,12 +4,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Job, Queue } from 'bullmq';
 import { IgdbService } from './igdb.service';
 import { QueueHealthService } from '../queue/queue-health.service';
-
-export const IGDB_SYNC_QUEUE = 'igdb-sync';
-
-export interface IgdbSyncJobData {
-  trigger: 'scheduled' | 'config-update' | 'manual';
-}
+import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
 
 @Processor(IGDB_SYNC_QUEUE)
 export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {

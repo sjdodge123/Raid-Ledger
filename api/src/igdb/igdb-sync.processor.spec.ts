@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { getQueueToken } from '@nestjs/bullmq';
-import { IgdbSyncProcessor, IGDB_SYNC_QUEUE } from './igdb-sync.processor';
+import { IgdbSyncProcessor } from './igdb-sync.processor';
+import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { IgdbService } from './igdb.service';
 import { QueueHealthService } from '../queue/queue-health.service';
 import { Job } from 'bullmq';

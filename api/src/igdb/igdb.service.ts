@@ -17,7 +17,7 @@ import {
   IgdbHealthStatusDto,
 } from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
-import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.processor';
+import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
 
 /** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {

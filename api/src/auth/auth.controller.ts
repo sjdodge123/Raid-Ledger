@@ -133,6 +133,7 @@ export class AuthController {
    * Initiates Discord OAuth with signed state containing user ID for linking.
    * Note: Uses token query param since browser redirects can't send Authorization headers.
    */
+  @RateLimit('auth')
   @Get('discord/link')
   async discordLink(
     @Query('token') token: string,
@@ -189,6 +190,7 @@ export class AuthController {
    * GET /auth/discord/link/callback
    * Handles Discord OAuth callback for linking (not login)
    */
+  @RateLimit('auth')
   @Get('discord/link/callback')
   async discordLinkCallback(
     @Query('code') code: string,

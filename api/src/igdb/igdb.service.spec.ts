@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { getQueueToken } from '@nestjs/bullmq';
 import { IgdbService } from './igdb.service';
-import { IGDB_SYNC_QUEUE } from './igdb-sync.processor';
+import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
