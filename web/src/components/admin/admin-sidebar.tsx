@@ -16,6 +16,8 @@ interface NavItem {
     newBadgeKey?: string;
     /** Integration status shown as a small pill badge */
     status?: IntegrationStatus;
+    /** Source plugin name for plugin-installed integrations (e.g. "World of Warcraft") */
+    pluginSource?: string;
 }
 
 interface NavSection {
@@ -69,6 +71,7 @@ function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[] {
                 label: integration.name,
                 newBadgeKey: `integration-nav-seen:${plugin.slug}:${integration.key}`,
                 status: integration.configured ? 'configured' : 'not-configured',
+                pluginSource: plugin.name,
             });
         }
     }
@@ -92,7 +95,6 @@ function buildNavSections(coreIntegrations: NavItem[], pluginIntegrations: NavIt
         ]},
         { id: 'appearance', label: 'Appearance', icon: AppearanceIcon, children: [
             { to: '/admin/settings/appearance', label: 'Branding' },
-            { to: '/admin/settings/appearance/theme', label: 'Theme' },
         ]},
     ];
 }
@@ -199,7 +201,14 @@ function SidebarNavItem({
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
             }`}
         >
-            <span className="truncate">{item.label}</span>
+            <span className="min-w-0 flex-1">
+                <span className="truncate block">{item.label}</span>
+                {item.pluginSource && (
+                    <span className="block text-[10px] leading-tight text-secondary/60 truncate">
+                        via {item.pluginSource}
+                    </span>
+                )}
+            </span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}
             {item.status && <StatusPill status={item.status} />}
         </Link>
