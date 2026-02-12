@@ -1,19 +1,19 @@
 import { useThemeStore } from '../../stores/theme-store';
 
 /**
- * Theme cycle button — toggles dark/light/auto on click.
- * Shows sun (light), moon (dark), or monitor (auto) icon.
+ * Theme mode cycle button (AC-5) — toggles mode: light -> dark -> auto.
+ * Icon reflects current mode: sun (light), moon (dark), monitor (auto).
  */
 export function ThemeToggle() {
-    const themeId = useThemeStore((s) => s.themeId);
+    const themeMode = useThemeStore((s) => s.themeMode);
     const cycleTheme = useThemeStore((s) => s.cycleTheme);
 
     const label =
-        themeId === 'auto'
-            ? 'Auto theme'
-            : themeId === 'default-light'
-              ? 'Light theme'
-              : 'Dark theme';
+        themeMode === 'auto'
+            ? 'Auto (system)'
+            : themeMode === 'light'
+              ? 'Light mode'
+              : 'Dark mode';
 
     return (
         <button
@@ -22,9 +22,9 @@ export function ThemeToggle() {
             aria-label={label}
             title={label}
         >
-            {themeId === 'default-light' ? (
+            {themeMode === 'light' ? (
                 <SunIcon />
-            ) : themeId === 'auto' ? (
+            ) : themeMode === 'auto' ? (
                 <MonitorIcon />
             ) : (
                 <MoonIcon />
