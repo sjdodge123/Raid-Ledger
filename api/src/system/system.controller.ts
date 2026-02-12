@@ -30,19 +30,12 @@ export class SystemController {
         this.settingsService.isBlizzardConfigured(),
       ]);
 
-    // Merge registry active slugs with transition shim:
-    // include 'blizzard' when configured even if not formally installed
-    const activeSlugs = new Set(this.pluginRegistry.getActiveSlugsSync());
-    if (blizzardConfigured) {
-      activeSlugs.add('blizzard');
-    }
-
     return {
       isFirstRun: userCount === 0,
       discordConfigured,
       blizzardConfigured,
       demoMode: await this.settingsService.getDemoMode(),
-      activePlugins: [...activeSlugs],
+      activePlugins: [...this.pluginRegistry.getActiveSlugsSync()],
     };
   }
 }

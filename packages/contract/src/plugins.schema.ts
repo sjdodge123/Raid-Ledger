@@ -24,7 +24,7 @@ export const PluginInfoSchema = z.object({
   version: z.string(),
   description: z.string(),
   author: PluginAuthorSchema,
-  gameSlugs: z.array(z.string()),
+  gameSlugs: z.array(z.string()).default([]),
   capabilities: z.array(z.string()),
   integrations: z.array(PluginIntegrationInfoSchema),
   status: z.enum(['not_installed', 'active', 'inactive']),

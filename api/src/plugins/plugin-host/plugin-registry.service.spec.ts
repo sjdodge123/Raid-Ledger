@@ -47,6 +47,15 @@ const depManifest: PluginManifest = {
   dependencies: ['test-plugin'],
 };
 
+const noGameManifest: PluginManifest = {
+  id: 'no-game-plugin',
+  name: 'Non-Game Plugin',
+  version: '1.0.0',
+  description: 'A plugin without gameSlugs',
+  author: { name: 'Test Author' },
+  capabilities: ['auth-provider'],
+};
+
 describe('PluginRegistryService', () => {
   let service: PluginRegistryService;
   let mockDb: Record<string, jest.Mock>;
@@ -427,6 +436,38 @@ describe('PluginRegistryService', () => {
     });
   });
 
+  describe('ensureInstalled()', () => {
+    it('should auto-install a registered manifest if not in DB', async () => {
+      service.registerManifest(testManifest);
+      selectResults = [];
+
+      insertReturning = [
+        {
+          slug: 'test-plugin',
+          name: 'Test Plugin',
+          version: '1.0.0',
+          active: true,
+        },
+      ];
+
+      await service.ensureInstalled('test-plugin');
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should no-op if plugin already in DB', async () => {
+      service.registerManifest(testManifest);
+      selectResults = [{ slug: 'test-plugin', active: true }];
+
+      await service.ensureInstalled('test-plugin');
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it('should no-op if manifest not registered', async () => {
+      await service.ensureInstalled('nonexistent');
+      expect(mockDb.select).not.toHaveBeenCalled();
+    });
+  });
+
   describe('isActive()', () => {
     it('should return false when plugin is not in active cache', () => {
       expect(service.isActive('test-plugin')).toBe(false);
@@ -563,6 +604,50 @@ describe('PluginRegistryService', () => {
 
       expect(service.getAdapter('character-sync', 'wow')).toBeUndefined();
       expect(service.getAdapter('character-sync', 'ffxiv')).toBe(adapter);
+    });
+
+    it('should handle undefined gameSlugs gracefully', () => {
+      const adapter = { fetchProfile: jest.fn() };
+      service.registerAdapter('character-sync', 'wow', adapter);
+
+      service.removeAdaptersForPlugin();
+
+      expect(service.getAdapter('character-sync', 'wow')).toBe(adapter);
+    });
+  });
+
+  describe('manifest without gameSlugs (ROK-265)', () => {
+    it('should register manifest without gameSlugs', () => {
+      service.registerManifest(noGameManifest);
+      const manifest = service.getManifest('no-game-plugin');
+      expect(manifest).toBeDefined();
+      expect(manifest!.gameSlugs).toBeUndefined();
+    });
+
+    it('should deactivate plugin without gameSlugs without error', async () => {
+      service.registerManifest(noGameManifest);
+      selectResults = [{ slug: 'no-game-plugin', active: true }];
+
+      await service.deactivate('no-game-plugin');
+      expect(mockEventEmitter.emit).toHaveBeenCalledWith(
+        PLUGIN_EVENTS.DEACTIVATED,
+        { slug: 'no-game-plugin' },
+      );
+    });
+
+    it('should list plugin without gameSlugs with empty array', async () => {
+      service.registerManifest(noGameManifest);
+
+      mockDb.select.mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => {
+          const r = thenableResult([]);
+          r.where = jest.fn().mockImplementation(() => thenableResult([]));
+          return r;
+        }),
+      }));
+
+      const result = await service.listPlugins();
+      expect(result[0].gameSlugs).toEqual([]);
     });
   });
 });

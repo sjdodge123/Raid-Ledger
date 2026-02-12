@@ -96,30 +96,10 @@ describe('SystemController', () => {
       );
     });
 
-    it('should include blizzard in activePlugins when blizzardConfigured is true (ROK-238)', async () => {
+    it('should return blizzard in activePlugins when plugin is active in registry (ROK-266)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(1);
       (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
         false,
-      );
-      (mockSettingsService.isBlizzardConfigured as jest.Mock).mockResolvedValue(
-        true,
-      );
-      (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
-        new Set<string>(),
-      );
-
-      const result = await controller.getStatus();
-
-      expect(result.activePlugins).toContain('blizzard');
-    });
-
-    it('should not duplicate blizzard when both registry and config report it (ROK-238)', async () => {
-      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
-      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
-        false,
-      );
-      (mockSettingsService.isBlizzardConfigured as jest.Mock).mockResolvedValue(
-        true,
       );
       (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
         new Set(['blizzard']),
@@ -127,10 +107,21 @@ describe('SystemController', () => {
 
       const result = await controller.getStatus();
 
-      const blizzardCount = result.activePlugins.filter(
-        (s) => s === 'blizzard',
-      ).length;
-      expect(blizzardCount).toBe(1);
+      expect(result.activePlugins).toContain('blizzard');
+    });
+
+    it('should return empty activePlugins when no plugins are active (ROK-266)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+      (mockPluginRegistry.getActiveSlugsSync as jest.Mock).mockReturnValue(
+        new Set<string>(),
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.activePlugins).toEqual([]);
     });
   });
 });

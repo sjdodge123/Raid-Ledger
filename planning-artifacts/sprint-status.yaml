@@ -1,4 +1,4 @@
-# generated: 2026-02-11T17:00:00Z
+# generated: 2026-02-11T12:00:00Z
 # source: Linear (Raid Ledger project) — do not hand-edit
 # regenerate: /init pulls from Linear, /handover pushes then pulls
 project: Raid Ledger
@@ -88,6 +88,7 @@ development_status:
   ROK-238: done           # Plugin Extension Points — Frontend
   ROK-239: done           # Plugin Admin UI
   ROK-240: done           # Extract Blizzard Module into Plugin Package
+  ROK-241: done           # Extract Character Sync into Plugin Adapter
   ROK-264: done           # Plugin Architecture Discovery & Codebase Audit
 
   # === Ready for Dev ===
@@ -128,7 +129,6 @@ development_status:
   ROK-218: backlog        # Missed-Event Nudge & Schedule Keeper
   ROK-219: backlog        # First-Time User Experience (FTE)
   ROK-231: backlog        # Game library: hide/ban games and adult content filter
-  ROK-241: backlog        # Extract Character Sync into Plugin Adapter
   ROK-242: backlog        # Extract Frontend WoW Components into Plugin Package
   ROK-243: backlog        # Realm Metadata & Cross-Realm Logic
   ROK-244: backlog        # Variant-Aware Boss & Loot Table Seed Data
@@ -156,6 +156,7 @@ development_status:
   ROK-267: backlog        # Add AuthProvider extension point for pluggable authentication strategies
   ROK-268: backlog        # Add ServerStatusProvider extension point for game server management plugins
   ROK-269: backlog        # Add DataEnricher extension point for third-party character/event data sources
+  ROK-270: backlog        # Re-register plugin adapters on reactivation
 
   # === Deprecated ===
   ROK-115: deprecated     # Flash Check-In (Zero-Click)

@@ -39,6 +39,37 @@ export class PluginRegistryService implements OnModuleInit {
     );
   }
 
+  /**
+   * Ensure a plugin is installed in the DB. If not present, inserts it as
+   * installed + active. If already present, preserves current state (no-op).
+   * Used by built-in plugin modules to self-register on first boot.
+   */
+  async ensureInstalled(slug: string): Promise<void> {
+    const manifest = this.manifests.get(slug);
+    if (!manifest) return;
+
+    const existing = await this.db
+      .select()
+      .from(plugins)
+      .where(eq(plugins.slug, slug))
+      .limit(1);
+
+    if (existing.length > 0) return;
+
+    const now = new Date();
+    await this.db.insert(plugins).values({
+      slug,
+      name: manifest.name,
+      version: manifest.version,
+      active: true,
+      installedAt: now,
+      updatedAt: now,
+    });
+
+    await this.refreshActiveCache();
+    this.logger.log(`Auto-installed built-in plugin: ${slug}`);
+  }
+
   getManifest(slug: string): PluginManifest | undefined {
     return this.manifests.get(slug);
   }
@@ -59,7 +90,7 @@ export class PluginRegistryService implements OnModuleInit {
         version: manifest.version,
         description: manifest.description,
         author: manifest.author,
-        gameSlugs: manifest.gameSlugs,
+        gameSlugs: manifest.gameSlugs ?? [],
         capabilities: manifest.capabilities,
         integrations,
         status: record
@@ -200,7 +231,7 @@ export class PluginRegistryService implements OnModuleInit {
 
     const manifest = this.manifests.get(slug);
     if (manifest) {
-      this.removeAdaptersForPlugin(manifest.gameSlugs);
+      this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
     }
 
     await this.refreshActiveCache();
@@ -234,7 +265,7 @@ export class PluginRegistryService implements OnModuleInit {
     return new Map(slugMap) as Map<string, T>;
   }
 
-  removeAdaptersForPlugin(gameSlugs: string[]): void {
+  removeAdaptersForPlugin(gameSlugs: string[] = []): void {
     for (const [, slugMap] of this.adapters) {
       for (const slug of gameSlugs) {
         slugMap.delete(slug);

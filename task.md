@@ -5,7 +5,6 @@
 <!-- [ ] = not started (no change in Linear) -->
 
 ## In Progress
-- [/] ROK-241: Extract Character Sync into Plugin Adapter  (P1)
 
 ## Ready for Dev
 - [ ] ROK-188: Delete User Account  (P1)
