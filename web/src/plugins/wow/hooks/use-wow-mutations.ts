@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { toast } from '@/lib/toast';
+import { toast } from '../../../lib/toast';
 import { importWowCharacter, refreshCharacterFromArmory } from '../api-client';
 import type { ImportWowCharacterInput, RefreshCharacterInput } from '@raid-ledger/contract';
 

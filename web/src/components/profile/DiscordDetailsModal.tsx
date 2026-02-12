@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
 import { unlinkDiscord } from '../../lib/api-client';
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { toast } from 'sonner';
+import { toast } from '../../lib/toast';
 import { useRelaySettings } from '../../hooks/use-relay-settings';
 
 const DEFAULT_RELAY_URL = 'https://hub.raid-ledger.com';

@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInMinutes } from 'date-fns';
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/use-auth';
 import { useRoster } from '../../hooks/use-roster';

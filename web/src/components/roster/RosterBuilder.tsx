@@ -1,5 +1,5 @@
 import React from 'react';
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 import { UnassignedBar } from './UnassignedBar';

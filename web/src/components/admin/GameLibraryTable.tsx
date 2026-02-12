@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import { useAdminGames } from '../../hooks/use-admin-games';
 
 export function GameLibraryTable() {

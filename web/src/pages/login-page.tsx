@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { API_BASE_URL } from '../lib/config';
-import { toast } from '@/lib/toast';
+import { toast } from '../lib/toast';
 import { consumeAuthRedirect } from '../components/auth';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
 

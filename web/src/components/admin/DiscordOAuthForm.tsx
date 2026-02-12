@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { API_BASE_URL } from '../../lib/config';
 

@@ -1,4 +1,4 @@
-import { toast } from '@/lib/toast';
+import { toast } from '../../lib/toast';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 
 /**
