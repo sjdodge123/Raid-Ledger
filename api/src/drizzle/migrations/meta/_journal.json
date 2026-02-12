@@ -232,6 +232,13 @@
       "when": 1770912450339,
       "tag": "0032_natural_layla_miller",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1770914561518,
+      "tag": "0033_fearless_slapstick",
+      "breakpoints": true
     }
   ]
 }

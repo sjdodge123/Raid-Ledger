@@ -192,3 +192,40 @@ export const DashboardResponseSchema = z.object({
 
 export type DashboardResponseDto = z.infer<typeof DashboardResponseSchema>;
 
+// ============================================================
+// Aggregate Game Time Schemas (ROK-223)
+// ============================================================
+
+/** Single cell in the aggregate game time heatmap */
+export const AggregateGameTimeCellSchema = z.object({
+    dayOfWeek: z.number().int().min(0).max(6), // 0=Sun, 6=Sat
+    hour: z.number().int().min(0).max(23),
+    availableCount: z.number().int().min(0),
+    totalCount: z.number().int().min(0),
+});
+
+export type AggregateGameTimeCell = z.infer<typeof AggregateGameTimeCellSchema>;
+
+/** Response for aggregate game time endpoint */
+export const AggregateGameTimeResponseSchema = z.object({
+    eventId: z.number(),
+    totalUsers: z.number(),
+    cells: z.array(AggregateGameTimeCellSchema),
+});
+
+export type AggregateGameTimeResponse = z.infer<typeof AggregateGameTimeResponseSchema>;
+
+/** Schema for rescheduling an event */
+export const RescheduleEventSchema = z.object({
+    startTime: z.string().datetime({ offset: true }),
+    endTime: z.string().datetime({ offset: true }),
+}).refine(
+    (data) => new Date(data.startTime) < new Date(data.endTime),
+    { message: 'Start time must be before end time', path: ['endTime'] }
+).refine(
+    (data) => new Date(data.startTime) > new Date(),
+    { message: 'Start time must be in the future', path: ['startTime'] }
+);
+
+export type RescheduleEventDto = z.infer<typeof RescheduleEventSchema>;
+

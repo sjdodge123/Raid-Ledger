@@ -11,6 +11,8 @@ export interface GameTimePreviewBlock {
     startHour: number;
     endHour: number;
     label?: string;
+    /** 'current' = dashed amber (default), 'selected' = solid emerald (ROK-223) */
+    variant?: 'current' | 'selected';
     // Rich fields (optional, for calendar-parity rendering inside the block)
     title?: string;
     gameName?: string;
@@ -20,6 +22,14 @@ export interface GameTimePreviewBlock {
     creatorUsername?: string | null;
     attendees?: Array<{ id: number; username: string; avatar: string | null }>;
     attendeeCount?: number;
+}
+
+/** Single cell in a heatmap overlay (ROK-223) */
+export interface HeatmapCell {
+    dayOfWeek: number;
+    hour: number;
+    availableCount: number;
+    totalCount: number;
 }
 
 export interface GameTimeGridProps {
@@ -43,6 +53,10 @@ export interface GameTimeGridProps {
     nextWeekSlots?: GameTimeSlot[];
     /** ISO date string for the start of the displayed week (e.g., "2026-02-08") */
     weekStart?: string;
+    /** Heatmap overlay data: intensity cells for aggregate availability (ROK-223) */
+    heatmapOverlay?: HeatmapCell[];
+    /** Callback when a cell is clicked (ROK-223, used in reschedule modal) */
+    onCellClick?: (dayOfWeek: number, hour: number) => void;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -219,6 +233,8 @@ export function GameTimeGrid({
     nextWeekEvents,
     nextWeekSlots,
     weekStart,
+    heatmapOverlay,
+    onCellClick,
 }: GameTimeGridProps) {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
     const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
@@ -240,6 +256,19 @@ export function GameTimeGrid({
         }
         return map;
     }, [nextWeekSlots]);
+
+    // Build heatmap intensity map for aggregate availability (ROK-223)
+    const heatmapMap = useMemo(() => {
+        if (!heatmapOverlay) return null;
+        const map = new Map<string, { available: number; total: number }>();
+        for (const cell of heatmapOverlay) {
+            map.set(`${cell.dayOfWeek}:${cell.hour}`, {
+                available: cell.availableCount,
+                total: cell.totalCount,
+            });
+        }
+        return map;
+    }, [heatmapOverlay]);
 
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const dragging = useRef(false);
@@ -474,6 +503,8 @@ export function GameTimeGrid({
                         const [d, h] = hoveredCell.split(':').map(Number);
                         const past = isPastCell(d, h);
                         const dateLabel = past && nextWeekDayDates ? nextWeekDayDates[d] : dayDates?.[d];
+                        const hm = heatmapMap?.get(`${d}:${h}`);
+                        if (hm) return `${hm.available} of ${hm.total} players available`;
                         return formatTooltip(d, h, getSlotStatus(d, h), dateLabel ?? undefined);
                     })()}
                 </div>
@@ -579,9 +610,16 @@ export function GameTimeGrid({
                             const sameBelow = belowGroup === group;
                             const rounding = sameAbove && sameBelow ? '' : sameAbove ? 'rounded-b-sm' : sameBelow ? 'rounded-t-sm' : 'rounded-sm';
 
+                            // Heatmap overlay (ROK-223)
+                            const heatmapData = heatmapMap?.get(`${dayIndex}:${hour}`);
+                            const heatmapIntensity = heatmapData
+                                ? heatmapData.available / heatmapData.total
+                                : 0;
+
                             // Hover: bright glow for paint, inverted red for erase, slate for locked
                             const isHovered = hoveredCell === `${dayIndex}:${hour}`;
                             const canInteract = isInteractive && !locked;
+                            const clickable = !!onCellClick;
                             const isErase = status === 'available';
 
                             // Proximity grid lines: cells near cursor get an inset border that fades with distance
@@ -612,19 +650,31 @@ export function GameTimeGrid({
                                 }
                             }
 
+                            // Heatmap background style
+                            const heatmapBg = heatmapData
+                                ? `rgba(16, 185, 129, ${(heatmapIntensity * 0.6).toFixed(2)})`
+                                : undefined;
+
+                            const cellStyle: React.CSSProperties = {
+                                ...(shadows.length ? { boxShadow: shadows.join(', ') } : {}),
+                                ...(heatmapBg ? { backgroundColor: heatmapBg } : {}),
+                            };
+
                             return (
                                 <div
                                     key={`${dayIndex}-${hour}`}
-                                    className={`h-5 ${rounding} transition-colors ${cellClasses} ${
-                                        canInteract ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : ''
+                                    className={`h-5 ${rounding} transition-colors ${heatmapBg ? '' : cellClasses} ${
+                                        canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : ''
                                     } ${past && nextWeekSlotMap && !isHovered ? 'opacity-60' : ''} ${
-                                        isHovered && isInteractive ? 'z-10 relative' : ''
+                                        isHovered && (isInteractive || clickable) ? 'z-10 relative' : ''
                                     }`}
-                                    style={shadows.length ? { boxShadow: shadows.join(', ') } : undefined}
+                                    style={Object.keys(cellStyle).length ? cellStyle : undefined}
                                     data-testid={`cell-${dayIndex}-${hour}`}
                                     data-status={status ?? 'inactive'}
+                                    title={heatmapData ? `${heatmapData.available} of ${heatmapData.total} players available` : undefined}
                                     onPointerDown={() => handlePointerDown(dayIndex, hour)}
                                     onPointerEnter={() => handlePointerEnter(dayIndex, hour)}
+                                    onClick={clickable ? () => onCellClick!(dayIndex, hour) : undefined}
                                 />
                             );
                         })}
@@ -876,6 +926,15 @@ export function GameTimeGrid({
                         (ev) => ev.dayOfWeek === block.dayOfWeek && ev.startHour < block.endHour && ev.endHour > block.startHour,
                     );
 
+                    // ROK-223: variant styling
+                    const isSelected = block.variant === 'selected';
+                    const borderStyle = isSelected
+                        ? '2px solid rgba(16, 185, 129, 0.8)'
+                        : '2px dashed rgba(251, 191, 36, 0.7)';
+                    const shadowStyle = isSelected
+                        ? '0 0 12px rgba(16, 185, 129, 0.3), inset 0 0 8px rgba(16, 185, 129, 0.1)'
+                        : '0 0 12px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.08)';
+
                     return (
                         <div
                             key={`preview-${block.dayOfWeek}-${block.startHour}-${i}`}
@@ -885,8 +944,8 @@ export function GameTimeGrid({
                                 left,
                                 width: Math.max(width, 0),
                                 height: Math.max(height, 0),
-                                border: '2px dashed rgba(251, 191, 36, 0.7)',
-                                boxShadow: '0 0 12px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.08)',
+                                border: borderStyle,
+                                boxShadow: shadowStyle,
                             }}
                             data-testid={`preview-block-${block.dayOfWeek}-${block.startHour}`}
                         >

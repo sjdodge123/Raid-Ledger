@@ -20,9 +20,12 @@ import {
   DashboardEventDto,
   RosterAvailabilityResponse,
   UserWithAvailabilitySlots,
+  AggregateGameTimeResponse,
+  RescheduleEventDto,
 } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { AvailabilityService } from '../availability/availability.service';
+import { NotificationService } from '../notifications/notification.service';
 
 /** Constants for events service */
 const EVENTS_CONFIG = {
@@ -38,6 +41,7 @@ export class EventsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly availabilityService: AvailabilityService,
+    private readonly notificationService: NotificationService,
   ) {}
 
   /**
@@ -744,6 +748,146 @@ export class EventsService {
       timeRange: { start: startTime, end: endTime },
       users,
     };
+  }
+
+  /**
+   * Get aggregate game time for all signed-up users (ROK-223).
+   * Returns a heatmap of how many players are available at each day/hour.
+   * @param eventId - Event ID
+   * @returns Aggregate game time data for heatmap display
+   */
+  async getAggregateGameTime(
+    eventId: number,
+  ): Promise<AggregateGameTimeResponse> {
+    // Verify event exists
+    await this.findOne(eventId);
+
+    // Get all signed-up user IDs
+    const signups = await this.db
+      .select({ userId: schema.eventSignups.userId })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    const userIds = signups.map((s) => s.userId);
+
+    if (userIds.length === 0) {
+      return { eventId, totalUsers: 0, cells: [] };
+    }
+
+    // Batch-fetch all game time templates for signed-up users
+    const templates = await this.db
+      .select({
+        dayOfWeek: schema.gameTimeTemplates.dayOfWeek,
+        startHour: schema.gameTimeTemplates.startHour,
+      })
+      .from(schema.gameTimeTemplates)
+      .where(inArray(schema.gameTimeTemplates.userId, userIds));
+
+    // Aggregate: count available users per day/hour cell
+    // DB uses 0=Mon convention, convert to display 0=Sun convention: (dbDay + 1) % 7
+    const countMap = new Map<string, number>();
+    for (const t of templates) {
+      const displayDay = (t.dayOfWeek + 1) % 7;
+      const key = `${displayDay}:${t.startHour}`;
+      countMap.set(key, (countMap.get(key) ?? 0) + 1);
+    }
+
+    const cells = Array.from(countMap.entries()).map(([key, count]) => {
+      const [day, hour] = key.split(':').map(Number);
+      return {
+        dayOfWeek: day,
+        hour,
+        availableCount: count,
+        totalCount: userIds.length,
+      };
+    });
+
+    return { eventId, totalUsers: userIds.length, cells };
+  }
+
+  /**
+   * Reschedule an event to a new time (ROK-223).
+   * Notifies all signed-up users (except the rescheduler).
+   * @param eventId - Event ID
+   * @param userId - ID of user performing the reschedule
+   * @param isAdmin - Whether the user is an admin
+   * @param dto - New start/end times
+   * @returns Updated event
+   */
+  async reschedule(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: RescheduleEventDto,
+  ): Promise<EventResponseDto> {
+    // Check event exists and user has permission
+    const existing = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (existing[0].creatorId !== userId && !isAdmin) {
+      throw new ForbiddenException('You can only reschedule your own events');
+    }
+
+    const newStart = new Date(dto.startTime);
+    const newEnd = new Date(dto.endTime);
+
+    // Update the event duration
+    await this.db
+      .update(schema.events)
+      .set({
+        duration: [newStart, newEnd],
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId));
+
+    this.logger.log(`Event rescheduled: ${eventId} by user ${userId}`);
+
+    // Notify all signed-up users (except the rescheduler)
+    const signups = await this.db
+      .select({ userId: schema.eventSignups.userId })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    const usersToNotify = signups
+      .map((s) => s.userId)
+      .filter((id) => id !== userId);
+
+    const eventTitle = existing[0].title;
+    const formatTime = (d: Date) =>
+      d.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+      });
+
+    await Promise.all(
+      usersToNotify.map((uid) =>
+        this.notificationService.create({
+          userId: uid,
+          type: 'event_rescheduled',
+          title: 'Event Rescheduled',
+          message: `"${eventTitle}" has been moved to ${formatTime(newStart)}`,
+          payload: {
+            eventId,
+            oldStartTime: existing[0].duration[0].toISOString(),
+            oldEndTime: existing[0].duration[1].toISOString(),
+            newStartTime: dto.startTime,
+            newEndTime: dto.endTime,
+          },
+        }),
+      ),
+    );
+
+    return this.findOne(eventId);
   }
 
   /**

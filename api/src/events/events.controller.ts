@@ -22,6 +22,7 @@ import {
   EventListQuerySchema,
   CreateSignupSchema,
   ConfirmSignupSchema,
+  RescheduleEventSchema,
   EventResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
@@ -31,6 +32,7 @@ import {
   RosterAvailabilityQuerySchema,
   UpdateRosterSchema,
   RosterWithAssignments,
+  AggregateGameTimeResponse,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -152,6 +154,43 @@ export class EventsController {
     try {
       const dto = UpdateEventSchema.parse(body);
       return this.eventsService.update(id, req.user.id, req.user.isAdmin, dto);
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Get aggregate game time for signed-up users (ROK-223).
+   * Returns heatmap data showing how many players are available at each day/hour.
+   * Public endpoint.
+   */
+  @Get(':id/aggregate-game-time')
+  async getAggregateGameTime(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<AggregateGameTimeResponse> {
+    return this.eventsService.getAggregateGameTime(id);
+  }
+
+  /**
+   * Reschedule an event (ROK-223).
+   * Requires authentication. Only creator or admin can reschedule.
+   * Notifies all signed-up users.
+   */
+  @Patch(':id/reschedule')
+  @UseGuards(AuthGuard('jwt'))
+  async reschedule(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<EventResponseDto> {
+    try {
+      const dto = RescheduleEventSchema.parse(body);
+      return this.eventsService.reschedule(
+        id,
+        req.user.id,
+        req.user.isAdmin,
+        dto,
+      );
     } catch (error) {
       handleValidationError(error);
     }

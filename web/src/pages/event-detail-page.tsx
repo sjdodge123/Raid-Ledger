@@ -14,6 +14,7 @@ import { CharacterCardCompact } from '../components/characters/character-card-co
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
+import { RescheduleModal } from '../components/events/RescheduleModal';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -70,6 +71,7 @@ export function EventDetailPage() {
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
+    const [showRescheduleModal, setShowRescheduleModal] = useState(false);
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
@@ -226,12 +228,20 @@ export function EventDetailPage() {
                 </button>
 
                 {canManageRoster && (
-                    <button
-                        onClick={() => navigate(`/events/${eventId}/edit`)}
-                        className="btn btn-secondary btn-sm"
-                    >
-                        Edit Event
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowRescheduleModal(true)}
+                            className="btn btn-secondary btn-sm"
+                        >
+                            Reschedule
+                        </button>
+                        <button
+                            onClick={() => navigate(`/events/${eventId}/edit`)}
+                            className="btn btn-secondary btn-sm"
+                        >
+                            Edit Event
+                        </button>
+                    </div>
                 )}
             </div>
 
@@ -461,6 +471,18 @@ export function EventDetailPage() {
                     gameName={event.game?.name ?? undefined}
                     hasRoles={gameRegistryEntry?.hasRoles ?? true}
                     gameSlug={event.game?.slug ?? undefined}
+                />
+            )}
+
+            {/* ROK-223: Reschedule Modal */}
+            {showRescheduleModal && event && (
+                <RescheduleModal
+                    isOpen={showRescheduleModal}
+                    onClose={() => setShowRescheduleModal(false)}
+                    eventId={eventId}
+                    currentStartTime={event.startTime}
+                    currentEndTime={event.endTime}
+                    eventTitle={event.title}
                 />
             )}
         </div>

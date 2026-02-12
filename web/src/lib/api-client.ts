@@ -28,6 +28,8 @@ import type {
     CreateTemplateDto,
     TemplateResponseDto,
     TemplateListResponseDto,
+    AggregateGameTimeResponse,
+    RescheduleEventDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -469,6 +471,31 @@ export async function getRosterAvailability(
     if (params?.to) searchParams.set('to', params.to);
     const query = searchParams.toString();
     return fetchApi(`/events/${eventId}/roster/availability${query ? `?${query}` : ''}`);
+}
+
+// ============================================================
+// Aggregate Game Time & Reschedule API (ROK-223)
+// ============================================================
+
+/**
+ * Fetch aggregate game time heatmap for signed-up users of an event
+ */
+export async function getAggregateGameTime(eventId: number): Promise<AggregateGameTimeResponse> {
+    return fetchApi(`/events/${eventId}/aggregate-game-time`);
+}
+
+/**
+ * Reschedule an event to a new time
+ */
+export async function rescheduleEvent(eventId: number, dto: RescheduleEventDto): Promise<EventResponseDto> {
+    return fetchApi(
+        `/events/${eventId}/reschedule`,
+        {
+            method: 'PATCH',
+            body: JSON.stringify(dto),
+        },
+        EventResponseSchema
+    );
 }
 
 // ============================================================

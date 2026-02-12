@@ -30,6 +30,7 @@ export const notifications = pgTable(
         'achievement_unlocked',
         'level_up',
         'missed_event_nudge',
+        'event_rescheduled',
       ],
     }).notNull(),
     title: text('title').notNull(),

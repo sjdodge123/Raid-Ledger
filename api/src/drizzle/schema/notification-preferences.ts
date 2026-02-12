@@ -12,6 +12,7 @@ export const NOTIFICATION_TYPES = [
   'achievement_unlocked',
   'level_up',
   'missed_event_nudge',
+  'event_rescheduled',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -37,6 +38,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   achievement_unlocked: { inApp: true, push: false, discord: false },
   level_up: { inApp: true, push: false, discord: false },
   missed_event_nudge: { inApp: true, push: false, discord: false },
+  event_rescheduled: { inApp: true, push: true, discord: true },
 };
 
 /**
