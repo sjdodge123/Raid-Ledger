@@ -18,6 +18,7 @@ import { GameDetailPage } from './pages/game-detail-page';
 import { CharacterDetailPage } from './pages/character-detail-page';
 import { PlayersPage } from './pages/players-page';
 import { MyEventsPage } from './pages/my-events-page';
+import { FeedbackWidget } from './components/feedback/FeedbackWidget';
 import './plugins/wow/register';
 import './App.css';
 
@@ -65,6 +66,7 @@ function App() {
           </Route>
         </Routes>
       </Layout>
+      <FeedbackWidget />
     </BrowserRouter>
   );
 }

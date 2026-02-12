@@ -18,3 +18,4 @@ export * from './schema/game-interests';
 export * from './schema/event-reminders-sent';
 export * from './schema/event-templates';
 export * from './schema/plugins';
+export * from './schema/feedback';
