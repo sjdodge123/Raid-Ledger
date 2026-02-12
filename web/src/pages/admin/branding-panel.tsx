@@ -51,9 +51,11 @@ export function BrandingPanel() {
         if (hasNameChange) updates.communityName = nameValue.trim();
         if (hasColorChange) updates.communityAccentColor = colorValue;
         updateBranding.mutate(updates, {
-            onSuccess: () => {
-                setNameInitialized(false);
-                setColorInitialized(false);
+            onSuccess: (data) => {
+                // Sync local form state from server response to avoid
+                // race condition with stale query cache (ROK-271)
+                setNameValue(data.communityName || '');
+                setColorValue(data.communityAccentColor || '#10B981');
             },
         });
     }, [hasNameChange, hasColorChange, nameValue, colorValue, updateBranding]);
@@ -62,12 +64,7 @@ export function BrandingPanel() {
         (e: React.ChangeEvent<HTMLInputElement>) => {
             const file = e.target.files?.[0];
             if (!file) return;
-            uploadLogo.mutate(file, {
-                onSuccess: () => {
-                    setNameInitialized(false);
-                    setColorInitialized(false);
-                },
-            });
+            uploadLogo.mutate(file);
             // Reset input so the same file can be re-selected
             if (fileInputRef.current) fileInputRef.current.value = '';
         },
@@ -76,11 +73,10 @@ export function BrandingPanel() {
 
     const handleReset = useCallback(() => {
         resetBranding.mutate(undefined, {
-            onSuccess: () => {
-                setNameValue('');
-                setColorValue('#10B981');
-                setNameInitialized(false);
-                setColorInitialized(false);
+            onSuccess: (data) => {
+                // Sync local form state from server response (ROK-271)
+                setNameValue(data.communityName || '');
+                setColorValue(data.communityAccentColor || '#10B981');
             },
         });
     }, [resetBranding]);
