@@ -18,7 +18,19 @@ const CATEGORY_PREFIX: Record<string, string> = {
 };
 
 const GITHUB_REPO = 'sjdodge123/Raid-Ledger';
-const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/issues`;
+const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_REPO}`;
+const GITHUB_ISSUES_URL = `${GITHUB_API_BASE}/issues`;
+
+/** Common headers for GitHub API requests */
+function githubHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'Content-Type': 'application/json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'RaidLedger/1.0',
+  };
+}
 
 export interface GitHubIssueResult {
   success: boolean;
@@ -37,6 +49,48 @@ export class GitHubService {
   constructor(private readonly settingsService: SettingsService) {}
 
   /**
+   * Upload a screenshot to the GitHub repo and return the raw URL.
+   * Stores under `.feedback-screenshots/` directory in the repo.
+   */
+  private async uploadScreenshot(
+    token: string,
+    feedbackId: number,
+    base64Content: string,
+  ): Promise<string | null> {
+    const timestamp = Date.now();
+    const filePath = `.feedback-screenshots/feedback-${feedbackId}-${timestamp}.png`;
+
+    try {
+      const response = await fetch(`${GITHUB_API_BASE}/contents/${filePath}`, {
+        method: 'PUT',
+        headers: githubHeaders(token),
+        body: JSON.stringify({
+          message: `feedback: add screenshot for #${feedbackId}`,
+          content: base64Content,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        this.logger.error(
+          `Screenshot upload failed: ${response.status} ${errorText}`,
+        );
+        return null;
+      }
+
+      const data = (await response.json()) as {
+        content: { download_url: string };
+      };
+      return data.content.download_url;
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to upload screenshot: ${errorMessage}`);
+      return null;
+    }
+  }
+
+  /**
    * Create a GitHub issue from feedback submission.
    * Returns the issue URL on success, or null if GitHub is not configured.
    */
@@ -46,6 +100,7 @@ export class GitHubService {
     username: string;
     pageUrl: string | null;
     feedbackId: number;
+    screenshotBase64: string | null;
   }): Promise<GitHubIssueResult> {
     const token = await this.settingsService.getGitHubPat();
     if (!token) {
@@ -59,7 +114,24 @@ export class GitHubService {
       };
     }
 
-    const { category, message, username, pageUrl, feedbackId } = params;
+    const {
+      category,
+      message,
+      username,
+      pageUrl,
+      feedbackId,
+      screenshotBase64,
+    } = params;
+
+    // Upload screenshot first (if provided)
+    let screenshotUrl: string | null = null;
+    if (screenshotBase64) {
+      screenshotUrl = await this.uploadScreenshot(
+        token,
+        feedbackId,
+        screenshotBase64,
+      );
+    }
 
     const prefix = CATEGORY_PREFIX[category] ?? '[Feedback]';
     // Use first 80 chars of message as title
@@ -77,20 +149,26 @@ export class GitHubService {
     }
     bodyParts.push('', '---', '', message);
 
+    // Append screenshot if uploaded successfully
+    if (screenshotUrl) {
+      bodyParts.push(
+        '',
+        '---',
+        '',
+        '### Screenshot',
+        '',
+        `![Screenshot](${screenshotUrl})`,
+      );
+    }
+
     const body = bodyParts.join('\n');
 
     const labels = [CATEGORY_LABELS[category] ?? 'feedback', 'user-feedback'];
 
     try {
-      const response = await fetch(GITHUB_API_URL, {
+      const response = await fetch(GITHUB_ISSUES_URL, {
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'User-Agent': 'RaidLedger/1.0',
-        },
+        headers: githubHeaders(token),
         body: JSON.stringify({ title, body, labels }),
       });
 
@@ -131,12 +209,7 @@ export class GitHubService {
       const response = await fetch(
         `https://api.github.com/repos/${GITHUB_REPO}`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-            'User-Agent': 'RaidLedger/1.0',
-          },
+          headers: githubHeaders(token),
         },
       );
 

@@ -13,7 +13,12 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     logger: logLevels,
+    // Increase JSON body limit for feedback screenshots (base64)
+    rawBody: false,
   });
+
+  // Increase body parser limit (default 100kb is too small for screenshot payloads)
+  app.useBodyParser('json', { limit: '8mb' });
 
   // CORS configuration with environment validation
   const isProduction = process.env.NODE_ENV === 'production';
