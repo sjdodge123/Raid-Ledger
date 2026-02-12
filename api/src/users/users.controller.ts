@@ -38,6 +38,7 @@ import {
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
+import { OperatorGuard } from '../auth/operator.guard';
 
 interface AuthenticatedRequest {
   user: {
@@ -109,6 +110,7 @@ export class UsersController {
         id: user.id,
         username: user.username,
         avatar: user.avatar || null,
+        discordId: user.discordId || null,
         customAvatarUrl: user.customAvatarUrl || null,
         createdAt: user.createdAt.toISOString(),
         characters: charactersResult.data,
@@ -332,18 +334,15 @@ export class UsersController {
   }
 
   /**
-   * Admin: remove any user's custom avatar (ROK-220 content moderation).
+   * Operator+: remove any user's custom avatar (ROK-220 content moderation).
    */
   @Delete(':id/avatar')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), OperatorGuard)
   @HttpCode(204)
   async adminDeleteAvatar(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ) {
-    if (req.user.role !== 'admin') {
-      throw new ForbiddenException('Admin access required');
-    }
     const user = await this.usersService.findById(id);
     if (!user) {
       throw new NotFoundException('User not found');

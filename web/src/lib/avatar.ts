@@ -65,7 +65,7 @@ export function toAvatarUser(user: {
     characters?: Array<{ gameId: string; avatarUrl: string | null }>;
 }): AvatarUser {
     return {
-        avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? user.avatar,
+        avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null),
         customAvatarUrl: user.customAvatarUrl,
         characters: user.characters,
     };

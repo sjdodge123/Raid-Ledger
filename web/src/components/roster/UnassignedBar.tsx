@@ -1,5 +1,6 @@
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
+import { toAvatarUser } from '../../lib/avatar';
 import './UnassignedBar.css';
 
 interface UnassignedBarProps {
@@ -43,7 +44,7 @@ export function UnassignedBar({ pool, onBarClick, inline }: UnassignedBarProps) 
                         style={{ marginLeft: i > 0 ? '-8px' : 0, zIndex: pool.length - i }}
                     >
                         <AvatarWithFallback
-                            avatarUrl={item.character?.avatarUrl ?? item.avatar}
+                            user={toAvatarUser(item)}
                             username={item.username}
                             sizeClassName="h-6 w-6"
                         />

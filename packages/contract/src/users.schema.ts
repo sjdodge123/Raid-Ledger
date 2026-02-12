@@ -24,6 +24,7 @@ export const UserProfileSchema = z.object({
     id: z.number().int(),
     username: z.string(),
     avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
     customAvatarUrl: z.string().nullable().optional(),
     role: UserRoleSchema.optional(),
     createdAt: z.string().datetime(),

@@ -10,6 +10,7 @@ import { EventBanner } from '../components/events/EventBanner';
 import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
+import { toAvatarUser } from '../lib/avatar';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -397,7 +398,7 @@ export function EventDetailPage() {
                                             <UserLink
                                                 userId={signup.user.id}
                                                 username={signup.user.username}
-                                                avatarUrl={signup.user.avatar}
+                                                user={toAvatarUser(signup.user)}
                                                 showAvatar
                                                 size="md"
                                             />
@@ -440,7 +441,7 @@ export function EventDetailPage() {
                                     <UserLink
                                         userId={signup.user.id}
                                         username={signup.user.username}
-                                        avatarUrl={signup.user.avatar}
+                                        user={toAvatarUser(signup.user)}
                                         showAvatar
                                         size="md"
                                     />

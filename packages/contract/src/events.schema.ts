@@ -83,6 +83,7 @@ export const EventCreatorSchema = z.object({
     id: z.number(),
     username: z.string(),
     avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
     customAvatarUrl: z.string().nullable().optional(),
 });
 

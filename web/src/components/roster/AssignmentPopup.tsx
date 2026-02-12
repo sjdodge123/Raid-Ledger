@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
+import { toAvatarUser } from '../../lib/avatar';
 import './AssignmentPopup.css';
 
 /** A single slot for the slot picker (may be empty or occupied) */
@@ -176,7 +177,7 @@ export function AssignmentPopup({
                     {/* Selected player info */}
                     <div className="assignment-popup__selected-player">
                         <AvatarWithFallback
-                            avatarUrl={selectedPlayer.character?.avatarUrl ?? selectedPlayer.avatar}
+                            user={toAvatarUser(selectedPlayer)}
                             username={selectedPlayer.username}
                             sizeClassName="h-10 w-10"
                         />
@@ -288,7 +289,7 @@ export function AssignmentPopup({
                         <div className="assignment-popup__player-row assignment-popup__player-row--current">
                             <div className="assignment-popup__player-info">
                                 <AvatarWithFallback
-                                    avatarUrl={currentOccupant.character?.avatarUrl ?? currentOccupant.avatar}
+                                    user={toAvatarUser(currentOccupant)}
                                     username={currentOccupant.username}
                                     sizeClassName="h-8 w-8"
                                 />
@@ -369,7 +370,7 @@ function PlayerRow({
         <div className="assignment-popup__player-row">
             <div className="assignment-popup__player-info">
                 <AvatarWithFallback
-                    avatarUrl={player.character?.avatarUrl ?? player.avatar}
+                    user={toAvatarUser(player)}
                     username={player.username}
                     sizeClassName="h-8 w-8"
                 />

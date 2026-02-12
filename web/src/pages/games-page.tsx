@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useGamesDiscover } from '../hooks/use-games-discover';
 import { useGameSearch } from '../hooks/use-game-search';
 import { useDebouncedValue } from '../hooks/use-debounced-value';
-import { useAuth, isAdmin as isAdminCheck } from '../hooks/use-auth';
+import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { GameCarousel } from '../components/games/GameCarousel';
 import { GameCard } from '../components/games/GameCard';
 import { GameLibraryTable } from '../components/admin/GameLibraryTable';
@@ -26,7 +26,7 @@ type GamesTab = 'discover' | 'manage';
 
 export function GamesPage() {
     const { user } = useAuth();
-    const isAdmin = isAdminCheck(user);
+    const canManage = isOperatorOrAdmin(user);
     const [activeTab, setActiveTab] = useState<GamesTab>('discover');
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
@@ -80,7 +80,7 @@ export function GamesPage() {
             </div>
 
             {/* Admin tab toggle */}
-            {isAdmin && (
+            {canManage && (
                 <div className="flex rounded-lg bg-panel/50 border border-edge p-1 w-fit mb-6">
                     <button
                         type="button"
@@ -108,7 +108,7 @@ export function GamesPage() {
             )}
 
             {/* Manage tab (admin only) */}
-            {activeTab === 'manage' && isAdmin && <GameLibraryTable />}
+            {activeTab === 'manage' && canManage && <GameLibraryTable />}
 
             {/* Discover tab */}
             {activeTab === 'discover' && (

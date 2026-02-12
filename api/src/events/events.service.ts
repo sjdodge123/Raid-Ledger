@@ -1062,6 +1062,7 @@ export class EventsService {
         id: creator?.id ?? 0,
         username: creator?.username ?? 'Unknown',
         avatar: creator?.avatar ?? null,
+        discordId: creator?.discordId ?? null,
         customAvatarUrl: creator?.customAvatarUrl ?? null,
       },
       game: gameData,

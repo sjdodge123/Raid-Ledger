@@ -232,7 +232,7 @@ function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }: Equip
 
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
-    equipment: CharacterEquipmentDto;
+    equipment: CharacterEquipmentDto | null;
     gameVariant: string | null;
     renderUrl: string | null;
     isArmoryImported: boolean;
@@ -246,7 +246,24 @@ export function CharacterDetailSections({
 }: CharacterDetailSectionsProps) {
     const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
-    useWowheadTooltips([equipment]);
+    useWowheadTooltips(equipment ? [equipment] : []);
+
+    // No equipment data — show placeholder (handles demo chars, FFXIV, etc.)
+    if (!equipment) {
+        return (
+            <div className="bg-panel border border-edge rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
+                <div className="text-center py-8 text-muted">
+                    <p className="text-lg">No equipment data</p>
+                    <p className="text-sm mt-1">
+                        {isArmoryImported
+                            ? 'Equipment data may not be available for this character. Try refreshing.'
+                            : 'Equipment data is only available for characters imported from the Blizzard Armory.'}
+                    </p>
+                </div>
+            </div>
+        );
+    }
 
     const orderedItems = buildOrderedItems(equipment);
 

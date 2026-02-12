@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { UserLink } from '../common/UserLink';
+import { toAvatarUser } from '../../lib/avatar';
 import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import './EventBanner.css';
@@ -17,6 +18,8 @@ interface EventBannerProps {
         id: number;
         username: string;
         avatar?: string | null;
+        discordId?: string | null;
+        customAvatarUrl?: string | null;
     };
     description?: string | null;
     isCollapsed?: boolean;
@@ -86,7 +89,7 @@ export function EventBanner({
                     👤 <UserLink
                         userId={creator.id}
                         username={creator.username}
-                        avatarUrl={creator.avatar}
+                        user={toAvatarUser({ ...creator, avatar: creator.avatar ?? null })}
                         showAvatar
                         size="sm"
                     />

@@ -2,8 +2,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useUserProfile } from '../hooks/use-user-profile';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto } from '@raid-ledger/contract';
-import { resolveAvatar } from '../lib/avatar';
-import type { AvatarUser } from '../lib/avatar';
+import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import './user-profile-page.css';
 
 const FACTION_STYLES: Record<string, string> = {
@@ -114,16 +113,8 @@ export function UserProfilePage() {
 
     const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
 
-    // ROK-222: Build AvatarUser from profile data for resolveAvatar()
-    const profileAvatarUser: AvatarUser = {
-        avatar: profile.avatar,
-        customAvatarUrl: (profile as { customAvatarUrl?: string | null }).customAvatarUrl ?? null,
-        characters: profile.characters?.map((c) => ({
-            gameId: c.gameId,
-            avatarUrl: c.avatarUrl,
-        })),
-    };
-    const profileAvatar = resolveAvatar(profileAvatarUser);
+    // ROK-222: Use toAvatarUser for unified avatar resolution
+    const profileAvatar = resolveAvatar(toAvatarUser(profile));
 
     return (
         <div className="user-profile-page">

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { LocalAuthService } from './local-auth.service';
-import { AdminGuard } from './admin.guard';
+import { OperatorGuard } from './operator.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { z } from 'zod';
 
@@ -83,11 +83,11 @@ export class LocalAuthController {
 
   /**
    * POST /auth/impersonate/:userId
-   * Admin-only. Issue a JWT as the target user for testing/debugging.
+   * Operator+. Issue a JWT as the target user for testing/debugging.
    * Returns both the impersonated token and the original admin token.
    */
   @Post('impersonate/:userId')
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  @UseGuards(AuthGuard('jwt'), OperatorGuard)
   @HttpCode(HttpStatus.OK)
   async impersonate(
     @Param('userId', ParseIntPipe) userId: number,
@@ -118,10 +118,10 @@ export class LocalAuthController {
 
   /**
    * GET /auth/users
-   * Admin-only. List non-admin users for the impersonation dropdown.
+   * Operator+. List non-admin users for the impersonation dropdown.
    */
   @Get('users')
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  @UseGuards(AuthGuard('jwt'), OperatorGuard)
   async listUsers() {
     return this.localAuthService.listNonAdminUsers();
   }

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth, isAdmin } from '../../hooks/use-auth';
+import { useAuth, isAdmin, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
@@ -46,7 +46,7 @@ export function UserMenu() {
             if (!res.ok) return [];
             return res.json();
         },
-        enabled: isAdmin(user) && !isImpersonating,
+        enabled: isOperatorOrAdmin(user) && !isImpersonating,
         staleTime: 1000 * 60 * 5,
     });
 
@@ -188,7 +188,6 @@ export function UserMenu() {
                         </Link>
 
                         {isAdmin(user) && !isImpersonating && (
-                            <>
                                 <Link
                                     to="/admin/settings"
                                     className="flex items-center gap-2 px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
@@ -200,8 +199,10 @@ export function UserMenu() {
                                     </svg>
                                     Plugins
                                 </Link>
+                        )}
 
-                                {/* Impersonation dropdown */}
+                        {/* Impersonation dropdown (operator+admin) */}
+                        {isOperatorOrAdmin(user) && !isImpersonating && (
                                 <div className="border-t border-edge mt-1 pt-1">
                                     <button
                                         onClick={() => {
@@ -283,7 +284,6 @@ export function UserMenu() {
                                         </div>
                                     )}
                                 </div>
-                            </>
                         )}
 
                         <button
