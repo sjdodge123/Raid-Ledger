@@ -167,7 +167,9 @@ describe('CharactersService', () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            orderBy: jest.fn().mockResolvedValue([mockCharacter, mockAltCharacter]),
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([mockCharacter, mockAltCharacter]),
           }),
         }),
       });
@@ -414,8 +416,8 @@ describe('CharactersService', () => {
       expect(txUpdateMock).toHaveBeenCalled();
     });
 
-    // ROK-206: Catch idx_one_main_per_game constraint as 409
-    it('should throw ConflictException on main constraint violation', async () => {
+    // ROK-206: Creating new main with multiple existing chars swaps atomically
+    it('should demote existing main and create new main in a single transaction', async () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -424,22 +426,30 @@ describe('CharactersService', () => {
         }),
       });
 
+      const txUpdateMock = jest.fn().mockReturnValue({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue(undefined),
+        }),
+      });
+
+      const newMainChar = {
+        ...mockCharacter,
+        id: 'char-uuid-3',
+        name: 'NewMain',
+        isMain: true,
+      };
+      const txInsertMock = jest.fn().mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([newMainChar]),
+        }),
+      });
+
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 1 }]),
-            update: jest.fn().mockReturnValue({
-              set: jest.fn().mockReturnValue({
-                where: jest.fn().mockResolvedValue(undefined),
-              }),
-            }),
-            insert: jest.fn().mockReturnValue({
-              values: jest.fn().mockReturnValue({
-                returning: jest
-                  .fn()
-                  .mockRejectedValue(new Error('idx_one_main_per_game')),
-              }),
-            }),
+            select: mockTxSelect([{ charCount: 2 }]),
+            update: txUpdateMock,
+            insert: txInsertMock,
           };
           return callback(tx);
         },
@@ -447,11 +457,25 @@ describe('CharactersService', () => {
 
       const dto = {
         gameId: 'game-uuid-1',
-        name: 'DupeMain',
+        name: 'NewMain',
+        realm: 'Stormrage',
         isMain: true,
       };
 
-      await expect(service.create(1, dto)).rejects.toThrow(ConflictException);
+      const result = await service.create(1, dto);
+
+      // New character is created as main
+      expect(result.isMain).toBe(true);
+      expect(result.name).toBe('NewMain');
+
+      // Existing main was demoted (update was called)
+      expect(txUpdateMock).toHaveBeenCalled();
+
+      // Insert was called with isMain: true
+      const insertCall = txInsertMock.mock.results[0].value.values;
+      expect(insertCall).toHaveBeenCalledWith(
+        expect.objectContaining({ isMain: true }),
+      );
     });
   });
 

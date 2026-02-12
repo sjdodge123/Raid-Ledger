@@ -15,7 +15,7 @@ import * as schema from '../drizzle/schema';
 import {
   CharacterDto,
   CharacterListResponseDto,
-  CreateCharacterInput,
+  CreateCharacterDto,
   UpdateCharacterDto,
   ImportWowCharacterDto,
   RefreshCharacterDto,
@@ -115,14 +115,14 @@ export class CharactersService {
 
   /**
    * Create a new character.
+   * ROK-206: When isMain is true and a main already exists, the existing main
+   * is automatically demoted to alt (swap behavior). First character for a
+   * game is always set as main.
    * @param userId - User ID
    * @param dto - Character creation data
    * @returns Created character
    */
-  async create(
-    userId: number,
-    dto: CreateCharacterInput,
-  ): Promise<CharacterDto> {
+  async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
     // Verify game exists
     const [game] = await this.db
       .select()
@@ -150,7 +150,7 @@ export class CharactersService {
 
         const shouldBeMain = dto.isMain === true || Number(charCount) === 0;
 
-        // If setting as main and others exist, demote existing main first
+        // ROK-206: If setting as main and others exist, demote existing main first (swap)
         if (shouldBeMain && Number(charCount) > 0) {
           await tx
             .update(schema.characters)
@@ -189,12 +189,6 @@ export class CharactersService {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
         throw new ConflictException(
           `Character ${dto.name} already exists for this game/realm`,
-        );
-      }
-      // ROK-206: Catch partial unique index constraint as 409
-      if (this.isUniqueViolation(error, 'idx_one_main_per_game')) {
-        throw new ConflictException(
-          'Only one main character allowed per game',
         );
       }
       throw error;
@@ -312,6 +306,8 @@ export class CharactersService {
 
   /**
    * Import a character from an external game API via adapter (ROK-234, ROK-237).
+   * ROK-206: When isMain is true and a main already exists, the existing main
+   * is automatically demoted to alt (swap behavior).
    */
   async importExternal(
     userId: number,
@@ -383,6 +379,7 @@ export class CharactersService {
 
         const shouldBeMain = dto.isMain === true || Number(charCount) === 0;
 
+        // ROK-206: If setting as main and others exist, demote existing main first (swap)
         if (shouldBeMain && Number(charCount) > 0) {
           await tx
             .update(schema.characters)
@@ -430,12 +427,6 @@ export class CharactersService {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
         throw new ConflictException(
           `Character ${profile.name} on ${profile.realm} already exists`,
-        );
-      }
-      // ROK-206: Catch partial unique index constraint as 409
-      if (this.isUniqueViolation(error, 'idx_one_main_per_game')) {
-        throw new ConflictException(
-          'Only one main character allowed per game',
         );
       }
       throw error;
