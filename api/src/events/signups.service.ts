@@ -63,19 +63,6 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Enforce max attendees cap
-    if (event[0].maxAttendees) {
-      const [{ count }] = await this.db
-        .select({ count: sql<number>`count(*)` })
-        .from(schema.eventSignups)
-        .where(eq(schema.eventSignups.eventId, eventId));
-      if (Number(count) >= event[0].maxAttendees) {
-        throw new ConflictException(
-          'Event has reached its maximum attendee limit',
-        );
-      }
-    }
-
     // Pre-fetch user data to avoid N+1 after insert
     const [user] = await this.db
       .select()
@@ -83,33 +70,78 @@ export class SignupsService {
       .where(eq(schema.users.id, userId))
       .limit(1);
 
-    // Try to insert first (handles race conditions gracefully)
+    // Wrap capacity check + insert + roster assignment in a transaction to
+    // prevent TOCTOU races where two concurrent signups both read count < max.
     try {
-      const [signup] = await this.db
-        .insert(schema.eventSignups)
-        .values({
-          eventId,
-          userId,
-          note: dto?.note ?? null,
-          confirmationStatus: 'pending', // ROK-131 AC-1
-        })
-        .returning();
+      const signup = await this.db.transaction(async (tx) => {
+        // When event is at capacity, auto-bench the signup instead of rejecting.
+        // If the user explicitly targets a bench slot, allow it regardless.
+        // Count only non-bench signups to accurately reflect player capacity.
+        let autoBench = false;
+        if (event[0].maxAttendees && dto?.slotRole !== 'bench') {
+          const [{ count }] = await tx
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.eventSignups)
+            .innerJoin(
+              schema.rosterAssignments,
+              eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+            )
+            .where(
+              and(
+                eq(schema.eventSignups.eventId, eventId),
+                sql`${schema.rosterAssignments.role} != 'bench'`,
+              ),
+            );
+          if (Number(count) >= event[0].maxAttendees) {
+            autoBench = true;
+          }
+        }
 
-      this.logger.log(`User ${userId} signed up for event ${eventId}`);
+        const [inserted] = await tx
+          .insert(schema.eventSignups)
+          .values({
+            eventId,
+            userId,
+            note: dto?.note ?? null,
+            confirmationStatus: 'pending', // ROK-131 AC-1
+          })
+          .returning();
 
-      // ROK-183: If slot preference provided, create roster assignment immediately
-      if (dto?.slotRole && dto?.slotPosition) {
-        await this.db.insert(schema.rosterAssignments).values({
-          eventId,
-          signupId: signup.id,
-          role: dto.slotRole,
-          position: dto.slotPosition,
-          isOverride: 0,
-        });
-        this.logger.log(
-          `Assigned user ${userId} to ${dto.slotRole} slot ${dto.slotPosition}`,
-        );
-      }
+        this.logger.log(`User ${userId} signed up for event ${eventId}`);
+
+        // ROK-183: Create roster assignment — explicit slot or auto-bench
+        const slotRole = autoBench ? 'bench' : dto?.slotRole;
+        if (slotRole) {
+          // Determine position: use provided or find next available
+          let position = dto?.slotPosition ?? 0;
+          if (autoBench || !position) {
+            const existing = await tx
+              .select({ position: schema.rosterAssignments.position })
+              .from(schema.rosterAssignments)
+              .where(
+                and(
+                  eq(schema.rosterAssignments.eventId, eventId),
+                  eq(schema.rosterAssignments.role, slotRole),
+                ),
+              );
+            position =
+              existing.reduce((max, r) => Math.max(max, r.position), 0) + 1;
+          }
+
+          await tx.insert(schema.rosterAssignments).values({
+            eventId,
+            signupId: inserted.id,
+            role: slotRole,
+            position,
+            isOverride: 0,
+          });
+          this.logger.log(
+            `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
+          );
+        }
+
+        return inserted;
+      });
 
       return this.buildSignupResponse(signup, user, null);
     } catch (error: unknown) {
@@ -655,10 +687,21 @@ export class SignupsService {
       }
     }
 
-    // Use per-event slot config if set, otherwise fall back to genre-based detection
-    const slots = event.slotConfig
-      ? this.slotConfigFromEvent(event.slotConfig as Record<string, unknown>)
-      : await this.getSlotConfigFromGenre(event.gameId);
+    // Use per-event slot config if set, otherwise fall back to genre-based detection.
+    // When maxAttendees is set (e.g. Phasmophobia max 4), use it as the player slot count.
+    let slots: RosterWithAssignments['slots'];
+    if (event.slotConfig) {
+      slots = this.slotConfigFromEvent(
+        event.slotConfig as Record<string, unknown>,
+      );
+    } else if (event.maxAttendees) {
+      // Count how many are actually benched to size the bench section
+      const benchedCount = assigned.filter((a) => a.slot === 'bench').length;
+      const benchSlots = Math.max(benchedCount, 2);
+      slots = { player: event.maxAttendees, bench: benchSlots };
+    } else {
+      slots = await this.getSlotConfigFromGenre(event.gameId);
+    }
 
     return {
       eventId,

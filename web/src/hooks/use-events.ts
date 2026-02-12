@@ -3,12 +3,15 @@ import { getEvents, getEvent, getEventRoster } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 
 /**
- * Hook to fetch paginated event list
+ * Hook to fetch paginated event list.
+ * Pass `undefined` to disable the query (e.g. when a dependency isn't ready yet).
  */
-export function useEvents(params: EventListParams = { upcoming: true }) {
+export function useEvents(params?: EventListParams) {
+    const resolvedParams = params ?? { upcoming: true };
     return useQuery({
-        queryKey: ['events', params],
-        queryFn: () => getEvents(params),
+        queryKey: ['events', resolvedParams],
+        queryFn: () => getEvents(resolvedParams),
+        enabled: params !== undefined,
     });
 }
 

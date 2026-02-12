@@ -41,7 +41,7 @@ export class SystemController {
       isFirstRun: userCount === 0,
       discordConfigured,
       blizzardConfigured,
-      demoMode: process.env.DEMO_MODE === 'true',
+      demoMode: await this.settingsService.getDemoMode(),
       activePlugins: [...activeSlugs],
     };
   }

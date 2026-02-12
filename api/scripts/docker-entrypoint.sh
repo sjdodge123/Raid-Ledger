@@ -53,32 +53,6 @@ if [ -n "$DATABASE_URL" ]; then
     
     echo "✅ Games seeded"
 
-    # Demo mode: Seed sample events and test data for demos/testing
-    if [ "$DEMO_MODE" = "true" ]; then
-        echo "🎭 Demo mode enabled - seeding sample events and users..."
-        
-        # Seed sample events
-        node ./dist/scripts/seed-events.js 2>&1 || {
-            echo "ℹ️ Event seeding skipped (may already exist)"
-        }
-
-        # Seed test fixtures (signups, availability)
-        node ./dist/scripts/seed-testing.js 2>&1 || {
-            echo "ℹ️ Test fixture seeding skipped (may already exist)"
-        }
-
-        # Seed role accounts (raidleader, player) for ACL testing
-        node ./dist/scripts/seed-role-accounts.js 2>&1 || {
-            echo "ℹ️ Role account seeding skipped (may already exist)"
-        }
-        
-        # Seed sample notifications
-        node ./dist/scripts/seed-notifications.js 2>&1 || {
-            echo "ℹ️ Notification seeding skipped (may already exist)"
-        }
-        
-        echo "✅ Demo data seeded"
-    fi
 fi
 
 # Execute the main command

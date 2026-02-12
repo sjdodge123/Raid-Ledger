@@ -87,13 +87,6 @@ jobs:
 
             Check container logs for admin credentials. The `-v` mount ensures data persists across container updates (e.g. Watchtower).
 
-            **Optional:**
-            ```bash
-            docker run -d -p 8080:80 -e DEMO_MODE=true \
-              -v raid-ledger-data:/data \
-              ghcr.io/${{ github.repository }}:${{ github.ref_name }}
-            ```
-
             **Reset admin password:**
             ```bash
             docker run -d -p 80:80 -e ADMIN_PASSWORD=mynewpassword \

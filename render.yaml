@@ -5,9 +5,6 @@ services:
     dockerfilePath: ./Dockerfile.allinone
     plan: starter
     healthCheckPath: /api/health
-    envVars:
-      - key: DEMO_MODE
-        value: "true"
     disk:
       name: postgres-data
       mountPath: /var/lib/postgresql/data

@@ -255,13 +255,6 @@ start_dev() {
     echo "Seeding IGDB game data..."
     npx ts-node api/scripts/seed-igdb-games.ts 2>&1 || true
 
-    # Demo mode seeds (sample events, test users, signups, notifications)
-    echo "Seeding demo data..."
-    npx ts-node api/scripts/seed-events.ts 2>&1 || true
-    npx ts-node api/scripts/seed-testing.ts 2>&1 || true
-    npx ts-node api/scripts/seed-role-accounts.ts 2>&1 || true
-    npx ts-node api/scripts/seed-notifications.ts 2>&1 || true
-
     # Create log directory
     mkdir -p "$LOG_DIR"
     > "$PID_FILE"

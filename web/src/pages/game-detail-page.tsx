@@ -1,9 +1,11 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useGameDetail, useGameStreams } from '../hooks/use-games-discover';
+import { useEvents } from '../hooks/use-events';
 import { useWantToPlay } from '../hooks/use-want-to-play';
 import { useAuth } from '../hooks/use-auth';
 import { ScreenshotGallery } from '../components/games/ScreenshotGallery';
 import { TwitchStreamEmbed } from '../components/games/TwitchStreamEmbed';
+import { EventCard } from '../components/events/event-card';
 
 /** IGDB genre ID → display name */
 const GENRE_MAP: Record<number, string> = {
@@ -31,6 +33,7 @@ const MODE_MAP: Record<number, string> = {
 export function GameDetailPage() {
     const { id } = useParams<{ id: string }>();
     const gameId = id ? parseInt(id, 10) : undefined;
+    const navigate = useNavigate();
 
     const { data: game, isLoading, error } = useGameDetail(gameId);
     const { data: streamsData } = useGameStreams(gameId);
@@ -38,6 +41,13 @@ export function GameDetailPage() {
     const { wantToPlay, count, toggle, isToggling } = useWantToPlay(
         isAuthenticated ? gameId : undefined,
     );
+
+    // Fetch upcoming events for this game
+    const igdbId = game?.igdbId;
+    const { data: eventsData } = useEvents(
+        igdbId ? { upcoming: true, gameId: String(igdbId), limit: 4 } : undefined,
+    );
+    const gameEvents = eventsData?.data;
 
     if (isLoading) {
         return (
@@ -71,16 +81,22 @@ export function GameDetailPage() {
 
     return (
         <div className="max-w-5xl mx-auto px-4 py-8">
-            {/* Back link */}
-            <Link
-                to="/games"
-                className="inline-flex items-center gap-1 text-muted hover:text-foreground transition-colors mb-6"
+            {/* Smart back button — navigate back if history exists, else fall back to /games */}
+            <button
+                onClick={() => {
+                    if (window.history.length > 1) {
+                        navigate(-1);
+                    } else {
+                        navigate('/games');
+                    }
+                }}
+                className="inline-flex items-center gap-1 text-muted hover:text-foreground transition-colors mb-6 bg-transparent border-none cursor-pointer p-0"
             >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Back to Games
-            </Link>
+                Back
+            </button>
 
             {/* Banner */}
             <div className="relative rounded-xl overflow-hidden mb-8">
@@ -212,6 +228,33 @@ export function GameDetailPage() {
                         </span>
                     )}
                 </div>
+            )}
+
+            {/* Upcoming Events */}
+            {gameEvents && gameEvents.length > 0 && (
+                <section className="mb-8">
+                    <div className="flex items-center justify-between mb-3">
+                        <h2 className="text-lg font-semibold text-foreground">
+                            Upcoming Events
+                        </h2>
+                        <Link
+                            to={`/events?gameId=${igdbId}`}
+                            className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                        >
+                            View all →
+                        </Link>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {gameEvents.slice(0, 4).map((event) => (
+                            <EventCard
+                                key={event.id}
+                                event={event}
+                                signupCount={event.signupCount}
+                                onClick={() => navigate(`/events/${event.id}`)}
+                            />
+                        ))}
+                    </div>
+                </section>
             )}
 
             {/* Screenshots */}

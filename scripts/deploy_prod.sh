@@ -163,7 +163,7 @@ start_containers() {
 
     # Start containers — ADMIN_PASSWORD is passed through docker-compose.yml
     echo "Starting containers..."
-    DEMO_MODE="${DEMO_MODE:-true}" docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" up -d
+    docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" up -d
 
     # Wait for health checks
     echo "Waiting for services to be healthy..."

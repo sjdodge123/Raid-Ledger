@@ -883,7 +883,7 @@ export class EventsService {
     let gameData = null;
     if (registry) {
       gameData = {
-        id: 0, // No numeric ID for registry
+        id: game?.id ?? 0, // Use IGDB games PK when available for cross-reference links
         registryId: registry.id, // ROK-194: UUID for character matching
         name: registry.name,
         slug: registry.slug,

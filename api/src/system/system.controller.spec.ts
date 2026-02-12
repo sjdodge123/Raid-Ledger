@@ -17,6 +17,7 @@ describe('SystemController', () => {
     mockSettingsService = {
       isDiscordConfigured: jest.fn(),
       isBlizzardConfigured: jest.fn().mockResolvedValue(false),
+      getDemoMode: jest.fn().mockResolvedValue(false),
     };
     mockPluginRegistry = {
       getActiveSlugsSync: jest.fn().mockReturnValue(new Set<string>()),

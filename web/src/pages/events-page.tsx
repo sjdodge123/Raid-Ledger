@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useEvents } from '../hooks/use-events';
 import { useAuth } from '../hooks/use-auth';
 import { useGameTime } from '../hooks/use-game-time';
@@ -42,12 +42,24 @@ function eventOverlapsGameTime(
  */
 export function EventsPage() {
     const navigate = useNavigate();
-    const { data, isLoading, error } = useEvents({ upcoming: true });
+    const [searchParams, setSearchParams] = useSearchParams();
+    const gameIdFilter = searchParams.get('gameId') || undefined;
+
+    const { data, isLoading, error } = useEvents({
+        upcoming: true,
+        ...(gameIdFilter ? { gameId: gameIdFilter } : {}),
+    });
     const { isAuthenticated } = useAuth();
     const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
 
     const gameTimeSlots = gameTime?.slots;
     const events = data?.data;
+
+    // Derive game name from the first loaded event when filtering by game
+    const filteredGameName = useMemo(() => {
+        if (!gameIdFilter || !events?.length) return null;
+        return events[0]?.game?.name ?? null;
+    }, [gameIdFilter, events]);
 
     // Build a Set of "dow-hour" keys for O(1) lookup
     const slotSet = useMemo(() => {
@@ -109,9 +121,13 @@ export function EventsPage() {
                 {/* Page Header */}
                 <div className="mb-8 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-foreground mb-2">Upcoming Events</h1>
+                        <h1 className="text-3xl font-bold text-foreground mb-2">
+                            {filteredGameName ? `${filteredGameName} Events` : 'Upcoming Events'}
+                        </h1>
                         <p className="text-muted">
-                            Discover and sign up for gaming sessions
+                            {filteredGameName
+                                ? `Showing events for ${filteredGameName}`
+                                : 'Discover and sign up for gaming sessions'}
                         </p>
                     </div>
                     {isAuthenticated && (
@@ -126,6 +142,28 @@ export function EventsPage() {
                         </Link>
                     )}
                 </div>
+
+                {/* Game Filter Chip */}
+                {gameIdFilter && (
+                    <div className="mb-4">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                            🎮 {filteredGameName ?? 'Loading...'}
+                            <button
+                                onClick={() => {
+                                    const next = new URLSearchParams(searchParams);
+                                    next.delete('gameId');
+                                    setSearchParams(next);
+                                }}
+                                className="ml-1 p-0.5 rounded-full hover:bg-violet-500/30 transition-colors"
+                                aria-label="Clear game filter"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </span>
+                    </div>
+                )}
 
                 {/* Game Time Filter */}
                 {slotSet && (

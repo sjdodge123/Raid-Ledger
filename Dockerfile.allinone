@@ -6,7 +6,6 @@
 #
 # Environment Variables:
 #   PORT           - External port (default: 80)
-#   DEMO_MODE      - Set "true" to seed sample data (default: false)
 #   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
 #
 # Data is persisted under /data (PostgreSQL + Redis). Mount a volume to
@@ -262,7 +261,6 @@ ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=*
 ENV CLIENT_URL=
-ENV DEMO_MODE=false
 ENV ADMIN_PASSWORD=
 
 # Expose port (nginx)

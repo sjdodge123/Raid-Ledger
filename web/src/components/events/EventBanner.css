@@ -44,6 +44,19 @@
     letter-spacing: 0.05em;
 }
 
+/* Game badge link */
+.event-banner__game--link {
+    text-decoration: none;
+    color: inherit;
+    transition: opacity 0.15s ease, text-decoration 0.15s ease;
+}
+
+.event-banner__game--link:hover {
+    opacity: 0.85;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
 /* Title */
 .event-banner__title {
     font-size: 1.75rem;

@@ -44,13 +44,14 @@ docker run -e ADMIN_PASSWORD=mynewpassword -p 80:80 ghcr.io/sjdodge123/raid-ledg
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `80` | Port to expose the application |
-| `DEMO_MODE` | `false` | Set `true` to seed sample events |
 | `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
 
-**Example with custom port and demo data:**
+**Example with custom port:**
 ```bash
-docker run -d -p 8080:80 -e DEMO_MODE=true ghcr.io/sjdodge123/raid-ledger:main
+docker run -d -p 8080:80 ghcr.io/sjdodge123/raid-ledger:main
 ```
+
+> **Demo data** can be installed (and removed) from the **Admin Panel** after logging in.
 
 ---
 

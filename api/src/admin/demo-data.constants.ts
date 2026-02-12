@@ -1,13 +1,23 @@
 /**
- * Demo Data Constants (ROK-193)
+ * Demo Data Constants (ROK-193, expanded ROK-233)
  *
  * Single source of truth for all demo data definitions.
  * Both the DemoDataService (runtime install/delete) and CLI seed scripts
  * reference these constants to guarantee consistency.
+ *
+ * The original 9 hand-crafted users are preserved at the front.
+ * 92 generated users are appended at module load via the deterministic generator.
  */
 
-/** All demo usernames — used to identify and delete demo data */
-export const DEMO_USERNAMES = [
+import {
+  createRng,
+  generateUsernames,
+  getAllNotificationTitles,
+} from './demo-data-generator';
+
+// ─── Original hand-crafted users ─────────────────────────────────────────────
+
+const ORIGINAL_USERNAMES = [
   'SeedAdmin',
   'ShadowMage',
   'DragonSlayer99',
@@ -19,8 +29,7 @@ export const DEMO_USERNAMES = [
   'LootGoblin',
 ] as const;
 
-/** Fake gamer accounts (excludes SeedAdmin which is created separately) */
-export const FAKE_GAMERS = [
+const ORIGINAL_GAMERS = [
   {
     username: 'ShadowMage',
     avatar: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6',
@@ -55,7 +64,31 @@ export const FAKE_GAMERS = [
   },
 ] as const;
 
-/** Character definitions per user */
+// ─── Generate 92 additional users (deterministic) ────────────────────────────
+// NOTE: These run at module load time. This is intentional — the constants file
+// is only imported by demo-data.service.ts and the delete path, both of which
+// need the full user list. If this module is ever imported more broadly,
+// consider switching to lazy initialization via getter functions.
+
+/** Number of original hand-crafted gamers (used to slice generated-only users) */
+export const ORIGINAL_GAMER_COUNT = ORIGINAL_GAMERS.length;
+
+const rng = createRng();
+const generatedUsers = generateUsernames(rng, 92, [...ORIGINAL_USERNAMES]);
+
+/** All demo usernames — used to identify and delete demo data */
+export const DEMO_USERNAMES: string[] = [
+  ...ORIGINAL_USERNAMES,
+  ...generatedUsers.map((u) => u.username),
+];
+
+/** Fake gamer accounts (excludes SeedAdmin which is created separately) */
+export const FAKE_GAMERS: { username: string; avatar: string }[] = [
+  ...ORIGINAL_GAMERS.map((g) => ({ username: g.username, avatar: g.avatar })),
+  ...generatedUsers,
+];
+
+/** Character definitions per user (original hand-crafted characters) */
 export const CHARACTERS_CONFIG = [
   {
     username: 'ShadowMage',
@@ -197,14 +230,15 @@ export const ROLE_ACCOUNTS = [
 ] as const;
 
 /** Notification titles used by demo data — used for deletion matching */
-export const DEMO_NOTIFICATION_TITLES = [
+export const DEMO_NOTIFICATION_TITLES: string[] = [
   'Roster Slot Available',
   'Event Starting Soon',
   'New Event Created',
   'New Event for Your Favorite Game',
   'Healer Needed',
   'Event Tomorrow',
-] as const;
+  ...getAllNotificationTitles(),
+].filter((v, i, arr) => arr.indexOf(v) === i); // dedupe
 
 /** Blizzard CDN URL for WoW class icons */
 export function getClassIconUrl(wowClass: string): string {
@@ -219,7 +253,7 @@ function roundToHour(date: Date): Date {
 }
 
 /** Helper: expand a time range into individual hour slots */
-function expandHours(
+export function expandHours(
   username: string,
   dayOfWeek: number,
   startHour: number,
@@ -241,7 +275,7 @@ function expandHours(
 }
 
 /** Helper: expand across multiple days */
-function expandDays(
+export function expandDays(
   username: string,
   days: number[],
   startHour: number,
@@ -250,7 +284,7 @@ function expandDays(
   return days.flatMap((d) => expandHours(username, d, startHour, endHour));
 }
 
-/** Generate game time slot definitions */
+/** Generate game time slot definitions (original 8 users) */
 export function getGameTimeDefinitions(): {
   username: string;
   dayOfWeek: number;

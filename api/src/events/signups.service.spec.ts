@@ -56,6 +56,7 @@ describe('SignupsService', () => {
       insert: jest.fn(),
       delete: jest.fn(),
       update: jest.fn(),
+      transaction: jest.fn(),
     };
 
     // Default select chain - event exists
@@ -103,6 +104,11 @@ describe('SignupsService', () => {
       }),
     };
     mockDb.update.mockReturnValue(updateChain);
+
+    // Transaction mock — executes callback with mockDb as the tx context
+    mockDb.transaction.mockImplementation(
+      async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
+    );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

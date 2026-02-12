@@ -33,7 +33,7 @@ services:
 
   # =============================================================================
   # API service (NestJS)
-  # Profile: test - Full stack for UI testing with DEMO_MODE seeding
+  # Profile: test - Full stack for UI testing
   # =============================================================================
   api:
     build:
@@ -51,7 +51,6 @@ services:
       JWT_SECRET: dev-secret-change-in-prod
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
-      DEMO_MODE: "${DEMO_MODE:-false}"
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
     ports:
       - "${API_PORT:-3000}:3000"

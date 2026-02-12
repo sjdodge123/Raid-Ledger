@@ -30,7 +30,7 @@ This file provides configuration and guidance for AI agents working on this code
 ./scripts/test-ui.sh --down
 ```
 
-> **Docker Demo Mode**: Containers use `DEMO_MODE=true` which seeds games, events, admin user, signups, and availability.
+> **Demo Data**: Use the Admin Panel to install or remove demo data (games, events, users, signups, and availability).
 
 ### Browser Testing
 
@@ -43,12 +43,10 @@ npx playwright test --reporter=list
 
 | Script | Mode | Purpose |
 |--------|------|---------|
-| `./scripts/test-ui.sh` | Demo (DEMO_MODE=true) | UI testing with seeded data |
-| `./scripts/test-production.sh` | Production (DEMO_MODE=false) | Bootstrap flow testing |
+| `./scripts/test-ui.sh` | Full stack | UI testing (install demo data via Admin Panel) |
+| `./scripts/test-production.sh` | Full stack | Bootstrap flow testing (empty database) |
 
-**Demo Mode** (default): Seeds games, events, admin user, signups, and availability. Use for UI verification.
-
-**Production Mode**: Empty database, no seed data. Use to test the full bootstrap experience users will see on first deployment.
+Use the **Admin Panel** to install demo data after starting the test environment.
 
 ### Verification Workflow
 

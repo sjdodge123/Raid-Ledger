@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { UserLink } from '../common/UserLink';
 import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
@@ -6,6 +7,7 @@ import './EventBanner.css';
 interface EventBannerProps {
     title: string;
     game: {
+        id?: number;
         name: string;
         coverUrl?: string | null;
     } | null;
@@ -106,9 +108,15 @@ export function EventBanner({
             <div className="event-banner__content">
                 {/* Game Badge */}
                 {game && (
-                    <span className="event-banner__game">
-                        <span role="img" aria-hidden="true">🎮</span> {game.name}
-                    </span>
+                    game.id && game.id > 0 ? (
+                        <Link to={`/games/${game.id}`} className="event-banner__game event-banner__game--link">
+                            <span role="img" aria-hidden="true">🎮</span> {game.name}
+                        </Link>
+                    ) : (
+                        <span className="event-banner__game">
+                            <span role="img" aria-hidden="true">🎮</span> {game.name}
+                        </span>
+                    )
                 )}
 
                 {/* Title */}
