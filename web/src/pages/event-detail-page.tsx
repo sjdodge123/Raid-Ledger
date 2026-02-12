@@ -13,6 +13,7 @@ import { UserLink } from '../components/common/UserLink';
 import { toAvatarUser } from '../lib/avatar';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
 import { isMMOSlotConfig } from '../utils/game-utils';
+import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { RescheduleModal } from '../components/events/RescheduleModal';
@@ -88,6 +89,7 @@ export function EventDetailPage() {
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
+    const updateAutoUnbench = useUpdateAutoUnbench(eventId);
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -318,6 +320,20 @@ export function EventDetailPage() {
                             </button>
                         )}
                     </div>
+
+                    {/* ROK-229: Auto-sub bench toggle (generic events only) */}
+                    {canManageRoster && !isMMOGame && (
+                        <label className="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer select-none">
+                            <input
+                                type="checkbox"
+                                checked={event.autoUnbench ?? true}
+                                onChange={(e) => updateAutoUnbench.mutate(e.target.checked)}
+                                disabled={updateAutoUnbench.isPending}
+                                className="rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
+                            />
+                            Auto-sub bench players when a slot opens
+                        </label>
+                    )}
 
                     <RosterBuilder
                         pool={rosterAssignments.pool}
