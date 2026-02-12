@@ -25,7 +25,18 @@ export interface SlotRegistration {
 const registry: SlotRegistration[] = [];
 
 export function registerSlotComponent(registration: SlotRegistration): void {
-    registry.push(registration);
+    // De-duplicate: replace existing registration for the same plugin+slot
+    // to prevent HMR from accumulating duplicate entries (ROK-206)
+    const existingIndex = registry.findIndex(
+        (r) =>
+            r.pluginSlug === registration.pluginSlug &&
+            r.slotName === registration.slotName,
+    );
+    if (existingIndex !== -1) {
+        registry[existingIndex] = registration;
+    } else {
+        registry.push(registration);
+    }
     registry.sort((a, b) => a.priority - b.priority);
 }
 

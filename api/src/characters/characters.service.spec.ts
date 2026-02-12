@@ -227,6 +227,7 @@ describe('CharactersService', () => {
         realm: 'Stormrage',
         class: 'Paladin',
         role: 'tank' as const,
+        isMain: false,
       };
 
       const result = await service.create(1, dto);
@@ -247,6 +248,7 @@ describe('CharactersService', () => {
       const dto = {
         gameId: 'nonexistent-game',
         name: 'NewChar',
+        isMain: false,
       };
 
       await expect(service.create(1, dto)).rejects.toThrow(NotFoundException);
@@ -281,6 +283,7 @@ describe('CharactersService', () => {
         gameId: 'game-uuid-1',
         name: 'Thrall',
         realm: 'Area 52',
+        isMain: false,
       };
 
       await expect(service.create(1, dto)).rejects.toThrow(ConflictException);
@@ -318,6 +321,7 @@ describe('CharactersService', () => {
         gameId: 'game-uuid-1',
         name: 'FirstChar',
         realm: 'Stormrage',
+        isMain: false,
       };
 
       const result = await service.create(1, dto);
@@ -361,6 +365,7 @@ describe('CharactersService', () => {
         gameId: 'game-uuid-1',
         name: 'AltChar',
         realm: 'Stormrage',
+        isMain: false,
       };
 
       const result = await service.create(1, dto);
@@ -579,6 +584,7 @@ describe('CharactersService', () => {
           realm: 'area-52',
           region: 'us',
           gameVariant: 'retail',
+          isMain: false,
         }),
       ).rejects.toThrow(NotFoundException);
     });
