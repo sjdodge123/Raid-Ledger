@@ -19,6 +19,7 @@ import { CharacterDetailPage } from './pages/character-detail-page';
 import { PlayersPage } from './pages/players-page';
 import { MyEventsPage } from './pages/my-events-page';
 import './plugins/wow/register';
+import './lib/toast-config';
 import './App.css';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
         richColors
         closeButton
         offset="72px"
+        duration={5000}
       />
       <Layout>
         <Routes>
