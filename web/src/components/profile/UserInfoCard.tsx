@@ -1,6 +1,6 @@
 import type { User } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 interface UserInfoCardProps {
     user: User;

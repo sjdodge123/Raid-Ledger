@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { useCancelSignup } from '../../../hooks/use-signups';
 import { SignupConfirmationModal } from '../../events/signup-confirmation-modal';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 interface EventBlockPopoverProps {
     event: GameTimeEventBlock;
