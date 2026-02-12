@@ -19,6 +19,7 @@ import { DemoDataPanel } from './pages/admin/demo-data-panel';
 import { DiscordPanel } from './pages/admin/discord-panel';
 import { IgdbPanel } from './pages/admin/igdb-panel';
 import { RelayPanel } from './pages/admin/relay-panel';
+import { GitHubPanel } from './pages/admin/github-panel';
 import { PluginsPanel } from './pages/admin/plugins-panel';
 import { BrandingPanel } from './pages/admin/branding-panel';
 import { PluginIntegrationPanel } from './pages/admin/plugin-integration-panel';
@@ -78,6 +79,7 @@ function App() {
               <Route path="integrations" element={<DiscordPanel />} />
               <Route path="integrations/igdb" element={<IgdbPanel />} />
               <Route path="integrations/relay" element={<RelayPanel />} />
+              <Route path="integrations/github" element={<GitHubPanel />} />
               <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
               <Route path="plugins" element={<PluginsPanel />} />
               <Route path="appearance" element={<BrandingPanel />} />

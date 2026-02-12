@@ -26,6 +26,7 @@ export const FeedbackResponseSchema = z.object({
     category: FeedbackCategorySchema,
     message: z.string(),
     pageUrl: z.string().nullable(),
+    githubIssueUrl: z.string().nullable(),
     createdAt: z.string(),
 });
 export type FeedbackResponseDto = z.infer<typeof FeedbackResponseSchema>;

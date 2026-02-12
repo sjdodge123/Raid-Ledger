@@ -317,4 +317,25 @@ export class SettingsService {
     this.logger.log('Community branding reset to defaults');
   }
 
+  /**
+   * Get GitHub PAT for feedback issue creation (ROK-186)
+   */
+  async getGitHubPat(): Promise<string | null> {
+    return this.get(SETTING_KEYS.GITHUB_PAT);
+  }
+
+  /**
+   * Set GitHub PAT (ROK-186)
+   */
+  async setGitHubPat(token: string): Promise<void> {
+    await this.set(SETTING_KEYS.GITHUB_PAT, token);
+    this.logger.log('GitHub PAT updated');
+  }
+
+  /**
+   * Check if GitHub PAT is configured (ROK-186)
+   */
+  async isGitHubConfigured(): Promise<boolean> {
+    return this.exists(SETTING_KEYS.GITHUB_PAT);
+  }
 }

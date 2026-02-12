@@ -23,6 +23,7 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
+import { GitHubService } from '../feedback/github.service';
 import {
   IgdbSyncStatusDto,
   IgdbHealthStatusDto,
@@ -84,6 +85,12 @@ export class IgdbConfigDto {
   clientSecret!: string;
 }
 
+export class GitHubPatDto {
+  @IsString()
+  @IsNotEmpty({ message: 'GitHub Personal Access Token is required' })
+  token!: string;
+}
+
 export interface OAuthTestResponse {
   success: boolean;
   message: string;
@@ -103,6 +110,7 @@ export class AdminSettingsController {
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
     private readonly demoDataService: DemoDataService,
+    private readonly githubService: GitHubService,
   ) {}
 
   /**
@@ -683,5 +691,64 @@ export class AdminSettingsController {
   @HttpCode(HttpStatus.OK)
   async clearDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.clearDemoData();
+  }
+
+  // ============================================================
+  // ROK-186: GitHub Feedback Integration
+  // ============================================================
+
+  /**
+   * GET /admin/settings/github
+   * Returns current GitHub PAT configuration status.
+   */
+  @Get('github')
+  async getGitHubStatus(): Promise<{ configured: boolean }> {
+    const configured = await this.settingsService.isGitHubConfigured();
+    return { configured };
+  }
+
+  /**
+   * PUT /admin/settings/github
+   * Save GitHub Personal Access Token.
+   */
+  @Put('github')
+  @HttpCode(HttpStatus.OK)
+  async updateGitHubConfig(
+    @Body() body: GitHubPatDto,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.setGitHubPat(body.token);
+    this.logger.log('GitHub PAT updated via admin UI');
+
+    return {
+      success: true,
+      message:
+        'GitHub PAT saved. Feedback submissions will now create GitHub issues.',
+    };
+  }
+
+  /**
+   * POST /admin/settings/github/test
+   * Test GitHub PAT by verifying repo access.
+   */
+  @Post('github/test')
+  @HttpCode(HttpStatus.OK)
+  async testGitHubConfig(): Promise<OAuthTestResponse> {
+    return this.githubService.testConnection();
+  }
+
+  /**
+   * POST /admin/settings/github/clear
+   * Remove GitHub PAT configuration.
+   */
+  @Post('github/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearGitHubConfig(): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.delete(SETTING_KEYS.GITHUB_PAT);
+    this.logger.log('GitHub PAT cleared via admin UI');
+
+    return {
+      success: true,
+      message: 'GitHub PAT cleared. Feedback will be stored locally only.',
+    };
   }
 }

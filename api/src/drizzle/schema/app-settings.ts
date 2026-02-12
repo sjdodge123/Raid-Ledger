@@ -32,6 +32,7 @@ export const SETTING_KEYS = {
   COMMUNITY_NAME: 'community_name',
   COMMUNITY_LOGO_PATH: 'community_logo_path',
   COMMUNITY_ACCENT_COLOR: 'community_accent_color',
+  GITHUB_PAT: 'github_pat',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

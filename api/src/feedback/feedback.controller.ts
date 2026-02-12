@@ -16,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { RateLimit } from '../throttler/rate-limit.decorator';
+import { GitHubService } from './github.service';
 import {
   CreateFeedbackSchema,
   type FeedbackResponseDto,
@@ -32,7 +33,7 @@ interface AuthRequest extends Request {
 
 /**
  * Feedback controller — handles user-submitted feedback.
- * ROK-186: User Feedback Widget.
+ * ROK-186: User Feedback Widget + GitHub Issues integration.
  */
 @Controller('feedback')
 export class FeedbackController {
@@ -41,11 +42,13 @@ export class FeedbackController {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: NodePgDatabase<typeof schema>,
+    private readonly githubService: GitHubService,
   ) {}
 
   /**
    * POST /feedback
    * Submit feedback (authenticated users only).
+   * Saves to local DB and creates a GitHub issue if configured.
    */
   @Post()
   @UseGuards(AuthGuard('jwt'))
@@ -63,6 +66,7 @@ export class FeedbackController {
     const userId = req.user.id;
     const { category, message, pageUrl } = parsed.data;
 
+    // Insert feedback into local DB first
     const [inserted] = await this.db
       .insert(schema.feedback)
       .values({
@@ -77,11 +81,48 @@ export class FeedbackController {
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );
 
+    // Look up username for GitHub issue body
+    const userRows = await this.db
+      .select({ username: schema.users.username })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    const username = userRows[0]?.username ?? `User #${userId}`;
+
+    // Attempt to create GitHub issue (non-blocking for the user)
+    let githubIssueUrl: string | null = null;
+    try {
+      const result = await this.githubService.createFeedbackIssue({
+        category,
+        message,
+        username,
+        pageUrl: pageUrl ?? null,
+        feedbackId: inserted.id,
+      });
+
+      if (result.success && result.issueUrl) {
+        githubIssueUrl = result.issueUrl;
+
+        // Update feedback record with GitHub issue URL
+        await this.db
+          .update(schema.feedback)
+          .set({ githubIssueUrl })
+          .where(eq(schema.feedback.id, inserted.id));
+      }
+    } catch (error) {
+      // Log but do not fail the request — local DB save is the fallback
+      this.logger.error(
+        `Failed to create GitHub issue for feedback #${inserted.id}:`,
+        error,
+      );
+    }
+
     return {
       id: inserted.id,
       category: inserted.category as FeedbackResponseDto['category'],
       message: inserted.message,
       pageUrl: inserted.pageUrl,
+      githubIssueUrl,
       createdAt: inserted.createdAt.toISOString(),
     };
   }
@@ -111,6 +152,7 @@ export class FeedbackController {
           category: schema.feedback.category,
           message: schema.feedback.message,
           pageUrl: schema.feedback.pageUrl,
+          githubIssueUrl: schema.feedback.githubIssueUrl,
           createdAt: schema.feedback.createdAt,
           username: schema.users.username,
         })
@@ -133,6 +175,7 @@ export class FeedbackController {
           row.category as FeedbackListResponseDto['data'][0]['category'],
         message: row.message,
         pageUrl: row.pageUrl,
+        githubIssueUrl: row.githubIssueUrl,
         createdAt: row.createdAt.toISOString(),
       })),
       meta: {

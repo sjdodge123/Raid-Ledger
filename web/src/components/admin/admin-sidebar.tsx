@@ -37,6 +37,7 @@ function buildCoreIntegrationItems(statuses: {
     discord: { configured: boolean; loading: boolean };
     igdb: { configured: boolean; loading: boolean };
     relay: { connected: boolean; loading: boolean };
+    github: { configured: boolean; loading: boolean };
 }): NavItem[] {
     return [
         {
@@ -56,6 +57,12 @@ function buildCoreIntegrationItems(statuses: {
             label: 'Relay Hub',
             status: statuses.relay.loading ? 'loading'
                 : statuses.relay.connected ? 'online' : 'not-configured',
+        },
+        {
+            to: '/admin/settings/integrations/github',
+            label: 'GitHub',
+            status: statuses.github.loading ? 'loading'
+                : statuses.github.configured ? 'configured' : 'not-configured',
         },
     ];
 }
@@ -110,7 +117,7 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { oauthStatus, igdbStatus } = useAdminSettings();
+    const { oauthStatus, igdbStatus, githubStatus } = useAdminSettings();
     const { relayStatus } = useRelaySettings();
 
     const coreIntegrations = buildCoreIntegrationItems({
@@ -125,6 +132,10 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         relay: {
             connected: relayStatus.data?.connected ?? false,
             loading: relayStatus.isLoading,
+        },
+        github: {
+            configured: githubStatus.data?.configured ?? false,
+            loading: githubStatus.isLoading,
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);

@@ -14,5 +14,6 @@ export const feedback = pgTable('feedback', {
   category: text('category').notNull(),
   message: text('message').notNull(),
   pageUrl: text('page_url'),
+  githubIssueUrl: text('github_issue_url'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
