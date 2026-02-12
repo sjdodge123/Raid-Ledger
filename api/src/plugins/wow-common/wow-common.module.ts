@@ -3,9 +3,10 @@ import { BlizzardService } from './blizzard.service';
 import { BlizzardController } from './blizzard.controller';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
-import { SettingsModule } from '../settings/settings.module';
-import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
-import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
+import { SettingsModule } from '../../settings/settings.module';
+import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { EXTENSION_POINTS } from '../plugin-host/extension-points';
+import { WOW_COMMON_MANIFEST } from './manifest';
 
 @Module({
   imports: [SettingsModule],
@@ -21,7 +22,7 @@ import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
     BlizzardContentProvider,
   ],
 })
-export class BlizzardModule implements OnModuleInit {
+export class WowCommonModule implements OnModuleInit {
   constructor(
     private readonly pluginRegistry: PluginRegistryService,
     private readonly characterSyncAdapter: BlizzardCharacterSyncAdapter,
@@ -29,6 +30,8 @@ export class BlizzardModule implements OnModuleInit {
   ) {}
 
   onModuleInit(): void {
+    this.pluginRegistry.registerManifest(WOW_COMMON_MANIFEST);
+
     for (const slug of this.characterSyncAdapter.gameSlugs) {
       this.pluginRegistry.registerAdapter(
         EXTENSION_POINTS.CHARACTER_SYNC,

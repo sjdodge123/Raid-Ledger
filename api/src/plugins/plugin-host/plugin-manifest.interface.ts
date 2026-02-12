@@ -17,6 +17,7 @@ export interface PluginManifest {
   name: string;
   version: string;
   description: string;
+  author: { name: string; url?: string };
   gameSlugs: string[];
   capabilities: string[];
   settingKeys?: string[];

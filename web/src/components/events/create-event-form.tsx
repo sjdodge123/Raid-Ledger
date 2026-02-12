@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto, WowInstanceDetailDto } from '@raid-ledger/contract';
+import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
 import { createEvent, updateEvent } from '../../lib/api-client';
 import { GameSearchInput } from './game-search-input';
 import { TeamAvailabilityPicker } from '../features/heatmap';
@@ -85,7 +85,7 @@ interface FormState {
     recurrenceFrequency: '' | 'weekly' | 'biweekly' | 'monthly';
     recurrenceUntil: string;
     // Content instances
-    selectedInstances: WowInstanceDetailDto[];
+    selectedInstances: Record<string, unknown>[];
     titleIsAutoSuggested: boolean;
     descriptionIsAutoSuggested: boolean;
 }
@@ -208,7 +208,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 autoUnbench: editEvent.autoUnbench ?? true,
                 recurrenceFrequency: '',
                 recurrenceUntil: '',
-                selectedInstances: (editEvent.contentInstances as WowInstanceDetailDto[]) ?? [],
+                selectedInstances: (editEvent.contentInstances as Record<string, unknown>[]) ?? [],
                 titleIsAutoSuggested: false,
                 descriptionIsAutoSuggested: false,
             };
@@ -286,7 +286,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         const instances = form.selectedInstances;
 
         if (instances.length > 0 && etName) {
-            const names = instances.map((i) => i.shortName || i.name);
+            const names = instances.map((i) => (i.shortName as string) || (i.name as string) || '');
             const playerCap = selectedEventType?.defaultPlayerCap;
             const suffix = playerCap ? ` ${playerCap} man` : '';
             return `${names.join(' + ')}${suffix}`;
@@ -305,7 +305,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         const instances = form.selectedInstances;
         if (instances.length === 0) return '';
         const levels = instances
-            .map((i) => ({ min: i.minimumLevel, max: i.maximumLevel ?? i.minimumLevel }))
+            .map((i) => ({ min: i.minimumLevel as number | undefined, max: (i.maximumLevel ?? i.minimumLevel) as number | undefined }))
             .filter((l): l is { min: number; max: number } => l.min != null);
         if (levels.length === 0) return '';
         // Intersection: highest min to lowest max = range where all dungeons are appropriate
@@ -703,7 +703,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                             wowVariant,
                             contentType,
                             selectedInstances: form.selectedInstances,
-                            onInstancesChange: (instances: WowInstanceDetailDto[]) => setForm(prev => ({...prev, selectedInstances: instances})),
+                            onInstancesChange: (instances: Record<string, unknown>[]) => setForm(prev => ({...prev, selectedInstances: instances})),
                         }}
                     />
                 )}

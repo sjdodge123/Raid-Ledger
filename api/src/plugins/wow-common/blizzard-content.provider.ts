@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { BlizzardService } from './blizzard.service';
-import type { ContentProvider } from '../plugins/plugin-host/extension-points';
+import type { ContentProvider } from '../plugin-host/extension-points';
 import type {
   ExternalRealm,
   ExternalContentInstance,
   ExternalContentInstanceDetail,
-} from '../plugins/plugin-host/extension-types';
+} from '../plugin-host/extension-types';
 import type { WowGameVariant } from '@raid-ledger/contract';
 
 @Injectable()

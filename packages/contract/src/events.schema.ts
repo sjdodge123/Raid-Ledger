@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { SignupUserSchema } from './signups.schema.js';
-import { WowInstanceDetailSchema } from './blizzard.schema.js';
 
 // ============================================================
 // Slot Configuration Schema
@@ -43,7 +42,7 @@ export const CreateEventSchema = z.object({
     maxAttendees: z.number().int().min(1).optional(),
     autoUnbench: z.boolean().optional(),
     recurrence: RecurrenceSchema.optional(),
-    contentInstances: z.array(WowInstanceDetailSchema).optional(),
+    contentInstances: z.array(z.record(z.string(), z.unknown())).optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -62,7 +61,7 @@ export const UpdateEventSchema = z.object({
     slotConfig: SlotConfigSchema.optional().nullable(),
     maxAttendees: z.number().int().min(1).optional().nullable(),
     autoUnbench: z.boolean().optional(),
-    contentInstances: z.array(WowInstanceDetailSchema).optional().nullable(),
+    contentInstances: z.array(z.record(z.string(), z.unknown())).optional().nullable(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {
@@ -115,7 +114,7 @@ export const EventResponseSchema = z.object({
     slotConfig: SlotConfigSchema.nullable().optional(),
     maxAttendees: z.number().nullable().optional(),
     autoUnbench: z.boolean().optional(),
-    contentInstances: z.array(WowInstanceDetailSchema).nullable().optional(),
+    contentInstances: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
     recurrenceGroupId: z.string().uuid().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),

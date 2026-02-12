@@ -19,7 +19,7 @@ import { SystemModule } from './system/system.module';
 import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
-import { BlizzardModule } from './blizzard/blizzard.module';
+import { WowCommonModule } from './plugins/wow-common';
 
 @Module({
   imports: [
@@ -40,7 +40,7 @@ import { BlizzardModule } from './blizzard/blizzard.module';
     SystemModule,
     SettingsModule,
     NotificationModule,
-    BlizzardModule,
+    WowCommonModule,
   ],
   controllers: [AppController],
   providers: [AppService],
