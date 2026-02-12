@@ -13,13 +13,16 @@
     <script>var whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
     <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
     <script>
-      // No-flash theme script — sets data-scheme before first paint (ROK-280)
+      // No-flash theme script — sets data-scheme before first paint (ROK-280, ROK-228)
       // Reads new three-key model, falls back to legacy key, then system preference.
+      // Supports: light, dark, space, auto modes.
       (function() {
         var mode = localStorage.getItem('raid_ledger_theme_mode');
         var scheme;
         if (mode === 'light' || mode === 'dark') {
           scheme = mode;
+        } else if (mode === 'space') {
+          scheme = 'space';
         } else if (mode === 'auto') {
           scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         } else {
@@ -30,7 +33,7 @@
           }
         }
         document.documentElement.setAttribute('data-scheme', scheme);
-        document.documentElement.style.colorScheme = scheme;
+        document.documentElement.style.colorScheme = scheme === 'space' ? 'dark' : scheme;
       })();
     </script>
   </head>

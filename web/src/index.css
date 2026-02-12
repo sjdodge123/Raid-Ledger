@@ -83,6 +83,30 @@ html {
     --gt-proximity-line: 100, 116, 139;
 }
 
+/* Space theme overrides (ROK-228) */
+[data-scheme="space"] {
+    --color-backdrop: #0a0a1a;
+    --color-surface: #12122a;
+    --color-panel: #1a1a3e;
+    --color-overlay: #252550;
+    --color-faint: #3d3d6b;
+    --color-dim: #6b6b9e;
+    --color-muted: #9898c8;
+    --color-secondary: #c0c0e0;
+    --color-foreground: #e8e8ff;
+    --color-edge: #2a2a55;
+    --color-edge-strong: #3d3d6b;
+    --color-edge-subtle: #1a1a3e;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(26, 26, 62, 0.7);
+    --gt-widget-border: rgba(61, 61, 107, 0.6);
+    --gt-split-bg: rgba(26, 26, 62, 0.8);
+    --gt-past-highlight: rgba(26, 26, 62, 0.3);
+    --gt-hover-glow: rgba(152, 152, 200, 0.2);
+    --gt-proximity-line: 152, 152, 200;
+}
+
 /* ============================================
    UX Design System - Raid Ledger
    Based on ux-design-specification.md
@@ -120,6 +144,10 @@ html {
 
 html[data-scheme="light"] {
     color-scheme: light;
+}
+
+html[data-scheme="space"] {
+    color-scheme: dark;
 }
 
 body {
@@ -162,6 +190,24 @@ body {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
 
+/* Space theme: glassmorphism with nebula tint (ROK-228) */
+[data-scheme="space"] .glass-card {
+    background: color-mix(in srgb, var(--color-surface) 65%, transparent);
+    backdrop-filter: blur(16px);
+    border-color: color-mix(in srgb, #8b5cf6 15%, transparent);
+    box-shadow:
+        0 0 1px rgba(139, 92, 246, 0.15),
+        inset 0 0 20px rgba(139, 92, 246, 0.03);
+}
+
+[data-scheme="space"] .glass-card:hover {
+    border-color: color-mix(in srgb, #8b5cf6 25%, transparent);
+    background: color-mix(in srgb, var(--color-surface) 75%, transparent);
+    box-shadow:
+        0 0 2px rgba(139, 92, 246, 0.2),
+        inset 0 0 25px rgba(139, 92, 246, 0.05);
+}
+
 /* Glow Button Effects */
 .glow-emerald {
     box-shadow: var(--glow-emerald);
@@ -194,6 +240,23 @@ body {
 
 [data-scheme="light"] .glow-indigo:hover {
     box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
+}
+
+/* Space theme: enhanced purple-cyan glows (ROK-228) */
+[data-scheme="space"] .glow-emerald {
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35), 0 0 40px rgba(139, 92, 246, 0.1);
+}
+
+[data-scheme="space"] .glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(16, 185, 129, 0.5), 0 0 50px rgba(139, 92, 246, 0.15);
+}
+
+[data-scheme="space"] .glow-indigo {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.35), 0 0 40px rgba(139, 92, 246, 0.15);
+}
+
+[data-scheme="space"] .glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5), 0 0 50px rgba(139, 92, 246, 0.2);
 }
 
 /* Role Badge Colors */
