@@ -22,6 +22,7 @@ import { RelayPanel } from './pages/admin/relay-panel';
 import { PluginsPanel } from './pages/admin/plugins-panel';
 import { BrandingPanel } from './pages/admin/branding-panel';
 import { ThemePanel } from './pages/admin/theme-panel';
+import { PluginIntegrationPanel } from './pages/admin/plugin-integration-panel';
 import { GamesPage } from './pages/games-page';
 import { GameDetailPage } from './pages/game-detail-page';
 import { CharacterDetailPage } from './pages/character-detail-page';
@@ -70,7 +71,7 @@ function App() {
             {/* ROK-181: Public user profiles */}
             <Route path="/users/:userId" element={<UserProfilePage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            {/* ROK-281: Admin Settings with accordion sidebar navigation */}
+            {/* ROK-281: Admin Settings with always-expanded sidebar navigation */}
             <Route path="/admin/settings" element={<AdminSettingsLayout />}>
               <Route path="general" element={<GeneralPanel />} />
               <Route path="general/roles" element={<RolesPanel />} />
@@ -78,6 +79,7 @@ function App() {
               <Route path="integrations" element={<DiscordPanel />} />
               <Route path="integrations/igdb" element={<IgdbPanel />} />
               <Route path="integrations/relay" element={<RelayPanel />} />
+              <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
               <Route path="plugins" element={<PluginsPanel />} />
               <Route path="appearance" element={<BrandingPanel />} />
               <Route path="appearance/theme" element={<ThemePanel />} />

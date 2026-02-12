@@ -7,7 +7,7 @@ import { AdminSidebar } from './admin-sidebar';
  * Admin Settings layout — sidebar + content area with nested <Outlet />.
  * Desktop: fixed sidebar on the left, content scrolls independently.
  * Mobile: hamburger button opens a slide-over drawer.
- * ROK-281: Accordion sidebar navigation.
+ * ROK-281: Always-expanded sidebar navigation with dynamic plugin integrations.
  */
 export function AdminSettingsLayout() {
     const { user, isLoading } = useAuth();

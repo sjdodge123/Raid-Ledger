@@ -5,13 +5,12 @@ import { useNewBadge } from '../../hooks/use-new-badge';
 import { AdminPluginSection } from '../../components/admin/AdminPluginSection';
 import { NewBadge } from '../../components/ui/new-badge';
 import { Modal } from '../../components/ui/modal';
-import { PluginSlot } from '../../plugins';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
 /**
  * Plugins > Manage Plugins panel.
- * ROK-281: Extracted from the old AdminSettingsPage.
- * Full plugin management: install, activate, deactivate, uninstall.
+ * ROK-281 v2: Card-based layout showing full plugin details at a glance.
+ * No collapsible sections — all info visible: author, capabilities, game slugs, integrations.
  */
 export function PluginsPanel() {
     const { plugins, install, uninstall, activate, deactivate } = usePluginAdmin();
@@ -81,7 +80,7 @@ export function PluginsPanel() {
             )}
 
             {plugins.data?.map((plugin) => (
-                <PluginSectionCard
+                <PluginCard
                     key={plugin.slug}
                     plugin={plugin}
                     isPending={isPending}
@@ -154,9 +153,9 @@ export function PluginsPanel() {
     );
 }
 
-// --- Plugin Section Card ---
+// --- Plugin Card ---
 
-interface PluginSectionCardProps {
+interface PluginCardProps {
     plugin: PluginInfoDto;
     isPending: boolean;
     onInstall: (slug: string) => void;
@@ -165,14 +164,14 @@ interface PluginSectionCardProps {
     onUninstall: (slug: string) => void;
 }
 
-function PluginSectionCard({
+function PluginCard({
     plugin,
     isPending,
     onInstall,
     onActivate,
     onDeactivate,
     onUninstall,
-}: PluginSectionCardProps) {
+}: PluginCardProps) {
     const { isNew, markSeen } = useNewBadge(`plugin-seen:${plugin.slug}`);
 
     const actionButtons = (
@@ -220,22 +219,103 @@ function PluginSectionCard({
         <AdminPluginSection
             title={plugin.name}
             version={plugin.version}
+            description={plugin.description}
             status={plugin.status}
             badge={<NewBadge visible={isNew} />}
             onMouseEnter={markSeen}
             actions={actionButtons}
-            defaultExpanded={plugin.status === 'active'}
         >
-            {plugin.status === 'active' ? (
-                <PluginSlot
-                    name="admin-settings:plugin-content"
-                    context={{ pluginSlug: plugin.slug }}
-                />
-            ) : (
-                <p className="text-sm text-muted py-2">
-                    {plugin.status === 'inactive'
-                        ? 'Activate this plugin to configure its integrations.'
-                        : 'Install this plugin to get started.'}
+            {/* Author */}
+            <div className="flex items-center gap-2 text-sm">
+                <span className="text-dim">Author:</span>
+                {plugin.author.url ? (
+                    <a
+                        href={plugin.author.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-secondary hover:text-foreground underline underline-offset-2 transition-colors"
+                    >
+                        {plugin.author.name}
+                    </a>
+                ) : (
+                    <span className="text-secondary">{plugin.author.name}</span>
+                )}
+            </div>
+
+            {/* Capabilities */}
+            {plugin.capabilities.length > 0 && (
+                <div>
+                    <span className="text-xs font-medium text-dim uppercase tracking-wider">Capabilities</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {plugin.capabilities.map((cap) => (
+                            <span
+                                key={cap}
+                                className="px-2 py-0.5 text-xs rounded-full bg-overlay text-secondary"
+                            >
+                                {cap}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Game Slugs */}
+            {plugin.gameSlugs.length > 0 && (
+                <div>
+                    <span className="text-xs font-medium text-dim uppercase tracking-wider">Supported Games</span>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {plugin.gameSlugs.map((slug) => (
+                            <span
+                                key={slug}
+                                className="px-2 py-0.5 text-xs rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20"
+                            >
+                                {slug}
+                            </span>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Integrations */}
+            {plugin.integrations.length > 0 && (
+                <div>
+                    <span className="text-xs font-medium text-dim uppercase tracking-wider">Integrations</span>
+                    <div className="mt-1.5 space-y-2">
+                        {plugin.integrations.map((integration) => (
+                            <div
+                                key={integration.key}
+                                className="flex items-start gap-3 p-2.5 rounded-lg bg-surface/30 border border-edge/30"
+                            >
+                                {integration.icon && (
+                                    <span className="text-lg flex-shrink-0 mt-0.5">{integration.icon}</span>
+                                )}
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium text-foreground">{integration.name}</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                            integration.configured
+                                                ? 'bg-emerald-500/20 text-emerald-400'
+                                                : 'bg-gray-500/20 text-gray-400'
+                                        }`}>
+                                            {integration.configured ? 'Configured' : 'Not Configured'}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-muted mt-0.5">{integration.description}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Installed date */}
+            {plugin.installedAt && (
+                <p className="text-xs text-dim">
+                    Installed {new Date(plugin.installedAt).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                    })}
                 </p>
             )}
         </AdminPluginSection>
