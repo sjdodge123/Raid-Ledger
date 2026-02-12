@@ -20,12 +20,16 @@ import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
+import { RateLimitModule } from './throttler/throttler.module';
+import { QueueModule } from './queue/queue.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
     EventEmitterModule.forRoot(),
     ScheduleModule.forRoot(),
+    RateLimitModule,
+    QueueModule,
     DrizzleModule,
     RedisModule,
     PluginHostModule,

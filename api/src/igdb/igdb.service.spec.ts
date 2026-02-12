@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
+import { getQueueToken } from '@nestjs/bullmq';
 import { IgdbService } from './igdb.service';
+import { IGDB_SYNC_QUEUE } from './igdb-sync.processor';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
@@ -88,6 +90,11 @@ describe('IgdbService', () => {
       isIgdbConfigured: jest.fn().mockResolvedValue(false),
     };
 
+    const mockSyncQueue = {
+      add: jest.fn().mockResolvedValue({ id: 'test-job-id' }),
+      name: 'igdb-sync',
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         IgdbService,
@@ -95,6 +102,7 @@ describe('IgdbService', () => {
         { provide: REDIS_CLIENT, useValue: mockRedis },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
       ],
     }).compile();
 

@@ -15,6 +15,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { LocalAuthService } from './local-auth.service';
 import { AdminGuard } from './admin.guard';
+import { RateLimit } from '../throttler/rate-limit.decorator';
 import { z } from 'zod';
 
 // Email regex that accepts local emails (admin@local) and standard emails
@@ -54,6 +55,7 @@ export class LocalAuthController {
    * Authenticate with email/password or username/password credentials.
    * Accepts either 'email' or 'username' field for backwards compatibility.
    */
+  @RateLimit('auth')
   @Post('local')
   @HttpCode(HttpStatus.OK)
   async localLogin(@Body() body: LocalLoginDto) {

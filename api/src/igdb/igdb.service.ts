@@ -2,6 +2,8 @@ import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
@@ -15,6 +17,7 @@ import {
   IgdbHealthStatusDto,
 } from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
+import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.processor';
 
 /** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {
@@ -119,6 +122,7 @@ export class IgdbService {
     @Inject(REDIS_CLIENT)
     private redis: Redis,
     private readonly settingsService: SettingsService,
+    @InjectQueue(IGDB_SYNC_QUEUE) private readonly syncQueue: Queue,
   ) {}
 
   /**
@@ -134,8 +138,8 @@ export class IgdbService {
 
     // Trigger immediate sync when credentials are set (not cleared)
     if (config) {
-      this.syncAllGames().catch((err) =>
-        this.logger.error(`Initial IGDB sync failed: ${err}`),
+      this.enqueueSync('config-update').catch((err) =>
+        this.logger.error(`Failed to enqueue IGDB sync: ${err}`),
       );
     }
   }
@@ -153,13 +157,32 @@ export class IgdbService {
       if (!clientId) return;
     }
 
-    this.logger.log('Starting scheduled IGDB sync...');
+    this.logger.log('Enqueuing scheduled IGDB sync...');
     try {
-      await this.syncAllGames();
-      this.logger.log('Scheduled IGDB sync complete');
+      await this.enqueueSync('scheduled');
     } catch (err) {
-      this.logger.error(`Scheduled IGDB sync failed: ${err}`);
+      this.logger.error(`Failed to enqueue scheduled IGDB sync: ${err}`);
     }
+  }
+
+  /**
+   * Enqueue an IGDB sync job. Uses a fixed jobId per trigger to prevent
+   * duplicate concurrent syncs of the same type.
+   */
+  async enqueueSync(
+    trigger: IgdbSyncJobData['trigger'],
+  ): Promise<{ jobId: string }> {
+    const jobId = `igdb-${trigger}-sync`;
+    await this.syncQueue.add(
+      'sync',
+      { trigger },
+      {
+        jobId,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
+    return { jobId };
   }
 
   /**

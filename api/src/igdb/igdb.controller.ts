@@ -27,6 +27,7 @@ import {
   GameInterestResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
+import { RateLimit } from '../throttler/rate-limit.decorator';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
@@ -48,6 +49,7 @@ export class IgdbController {
    * GET /games/search
    * Search for games by name.
    */
+  @RateLimit('search')
   @Get('search')
   async searchGames(@Query('q') query: string): Promise<GameSearchResponseDto> {
     try {
@@ -468,37 +470,26 @@ export class IgdbController {
    * POST /games/sync-popular
    * Admin-only: pull top 100 popular multiplayer games from IGDB.
    */
+  @RateLimit('admin')
   @Post('sync-popular')
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   async syncPopularGames(): Promise<{
-    success: boolean;
+    jobId: string;
     message: string;
-    count: number;
   }> {
     try {
-      const config = this.igdbService.config;
+      const { jobId } = await this.igdbService.enqueueSync('manual');
 
-      const apiGames = await this.igdbService.queryIgdb(
-        `fields ${config.EXPANDED_FIELDS}; ` +
-          `where game_modes = (2,3,5) & rating_count > 10; ` +
-          `sort total_rating desc; limit 100;`,
-      );
-
-      const games = await this.igdbService.upsertGamesFromApi(apiGames);
-
-      this.logger.log(
-        `Synced ${games.length} popular multiplayer games from IGDB`,
-      );
+      this.logger.log(`IGDB sync job enqueued: ${jobId}`);
 
       return {
-        success: true,
-        message: `Synced ${games.length} games from IGDB`,
-        count: games.length,
+        jobId,
+        message: 'IGDB sync job enqueued',
       };
     } catch (error) {
-      this.logger.error(`Failed to sync popular games: ${error}`);
-      throw new InternalServerErrorException('Failed to sync games from IGDB');
+      this.logger.error(`Failed to enqueue IGDB sync: ${error}`);
+      throw new InternalServerErrorException('Failed to enqueue IGDB sync job');
     }
   }
 }

@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import { AppModule } from './app.module';
+import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -62,6 +63,8 @@ async function bootstrap() {
       ? '/data/avatars'
       : path.join(process.cwd(), 'uploads', 'avatars'));
   app.useStaticAssets(avatarDir, { prefix: '/avatars/', maxAge: '7d' });
+
+  app.useGlobalFilters(new ThrottlerExceptionFilter());
 
   await app.listen(process.env.PORT ?? 3000);
 }

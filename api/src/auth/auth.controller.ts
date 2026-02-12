@@ -15,6 +15,8 @@ import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
+import { RateLimit } from '../throttler/rate-limit.decorator';
+import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
@@ -106,12 +108,14 @@ export class AuthController {
     );
   }
 
+  @RateLimit('auth')
   @Get('discord')
   @UseGuards(DiscordAuthGuard)
   async discordLogin() {
     // Initiates the Discord OAuth flow
   }
 
+  @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
   discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
@@ -220,7 +224,7 @@ export class AuthController {
       );
 
       // Exchange code for access token
-      const tokenResponse = await fetch(
+      const tokenResponse = await discordFetch(
         'https://discord.com/api/oauth2/token',
         {
           method: 'POST',
@@ -250,13 +254,16 @@ export class AuthController {
       const tokens = (await tokenResponse.json()) as { access_token: string };
 
       // Get Discord user profile
-      const userResponse = await fetch('https://discord.com/api/users/@me', {
-        headers: {
-          Authorization: `Bearer ${tokens.access_token}`,
-          'User-Agent':
-            'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+      const userResponse = await discordFetch(
+        'https://discord.com/api/users/@me',
+        {
+          headers: {
+            Authorization: `Bearer ${tokens.access_token}`,
+            'User-Agent':
+              'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+          },
         },
-      });
+      );
 
       if (!userResponse.ok) {
         throw new Error('Failed to fetch Discord profile');

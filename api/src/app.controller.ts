@@ -1,4 +1,5 @@
 import { Controller, Get, Res } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { AppService } from './app.service';
 
@@ -11,6 +12,7 @@ export class AppController {
     return this.appService.getHello();
   }
 
+  @SkipThrottle()
   @Get('health')
   async getHealth(@Res() res: Response): Promise<void> {
     const dbHealth = await this.appService.checkDatabaseHealth();
