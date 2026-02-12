@@ -42,8 +42,8 @@ export function computeAutoFill(
 
     if (isGenericGame) {
         // Generic: fill player slots sequentially
-        let filled = 0;
         for (const { role } of roleSlots) {
+            let filled = 0;
             let pos = findNextEmptyPosition(role);
             while (pos !== null && remaining.length > 0) {
                 assignPlayer(remaining[0], role, pos, false);
