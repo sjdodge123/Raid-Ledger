@@ -77,10 +77,10 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
                     : item
                         ? isCurrentUser
                             ? 'border-emerald-400/50 bg-emerald-900/20'
-                            : 'border-edge bg-panel/50'
+                            : 'border-edge bg-panel/80'
                         : isClickable
-                            ? 'border-edge-strong bg-panel/30 hover:border-indigo-400 hover:bg-indigo-500/10'
-                            : 'border-edge bg-panel/30'
+                            ? 'border-dashed border-edge-strong bg-panel/20 hover:border-indigo-400 hover:bg-indigo-500/10'
+                            : 'border-dashed border-edge bg-panel/20'
                 }
       `}
         >
@@ -113,16 +113,16 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
                             Join?
                         </span>
                     ) : isClickable ? (
-                        <span className="flex items-center gap-1 text-xs font-medium text-indigo-400">
+                        <span className="flex items-center gap-1 text-xs font-medium text-muted/70">
                             {onAdminClick ? (
-                                <><span>Assign</span> <span className="text-lg">+</span></>
+                                <><span className="text-lg text-dim">+</span> <span>Assign</span></>
                             ) : (
-                                <><span className="text-lg">+</span> Join</>
+                                <><span className="text-lg text-dim">+</span> <span>Join</span></>
                             )}
                         </span>
                     ) : (
-                        <span className="text-xs text-dim">
-                            Empty
+                        <span className="text-lg text-dim/50">
+                            +
                         </span>
                     )}
                 </div>

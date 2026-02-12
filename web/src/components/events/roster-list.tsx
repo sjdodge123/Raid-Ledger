@@ -1,5 +1,6 @@
 import type { SignupUserDto, SignupCharacterDto, ConfirmationStatus } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { ROLE_BORDER_CLASSES, ROLE_EMOJI } from '../../lib/role-colors';
 
 interface RosterListProps {
     signups: Array<{
@@ -13,20 +14,6 @@ interface RosterListProps {
     /** Game ID for context-aware avatar resolution (ROK-222) */
     gameId?: string;
 }
-
-/** Role display colors for class-colored borders (AC-6) */
-const ROLE_BORDER_COLORS: Record<string, string> = {
-    tank: 'border-l-blue-500',
-    healer: 'border-l-green-500',
-    dps: 'border-l-red-500',
-};
-
-/** Role emoji indicators */
-const ROLE_ICONS: Record<string, string> = {
-    tank: '\u{1F6E1}\uFE0F',
-    healer: '\u{1F49A}',
-    dps: '\u2694\uFE0F',
-};
 
 /**
  * Format the signup time relative to now
@@ -104,7 +91,7 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
     const isPending = confirmationStatus === 'pending' || !confirmationStatus;
     const isConfirmed = confirmationStatus === 'confirmed' || confirmationStatus === 'changed';
     const roleBorderClass = character?.role
-        ? ROLE_BORDER_COLORS[character.role] || ''
+        ? ROLE_BORDER_CLASSES[character.role] || ''
         : '';
 
     // ROK-222: Resolve avatar through unified pipeline
@@ -158,7 +145,7 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
                             )}
                             {character.role && (
                                 <span className="text-xs" title={character.role}>
-                                    {ROLE_ICONS[character.role]}
+                                    {ROLE_EMOJI[character.role]}
                                 </span>
                             )}
                         </div>

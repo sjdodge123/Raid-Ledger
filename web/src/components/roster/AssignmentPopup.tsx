@@ -1,8 +1,8 @@
 import { useState, useMemo } from 'react';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
-import { AvatarWithFallback } from '../shared/AvatarWithFallback';
-import { toAvatarUser } from '../../lib/avatar';
+import { PlayerCard } from '../events/player-card';
+import { ROLE_EMOJI, ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
 import './AssignmentPopup.css';
 
 /** A single slot for the slot picker (may be empty or occupied) */
@@ -38,30 +38,6 @@ interface AssignmentPopupProps {
     onAssignToSlot?: (signupId: number, role: RosterRole, position: number) => void;
 }
 
-/** Capitalize first letter */
-function capitalize(str: string): string {
-    return str.charAt(0).toUpperCase() + str.slice(1);
-}
-
-/** Role emoji icons */
-const ROLE_EMOJI: Record<string, string> = {
-    tank: '🛡️',
-    healer: '💚',
-    dps: '⚔️',
-    flex: '🔄',
-    player: '🎮',
-    bench: '💺',
-};
-
-/** Role color classes for slot buttons */
-const ROLE_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-    tank: { bg: 'rgba(37, 99, 235, 0.15)', border: 'rgba(37, 99, 235, 0.4)', text: '#93c5fd' },
-    healer: { bg: 'rgba(22, 163, 74, 0.15)', border: 'rgba(22, 163, 74, 0.4)', text: '#86efac' },
-    dps: { bg: 'rgba(220, 38, 38, 0.15)', border: 'rgba(220, 38, 38, 0.4)', text: '#fca5a5' },
-    flex: { bg: 'rgba(147, 51, 234, 0.15)', border: 'rgba(147, 51, 234, 0.4)', text: '#c4b5fd' },
-    player: { bg: 'rgba(99, 102, 241, 0.15)', border: 'rgba(99, 102, 241, 0.4)', text: '#a5b4fc' },
-    bench: { bg: 'rgba(100, 116, 139, 0.15)', border: 'rgba(100, 116, 139, 0.4)', text: '#94a3b8' },
-};
 
 /**
  * AssignmentPopup - Modal for assigning unassigned players to roster slots (ROK-208).
@@ -129,7 +105,7 @@ export function AssignmentPopup({
     const title = selectedPlayer
         ? `Pick a slot for ${selectedPlayer.username}`
         : slotRole && slotPosition > 0
-            ? `Assign to ${capitalize(slotRole)} ${slotPosition}`
+            ? `Assign to ${formatRole(slotRole)} ${slotPosition}`
             : 'Unassigned Players';
 
     const handleAssign = (signupId: number) => {
@@ -174,33 +150,12 @@ export function AssignmentPopup({
                         ← Back to players
                     </button>
 
-                    {/* Selected player info */}
-                    <div className="assignment-popup__selected-player">
-                        <AvatarWithFallback
-                            user={toAvatarUser(selectedPlayer)}
-                            username={selectedPlayer.username}
-                            sizeClassName="h-10 w-10"
-                        />
-                        <div className="assignment-popup__player-details">
-                            <span className="assignment-popup__player-name">{selectedPlayer.username}</span>
-                            {selectedPlayer.character && (
-                                <span className="assignment-popup__player-character">
-                                    {selectedPlayer.character.name}
-                                    {selectedPlayer.character.className && ` • ${selectedPlayer.character.className}`}
-                                </span>
-                            )}
-                        </div>
-                        {selectedPlayer.character?.role && (
-                            <span className={`assignment-popup__role-badge ${selectedPlayer.character.role === 'tank'
-                                ? 'assignment-popup__role-badge--tank'
-                                : selectedPlayer.character.role === 'healer'
-                                    ? 'assignment-popup__role-badge--healer'
-                                    : 'assignment-popup__role-badge--dps'
-                                }`}>
-                                {ROLE_EMOJI[selectedPlayer.character.role] ?? ''} {capitalize(selectedPlayer.character.role)}
-                            </span>
-                        )}
-                    </div>
+                    {/* Selected player info - uses PlayerCard for consistency (AC-1) */}
+                    <PlayerCard
+                        player={selectedPlayer}
+                        size="default"
+                        showRole
+                    />
 
                     {/* Slot groups */}
                     {slotsByRole.map(({ role, label, slots }) => (
@@ -210,7 +165,7 @@ export function AssignmentPopup({
                             </h4>
                             <div className="assignment-popup__slot-grid">
                                 {slots.map(slot => {
-                                    const colors = ROLE_COLORS[slot.role] ?? ROLE_COLORS.player;
+                                    const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
                                     const isMatch = !slot.occupantName && selectedPlayer.character?.role === slot.role;
                                     const isLocked = !!slot.occupantName;
                                     return (
@@ -228,7 +183,7 @@ export function AssignmentPopup({
                                             } as React.CSSProperties}
                                         >
                                             <span className="assignment-popup__slot-label">
-                                                {capitalize(slot.role)} {slot.position}
+                                                {formatRole(slot.role)} {slot.position}
                                             </span>
                                             {isLocked && (
                                                 <span className="assignment-popup__slot-occupant">
@@ -275,7 +230,7 @@ export function AssignmentPopup({
                             onClick={onSelfAssign}
                             className="assignment-popup__self-assign-btn"
                         >
-                            🙋 Assign Myself to {capitalize(slotRole)} {slotPosition}
+                            🙋 Assign Myself to {formatRole(slotRole)} {slotPosition}
                         </button>
                     </div>
                 )}
@@ -286,44 +241,36 @@ export function AssignmentPopup({
                         <h4 className="assignment-popup__section-title assignment-popup__section-title--remove">
                             Current Occupant
                         </h4>
-                        <div className="assignment-popup__player-row assignment-popup__player-row--current">
-                            <div className="assignment-popup__player-info">
-                                <AvatarWithFallback
-                                    user={toAvatarUser(currentOccupant)}
-                                    username={currentOccupant.username}
-                                    sizeClassName="h-8 w-8"
+                        <div className="flex items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                                <PlayerCard
+                                    player={currentOccupant}
+                                    size="compact"
+                                    showRole
                                 />
-                                <div className="assignment-popup__player-details">
-                                    <span className="assignment-popup__player-name">{currentOccupant.username}</span>
-                                    {currentOccupant.character && (
-                                        <span className="assignment-popup__player-character">
-                                            {currentOccupant.character.name}
-                                            {currentOccupant.character.className && ` • ${currentOccupant.character.className}`}
-                                        </span>
-                                    )}
-                                </div>
                             </div>
                             <button
                                 onClick={() => onRemove(currentOccupant.signupId)}
                                 className="assignment-popup__remove-btn"
                             >
-                                Remove to Unassigned
+                                Remove
                             </button>
                         </div>
                     </div>
                 )}
 
-                {/* Matching Role section */}
+                {/* Matching Role section — AC-7: accent left-border */}
                 {slotRole && matching.length > 0 && (
                     <div className="assignment-popup__section">
                         <h4 className="assignment-popup__section-title">
-                            {ROLE_EMOJI[slotRole] ?? '🎯'} Matching Role — {capitalize(slotRole)}
+                            {ROLE_EMOJI[slotRole] ?? '🎯'} Matching Role — {formatRole(slotRole)}
                         </h4>
                         {matching.map(player => (
-                            <PlayerRow
+                            <ModalPlayerRow
                                 key={player.signupId}
                                 player={player}
                                 onAssign={handleAssign}
+                                accentColor={(ROLE_SLOT_COLORS[slotRole] ?? ROLE_SLOT_COLORS.player).border}
                             />
                         ))}
                     </div>
@@ -336,7 +283,7 @@ export function AssignmentPopup({
                             {slotRole && matching.length > 0 ? 'Other Unassigned' : 'Unassigned Players'}
                         </h4>
                         {other.map(player => (
-                            <PlayerRow
+                            <ModalPlayerRow
                                 key={player.signupId}
                                 player={player}
                                 onAssign={handleAssign}
@@ -345,10 +292,12 @@ export function AssignmentPopup({
                     </div>
                 )}
 
-                {/* Empty state */}
+                {/* Empty state — AC-5: clear messaging */}
                 {matching.length === 0 && other.length === 0 && (
                     <div className="assignment-popup__empty">
-                        {search ? 'No players match your search.' : 'All players are assigned.'}
+                        {search
+                            ? 'No players match your search.'
+                            : 'All players are assigned to slots \u2713'}
                     </div>
                 )}
             </div>
@@ -356,43 +305,29 @@ export function AssignmentPopup({
     );
 }
 
-/** Individual player row in the assignment popup */
-function PlayerRow({
+/**
+ * Individual player row in the assignment modal.
+ * Uses shared PlayerCard (AC-1) with an Assign button alongside.
+ * Matching-role rows get an accent left-border (AC-7).
+ */
+function ModalPlayerRow({
     player,
     onAssign,
+    accentColor,
 }: {
     player: RosterAssignmentResponse;
     onAssign: (signupId: number) => void;
+    accentColor?: string;
 }) {
-    const roleEmoji = player.character?.role ? ROLE_EMOJI[player.character.role] ?? '' : '';
-
     return (
-        <div className="assignment-popup__player-row">
-            <div className="assignment-popup__player-info">
-                <AvatarWithFallback
-                    user={toAvatarUser(player)}
-                    username={player.username}
-                    sizeClassName="h-8 w-8"
+        <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+                <PlayerCard
+                    player={player}
+                    size="compact"
+                    showRole
+                    matchAccent={accentColor}
                 />
-                <div className="assignment-popup__player-details">
-                    <span className="assignment-popup__player-name">{player.username}</span>
-                    {player.character && (
-                        <span className="assignment-popup__player-character">
-                            {player.character.name}
-                            {player.character.className && ` • ${player.character.className}`}
-                        </span>
-                    )}
-                </div>
-                {player.character?.role && (
-                    <span className={`assignment-popup__role-badge ${player.character.role === 'tank'
-                        ? 'assignment-popup__role-badge--tank'
-                        : player.character.role === 'healer'
-                            ? 'assignment-popup__role-badge--healer'
-                            : 'assignment-popup__role-badge--dps'
-                        }`}>
-                        {roleEmoji} {capitalize(player.character.role)}
-                    </span>
-                )}
             </div>
             <button
                 onClick={() => onAssign(player.signupId)}
