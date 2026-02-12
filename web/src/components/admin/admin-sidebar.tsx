@@ -1,14 +1,21 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
+import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { useRelaySettings } from '../../hooks/use-relay-settings';
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { NewBadge } from '../ui/new-badge';
 import type { PluginInfoDto } from '@raid-ledger/contract';
+
+/** Status info for integration sidebar items */
+type IntegrationStatus = 'online' | 'configured' | 'not-configured' | 'loading';
 
 interface NavItem {
     to: string;
     label: string;
     /** When true, the item shows a "New" badge via useNewBadge */
     newBadgeKey?: string;
+    /** Integration status shown as a small pill badge */
+    status?: IntegrationStatus;
 }
 
 interface NavSection {
@@ -23,12 +30,33 @@ const IntegrationsIcon = (<svg className="w-5 h-5" fill="none" stroke="currentCo
 const PluginsIcon = (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z" /></svg>);
 const AppearanceIcon = (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" /></svg>);
 
-/** Static (core) integration nav items */
-const CORE_INTEGRATION_ITEMS: NavItem[] = [
-    { to: '/admin/settings/integrations', label: 'Discord OAuth' },
-    { to: '/admin/settings/integrations/igdb', label: 'IGDB / Twitch' },
-    { to: '/admin/settings/integrations/relay', label: 'Relay Hub' },
-];
+/** Build core integration nav items with live status from hooks */
+function buildCoreIntegrationItems(statuses: {
+    discord: { configured: boolean; loading: boolean };
+    igdb: { configured: boolean; loading: boolean };
+    relay: { connected: boolean; loading: boolean };
+}): NavItem[] {
+    return [
+        {
+            to: '/admin/settings/integrations',
+            label: 'Discord OAuth',
+            status: statuses.discord.loading ? 'loading'
+                : statuses.discord.configured ? 'online' : 'not-configured',
+        },
+        {
+            to: '/admin/settings/integrations/igdb',
+            label: 'IGDB / Twitch',
+            status: statuses.igdb.loading ? 'loading'
+                : statuses.igdb.configured ? 'configured' : 'not-configured',
+        },
+        {
+            to: '/admin/settings/integrations/relay',
+            label: 'Relay Hub',
+            status: statuses.relay.loading ? 'loading'
+                : statuses.relay.connected ? 'online' : 'not-configured',
+        },
+    ];
+}
 
 /** Build integration nav items from active plugins. Plugin-installed integrations get a "New" badge key. */
 function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[] {
@@ -40,14 +68,15 @@ function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[] {
                 to: `/admin/settings/integrations/plugin/${plugin.slug}/${integration.key}`,
                 label: integration.name,
                 newBadgeKey: `integration-nav-seen:${plugin.slug}:${integration.key}`,
+                status: integration.configured ? 'configured' : 'not-configured',
             });
         }
     }
     return items;
 }
 
-/** Build the full sections list, merging static nav with dynamic plugin integrations */
-function buildNavSections(pluginIntegrations: NavItem[]): NavSection[] {
+/** Build the full sections list, merging core and plugin integrations */
+function buildNavSections(coreIntegrations: NavItem[], pluginIntegrations: NavItem[]): NavSection[] {
     return [
         { id: 'general', label: 'General', icon: GeneralIcon, children: [
             { to: '/admin/settings/general', label: 'Site Settings' },
@@ -55,7 +84,7 @@ function buildNavSections(pluginIntegrations: NavItem[]): NavSection[] {
             { to: '/admin/settings/general/data', label: 'Demo Data' },
         ]},
         { id: 'integrations', label: 'Integrations', icon: IntegrationsIcon, children: [
-            ...CORE_INTEGRATION_ITEMS,
+            ...coreIntegrations,
             ...pluginIntegrations,
         ]},
         { id: 'plugins', label: 'Plugins', icon: PluginsIcon, children: [
@@ -73,14 +102,31 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 /**
  * Admin settings sidebar navigation.
  * All sections are always expanded (no accordion collapse).
+ * Integration items show at-a-glance status badges (Online, Configured, Not Configured).
  * Plugin-installed integrations appear in the Integrations section with "New" badges.
  */
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
+    const { oauthStatus, igdbStatus } = useAdminSettings();
+    const { relayStatus } = useRelaySettings();
 
+    const coreIntegrations = buildCoreIntegrationItems({
+        discord: {
+            configured: oauthStatus.data?.configured ?? false,
+            loading: oauthStatus.isLoading,
+        },
+        igdb: {
+            configured: igdbStatus.data?.configured ?? false,
+            loading: igdbStatus.isLoading,
+        },
+        relay: {
+            connected: relayStatus.data?.connected ?? false,
+            loading: relayStatus.isLoading,
+        },
+    });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(pluginIntegrations);
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
 
     if (!isOpen) return null;
 
@@ -111,7 +157,26 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     );
 }
 
-/** Individual nav link. Renders a "New" badge for plugin-installed integration items. */
+/** Small status pill for integration sidebar items */
+function StatusPill({ status }: { status: IntegrationStatus }) {
+    if (status === 'loading') return null;
+
+    const config = {
+        online: { label: 'Online', className: 'bg-emerald-500/20 text-emerald-400' },
+        configured: { label: 'Configured', className: 'bg-emerald-500/20 text-emerald-400' },
+        'not-configured': { label: 'Not Configured', className: 'bg-red-500/15 text-red-400' },
+    } as const;
+
+    const { label, className } = config[status];
+
+    return (
+        <span className={`ml-auto shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium leading-tight ${className}`}>
+            {label}
+        </span>
+    );
+}
+
+/** Individual nav link. Renders status pills for integrations and "New" badges for plugin items. */
 function SidebarNavItem({
     item,
     isActive,
@@ -128,14 +193,15 @@ function SidebarNavItem({
             to={item.to}
             onClick={onNavigate}
             onMouseEnter={item.newBadgeKey ? markSeen : undefined}
-            className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors ${
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
                 isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
             }`}
         >
-            <span>{item.label}</span>
+            <span className="truncate">{item.label}</span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}
+            {item.status && <StatusPill status={item.status} />}
         </Link>
     );
 }

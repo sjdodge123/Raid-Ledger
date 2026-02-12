@@ -103,7 +103,6 @@ export function BlizzardIntegrationSlot() {
             }
             isConfigured={blizzardStatus.data?.configured ?? false}
             isLoading={blizzardStatus.isLoading}
-            defaultExpanded={false}
             badge={<NewBadge visible={isNew} />}
             onMouseEnter={markSeen}
         >

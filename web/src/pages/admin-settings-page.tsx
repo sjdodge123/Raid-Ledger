@@ -147,7 +147,6 @@ export function AdminSettingsPage() {
                     icon={DiscordIcon}
                     isConfigured={oauthStatus.data?.configured ?? false}
                     isLoading={oauthStatus.isLoading}
-                    defaultExpanded={false}
                 >
                     <DiscordOAuthForm />
                 </IntegrationCard>
@@ -159,7 +158,6 @@ export function AdminSettingsPage() {
                     icon={TwitchIcon}
                     isConfigured={igdbStatus.data?.configured ?? false}
                     isLoading={igdbStatus.isLoading}
-                    defaultExpanded={false}
                 >
                     <IgdbForm />
                 </IntegrationCard>

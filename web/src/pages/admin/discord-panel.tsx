@@ -29,7 +29,6 @@ export function DiscordPanel() {
                 icon={DiscordIcon}
                 isConfigured={oauthStatus.data?.configured ?? false}
                 isLoading={oauthStatus.isLoading}
-                defaultExpanded
             >
                 <DiscordOAuthForm />
             </IntegrationCard>

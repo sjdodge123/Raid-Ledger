@@ -29,7 +29,6 @@ export function IgdbPanel() {
                 icon={TwitchIcon}
                 isConfigured={igdbStatus.data?.configured ?? false}
                 isLoading={igdbStatus.isLoading}
-                defaultExpanded
             >
                 <IgdbForm />
             </IntegrationCard>
