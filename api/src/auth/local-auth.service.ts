@@ -233,13 +233,21 @@ export class LocalAuthService {
    * List all non-admin users for the impersonation dropdown.
    */
   async listNonAdminUsers(): Promise<
-    { id: number; username: string; avatar: string | null }[]
+    {
+      id: number;
+      username: string;
+      avatar: string | null;
+      discordId: string | null;
+      customAvatarUrl: string | null;
+    }[]
   > {
     const result = await this.db
       .select({
         id: users.id,
         username: users.username,
         avatar: users.avatar,
+        discordId: users.discordId,
+        customAvatarUrl: users.customAvatarUrl,
       })
       .from(users)
       .where(ne(users.role, 'admin'));

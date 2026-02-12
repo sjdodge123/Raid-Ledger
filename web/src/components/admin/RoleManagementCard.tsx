@@ -4,6 +4,7 @@ import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useAuth } from '../../hooks/use-auth';
 import { RoleBadge } from '../ui/role-badge';
 import { toast } from '../../lib/toast';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole } from '@raid-ledger/contract';
 
 /**
@@ -95,19 +96,27 @@ export function RoleManagementCard() {
                                 className="flex items-center gap-3 py-2.5"
                             >
                                 {/* Avatar */}
-                                <div className="w-8 h-8 rounded-full bg-overlay flex-shrink-0 overflow-hidden">
-                                    {(u.customAvatarUrl || u.avatar) ? (
-                                        <img
-                                            src={u.customAvatarUrl || u.avatar || ''}
-                                            alt={u.username}
-                                            className="w-full h-full object-cover"
-                                        />
-                                    ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-dim text-xs font-bold">
-                                            {u.username.charAt(0).toUpperCase()}
+                                {(() => {
+                                    const av = resolveAvatar(toAvatarUser(u));
+                                    return (
+                                        <div className="w-8 h-8 rounded-full bg-overlay flex-shrink-0 overflow-hidden">
+                                            {av.url ? (
+                                                <img
+                                                    src={av.url}
+                                                    alt={u.username}
+                                                    className="w-full h-full object-cover"
+                                                    onError={(e) => {
+                                                        e.currentTarget.style.display = 'none';
+                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                    }}
+                                                />
+                                            ) : null}
+                                            <div className={`w-full h-full flex items-center justify-center text-dim text-xs font-bold ${av.url ? 'hidden' : ''}`}>
+                                                {u.username.charAt(0).toUpperCase()}
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
+                                    );
+                                })()}
 
                                 {/* Username + Badge */}
                                 <div className="flex items-center gap-2 min-w-0">

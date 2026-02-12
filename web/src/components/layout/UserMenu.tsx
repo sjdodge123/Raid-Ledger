@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
-import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../../lib/avatar';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
@@ -13,6 +13,8 @@ interface ImpersonateUser {
     id: number;
     username: string;
     avatar: string | null;
+    discordId: string | null;
+    customAvatarUrl: string | null;
 }
 
 /**
@@ -25,7 +27,9 @@ export function UserMenu() {
     const { data: systemStatus } = useSystemStatus();
     const [isOpen, setIsOpen] = useState(false);
     const [showImpersonateMenu, setShowImpersonateMenu] = useState(false);
+    const [impersonateSearch, setImpersonateSearch] = useState('');
     const menuRef = useRef<HTMLDivElement>(null);
+    const impersonateSearchRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
 
     const discordConfigured = systemStatus?.discordConfigured ?? false;
@@ -52,6 +56,7 @@ export function UserMenu() {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
                 setIsOpen(false);
                 setShowImpersonateMenu(false);
+                setImpersonateSearch('');
             }
         }
 
@@ -67,6 +72,7 @@ export function UserMenu() {
             if (event.key === 'Escape') {
                 setIsOpen(false);
                 setShowImpersonateMenu(false);
+                setImpersonateSearch('');
             }
         }
 
@@ -198,7 +204,12 @@ export function UserMenu() {
                                 {/* Impersonation dropdown */}
                                 <div className="border-t border-edge mt-1 pt-1">
                                     <button
-                                        onClick={() => setShowImpersonateMenu(!showImpersonateMenu)}
+                                        onClick={() => {
+                                            const next = !showImpersonateMenu;
+                                            setShowImpersonateMenu(next);
+                                            if (!next) setImpersonateSearch('');
+                                            else setTimeout(() => impersonateSearchRef.current?.focus(), 0);
+                                        }}
                                         className="flex items-center justify-between w-full px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
                                     >
                                         <span className="flex items-center gap-2">
@@ -218,35 +229,57 @@ export function UserMenu() {
                                     </button>
 
                                     {showImpersonateMenu && (
-                                        <div className="max-h-48 overflow-y-auto bg-panel/50">
-                                            {impersonateUsers && impersonateUsers.length > 0 ? (
-                                                impersonateUsers.map((u) => {
-                                                    const impAvatar = buildDiscordAvatarUrl(String(u.id), u.avatar);
+                                        <div className="bg-panel/50">
+                                            <div className="px-3 py-1.5">
+                                                <input
+                                                    ref={impersonateSearchRef}
+                                                    type="text"
+                                                    value={impersonateSearch}
+                                                    onChange={(e) => setImpersonateSearch(e.target.value)}
+                                                    placeholder="Search users..."
+                                                    className="w-full px-2.5 py-1 text-xs bg-surface/50 border border-edge rounded text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                />
+                                            </div>
+                                            <div className="max-h-48 overflow-y-auto">
+                                            {(() => {
+                                                const filtered = (impersonateUsers ?? []).filter((u) =>
+                                                    u.username.toLowerCase().includes(impersonateSearch.toLowerCase())
+                                                );
+                                                return filtered.length > 0 ? (
+                                                filtered.map((u) => {
+                                                    const impAvatar = resolveAvatar(toAvatarUser(u));
                                                     return (
                                                         <button
                                                             key={u.id}
                                                             onClick={() => handleImpersonate(u.id)}
                                                             className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
                                                         >
-                                                            {impAvatar ? (
+                                                            {impAvatar.url ? (
                                                                 <img
-                                                                    src={impAvatar}
+                                                                    src={impAvatar.url}
                                                                     alt={u.username}
-                                                                    className="w-5 h-5 rounded-full bg-faint"
-                                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                    className="w-5 h-5 rounded-full bg-faint object-cover"
+                                                                    onError={(e) => {
+                                                                        e.currentTarget.style.display = 'none';
+                                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                    }}
                                                                 />
-                                                            ) : (
-                                                                <div className="w-5 h-5 rounded-full bg-faint flex items-center justify-center text-[10px] font-semibold text-muted">
-                                                                    {u.username.charAt(0).toUpperCase()}
-                                                                </div>
-                                                            )}
+                                                            ) : null}
+                                                            <div className={`w-5 h-5 rounded-full bg-faint flex items-center justify-center text-[10px] font-semibold text-muted ${impAvatar.url ? 'hidden' : ''}`}>
+                                                                {u.username.charAt(0).toUpperCase()}
+                                                            </div>
                                                             {u.username}
                                                         </button>
                                                     );
                                                 })
                                             ) : (
-                                                <p className="px-6 py-2 text-xs text-dim">No users available</p>
-                                            )}
+                                                <p className="px-6 py-2 text-xs text-dim">
+                                                    {impersonateSearch ? 'No matches' : 'No users available'}
+                                                </p>
+                                            );
+                                            })()}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
