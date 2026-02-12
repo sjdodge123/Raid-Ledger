@@ -159,10 +159,23 @@ export const AdminGameListResponseSchema = z.object({
 
 export type AdminGameListResponseDto = z.infer<typeof AdminGameListResponseSchema>;
 
+/** Player preview for game interest avatars (ROK-282) */
+export const InterestPlayerPreviewSchema = z.object({
+    id: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+});
+
+export type InterestPlayerPreviewDto = z.infer<typeof InterestPlayerPreviewSchema>;
+
 /** Game interest (want-to-play) */
 export const GameInterestResponseSchema = z.object({
     wantToPlay: z.boolean(),
     count: z.number(),
+    /** First N interested players for avatar display (ROK-282) */
+    players: z.array(InterestPlayerPreviewSchema).optional(),
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;

@@ -364,7 +364,7 @@ export class IgdbController {
     const db = this.igdbService.database;
     const userId = req.user.id;
 
-    const [countResult, userInterest] = await Promise.all([
+    const [countResult, userInterest, playerPreviews] = await Promise.all([
       db
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.gameInterests)
@@ -379,11 +379,13 @@ export class IgdbController {
           ),
         )
         .limit(1),
+      this.getInterestedPlayers(id),
     ]);
 
     return {
       wantToPlay: userInterest.length > 0,
       count: countResult[0]?.count ?? 0,
+      players: playerPreviews,
     };
   }
 
@@ -422,15 +424,19 @@ export class IgdbController {
       })
       .onConflictDoNothing();
 
-    // Return updated count
-    const countResult = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.gameInterests)
-      .where(eq(schema.gameInterests.gameId, id));
+    // Return updated count + player previews (ROK-282)
+    const [countResult, playerPreviews] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.gameInterests)
+        .where(eq(schema.gameInterests.gameId, id)),
+      this.getInterestedPlayers(id),
+    ]);
 
     return {
       wantToPlay: true,
       count: countResult[0]?.count ?? 0,
+      players: playerPreviews,
     };
   }
 
@@ -457,15 +463,51 @@ export class IgdbController {
         ),
       );
 
-    const countResult = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.gameInterests)
-      .where(eq(schema.gameInterests.gameId, id));
+    // Return updated count + player previews (ROK-282)
+    const [countResult, playerPreviews] = await Promise.all([
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.gameInterests)
+        .where(eq(schema.gameInterests.gameId, id)),
+      this.getInterestedPlayers(id),
+    ]);
 
     return {
       wantToPlay: false,
       count: countResult[0]?.count ?? 0,
+      players: playerPreviews,
     };
+  }
+
+  /**
+   * ROK-282: Fetch first 8 interested players for avatar display.
+   */
+  private async getInterestedPlayers(gameId: number) {
+    const db = this.igdbService.database;
+    const rows = await db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        discordId: schema.users.discordId,
+      })
+      .from(schema.gameInterests)
+      .innerJoin(
+        schema.users,
+        eq(schema.gameInterests.userId, schema.users.id),
+      )
+      .where(eq(schema.gameInterests.gameId, gameId))
+      .orderBy(schema.gameInterests.createdAt)
+      .limit(8);
+
+    return rows.map((p) => ({
+      id: p.id,
+      username: p.username,
+      avatar: p.avatar,
+      customAvatarUrl: p.customAvatarUrl,
+      discordId: p.discordId,
+    }));
   }
 
   /**

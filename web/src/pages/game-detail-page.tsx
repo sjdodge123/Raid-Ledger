@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/use-auth';
 import { ScreenshotGallery } from '../components/games/ScreenshotGallery';
 import { TwitchStreamEmbed } from '../components/games/TwitchStreamEmbed';
 import { EventCard } from '../components/events/event-card';
+import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars';
 
 /** IGDB genre ID → display name */
 const GENRE_MAP: Record<number, string> = {
@@ -38,7 +39,7 @@ export function GameDetailPage() {
     const { data: game, isLoading, error } = useGameDetail(gameId);
     const { data: streamsData } = useGameStreams(gameId);
     const { isAuthenticated } = useAuth();
-    const { wantToPlay, count, toggle, isToggling } = useWantToPlay(
+    const { wantToPlay, count, players, toggle, isToggling } = useWantToPlay(
         isAuthenticated ? gameId : undefined,
     );
 
@@ -203,7 +204,7 @@ export function GameDetailPage() {
 
             {/* Want to Play */}
             {isAuthenticated && (
-                <div className="flex items-center gap-4 mb-8">
+                <div className="flex flex-wrap items-center gap-4 mb-8">
                     <button
                         onClick={() => !isToggling && toggle(!wantToPlay)}
                         disabled={isToggling}
@@ -223,9 +224,11 @@ export function GameDetailPage() {
                         {wantToPlay ? 'Remove from List' : 'Want to Play'}
                     </button>
                     {count > 0 && (
-                        <span className="text-sm text-muted">
-                            {count} player{count !== 1 ? 's' : ''} interested
-                        </span>
+                        <InterestPlayerAvatars
+                            players={players}
+                            totalCount={count}
+                            maxVisible={6}
+                        />
                     )}
                 </div>
             )}

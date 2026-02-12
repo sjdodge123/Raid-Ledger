@@ -73,6 +73,7 @@ export function useWantToPlay(gameId: number | undefined) {
     return {
         wantToPlay: interest.data?.wantToPlay ?? false,
         count: interest.data?.count ?? 0,
+        players: interest.data?.players ?? [],
         isLoading: interest.isLoading,
         toggle: (wantToPlay: boolean) => toggle.mutate(wantToPlay),
         isToggling: toggle.isPending,
