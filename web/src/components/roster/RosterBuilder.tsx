@@ -5,6 +5,9 @@ import { RosterSlot } from './RosterSlot';
 import { UnassignedBar } from './UnassignedBar';
 import { AssignmentPopup } from './AssignmentPopup';
 import type { AvailableSlot } from './AssignmentPopup';
+import { Modal } from '../ui/modal';
+import { computeAutoFill } from './roster-auto-fill';
+import type { AutoFillResult } from './roster-auto-fill';
 
 interface RosterBuilderProps {
     /** Unassigned users (pool) */
@@ -82,6 +85,19 @@ export function RosterBuilder({
 
     // ROK-208: Browse-all mode (clicking the unassigned bar)
     const [browseAll, setBrowseAll] = React.useState(false);
+
+    // ROK-209: Auto-fill and clear-all state
+    const [autoFillPreview, setAutoFillPreview] = React.useState<AutoFillResult | null>(null);
+    const [clearPending, setClearPending] = React.useState(false);
+    const [isBulkUpdating, setIsBulkUpdating] = React.useState(false);
+
+    // ROK-209: Auto-reset clearPending after 3s
+    React.useEffect(() => {
+        if (clearPending) {
+            const timeout = setTimeout(() => setClearPending(false), 3000);
+            return () => clearTimeout(timeout);
+        }
+    }, [clearPending]);
 
     // ROK-183: Detect if this is a generic game (has player slots, no MMO roles)
     const isGenericGame = React.useMemo(() => {
@@ -197,6 +213,58 @@ export function RosterBuilder({
         return result;
     }, [roleSlots, assignments, getSlotCount]);
 
+    // ROK-209: Check if all slots are filled
+    const allSlotsFilled = React.useMemo(() =>
+        roleSlots.every(({ role }) => {
+            const count = getSlotCount(role);
+            if (count === 0) return true;
+            return assignments.filter(a => a.slot === role).length >= count;
+        }),
+    [roleSlots, assignments, getSlotCount]);
+
+    // ROK-209: Auto-fill click — compute preview
+    const handleAutoFillClick = () => {
+        const result = computeAutoFill(pool, assignments, roleSlots, getSlotCount, isGenericGame);
+        if (result.totalFilled === 0) {
+            toast.info('No matching players to auto-fill');
+            return;
+        }
+        setAutoFillPreview(result);
+    };
+
+    // ROK-209: Auto-fill confirm — apply changes
+    const handleAutoFillConfirm = () => {
+        if (!autoFillPreview) return;
+        setIsBulkUpdating(true);
+        try {
+            onRosterChange(autoFillPreview.newPool, autoFillPreview.newAssignments);
+            toast.success(`Auto-filled ${autoFillPreview.totalFilled} players`);
+        } finally {
+            setAutoFillPreview(null);
+            setIsBulkUpdating(false);
+        }
+    };
+
+    // ROK-209: Clear all — double-click pattern
+    const handleClearAllClick = () => {
+        if (clearPending) {
+            // Second click — execute clear
+            setClearPending(false);
+            setIsBulkUpdating(true);
+            try {
+                const clearedPlayers = assignments.map(a => ({ ...a, slot: null, position: 0 }));
+                const mergedPool = [...pool, ...clearedPlayers];
+                onRosterChange(mergedPool, []);
+                toast.success(`Roster cleared — ${assignments.length} players moved to pool`);
+            } finally {
+                setIsBulkUpdating(false);
+            }
+        } else {
+            // First click — enter pending state
+            setClearPending(true);
+        }
+    };
+
     // ROK-208: Assign player to a specific slot (from browse-all slot picker)
     const handleAssignToSlot = (signupId: number, role: RosterRole, position: number) => {
         const sourceItem = pool.find(p => p.signupId === signupId);
@@ -239,6 +307,82 @@ export function RosterBuilder({
                     onBarClick={() => setBrowseAll(true)}
                 />
             )}
+
+            {/* ROK-209: Auto-Fill & Clear All toolbar */}
+            {canEdit && (
+                <div className="flex items-center gap-2">
+                    <button
+                        type="button"
+                        className="btn btn-secondary btn-sm"
+                        disabled={pool.length === 0 || allSlotsFilled || isBulkUpdating}
+                        onClick={handleAutoFillClick}
+                    >
+                        {isBulkUpdating ? (
+                            <>
+                                <svg className="inline-block mr-1 h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                                </svg>
+                                Updating…
+                            </>
+                        ) : (
+                            'Auto-Fill'
+                        )}
+                    </button>
+                    <button
+                        type="button"
+                        className={`btn btn-danger btn-sm ${clearPending ? 'animate-pulse' : ''}`}
+                        disabled={assignments.length === 0 || isBulkUpdating}
+                        onClick={handleClearAllClick}
+                    >
+                        {clearPending ? 'Click again to clear' : 'Clear All'}
+                    </button>
+                </div>
+            )}
+
+            {/* ROK-209: Auto-Fill confirmation modal */}
+            <Modal
+                isOpen={autoFillPreview !== null}
+                onClose={() => setAutoFillPreview(null)}
+                title="Auto-Fill Roster"
+            >
+                {autoFillPreview && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-secondary">
+                            Auto-fill will assign <strong className="text-foreground">{autoFillPreview.totalFilled}</strong> players to roster slots:
+                        </p>
+                        <ul className="space-y-1 text-sm">
+                            {autoFillPreview.summary.map(({ role, count }) => (
+                                <li key={role} className="flex items-center gap-2">
+                                    <span className="font-medium text-foreground">{count}</span>
+                                    <span className="text-secondary">→ {role}</span>
+                                </li>
+                            ))}
+                        </ul>
+                        {autoFillPreview.newPool.length > 0 && (
+                            <p className="text-xs text-dim">
+                                {autoFillPreview.newPool.length} player{autoFillPreview.newPool.length !== 1 ? 's' : ''} will remain unassigned
+                            </p>
+                        )}
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setAutoFillPreview(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-primary btn-sm"
+                                onClick={handleAutoFillConfirm}
+                            >
+                                Continue
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* Role Slots */}
             <div className="space-y-4">

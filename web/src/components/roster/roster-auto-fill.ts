@@ -1,0 +1,129 @@
+import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+
+export interface AutoFillResult {
+    newPool: RosterAssignmentResponse[];
+    newAssignments: RosterAssignmentResponse[];
+    summary: { role: string; count: number }[];
+    totalFilled: number;
+}
+
+/**
+ * ROK-209: Pure function that computes auto-fill assignments.
+ * MMO: role-match → flex overflow → backfill → bench overflow.
+ * Generic: sequential fill by signup order.
+ */
+export function computeAutoFill(
+    pool: RosterAssignmentResponse[],
+    assignments: RosterAssignmentResponse[],
+    roleSlots: { role: RosterRole; label: string }[],
+    getSlotCount: (role: RosterRole) => number,
+    isGenericGame: boolean,
+): AutoFillResult {
+    const remaining = [...pool];
+    const newAssignments = [...assignments];
+    const summary: { role: string; count: number }[] = [];
+
+    const findNextEmptyPosition = (role: RosterRole): number | null => {
+        const count = getSlotCount(role);
+        for (let pos = 1; pos <= count; pos++) {
+            if (!newAssignments.some(a => a.slot === role && a.position === pos)) {
+                return pos;
+            }
+        }
+        return null;
+    };
+
+    const assignPlayer = (player: RosterAssignmentResponse, role: RosterRole, position: number, isOverride: boolean) => {
+        const idx = remaining.findIndex(p => p.signupId === player.signupId);
+        if (idx === -1) return;
+        remaining.splice(idx, 1);
+        newAssignments.push({ ...player, slot: role, position, isOverride });
+    };
+
+    if (isGenericGame) {
+        // Generic: fill player slots sequentially
+        let filled = 0;
+        for (const { role } of roleSlots) {
+            let pos = findNextEmptyPosition(role);
+            while (pos !== null && remaining.length > 0) {
+                assignPlayer(remaining[0], role, pos, false);
+                filled++;
+                pos = findNextEmptyPosition(role);
+            }
+            if (filled > 0) {
+                const slotDef = roleSlots.find(s => s.role === role);
+                summary.push({ role: slotDef?.label ?? role, count: filled });
+            }
+        }
+    } else {
+        // MMO algorithm (4 passes)
+        const mmoRoles: RosterRole[] = ['tank', 'healer', 'dps'];
+
+        // Pass 1: Role-match — assign pool players whose character.role matches the slot role
+        for (const role of mmoRoles) {
+            let filled = 0;
+            const matching = remaining.filter(p => p.character?.role === role);
+            for (const player of matching) {
+                const pos = findNextEmptyPosition(role);
+                if (pos === null) break;
+                assignPlayer(player, role, pos, false);
+                filled++;
+            }
+            if (filled > 0) {
+                const slotDef = roleSlots.find(s => s.role === role);
+                summary.push({ role: slotDef?.label ?? role, count: filled });
+            }
+        }
+
+        // Pass 2: Flex overflow — remaining unmatched players → empty flex slots
+        if (getSlotCount('flex') > 0) {
+            let filled = 0;
+            let pos = findNextEmptyPosition('flex');
+            while (pos !== null && remaining.length > 0) {
+                assignPlayer(remaining[0], 'flex', pos, true);
+                filled++;
+                pos = findNextEmptyPosition('flex');
+            }
+            if (filled > 0) {
+                summary.push({ role: 'Flex', count: filled });
+            }
+        }
+
+        // Pass 3: Backfill — if role slots still empty and pool players remain, fill any role
+        for (const role of mmoRoles) {
+            let filled = 0;
+            let pos = findNextEmptyPosition(role);
+            while (pos !== null && remaining.length > 0) {
+                assignPlayer(remaining[0], role, pos, true);
+                filled++;
+                pos = findNextEmptyPosition(role);
+            }
+            if (filled > 0) {
+                const existing = summary.find(s => s.role === (roleSlots.find(r => r.role === role)?.label ?? role));
+                if (existing) {
+                    existing.count += filled;
+                } else {
+                    const slotDef = roleSlots.find(s => s.role === role);
+                    summary.push({ role: slotDef?.label ?? role, count: filled });
+                }
+            }
+        }
+
+        // Pass 4: Bench overflow — fill bench slots with remaining players
+        if (getSlotCount('bench') > 0) {
+            let filled = 0;
+            let pos = findNextEmptyPosition('bench');
+            while (pos !== null && remaining.length > 0) {
+                assignPlayer(remaining[0], 'bench', pos, true);
+                filled++;
+                pos = findNextEmptyPosition('bench');
+            }
+            if (filled > 0) {
+                summary.push({ role: 'Bench', count: filled });
+            }
+        }
+    }
+
+    const totalFilled = pool.length - remaining.length;
+    return { newPool: remaining, newAssignments, summary, totalFilled };
+}
