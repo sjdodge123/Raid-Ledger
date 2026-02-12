@@ -30,6 +30,7 @@ import type {
     TemplateListResponseDto,
     AggregateGameTimeResponse,
     RescheduleEventDto,
+    UserHeartedGamesResponseDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -554,10 +555,11 @@ export async function unlinkDiscord(): Promise<void> {
 /**
  * Fetch paginated player list (public)
  */
-export async function getPlayers(params?: { page?: number; search?: string }): Promise<PlayersListResponseDto> {
+export async function getPlayers(params?: { page?: number; search?: string; gameId?: number }): Promise<PlayersListResponseDto> {
     const searchParams = new URLSearchParams();
     if (params?.page) searchParams.set('page', String(params.page));
     if (params?.search) searchParams.set('search', params.search);
+    if (params?.gameId) searchParams.set('gameId', String(params.gameId));
     const query = searchParams.toString();
     return fetchApi(`/users${query ? `?${query}` : ''}`);
 }
@@ -568,6 +570,13 @@ export async function getPlayers(params?: { page?: number; search?: string }): P
 export async function getUserProfile(userId: number): Promise<UserProfileDto> {
     const response = await fetchApi<{ data: UserProfileDto }>(`/users/${userId}/profile`);
     return response.data;
+}
+
+/**
+ * ROK-282: Fetch games a user has hearted.
+ */
+export async function getUserHeartedGames(userId: number): Promise<UserHeartedGamesResponseDto> {
+    return fetchApi(`/users/${userId}/hearted-games`);
 }
 
 // ============================================================

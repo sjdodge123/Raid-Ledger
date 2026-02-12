@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { getUserProfile } from '../lib/api-client';
-import type { UserProfileDto } from '@raid-ledger/contract';
+import { getUserProfile, getUserHeartedGames } from '../lib/api-client';
+import type { UserProfileDto, UserHeartedGamesResponseDto } from '@raid-ledger/contract';
 
 /**
  * Fetch a user's public profile by ID (ROK-181).
@@ -14,6 +14,21 @@ export function useUserProfile(userId: number | undefined) {
         },
         enabled: !!userId,
         staleTime: 5 * 60 * 1000, // 5 minutes
+    });
+}
+
+/**
+ * ROK-282: Fetch games a user has hearted.
+ */
+export function useUserHeartedGames(userId: number | undefined) {
+    return useQuery<UserHeartedGamesResponseDto>({
+        queryKey: ['userHeartedGames', userId],
+        queryFn: async () => {
+            if (!userId) throw new Error('User ID required');
+            return getUserHeartedGames(userId);
+        },
+        enabled: !!userId,
+        staleTime: 5 * 60 * 1000,
     });
 }
 

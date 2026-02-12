@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc, ne } from 'drizzle-orm';
+import { eq, sql, ilike, asc, and } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
 
 @Injectable()
@@ -227,11 +227,13 @@ export class UsersService {
   /**
    * Paginated list of all users with optional search.
    * Used for the Players page.
+   * ROK-282: Optional gameId filter to show only players who hearted a specific game.
    */
   async findAll(
     page: number,
     limit: number,
     search?: string,
+    gameId?: number,
   ): Promise<{
     data: Array<{
       id: number;
@@ -242,6 +244,55 @@ export class UsersService {
     total: number;
   }> {
     const offset = (page - 1) * limit;
+
+    // If filtering by gameId, get the set of user IDs who hearted that game
+    if (gameId) {
+      const searchCondition = search
+        ? ilike(schema.users.username, `%${search}%`)
+        : undefined;
+
+      const baseQuery = this.db
+        .select({
+          id: schema.users.id,
+          username: schema.users.username,
+          avatar: schema.users.avatar,
+          customAvatarUrl: schema.users.customAvatarUrl,
+        })
+        .from(schema.gameInterests)
+        .innerJoin(
+          schema.users,
+          eq(schema.gameInterests.userId, schema.users.id),
+        )
+        .where(
+          searchCondition
+            ? and(eq(schema.gameInterests.gameId, gameId), searchCondition)
+            : eq(schema.gameInterests.gameId, gameId),
+        );
+
+      const countQuery = this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(schema.gameInterests)
+        .innerJoin(
+          schema.users,
+          eq(schema.gameInterests.userId, schema.users.id),
+        )
+        .where(
+          searchCondition
+            ? and(eq(schema.gameInterests.gameId, gameId), searchCondition)
+            : eq(schema.gameInterests.gameId, gameId),
+        );
+
+      const [countResult] = await countQuery;
+      const rows = await baseQuery
+        .orderBy(asc(schema.users.username))
+        .limit(limit)
+        .offset(offset);
+
+      return {
+        data: rows,
+        total: Number(countResult.count),
+      };
+    }
 
     const conditions = search
       ? ilike(schema.users.username, `%${search}%`)
@@ -278,5 +329,34 @@ export class UsersService {
       .where(eq(schema.users.id, userId))
       .returning();
     return updated;
+  }
+
+  /**
+   * ROK-282: Fetch games a user has hearted (game interests).
+   * Returns basic game info for display on the public profile.
+   */
+  async getHeartedGames(userId: number): Promise<
+    Array<{
+      id: number;
+      igdbId: number;
+      name: string;
+      slug: string;
+      coverUrl: string | null;
+    }>
+  > {
+    const rows = await this.db
+      .select({
+        id: schema.games.id,
+        igdbId: schema.games.igdbId,
+        name: schema.games.name,
+        slug: schema.games.slug,
+        coverUrl: schema.games.coverUrl,
+      })
+      .from(schema.gameInterests)
+      .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
+      .where(eq(schema.gameInterests.userId, userId))
+      .orderBy(asc(schema.games.name));
+
+    return rows;
   }
 }

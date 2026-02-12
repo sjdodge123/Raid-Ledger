@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { usePlayers } from '../hooks/use-players';
+import { useGameDetail } from '../hooks/use-games-discover';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 
 export function PlayersPage() {
+    const [searchParams] = useSearchParams();
+    const gameIdParam = searchParams.get('gameId');
+    const gameId = gameIdParam ? parseInt(gameIdParam, 10) || undefined : undefined;
+
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [page, setPage] = useState(1);
@@ -17,7 +22,9 @@ export function PlayersPage() {
         return () => clearTimeout(timer);
     }, [search]);
 
-    const { data, isLoading } = usePlayers(page, debouncedSearch);
+    const { data, isLoading } = usePlayers(page, debouncedSearch, gameId);
+    // Fetch game name for the filter banner
+    const { data: gameData } = useGameDetail(gameId);
     const players = data?.data ?? [];
     const total = data?.meta.total ?? 0;
     const limit = data?.meta.limit ?? 20;
@@ -27,8 +34,23 @@ export function PlayersPage() {
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
             <div className="flex items-center justify-between flex-wrap gap-4">
                 <h1 className="text-2xl font-bold text-foreground">Players</h1>
-                <span className="text-sm text-muted">{total} registered</span>
+                <span className="text-sm text-muted">{total} {gameId ? 'interested' : 'registered'}</span>
             </div>
+
+            {/* Game filter banner */}
+            {gameId && gameData && (
+                <div className="flex items-center gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-3">
+                    <span className="text-sm text-emerald-400">
+                        Showing players interested in <strong>{gameData.name}</strong>
+                    </span>
+                    <Link
+                        to="/players"
+                        className="ml-auto text-sm text-muted hover:text-foreground transition-colors"
+                    >
+                        Clear filter
+                    </Link>
+                </div>
+            )}
 
             {/* Search */}
             <div className="relative">

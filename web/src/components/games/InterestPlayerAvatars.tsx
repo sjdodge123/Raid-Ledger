@@ -10,6 +10,8 @@ interface InterestPlayerAvatarsProps {
     totalCount: number;
     /** Maximum avatars to show before overflow (default 6) */
     maxVisible?: number;
+    /** Game ID for the "+N more" overflow link to the filtered players page */
+    gameId?: number;
 }
 
 /**
@@ -21,6 +23,7 @@ export function InterestPlayerAvatars({
     players,
     totalCount,
     maxVisible = 6,
+    gameId,
 }: InterestPlayerAvatarsProps) {
     const visiblePlayers = useMemo(
         () => players.slice(0, maxVisible),
@@ -47,7 +50,7 @@ export function InterestPlayerAvatars({
                     return (
                         <Link
                             key={player.id}
-                            to={`/players/${player.id}`}
+                            to={`/users/${player.id}`}
                             className="block rounded-full ring-2 ring-surface hover:ring-emerald-500/50 transition-all hover:z-10 hover:scale-110 flex-shrink-0"
                             style={{
                                 marginLeft: index > 0 ? '-8px' : 0,
@@ -76,11 +79,20 @@ export function InterestPlayerAvatars({
             </div>
 
             {/* Count / overflow text */}
-            <span className="text-sm text-muted whitespace-nowrap">
-                {overflowCount > 0
-                    ? `+${overflowCount} more`
-                    : `${totalCount} player${totalCount !== 1 ? 's' : ''} interested`}
-            </span>
+            {overflowCount > 0 && gameId ? (
+                <Link
+                    to={`/players?gameId=${gameId}`}
+                    className="text-sm text-emerald-400 hover:text-emerald-300 whitespace-nowrap transition-colors"
+                >
+                    +{overflowCount} more
+                </Link>
+            ) : (
+                <span className="text-sm text-muted whitespace-nowrap">
+                    {overflowCount > 0
+                        ? `+${overflowCount} more`
+                        : `${totalCount} player${totalCount !== 1 ? 's' : ''} interested`}
+                </span>
+            )}
         </div>
     );
 }

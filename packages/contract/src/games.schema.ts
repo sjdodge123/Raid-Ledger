@@ -179,3 +179,21 @@ export const GameInterestResponseSchema = z.object({
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;
+
+/** A game the user has hearted, with basic info for display (ROK-282) */
+export const UserHeartedGameSchema = z.object({
+    id: z.number(),
+    igdbId: z.number(),
+    name: z.string(),
+    slug: z.string(),
+    coverUrl: z.string().nullable(),
+});
+
+export type UserHeartedGameDto = z.infer<typeof UserHeartedGameSchema>;
+
+/** Response for user hearted games endpoint (ROK-282) */
+export const UserHeartedGamesResponseSchema = z.object({
+    data: z.array(UserHeartedGameSchema),
+});
+
+export type UserHeartedGamesResponseDto = z.infer<typeof UserHeartedGamesResponseSchema>;

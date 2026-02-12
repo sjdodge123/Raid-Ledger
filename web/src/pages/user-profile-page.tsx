@@ -1,7 +1,7 @@
 import { useParams, Link } from 'react-router-dom';
-import { useUserProfile } from '../hooks/use-user-profile';
+import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
 import { formatDistanceToNow } from 'date-fns';
-import type { CharacterDto } from '@raid-ledger/contract';
+import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import './user-profile-page.css';
 
@@ -75,6 +75,30 @@ function PublicCharacterCard({ character }: { character: CharacterDto }) {
     );
 }
 
+/** Clickable game card for the hearted games section (ROK-282) */
+function HeartedGameCard({ game }: { game: UserHeartedGameDto }) {
+    return (
+        <Link
+            to={`/games/${game.id}`}
+            className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
+        >
+            {game.coverUrl ? (
+                <img
+                    src={game.coverUrl}
+                    alt={game.name}
+                    className="w-10 h-14 rounded object-cover flex-shrink-0"
+                    loading="lazy"
+                />
+            ) : (
+                <div className="w-10 h-14 rounded bg-overlay flex items-center justify-center text-muted flex-shrink-0 text-xs">
+                    ?
+                </div>
+            )}
+            <span className="font-medium text-foreground truncate">{game.name}</span>
+        </Link>
+    );
+}
+
 /**
  * Public user profile page (ROK-181).
  * Shows username, avatar, member since, and characters.
@@ -84,6 +108,8 @@ export function UserProfilePage() {
     const numericId = userId ? parseInt(userId, 10) : undefined;
 
     const { data: profile, isLoading, error } = useUserProfile(numericId);
+    const { data: heartedGamesData } = useUserHeartedGames(numericId);
+    const heartedGames = heartedGamesData?.data ?? [];
 
     if (isLoading) {
         return (
@@ -160,6 +186,20 @@ export function UserProfilePage() {
                 {profile.characters.length === 0 && (
                     <div className="user-profile-empty">
                         <p>No characters added yet.</p>
+                    </div>
+                )}
+
+                {/* Hearted Games Section (ROK-282) */}
+                {heartedGames.length > 0 && (
+                    <div className="user-profile-section">
+                        <h2 className="user-profile-section-title">
+                            Interested In ({heartedGames.length})
+                        </h2>
+                        <div className="flex flex-col gap-2">
+                            {heartedGames.map((game) => (
+                                <HeartedGameCard key={game.id} game={game} />
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>

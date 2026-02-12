@@ -228,6 +228,7 @@ export function GameDetailPage() {
                             players={players}
                             totalCount={count}
                             maxVisible={6}
+                            gameId={gameId}
                         />
                     )}
                 </div>

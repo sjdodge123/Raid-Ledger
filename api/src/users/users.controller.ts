@@ -35,6 +35,7 @@ import {
   GameTimeTemplateInputSchema,
   GameTimeOverrideInputSchema,
   GameTimeAbsenceInputSchema,
+  UserHeartedGamesResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
@@ -64,23 +65,27 @@ export class UsersController {
   /**
    * List all registered players (paginated, with optional search).
    * Public endpoint for the Players page.
+   * ROK-282: Optional gameId filter to show only players who hearted a specific game.
    */
   @Get()
   async listPlayers(
     @Query('page') pageStr?: string,
     @Query('limit') limitStr?: string,
     @Query('search') search?: string,
+    @Query('gameId') gameIdStr?: string,
   ): Promise<PlayersListResponseDto> {
     const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
     const limit = Math.min(
       50,
       Math.max(1, parseInt(limitStr ?? '20', 10) || 20),
     );
+    const gameId = gameIdStr ? parseInt(gameIdStr, 10) || undefined : undefined;
 
     const result = await this.usersService.findAll(
       page,
       limit,
       search || undefined,
+      gameId,
     );
     return {
       data: result.data,
@@ -116,6 +121,23 @@ export class UsersController {
         characters: charactersResult.data,
       },
     };
+  }
+
+  /**
+   * ROK-282: Get games a user has hearted.
+   * Public endpoint for displaying hearted games on a user's profile.
+   */
+  @Get(':id/hearted-games')
+  async getHeartedGames(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<UserHeartedGamesResponseDto> {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const games = await this.usersService.getHeartedGames(id);
+    return { data: games };
   }
 
   /**
