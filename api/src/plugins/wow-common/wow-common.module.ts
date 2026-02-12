@@ -3,18 +3,21 @@ import { BlizzardService } from './blizzard.service';
 import { BlizzardController } from './blizzard.controller';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardContentProvider } from './blizzard-content.provider';
+import { WowCronRegistrar } from './wow-cron-registrar';
 import { SettingsModule } from '../../settings/settings.module';
+import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { WOW_COMMON_MANIFEST } from './manifest';
 
 @Module({
-  imports: [SettingsModule],
+  imports: [SettingsModule, CharactersModule],
   controllers: [BlizzardController],
   providers: [
     BlizzardService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
+    WowCronRegistrar,
   ],
   exports: [
     BlizzardService,
@@ -27,6 +30,7 @@ export class WowCommonModule implements OnModuleInit {
     private readonly pluginRegistry: PluginRegistryService,
     private readonly characterSyncAdapter: BlizzardCharacterSyncAdapter,
     private readonly contentProvider: BlizzardContentProvider,
+    private readonly cronRegistrar: WowCronRegistrar,
   ) {}
 
   onModuleInit(): void {
@@ -47,5 +51,11 @@ export class WowCommonModule implements OnModuleInit {
         this.contentProvider,
       );
     }
+
+    this.pluginRegistry.registerAdapter(
+      EXTENSION_POINTS.CRON_REGISTRAR,
+      WOW_COMMON_MANIFEST.id,
+      this.cronRegistrar,
+    );
   }
 }

@@ -8,7 +8,7 @@ export const WOW_COMMON_MANIFEST: PluginManifest = {
     'Blizzard API integration for WoW character sync, realm data, and dungeon/raid content.',
   author: { name: 'Raid Ledger' },
   gameSlugs: ['wow', 'world-of-warcraft', 'wow-classic', 'wow-classic-era'],
-  capabilities: ['character-sync', 'content-provider'],
+  capabilities: ['character-sync', 'content-provider', 'cron-registrar'],
   settingKeys: ['blizzard_client_id', 'blizzard_client_secret'],
   integrations: [
     {

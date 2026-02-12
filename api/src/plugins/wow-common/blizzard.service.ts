@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { SettingsService, SETTINGS_EVENTS } from '../../settings/settings.service';
+import {
+  SettingsService,
+  SETTINGS_EVENTS,
+} from '../../settings/settings.service';
 import type { WowGameVariant } from '@raid-ledger/contract';
 
 /** Equipment item from the Blizzard API */

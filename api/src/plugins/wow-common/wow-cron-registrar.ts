@@ -1,20 +1,30 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
-import { CharactersService } from './characters.service';
+import { CharactersService } from '../../characters/characters.service';
+import type { CronRegistrar } from '../plugin-host/extension-points';
+import type { CronJobDefinition } from '../plugin-host/extension-types';
 
 /**
- * Cron service that auto-syncs all externally-linked characters every 12 hours.
- * Fires at 03:00 and 15:00 UTC.
+ * Registers cron jobs for WoW character auto-sync.
+ * Only active when the wow-common plugin is enabled.
  */
 @Injectable()
-export class CharacterSyncService {
-  private readonly logger = new Logger(CharacterSyncService.name);
+export class WowCronRegistrar implements CronRegistrar {
+  private readonly logger = new Logger(WowCronRegistrar.name);
   private isSyncing = false;
 
   constructor(private readonly charactersService: CharactersService) {}
 
-  @Cron('0 0 3,15 * * *')
-  async handleAutoSync() {
+  getCronJobs(): CronJobDefinition[] {
+    return [
+      {
+        name: 'character-auto-sync',
+        cronExpression: '0 0 3,15 * * *',
+        handler: () => this.handleAutoSync(),
+      },
+    ];
+  }
+
+  private async handleAutoSync(): Promise<void> {
     if (this.isSyncing) {
       this.logger.warn('Auto-sync already in progress, skipping');
       return;

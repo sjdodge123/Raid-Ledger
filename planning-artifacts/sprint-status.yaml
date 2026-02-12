@@ -1,4 +1,4 @@
-# generated: 2026-02-11T21:00:00Z
+# generated: 2026-02-11T17:00:00Z
 # source: Linear (Raid Ledger project) — do not hand-edit
 # regenerate: /init pulls from Linear, /handover pushes then pulls
 project: Raid Ledger
@@ -80,13 +80,15 @@ development_status:
   ROK-227: done           # Seed Game Time Data for Demo Users
   ROK-230: done           # IGDB Games Integration Bug Fixes + Crossplay Support
   ROK-232: done           # Set browser tab title to "Raid Ledger" and add favicon
+  ROK-233: done           # Expand demo seed data to ~100 players with rich cross-domain data
+  ROK-234: done           # Reimagine character creation: inline onboarding, WoW Armory import, and no-character signup UX
   ROK-235: done           # Bug: translucent overlay box appears over events in calendar week view
   ROK-236: done           # Plugin Registry, Lifecycle & Data Management — Backend
   ROK-237: done           # Plugin Extension Point Interfaces — Backend
+  ROK-238: done           # Plugin Extension Points — Frontend
+  ROK-239: done           # Plugin Admin UI
+  ROK-240: done           # Extract Blizzard Module into Plugin Package
   ROK-264: done           # Plugin Architecture Discovery & Codebase Audit
-
-  # === In Progress ===
-  ROK-234: in-progress    # Reimagine character creation: inline onboarding, WoW Armory import, and no-character signup UX
 
   # === Ready for Dev ===
   ROK-180: ready-for-dev  # Discord Bot Welcome & Dispatch
@@ -101,7 +103,6 @@ development_status:
   ROK-223: ready-for-dev  # Event reschedule modal with aggregate game time overlay
   ROK-228: ready-for-dev  # Space Dark Mode Theme
   ROK-229: ready-for-dev  # Auto-Sub Benched Players
-  ROK-233: ready-for-dev  # Expand demo seed data to ~100 players with rich cross-domain data
 
   # === Backlog ===
   ROK-116: backlog        # Epic: Discord Bot Integration
@@ -127,9 +128,6 @@ development_status:
   ROK-218: backlog        # Missed-Event Nudge & Schedule Keeper
   ROK-219: backlog        # First-Time User Experience (FTE)
   ROK-231: backlog        # Game library: hide/ban games and adult content filter
-  ROK-238: backlog        # Plugin Extension Points — Frontend
-  ROK-239: backlog        # Plugin Admin UI
-  ROK-240: backlog        # Extract Blizzard Module into Plugin Package
   ROK-241: backlog        # Extract Character Sync into Plugin Adapter
   ROK-242: backlog        # Extract Frontend WoW Components into Plugin Package
   ROK-243: backlog        # Realm Metadata & Cross-Realm Logic
@@ -153,6 +151,11 @@ development_status:
   ROK-261: backlog        # Lockout-Aware Event Signups
   ROK-262: backlog        # PUG Slot System
   ROK-263: backlog        # Magic Discord Invite Links
+  ROK-265: backlog        # Make PluginManifest.gameSlugs optional for non-game plugins
+  ROK-266: backlog        # Wire up registerManifest() and remove hardcoded Blizzard shim
+  ROK-267: backlog        # Add AuthProvider extension point for pluggable authentication strategies
+  ROK-268: backlog        # Add ServerStatusProvider extension point for game server management plugins
+  ROK-269: backlog        # Add DataEnricher extension point for third-party character/event data sources
 
   # === Deprecated ===
   ROK-115: deprecated     # Flash Check-In (Zero-Click)

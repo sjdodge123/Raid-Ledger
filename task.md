@@ -5,10 +5,9 @@
 <!-- [ ] = not started (no change in Linear) -->
 
 ## In Progress
-- [/] ROK-234: Reimagine character creation: inline onboarding, WoW Armory import, and no-character signup UX
+- [/] ROK-241: Extract Character Sync into Plugin Adapter  (P1)
 
 ## Ready for Dev
-- [ ] ROK-233: Expand demo seed data to ~100 players with rich cross-domain data  (P0)
 - [ ] ROK-188: Delete User Account  (P1)
 - [ ] ROK-206: Enforce Single Main Character Per Player  (P1)
 - [ ] ROK-208: Calendar Default View & Persisted Preference  (P1)
