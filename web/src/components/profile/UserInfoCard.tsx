@@ -1,6 +1,7 @@
 import type { User } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { toast } from '../../lib/toast';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { RoleBadge } from '../ui/role-badge';
 
 interface UserInfoCardProps {

@@ -30,7 +30,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (!isAuthenticated) {
         // Save current path for post-login redirect (including search and hash)
         saveAuthRedirect(location.pathname + location.search + location.hash);
-        return <Navigate to="/login" replace />;
+        return <Navigate to="/" replace />;
     }
 
     return <>{children}</>;
