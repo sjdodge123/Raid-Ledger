@@ -8,7 +8,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, count, inArray, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -137,8 +137,21 @@ export class CharactersService {
     // Use transaction for atomic demotion + insert to prevent race conditions
     try {
       return await this.db.transaction(async (tx) => {
-        // If setting as main, demote any existing main first
-        if (dto.isMain) {
+        // ROK-206: Count existing characters to auto-main the first one
+        const [{ charCount }] = await tx
+          .select({ charCount: count() })
+          .from(schema.characters)
+          .where(
+            and(
+              eq(schema.characters.userId, userId),
+              eq(schema.characters.gameId, dto.gameId),
+            ),
+          );
+
+        const shouldBeMain = dto.isMain === true || Number(charCount) === 0;
+
+        // If setting as main and others exist, demote existing main first
+        if (shouldBeMain && Number(charCount) > 0) {
           await tx
             .update(schema.characters)
             .set({ isMain: false, updatedAt: new Date() })
@@ -161,14 +174,14 @@ export class CharactersService {
             class: dto.class ?? null,
             spec: dto.spec ?? null,
             role: dto.role ?? null,
-            isMain: dto.isMain ?? false,
+            isMain: shouldBeMain,
             itemLevel: dto.itemLevel ?? null,
             avatarUrl: dto.avatarUrl ?? null,
           })
           .returning();
 
         this.logger.log(
-          `User ${userId} created character ${character.id} (${character.name})`,
+          `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
         );
         return this.mapToDto(character);
       });
@@ -176,6 +189,12 @@ export class CharactersService {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
         throw new ConflictException(
           `Character ${dto.name} already exists for this game/realm`,
+        );
+      }
+      // ROK-206: Catch partial unique index constraint as 409
+      if (this.isUniqueViolation(error, 'idx_one_main_per_game')) {
+        throw new ConflictException(
+          'Only one main character allowed per game',
         );
       }
       throw error;
@@ -216,12 +235,38 @@ export class CharactersService {
    * @param characterId - Character ID
    */
   async delete(userId: number, characterId: string): Promise<void> {
-    // Verify ownership
-    await this.findOne(userId, characterId);
+    // Verify ownership — also captures character details for auto-promote
+    const character = await this.findOne(userId, characterId);
 
     await this.db
       .delete(schema.characters)
       .where(eq(schema.characters.id, characterId));
+
+    // ROK-206: If we deleted the main, auto-promote the lowest-order alt
+    if (character.isMain) {
+      const [nextAlt] = await this.db
+        .select()
+        .from(schema.characters)
+        .where(
+          and(
+            eq(schema.characters.userId, userId),
+            eq(schema.characters.gameId, character.gameId),
+          ),
+        )
+        .orderBy(asc(schema.characters.displayOrder))
+        .limit(1);
+
+      if (nextAlt) {
+        await this.db
+          .update(schema.characters)
+          .set({ isMain: true, updatedAt: new Date() })
+          .where(eq(schema.characters.id, nextAlt.id));
+
+        this.logger.log(
+          `Auto-promoted character ${nextAlt.id} (${nextAlt.name}) to main after deletion of ${characterId}`,
+        );
+      }
+    }
 
     this.logger.log(`User ${userId} deleted character ${characterId}`);
   }
@@ -325,7 +370,20 @@ export class CharactersService {
     // Create the character with external data
     try {
       return await this.db.transaction(async (tx) => {
-        if (dto.isMain) {
+        // ROK-206: Count existing characters to auto-main the first one
+        const [{ charCount }] = await tx
+          .select({ charCount: count() })
+          .from(schema.characters)
+          .where(
+            and(
+              eq(schema.characters.userId, userId),
+              eq(schema.characters.gameId, game.id),
+            ),
+          );
+
+        const shouldBeMain = dto.isMain === true || Number(charCount) === 0;
+
+        if (shouldBeMain && Number(charCount) > 0) {
           await tx
             .update(schema.characters)
             .set({ isMain: false, updatedAt: new Date() })
@@ -348,7 +406,7 @@ export class CharactersService {
             class: profile.class,
             spec: profile.spec,
             role: profile.role,
-            isMain: dto.isMain ?? false,
+            isMain: shouldBeMain,
             itemLevel: profile.itemLevel,
             avatarUrl: profile.avatarUrl,
             renderUrl: profile.renderUrl,
@@ -364,7 +422,7 @@ export class CharactersService {
           .returning();
 
         this.logger.log(
-          `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})`,
+          `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
         );
         return this.mapToDto(character);
       });
@@ -372,6 +430,12 @@ export class CharactersService {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
         throw new ConflictException(
           `Character ${profile.name} on ${profile.realm} already exists`,
+        );
+      }
+      // ROK-206: Catch partial unique index constraint as 409
+      if (this.isUniqueViolation(error, 'idx_one_main_per_game')) {
+        throw new ConflictException(
+          'Only one main character allowed per game',
         );
       }
       throw error;
