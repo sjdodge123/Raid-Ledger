@@ -335,7 +335,7 @@ describe('RosterBuilder', () => {
                 { role: 'dps' as RosterRole, label: 'DPS' },
                 { role: 'flex' as RosterRole, label: 'Flex' },
             ];
-            const getSlotCount = (role: RosterRole) => ({ tank: 2, healer: 4, dps: 14, flex: 5 }[role] ?? 0);
+            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
 
             const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
 
@@ -355,7 +355,7 @@ describe('RosterBuilder', () => {
                 { role: 'dps' as RosterRole, label: 'DPS' },
                 { role: 'flex' as RosterRole, label: 'Flex' },
             ];
-            const getSlotCount = (role: RosterRole) => ({ tank: 2, healer: 4, dps: 14, flex: 5 }[role] ?? 0);
+            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
 
             const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
 
@@ -374,7 +374,7 @@ describe('RosterBuilder', () => {
                 { role: 'flex' as RosterRole, label: 'Flex' },
             ];
             // Small slots to test backfill: 1 tank, 1 healer, 1 dps, 2 flex = 5 slots
-            const getSlotCount = (role: RosterRole) => ({ tank: 1, healer: 1, dps: 1, flex: 2 }[role] ?? 0);
+            const getSlotCount = (role: RosterRole) => (({ tank: 1, healer: 1, dps: 1, flex: 2 } as Record<string, number>)[role] ?? 0);
 
             const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
 
@@ -393,7 +393,7 @@ describe('RosterBuilder', () => {
                 { role: 'bench' as RosterRole, label: 'Bench' },
             ];
             // All MMO slots are 0, only bench available
-            const getSlotCount = (role: RosterRole) => ({ tank: 0, healer: 0, dps: 0, flex: 0, bench: 3 }[role] ?? 0);
+            const getSlotCount = (role: RosterRole) => (({ tank: 0, healer: 0, dps: 0, flex: 0, bench: 3 } as Record<string, number>)[role] ?? 0);
 
             const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
 
@@ -430,7 +430,7 @@ describe('RosterBuilder', () => {
                 { role: 'dps' as RosterRole, label: 'DPS' },
                 { role: 'flex' as RosterRole, label: 'Flex' },
             ];
-            const getSlotCount = (role: RosterRole) => ({ tank: 2, healer: 4, dps: 14, flex: 5 }[role] ?? 0);
+            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
 
             const result = computeAutoFill(pool, existing, roleSlots, getSlotCount, false);
 

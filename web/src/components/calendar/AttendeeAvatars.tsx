@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
-import { resolveAvatar } from '../../lib/avatar';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 
 interface SignupPreview {
     id: number;
     username: string;
     avatar: string | null;
+    /** Discord user ID for avatar URL resolution (ROK-222) */
+    discordId?: string | null;
     /** Optional characters for avatar resolution (ROK-194) */
     characters?: Array<{ gameId: string; avatarUrl: string | null }>;
 }
@@ -93,8 +95,8 @@ export function AttendeeAvatars({
             {/* Avatar stack */}
             <div className="flex items-center">
                 {visibleSignups.map((signup, index) => {
-                    // ROK-194: Resolve avatar based on game context
-                    const resolved = resolveAvatar(signup, gameId);
+                    // ROK-222: Resolve avatar using toAvatarUser for proper Discord hash→URL conversion
+                    const resolved = resolveAvatar(toAvatarUser(signup), gameId);
                     const avatarUrl = resolved.url;
 
                     return (

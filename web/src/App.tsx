@@ -38,9 +38,6 @@ function App() {
         closeButton
         offset="72px"
         duration={5000}
-        toastOptions={{
-          error: { duration: Infinity },
-        }}
       />
       <Layout>
         <Routes>

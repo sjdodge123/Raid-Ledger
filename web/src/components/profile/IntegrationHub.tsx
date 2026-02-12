@@ -4,6 +4,7 @@ import { toast } from '@/lib/toast';
 import type { User } from '../../hooks/use-auth';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../../lib/config';
+import { buildDiscordAvatarUrl } from '../../lib/avatar';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { PowerCoreAvatar } from './PowerCoreAvatar';
 import { IntegrationSpoke, type SpokeStatus } from './IntegrationSpoke';
@@ -47,11 +48,12 @@ function buildAvatarOptions(user: User, characters: CharacterDto[]) {
         });
     }
 
-    // Discord avatar
+    // Discord avatar (ROK-222: use buildDiscordAvatarUrl)
     const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
-    if (hasDiscordLinked && user.avatar) {
+    const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
+    if (hasDiscordLinked && discordUrl) {
         options.push({
-            url: `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=128`,
+            url: discordUrl,
             label: 'Discord',
         });
     }
@@ -78,10 +80,10 @@ function resolveCurrentAvatar(
     if (options.length > 0 && prefIndex >= 0 && prefIndex < options.length) {
         return options[prefIndex].url;
     }
-    // Fallback: Discord avatar or default
-    const hasDiscord = user.discordId && !user.discordId.startsWith('local:');
-    if (hasDiscord && user.avatar) {
-        return `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=128`;
+    // Fallback: Discord avatar or default (ROK-222: use buildDiscordAvatarUrl)
+    const fallbackDiscordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
+    if (fallbackDiscordUrl) {
+        return fallbackDiscordUrl;
     }
     return '/default-avatar.svg';
 }

@@ -1,4 +1,5 @@
 import type { SignupUserDto, SignupCharacterDto, ConfirmationStatus } from '@raid-ledger/contract';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 
 interface RosterListProps {
     signups: Array<{
@@ -9,6 +10,8 @@ interface RosterListProps {
         confirmationStatus?: ConfirmationStatus;
     }>;
     isLoading?: boolean;
+    /** Game ID for context-aware avatar resolution (ROK-222) */
+    gameId?: string;
 }
 
 /** Role display colors for class-colored borders (AC-6) */
@@ -20,35 +23,10 @@ const ROLE_BORDER_COLORS: Record<string, string> = {
 
 /** Role emoji indicators */
 const ROLE_ICONS: Record<string, string> = {
-    tank: '🛡️',
-    healer: '💚',
-    dps: '⚔️',
+    tank: '\u{1F6E1}\uFE0F',
+    healer: '\u{1F49A}',
+    dps: '\u2694\uFE0F',
 };
-
-/**
- * Build Discord avatar URL from discord ID and avatar hash
- */
-function getAvatarUrl(discordId: string, avatar: string | null): string {
-    if (!avatar || !discordId) {
-        // Discord default avatar based on discordId hash
-        const defaultIndex = discordId ? parseInt(discordId.slice(-1), 10) % 5 : 0;
-        return `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
-    }
-    // The avatar is already a URL or hash
-    if (avatar.startsWith('http')) {
-        return avatar;
-    }
-    return `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png`;
-}
-
-/**
- * Handle avatar load errors with fallback
- */
-function handleAvatarError(e: React.SyntheticEvent<HTMLImageElement>, discordId: string) {
-    // Fall back to Discord default avatar
-    const defaultIndex = discordId ? parseInt(discordId.slice(-1), 10) % 5 : 0;
-    e.currentTarget.src = `https://cdn.discordapp.com/embed/avatars/${defaultIndex}.png`;
-}
 
 /**
  * Format the signup time relative to now
@@ -73,10 +51,11 @@ function formatSignupTime(dateString: string): string {
 }
 
 /**
- * Roster list component displaying signed-up users with Discord avatars
+ * Roster list component displaying signed-up users with avatars
  * and character info when confirmed (ROK-131 AC-6, AC-7).
+ * ROK-222: Uses resolveAvatar() for unified avatar resolution.
  */
-export function RosterList({ signups, isLoading }: RosterListProps) {
+export function RosterList({ signups, isLoading, gameId }: RosterListProps) {
     if (isLoading) {
         return (
             <div className="space-y-3">
@@ -98,7 +77,7 @@ export function RosterList({ signups, isLoading }: RosterListProps) {
     return (
         <div className="space-y-2">
             {signups.map((signup) => (
-                <RosterItem key={signup.id} signup={signup} />
+                <RosterItem key={signup.id} signup={signup} gameId={gameId} />
             ))}
         </div>
     );
@@ -112,18 +91,24 @@ interface RosterItemProps {
         character?: SignupCharacterDto | null;
         confirmationStatus?: ConfirmationStatus;
     };
+    /** Game ID for context-aware avatar resolution (ROK-222) */
+    gameId?: string;
 }
 
 /**
  * Individual roster item with character info when confirmed (ROK-131).
+ * ROK-222: Uses resolveAvatar(toAvatarUser()) for avatar resolution.
  */
-function RosterItem({ signup }: RosterItemProps) {
+function RosterItem({ signup, gameId }: RosterItemProps) {
     const { user, character, confirmationStatus } = signup;
     const isPending = confirmationStatus === 'pending' || !confirmationStatus;
     const isConfirmed = confirmationStatus === 'confirmed' || confirmationStatus === 'changed';
     const roleBorderClass = character?.role
         ? ROLE_BORDER_COLORS[character.role] || ''
         : '';
+
+    // ROK-222: Resolve avatar through unified pipeline
+    const avatarResolved = resolveAvatar(toAvatarUser(user), gameId);
 
     return (
         <div
@@ -132,19 +117,27 @@ function RosterItem({ signup }: RosterItemProps) {
         >
             {/* Avatar */}
             <div className="relative">
-                <img
-                    src={getAvatarUrl(user.discordId, user.avatar)}
-                    alt={user.username}
-                    className="w-10 h-10 rounded-full bg-overlay"
-                    onError={(e) => handleAvatarError(e, user.discordId)}
-                />
+                {avatarResolved.url ? (
+                    <img
+                        src={avatarResolved.url}
+                        alt={user.username}
+                        className="w-10 h-10 rounded-full bg-overlay"
+                        onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                        }}
+                    />
+                ) : (
+                    <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
+                        {user.username.charAt(0).toUpperCase()}
+                    </div>
+                )}
                 {/* Pending confirmation badge (AC-7) */}
                 {isPending && (
                     <span
                         className="absolute -bottom-1 -right-1 text-sm"
                         title="Character not confirmed"
                     >
-                        ❓
+                        &#10067;
                     </span>
                 )}
             </div>
@@ -160,7 +153,7 @@ function RosterItem({ signup }: RosterItemProps) {
                             </p>
                             {character.isMain && (
                                 <span className="text-yellow-400 text-xs" title="Main Character">
-                                    ⭐
+                                    &#11088;
                                 </span>
                             )}
                             {character.role && (
@@ -173,7 +166,7 @@ function RosterItem({ signup }: RosterItemProps) {
                             <span className="truncate">{user.username}</span>
                             {character.class && (
                                 <>
-                                    <span>·</span>
+                                    <span>&#183;</span>
                                     <span className="text-muted">{character.class}</span>
                                 </>
                             )}
@@ -185,7 +178,7 @@ function RosterItem({ signup }: RosterItemProps) {
                             )}
                             {character.itemLevel && (
                                 <>
-                                    <span>·</span>
+                                    <span>&#183;</span>
                                     <span className="text-purple-400">{character.itemLevel}</span>
                                 </>
                             )}
@@ -200,7 +193,7 @@ function RosterItem({ signup }: RosterItemProps) {
                             Signed up {formatSignupTime(signup.signedUpAt)}
                             {isPending && (
                                 <span className="text-amber-500/80 ml-2">
-                                    · Awaiting confirmation
+                                    &#183; Awaiting confirmation
                                 </span>
                             )}
                         </p>
@@ -214,7 +207,7 @@ function RosterItem({ signup }: RosterItemProps) {
                     className="text-green-500 text-xs font-medium"
                     title={confirmationStatus === 'changed' ? 'Changed selection' : 'Confirmed'}
                 >
-                    {confirmationStatus === 'changed' ? '🔄' : '✓'}
+                    {confirmationStatus === 'changed' ? '\u{1F504}' : '\u2713'}
                 </span>
             )}
         </div>

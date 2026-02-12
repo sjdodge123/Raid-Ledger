@@ -2,6 +2,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useUserProfile } from '../hooks/use-user-profile';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto } from '@raid-ledger/contract';
+import { resolveAvatar } from '../lib/avatar';
+import type { AvatarUser } from '../lib/avatar';
 import './user-profile-page.css';
 
 const FACTION_STYLES: Record<string, string> = {
@@ -112,19 +114,36 @@ export function UserProfilePage() {
 
     const memberSince = formatDistanceToNow(new Date(profile.createdAt), { addSuffix: true });
 
+    // ROK-222: Build AvatarUser from profile data for resolveAvatar()
+    const profileAvatarUser: AvatarUser = {
+        avatar: profile.avatar,
+        customAvatarUrl: (profile as { customAvatarUrl?: string | null }).customAvatarUrl ?? null,
+        characters: profile.characters?.map((c) => ({
+            gameId: c.gameId,
+            avatarUrl: c.avatarUrl,
+        })),
+    };
+    const profileAvatar = resolveAvatar(profileAvatarUser);
+
     return (
         <div className="user-profile-page">
             <div className="user-profile-card">
                 {/* Header */}
                 <div className="user-profile-header">
-                    <img
-                        src={profile.avatar || '/default-avatar.svg'}
-                        alt={profile.username}
-                        className="user-profile-avatar"
-                        onError={(e) => {
-                            (e.target as HTMLImageElement).src = '/default-avatar.svg';
-                        }}
-                    />
+                    {profileAvatar.url ? (
+                        <img
+                            src={profileAvatar.url}
+                            alt={profile.username}
+                            className="user-profile-avatar"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                            }}
+                        />
+                    ) : (
+                        <div className="user-profile-avatar user-profile-avatar--initials">
+                            {profile.username.charAt(0).toUpperCase()}
+                        </div>
+                    )}
                     <div className="user-profile-info">
                         <h1 className="user-profile-name">{profile.username}</h1>
                         <p className="user-profile-meta">

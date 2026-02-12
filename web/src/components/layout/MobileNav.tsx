@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { useThemeStore } from '../../stores/theme-store';
 import { API_BASE_URL } from '../../lib/config';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
 
 interface MobileNavProps {
@@ -55,10 +56,9 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
     if (!isOpen) return null;
 
-    // Only use Discord CDN if user has both discordId AND avatar hash
-    const avatarUrl = user?.discordId && user?.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
-        : '/default-avatar.svg';
+    // ROK-222: Use resolveAvatar for unified avatar resolution
+    const avatarResolved = user ? resolveAvatar(toAvatarUser(user)) : null;
+    const avatarUrl = avatarResolved?.url;
 
     const navLinks = [
         { to: '/games', label: 'Games' },
@@ -96,14 +96,20 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 {isAuthenticated && user && (
                     <div className="p-4 border-b border-edge-subtle">
                         <div className="flex items-center gap-3">
-                            <img
-                                src={avatarUrl}
-                                alt={user.username}
-                                className="w-10 h-10 rounded-full bg-overlay"
-                                onError={(e) => {
-                                    e.currentTarget.src = '/default-avatar.svg';
-                                }}
-                            />
+                            {avatarUrl ? (
+                                <img
+                                    src={avatarUrl}
+                                    alt={user.username}
+                                    className="w-10 h-10 rounded-full bg-overlay"
+                                    onError={(e) => {
+                                        e.currentTarget.style.display = 'none';
+                                    }}
+                                />
+                            ) : (
+                                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
+                                    {user.username.charAt(0).toUpperCase()}
+                                </div>
+                            )}
                             <span className="text-foreground font-medium">{user.username}</span>
                         </div>
                     </div>

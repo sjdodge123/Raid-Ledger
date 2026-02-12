@@ -2,6 +2,7 @@ import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
+import { resolveAvatar } from '../../lib/avatar';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -25,7 +26,7 @@ function StatusBadge({ status }: { status: EventStatus }) {
 
     const labels: Record<EventStatus, string> = {
         upcoming: 'Upcoming',
-        live: '● Live',
+        live: 'Live',
         ended: 'Ended',
     };
 
@@ -84,7 +85,8 @@ function getPlaceholderPath(slug: string | undefined): string {
 }
 
 /**
- * Event card component displaying event info with game cover
+ * Event card component displaying event info with game cover.
+ * ROK-222: Uses resolveAvatar() for creator avatar.
  */
 export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
@@ -96,6 +98,9 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
     // Track image load failure to show placeholder
     const [imageError, setImageError] = React.useState(false);
     const showPlaceholder = !gameCoverUrl || imageError;
+
+    // ROK-222: Resolve creator avatar through unified pipeline
+    const creatorAvatar = resolveAvatar({ avatar: event.creator.avatar });
 
     return (
         <div
@@ -160,7 +165,7 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
                     <p className="text-muted text-sm">
                         {formatEventTime(event.startTime, resolved)}
                     </p>
-                    <span className="text-faint">•</span>
+                    <span className="text-faint">&#8226;</span>
                     <p data-testid="relative-time" className="text-sm text-dim">
                         {relativeTime}
                     </p>
@@ -172,14 +177,20 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
                     </span>
 
                     <div className="flex items-center gap-1">
-                        <img
-                            src={event.creator.avatar || '/default-avatar.svg'}
-                            alt={event.creator.username}
-                            className="w-6 h-6 rounded-full bg-overlay"
-                            onError={(e) => {
-                                e.currentTarget.src = '/default-avatar.svg';
-                            }}
-                        />
+                        {creatorAvatar.url ? (
+                            <img
+                                src={creatorAvatar.url}
+                                alt={event.creator.username}
+                                className="w-6 h-6 rounded-full bg-overlay"
+                                onError={(e) => {
+                                    e.currentTarget.style.display = 'none';
+                                }}
+                            />
+                        ) : (
+                            <div className="w-6 h-6 rounded-full bg-overlay flex items-center justify-center text-[10px] font-semibold text-muted">
+                                {event.creator.username.charAt(0).toUpperCase()}
+                            </div>
+                        )}
                         <span className="text-xs text-dim">
                             by {event.creator.username}
                         </span>

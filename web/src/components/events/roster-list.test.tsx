@@ -71,12 +71,15 @@ describe('RosterList', () => {
         expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
     });
 
-    it('renders Discord avatars', () => {
+    it('renders Discord avatars and initials fallback (ROK-222)', () => {
         render(<RosterList signups={mockSignups} />);
         const avatars = screen.getAllByRole('img');
-        expect(avatars).toHaveLength(2);
-        // Player2 has custom avatar hash - URL should use discordId
-        expect(avatars[1]).toHaveAttribute('src', expect.stringContaining('987654321'));
+        // Player1 has no avatar -> shows initials (div), not img
+        // Player2 has avatar hash -> shows Discord CDN img via resolveAvatar(toAvatarUser())
+        expect(avatars).toHaveLength(1);
+        expect(avatars[0]).toHaveAttribute('src', expect.stringContaining('987654321'));
+        // Verify Player1 shows initials fallback
+        expect(screen.getByText('P')).toBeInTheDocument();
     });
 
     it('shows item level for confirmed characters', () => {

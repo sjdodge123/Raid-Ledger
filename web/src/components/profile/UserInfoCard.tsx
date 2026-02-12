@@ -10,14 +10,15 @@ interface UserInfoCardProps {
  * Displays user profile information: avatar, username.
  * Shows "Link Discord" button for local-only users.
  * Note: Discord link result toasts are handled by IntegrationHub.
+ * ROK-222: Uses resolveAvatar() for unified avatar resolution.
  */
 export function UserInfoCard({ user }: UserInfoCardProps) {
     // Check if user has Discord linked (discordId doesn't start with 'local:')
     const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
 
-    const avatarUrl = hasDiscordLinked && user.avatar
-        ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png?size=128`
-        : '/default-avatar.svg';
+    // ROK-222: Use resolveAvatar for unified avatar resolution
+    const avatarResolved = resolveAvatar(toAvatarUser(user));
+    const avatarUrl = avatarResolved.url;
 
     const handleLinkDiscord = () => {
         // Get auth token from localStorage and pass as query param (browser redirects can't send headers)
@@ -33,14 +34,20 @@ export function UserInfoCard({ user }: UserInfoCardProps) {
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <img
-                        src={avatarUrl}
-                        alt={user.username}
-                        className="w-20 h-20 rounded-full bg-overlay"
-                        onError={(e) => {
-                            e.currentTarget.src = '/default-avatar.svg';
-                        }}
-                    />
+                    {avatarUrl ? (
+                        <img
+                            src={avatarUrl}
+                            alt={user.username}
+                            className="w-20 h-20 rounded-full bg-overlay"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                            }}
+                        />
+                    ) : (
+                        <div className="w-20 h-20 rounded-full bg-overlay flex items-center justify-center text-2xl font-bold text-muted">
+                            {user.username.charAt(0).toUpperCase()}
+                        </div>
+                    )}
                     <div>
                         <div className="flex items-center gap-2">
                             <h2 className="text-2xl font-bold text-foreground">{user.username}</h2>
