@@ -29,6 +29,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
 })
 export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
   private activatedHandler?: (payload: { slug: string }) => void;
+  private installedHandler?: (payload: { slug: string }) => void;
 
   constructor(
     private readonly pluginRegistry: PluginRegistryService,
@@ -43,12 +44,16 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     await this.pluginRegistry.ensureInstalled(WOW_COMMON_MANIFEST.id);
     this.registerAdapters();
 
-    this.activatedHandler = (payload: { slug: string }) => {
+    const reRegister = (payload: { slug: string }) => {
       if (payload.slug === WOW_COMMON_MANIFEST.id) {
         this.registerAdapters();
       }
     };
+
+    this.activatedHandler = reRegister;
+    this.installedHandler = reRegister;
     this.eventEmitter.on(PLUGIN_EVENTS.ACTIVATED, this.activatedHandler);
+    this.eventEmitter.on(PLUGIN_EVENTS.INSTALLED, this.installedHandler);
   }
 
   onModuleDestroy(): void {
@@ -56,6 +61,12 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       this.eventEmitter.removeListener(
         PLUGIN_EVENTS.ACTIVATED,
         this.activatedHandler,
+      );
+    }
+    if (this.installedHandler) {
+      this.eventEmitter.removeListener(
+        PLUGIN_EVENTS.INSTALLED,
+        this.installedHandler,
       );
     }
   }
