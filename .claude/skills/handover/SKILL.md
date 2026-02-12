@@ -1,12 +1,14 @@
 ---
 name: handover
-description: End-of-session handover — sync Linear, regenerate cache, summary
-allowed-tools: "Bash(git *), Read, Write, Task, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__get_issue"
+description: End-of-session cleanup — merge branches, regenerate cache, verify Linear sync
+allowed-tools: "Bash(git *), Read, Write, Task, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__get_issue, mcp__linear__list_cycles"
 ---
 
 # Handover Skill
 
-Fast end-of-session handover: identify what changed, sync Linear, regenerate cache, report.
+End-of-session cleanup: merge branches, regenerate caches, verify Linear is up to date.
+
+**Note:** Linear status updates and summary comments should happen incrementally during the session (see "On Story Completion" in CLAUDE.md). This skill is a convenience for branch cleanup and cache regeneration, not the primary mechanism for Linear sync.
 
 **No builds, no lint, no commits** — those cause conflicts when parallel agents work in different branches. Handover only syncs status and captures context.
 
@@ -65,15 +67,25 @@ Track: **pushed**, **already-correct**, **errors**.
 **Delegate to a subagent** (`subagent_type: "general-purpose"`) with these instructions:
 
 1. Call `mcp__linear__list_issues` with `project: "Raid Ledger"`, `limit: 250`
-2. Map statuses: Done→`done`, In Progress→`in-progress`, Todo→`ready-for-dev`, In Review→`review`, Backlog→`backlog`, Canceled→`deprecated`, Duplicate→skip
-3. Write `planning-artifacts/sprint-status.yaml`:
+2. Call `mcp__linear__list_cycles` with `teamId: "0728c19f-5268-4e16-aa45-c944349ce386"`, `type: "current"`
+3. Map statuses: Done→`done`, In Progress→`in-progress`, Todo→`ready-for-dev`, In Review→`review`, Backlog→`backlog`, Canceled→`deprecated`, Duplicate→skip
+4. Write `planning-artifacts/sprint-status.yaml`:
 
 ```yaml
 # generated: <ISO-8601 timestamp>
 # source: Linear (Raid Ledger project) — do not hand-edit
-# regenerate: /init pulls from Linear, /handover pushes then pulls
+# regenerate: /init pulls from Linear
 project: Raid Ledger
 tracking_system: linear
+
+current_sprint:
+  name: "<cycle name>"
+  number: <N>
+  starts: "<YYYY-MM-DD>"
+  ends: "<YYYY-MM-DD>"
+  progress: "<done>/<total>"
+  stories:
+    - ROK-XXX    # <title> (<status>)
 
 development_status:
   # === Done ===
@@ -84,8 +96,9 @@ development_status:
   # === Deprecated ===
 ```
 
-4. Sort by ROK number within each group, omit empty groups
-5. Return total count and per-status counts
+5. `current_sprint` block is only included when a cycle is active. Omit entirely if no cycle.
+6. Sort by ROK number within each group, omit empty groups
+7. Return total count and per-status counts
 
 ---
 
