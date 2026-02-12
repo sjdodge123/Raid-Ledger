@@ -487,6 +487,11 @@ export function IntegrationHub({ user, characters, onRefresh }: IntegrationHubPr
                 currentAvatarUrl={currentAvatarUrl}
                 avatarOptions={avatarOptions}
                 onSelect={handleAvatarSelect}
+                customAvatarDisplayUrl={user.customAvatarUrl ? `${API_BASE_URL}${user.customAvatarUrl}` : null}
+                onUpload={handleUpload}
+                onRemoveCustom={handleRemoveCustomAvatar}
+                isUploading={isUploading}
+                uploadProgress={uploadProgress}
             />
 
             {/* Discord Details Modal */}
