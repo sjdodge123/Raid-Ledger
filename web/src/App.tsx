@@ -12,13 +12,21 @@ import { ProfilePage } from './pages/profile-page';
 import { UserProfilePage } from './pages/user-profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { CalendarPage } from './pages/calendar-page';
-import { AdminSettingsPage } from './pages/admin-settings-page';
+import { AdminSettingsLayout } from './components/admin/admin-settings-layout';
+import { GeneralPanel } from './pages/admin/general-panel';
+import { RolesPanel } from './pages/admin/roles-panel';
+import { DemoDataPanel } from './pages/admin/demo-data-panel';
+import { DiscordPanel } from './pages/admin/discord-panel';
+import { IgdbPanel } from './pages/admin/igdb-panel';
+import { RelayPanel } from './pages/admin/relay-panel';
+import { PluginsPanel } from './pages/admin/plugins-panel';
+import { BrandingPanel } from './pages/admin/branding-panel';
+import { ThemePanel } from './pages/admin/theme-panel';
 import { GamesPage } from './pages/games-page';
 import { GameDetailPage } from './pages/game-detail-page';
 import { CharacterDetailPage } from './pages/character-detail-page';
 import { PlayersPage } from './pages/players-page';
 import { MyEventsPage } from './pages/my-events-page';
-import { FeedbackWidget } from './components/feedback/FeedbackWidget';
 import './plugins/wow/register';
 import './App.css';
 
@@ -37,15 +45,15 @@ function App() {
       />
       <Layout>
         <Routes>
-          {/* ── Public routes (no auth required) ── */}
+          {/* -- Public routes (no auth required) -- */}
           {/* ROK-175: Root shows login or redirects to events based on auth */}
           <Route path="/" element={<RootRedirect />} />
           {/* Legacy /login redirects to root (AC-2) */}
           <Route path="/login" element={<Navigate to="/" replace />} />
-          {/* OAuth callback — must stay public for Discord redirect flow */}
+          {/* OAuth callback -- must stay public for Discord redirect flow */}
           <Route path="/auth/success" element={<AuthSuccessPage />} />
 
-          {/* ── Protected routes (ROK-283: global auth guard) ── */}
+          {/* -- Protected routes (ROK-283: global auth guard) -- */}
           <Route element={<AuthGuard />}>
             <Route path="/calendar" element={<CalendarPage />} />
             <Route path="/games" element={<GamesPage />} />
@@ -61,12 +69,21 @@ function App() {
             {/* ROK-181: Public user profiles */}
             <Route path="/users/:userId" element={<UserProfilePage />} />
             <Route path="/profile" element={<ProfilePage />} />
-            {/* ROK-146: Admin Settings Page */}
-            <Route path="/admin/settings" element={<AdminSettingsPage />} />
+            {/* ROK-281: Admin Settings with accordion sidebar navigation */}
+            <Route path="/admin/settings" element={<AdminSettingsLayout />}>
+              <Route path="general" element={<GeneralPanel />} />
+              <Route path="general/roles" element={<RolesPanel />} />
+              <Route path="general/data" element={<DemoDataPanel />} />
+              <Route path="integrations" element={<DiscordPanel />} />
+              <Route path="integrations/igdb" element={<IgdbPanel />} />
+              <Route path="integrations/relay" element={<RelayPanel />} />
+              <Route path="plugins" element={<PluginsPanel />} />
+              <Route path="appearance" element={<BrandingPanel />} />
+              <Route path="appearance/theme" element={<ThemePanel />} />
+            </Route>
           </Route>
         </Routes>
       </Layout>
-      <FeedbackWidget />
     </BrowserRouter>
   );
 }
