@@ -206,20 +206,16 @@ function SidebarNavItem({
             to={item.to}
             onClick={onNavigate}
             onMouseEnter={item.newBadgeKey ? markSeen : undefined}
+            title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+                item.pluginSource ? 'border-l-2 border-indigo-400/60 ' : ''
+            }${
                 isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
             }`}
         >
-            <span className="min-w-0 flex-1">
-                <span className="truncate block">{item.label}</span>
-                {item.pluginSource && (
-                    <span className="block text-[10px] leading-tight text-secondary/60 truncate">
-                        via {item.pluginSource}
-                    </span>
-                )}
-            </span>
+            <span className="truncate min-w-0 flex-1">{item.label}</span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}
             {item.status && <StatusPill status={item.status} />}
         </Link>
