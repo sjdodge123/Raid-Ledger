@@ -13,25 +13,32 @@
     <script>var whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
     <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
     <script>
-      // No-flash theme script — sets data-scheme before first paint (ROK-280, ROK-228)
-      // Reads new three-key model, falls back to legacy key, then system preference.
-      // Space is a dark sub-theme: mode='dark' + darkTheme='space' -> data-scheme='space'.
+      // No-flash theme script — sets data-scheme (+ data-variant) before first paint
+      // (ROK-280, ROK-228, ROK-291)
+      // Space: mode='dark' + darkTheme='space' -> data-scheme='space'.
+      // Quest Log: mode='light' + lightTheme='quest-log' -> data-scheme='light' + data-variant='quest-log'.
       (function() {
         var mode = localStorage.getItem('raid_ledger_theme_mode');
         var darkTheme = localStorage.getItem('raid_ledger_dark_theme') || 'default-dark';
+        var lightTheme = localStorage.getItem('raid_ledger_light_theme') || 'default-light';
         var scheme;
+        var variant = null;
         if (mode === 'light') {
           scheme = 'light';
+          if (lightTheme === 'quest-log') variant = 'quest-log';
         } else if (mode === 'dark') {
           scheme = darkTheme === 'space' ? 'space' : 'dark';
         } else if (mode === 'auto') {
           var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          scheme = prefersDark ? (darkTheme === 'space' ? 'space' : 'dark') : 'light';
+          if (prefersDark) {
+            scheme = darkTheme === 'space' ? 'space' : 'dark';
+          } else {
+            scheme = 'light';
+            if (lightTheme === 'quest-log') variant = 'quest-log';
+          }
         } else if (mode === 'space') {
-          // Legacy: space-as-mode migration (handled by JS store too)
           scheme = 'space';
         } else {
-          // Fallback: legacy scheme key or system preference
           scheme = localStorage.getItem('raid_ledger_scheme');
           if (!scheme) {
             scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
@@ -39,6 +46,9 @@
         }
         document.documentElement.setAttribute('data-scheme', scheme);
         document.documentElement.style.colorScheme = scheme === 'space' ? 'dark' : scheme;
+        if (variant) {
+          document.documentElement.setAttribute('data-variant', variant);
+        }
       })();
     </script>
   </head>

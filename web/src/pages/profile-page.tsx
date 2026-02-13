@@ -245,7 +245,7 @@ function AppearanceSection() {
             {/* Theme Pickers */}
             {showLightPicker && (
                 <ThemePicker
-                    label={themeMode === 'auto' ? 'Light Mode Theme' : undefined}
+                    label={themeMode === 'auto' ? 'Light Mode Theme' : 'Light Themes'}
                     themes={lightThemes}
                     activeId={lightTheme}
                     onSelect={setLightTheme}
