@@ -330,11 +330,24 @@ After spawning all teammates, the lead:
 
 ## Step 8: PR + Staging Pipeline (as teammates complete)
 
-When a dev teammate messages the lead that their story is complete, perform **all of 8a-8c as one atomic sequence** per story. Do NOT skip any sub-step.
+**⚠️ This step is EVENT-DRIVEN, not sequential. The lead reacts to messages from teammates — it does NOT synchronously wait or block on any agent. Stay responsive to the operator and other teammates at all times.**
 
-### 8a. Push Branch + Create PR + Update Linear (ATOMIC — do all three)
+### 8a. When a Dev Teammate Completes → Spawn Test Agent
 
-These three actions happen together, in order, for every completed story:
+When a dev teammate messages the lead that their story is complete:
+
+1. **Spawn a test agent as a teammate** (non-blocking — do NOT wait):
+   ```
+   Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+        name: "test-rok-<num>", model: "sonnet", mode: "bypassPermissions",
+        prompt: <test agent prompt — see template below>)
+   ```
+2. **Immediately return to delegate mode** — handle other messages, respond to the operator
+3. The test agent runs independently in the dev's worktree, writes tests, and messages the lead when done
+
+### 8b. When a Test Agent Completes → Push + PR + Linear (ATOMIC)
+
+When a test agent messages the lead that tests are written and passing, **then** proceed with the PR pipeline. These actions happen together, in order:
 
 **1. Push and create PR:**
 ```bash
@@ -388,69 +401,122 @@ This runs in the background while other stories are being processed. It posts a 
 git checkout staging
 git merge rok-<num>-<short-name>
 git push origin staging
-git checkout main
 ```
 
-### 8b. Unblock Review Task
+**⚠️ Do NOT checkout main yet — stay on staging until deploy is complete (Step 8e).**
+
+### 8c. Shut Down Dev + Test Teammates for This Story
+
+Once the PR is created, the dev and test agents for this story have no more work. **Shut them down immediately** to stop burning tokens:
+
+```
+SendMessage(type: "shutdown_request", recipient: "dev-rok-<num>")
+SendMessage(type: "shutdown_request", recipient: "test-rok-<num>")
+```
+
+Do NOT wait until batch completion — shut them down as soon as their PR is pushed.
+
+### 8d. Unblock Review Task
 
 Update the review task in the shared task list (remove blocker so reviewer can claim it).
 
-### 8c. Auto-Deploy Staging (after all batch stories have PRs)
+### 8e. Auto-Deploy Staging (after all batch stories have PRs)
 
-Once ALL stories in the current batch have PRs created, Linear updated, and staging merged, **automatically deploy** — do NOT ask the operator:
+Once ALL stories in the current batch have PRs created, Linear updated, and staging merged, **automatically deploy from the staging branch** — do NOT ask the operator:
+
+**⚠️ CRITICAL: You MUST be on the `staging` branch when deploying for operator testing. Deploying from `main` will NOT include the PR changes — the operator will test stale code and waste time. This was a real bug — do not repeat it.**
 
 ```bash
+git checkout staging    # Ensure you are on staging — NOT main
 ./scripts/deploy_dev.sh --rebuild
+git checkout main       # Return to main ONLY AFTER deploy starts
 ```
 
-Then **pause and notify the operator with confirmed Linear statuses:**
+### 8f. Spawn Playwright Testing Agent (non-blocking)
+
+After staging is deployed, spawn a Playwright testing agent as a teammate to run automated browser tests and capture screenshots for operator review:
+
+```
+Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+     name: "playwright-tester", model: "sonnet", mode: "bypassPermissions",
+     prompt: <playwright testing agent prompt — see template below>)
+```
+
+The Playwright agent runs independently — do NOT wait for it. It will:
+1. Navigate the staging app using Playwright MCP tools
+2. Test each story's acceptance criteria in the browser
+3. Capture screenshots at key states
+4. Post results + screenshots to each story in Linear
+5. Message the lead with a summary
+
+### 8g. Notify Operator
+
+**Notify the operator — do NOT ask for test results in the terminal:**
 
 ```
 ## Batch N — Staging Deployed
 All N stories are on staging at localhost:5173.
 All stories moved to "In Review" in Linear.
 
+Automated Playwright tests are running — results and screenshots will be
+posted to each story in Linear shortly.
+
 Ready for testing:
 - ROK-XXX: PR #<num> — <title> (Linear: In Review ✓)
 - ROK-YYY: PR #<num> — <title> (Linear: In Review ✓)
 
 Testing checklists have been posted to each story in Linear.
-Test each story on staging. In Linear:
-  → Move to "Code Review" if testing passes
-  → Move to "Changes Requested" (with comments) if issues found
-Tell me when you're done testing, or if you need a dev to fix something.
+Test each story on staging. Update each story's status in Linear when done:
+  → "Code Review" = testing passed, ready for code review agent
+  → "Changes Requested" (add comments explaining issues) = testing failed
 ```
 
-**WAIT for operator response before proceeding.** This is the manual testing gate.
+**⚠️ Do NOT ask the operator for test results in the terminal. The operator communicates results by updating Linear statuses. Poll Linear to detect when they're done.**
 
 ---
 
 ## Step 9: Status-Driven Review Pipeline
 
-The operator controls the testing gate by moving stories in Linear. The lead monitors and reacts.
+The operator controls the testing gate by moving stories in Linear. The lead polls Linear and reacts — **it does NOT ask the operator for results in the terminal.**
 
-### 9a. Operator Manual Testing (operator-driven)
+### 9a. Poll Linear for Status Changes
 
-The operator tests on staging (localhost:5173) and updates Linear statuses:
+The operator tests on staging and updates Linear:
 - **"Code Review"** = operator approved, ready for code review agent
 - **"Changes Requested"** (with comments) = operator found issues
 
-When the operator signals they're done testing, the lead checks Linear for status changes:
+The lead polls Linear to detect changes:
 ```
 mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
 mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
 ```
 
+Process any stories that have changed status. Stories still in "In Review" haven't been tested yet — leave them alone.
+
 ### 9b. Handle Changes Requested (from operator testing)
 
 For stories the operator moved to "Changes Requested":
 1. Fetch comments to get the operator's feedback: `mcp__linear__list_comments(issueId: <id>)`
-2. Message the dev teammate with specific issues
-3. Dev teammate fixes in its worktree, commits
-4. Lead pushes updated branch
-5. Lead re-merges to staging, re-deploys
-6. Lead moves Linear back to "In Review"
-7. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
+2. **Re-spawn the dev teammate** (it was shut down after PR creation in Step 8c):
+   ```
+   Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+        name: "dev-rok-<num>", mode: "bypassPermissions",
+        prompt: <rework prompt with operator feedback>)
+   ```
+3. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
+4. Dev teammate runs all tests to verify they pass, messages lead when done
+5. **Shut down dev teammate** after fixes are committed
+6. Lead pushes updated branch: `git push origin rok-<num>-<short-name>`
+7. Lead re-merges to staging and deploys **from staging**:
+   ```bash
+   git checkout staging
+   git merge rok-<num>-<short-name>
+   git push origin staging
+   ./scripts/deploy_dev.sh --rebuild
+   git checkout main
+   ```
+8. Lead moves Linear back to "In Review"
+9. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
 
 ### 9c. Dispatch Code Review (for "Code Review" stories)
 
@@ -488,13 +554,27 @@ For stories the operator moved to "Code Review", dispatch the reviewer teammate:
 ### If reviewer requests changes:
 
 1. Lead updates Linear → "Changes Requested"
-2. Lead messages the dev teammate with specific feedback from the review
-3. Dev teammate fixes in its worktree, commits
-4. Lead pushes updated branch
-5. Lead re-merges to staging, re-deploys
-6. Lead moves Linear → "In Review"
-7. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
-8. Cycle repeats from Step 9a (operator re-tests)
+2. **Re-spawn the dev teammate** (it was shut down after PR creation in Step 8c):
+   ```
+   Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+        name: "dev-rok-<num>", mode: "bypassPermissions",
+        prompt: <rework prompt with reviewer feedback>)
+   ```
+3. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
+4. Dev teammate runs all tests to verify they pass, messages lead when done
+5. **Shut down dev teammate** after fixes are committed
+6. Lead pushes updated branch: `git push origin rok-<num>-<short-name>`
+7. Lead re-merges to staging and deploys **from staging**:
+   ```bash
+   git checkout staging
+   git merge rok-<num>-<short-name>
+   git push origin staging
+   ./scripts/deploy_dev.sh --rebuild
+   git checkout main
+   ```
+8. Lead moves Linear → "In Review"
+9. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
+10. Cycle repeats from Step 9a (operator re-tests)
 
 ---
 
@@ -502,10 +582,10 @@ For stories the operator moved to "Code Review", dispatch the reviewer teammate:
 
 After all stories in a batch are merged (or deferred):
 
-1. **Shut down batch teammates:**
+1. **Shut down remaining teammates** (dev + test agents were already shut down in Step 8c):
    ```
-   SendMessage(type: "shutdown_request", recipient: "dev-rok-<num>")
    SendMessage(type: "shutdown_request", recipient: "reviewer")
+   SendMessage(type: "shutdown_request", recipient: "playwright-tester")
    ```
 
 2. **Clean up team:**
@@ -772,4 +852,172 @@ Use this format for the comment body:
 
 ---
 After posting the comment, you are done. Do NOT edit any files or make any code changes.
+```
+
+---
+
+### Test Agent Prompt Template:
+
+```
+You are a test engineer for the Raid Ledger project.
+Your worktree is at <WORKTREE_PATH>.
+Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
+
+## Story: <ROK-XXX> — <title>
+
+### Story Spec
+<paste the full Linear issue description — especially acceptance criteria>
+
+### Changed Files
+<list the files the dev teammate changed, from their completion message>
+
+### Your Job
+Write unit tests for the changes made by the dev teammate. You are a SEPARATE agent
+from the developer — your job is to write adversarial tests that verify the implementation
+is correct, handles edge cases, and doesn't break existing behavior.
+
+### Guidelines
+- Read every changed file to understand what was implemented
+- Read existing test files in the same directories to follow established test patterns
+- Backend tests: co-located `*.spec.ts` files, Jest, follow existing test structure
+- Frontend tests: co-located `*.test.tsx` files, Vitest + React Testing Library
+- Test the acceptance criteria — each AC should have at least one test
+- Test edge cases: null/undefined inputs, empty arrays, boundary values, error paths
+- Test error handling: what happens when things fail?
+- Do NOT test implementation details (private methods, internal state) — test behavior
+- Do NOT mock excessively — prefer testing real behavior over mocked behavior
+- If the story adds API endpoints, test the controller/service layer
+- If the story adds UI components, test rendering, user interactions, and conditional display
+
+### Workflow
+1. Read all changed files in the worktree
+2. Read existing test files for patterns and conventions
+3. Write test files (co-located with the source files)
+4. Run tests to verify they pass:
+   - Backend: `npx jest --config <WORKTREE_PATH>/api/jest.config.js -- <test_file>`
+   - Frontend: `npx vitest run <WORKTREE_PATH>/web/src/<test_file>`
+5. Fix any failing tests until they all pass
+6. Commit with message: `test: add unit tests for <feature> (ROK-XXX)`
+7. **Message the lead** with: test files created, number of tests, pass/fail status
+
+### Critical Rules
+- Do NOT modify any source code — only add/modify test files
+- Do NOT push to remote
+- Do NOT create pull requests
+- Do NOT switch branches or leave the worktree
+- All tests MUST pass before you commit
+- You are a TEAMMATE — message the lead when done using SendMessage
+```
+
+---
+
+### Playwright Testing Agent Prompt Template:
+
+```
+You are an automated QA tester for the Raid Ledger project using Playwright MCP browser automation.
+
+## Stories to Test
+<for each story in the batch, include:>
+### ROK-XXX: <title>
+- Linear Issue ID: <issue_id>
+- PR: #<num>
+- Acceptance Criteria:
+  <paste ACs from the story spec>
+
+## Your Job
+Run automated browser tests against the staging deployment at http://localhost:5173.
+For each story, navigate the app, verify acceptance criteria, and capture screenshots
+at key states. Post your results and screenshots directly to each story in Linear.
+
+## Setup
+The app is running at http://localhost:5173.
+To log in as admin, navigate to /login and use:
+- Username: Admin (or check .env ADMIN_PASSWORD for the password)
+
+## Testing Workflow
+
+For EACH story:
+
+1. **Navigate to the relevant pages** using Playwright MCP tools:
+   - Use `mcp__playwright__browser_navigate` to go to URLs
+   - Use `mcp__playwright__browser_snapshot` to read the accessibility tree
+   - Use `mcp__playwright__browser_click`, `mcp__playwright__browser_type` for interactions
+
+2. **Verify each acceptance criterion:**
+   - Navigate to the page/feature the AC describes
+   - Interact with the UI as a user would
+   - Verify the expected behavior occurs (check for elements, text, states)
+
+3. **Capture screenshots at key states:**
+   - Before the feature interaction (baseline)
+   - After the feature interaction (result)
+   - Any error states or edge cases found
+   - Use `mcp__playwright__browser_screenshot` to capture each screenshot
+   - Save screenshots locally first, then upload to Linear
+
+4. **Upload screenshots to Linear as attachments on the story:**
+   For each screenshot captured, upload it directly to the Linear story:
+   ```
+   mcp__linear__create_attachment(
+     issue: "<ROK-XXX>",
+     base64Content: "<base64-encoded screenshot>",
+     filename: "rok-XXX-<description>.png",
+     contentType: "image/png",
+     title: "Playwright: <what the screenshot shows>"
+   )
+   ```
+
+5. **Test edge cases:**
+   - Empty states (no data)
+   - Error states (invalid input)
+   - Responsive behavior if relevant
+   - Navigation flows (back/forward)
+
+6. **Record results** for each story:
+   - PASS: AC verified, screenshot attached
+   - FAIL: AC not met, screenshot of actual behavior attached
+   - BLOCKED: Could not test (explain why)
+
+## Posting Results to Linear
+
+For each story, post a summary comment AND attach screenshots:
+
+**Screenshots:** Upload each screenshot as a Linear attachment using `mcp__linear__create_attachment`
+(see step 4 above). This ensures the operator can see the screenshots directly in the Linear story.
+
+**Summary comment:** Use `mcp__linear__create_comment` with the story's issue ID:
+
+## Automated Playwright Test Results
+
+### Summary
+- X/Y acceptance criteria passed
+- Z screenshots attached to this story
+
+### Acceptance Criteria Results
+- [x] **AC1: <description>** — PASS (screenshot: rok-XXX-ac1-result.png)
+- [ ] **AC2: <description>** — FAIL
+  Expected: <what should happen>
+  Actual: <what actually happened>
+  Screenshot: rok-XXX-ac2-actual.png
+
+### Edge Cases Tested
+- <edge case 1>: PASS/FAIL
+- <edge case 2>: PASS/FAIL
+
+### Issues Found
+- <any bugs or unexpected behavior discovered>
+
+## After posting results for ALL stories, message the lead with a summary:
+- Total stories tested
+- Total ACs passed/failed
+- Any blocking issues or critical failures found
+
+## Critical Rules
+- Do NOT modify any code or files
+- Do NOT push to remote or create PRs
+- Do NOT switch git branches
+- You are a TEAMMATE — message the lead when done using SendMessage
+- If Playwright MCP tools are not available, message the lead immediately
+- If the app is not running at localhost:5173, message the lead immediately
+- **ALWAYS upload screenshots to Linear via mcp__linear__create_attachment** — do not just save them locally
 ```
