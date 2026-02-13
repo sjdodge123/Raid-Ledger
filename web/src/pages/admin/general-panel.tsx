@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useOnboarding } from '../../hooks/use-onboarding';
 
 /**
@@ -8,11 +9,18 @@ import { useOnboarding } from '../../hooks/use-onboarding';
  */
 export function GeneralPanel() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { resetOnboarding } = useOnboarding();
 
-    const handleRerunWizard = () => {
-        // Fire-and-forget reset, navigate immediately (ROK-204 feedback)
-        resetOnboarding.mutate();
+    const handleRerunWizard = async () => {
+        // Wait for the reset API call to complete before navigating (ROK-204)
+        await resetOnboarding.mutateAsync();
+        // Ensure both caches reflect the reset state so RootRedirect
+        // and AdminSetupWizard don't bounce us back to /calendar
+        await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['admin', 'onboarding', 'status'] }),
+            queryClient.invalidateQueries({ queryKey: ['system', 'status'] }),
+        ]);
         navigate('/admin/setup');
     };
 
