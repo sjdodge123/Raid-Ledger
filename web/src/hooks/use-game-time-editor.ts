@@ -76,15 +76,19 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const currentHour = now.getHours() + now.getMinutes() / 60;
 
     // Derive displayed slots
+    // In non-rolling (profile) mode, exclude committed/freed slots — those come from
+    // event signups and should not appear in the weekly template view.
     const slots = useMemo<GameTimeSlot[]>(() => {
         if (editSlots !== null) return editSlots;
         if (!gameTimeData?.slots) return [];
-        return gameTimeData.slots.map((s: GameTimeSlot) => ({
-            dayOfWeek: s.dayOfWeek,
-            hour: s.hour,
-            status: s.status ?? 'available',
-        }));
-    }, [editSlots, gameTimeData]);
+        return gameTimeData.slots
+            .filter((s: GameTimeSlot) => rolling || (s.status !== 'committed' && s.status !== 'freed'))
+            .map((s: GameTimeSlot) => ({
+                dayOfWeek: s.dayOfWeek,
+                hour: s.hour,
+                status: s.status ?? 'available',
+            }));
+    }, [editSlots, gameTimeData, rolling]);
 
     const events = useMemo<GameTimeEventBlock[]>(
         () => (gameTimeData?.events as GameTimeEventBlock[]) ?? [],
