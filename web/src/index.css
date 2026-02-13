@@ -456,25 +456,77 @@ body {
     font-family: 'MedievalSharp', 'Cinzel', serif;
     background-color: var(--color-backdrop);
     background-image:
-        radial-gradient(ellipse at 20% 50%, rgba(201, 168, 76, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 20%, rgba(139, 115, 85, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 80%, rgba(201, 168, 76, 0.05) 0%, transparent 50%);
+        /* Dark edge vignette — aged/burned parchment edges */
+        radial-gradient(ellipse at center, transparent 50%, rgba(139, 100, 50, 0.15) 100%),
+        /* Warm irregular stain patches */
+        radial-gradient(ellipse at 15% 30%, rgba(180, 140, 70, 0.18) 0%, transparent 40%),
+        radial-gradient(ellipse at 75% 15%, rgba(160, 120, 60, 0.12) 0%, transparent 35%),
+        radial-gradient(ellipse at 85% 70%, rgba(170, 130, 65, 0.15) 0%, transparent 45%),
+        radial-gradient(ellipse at 30% 80%, rgba(150, 115, 55, 0.10) 0%, transparent 40%),
+        radial-gradient(ellipse at 55% 45%, rgba(190, 155, 85, 0.08) 0%, transparent 50%),
+        /* Fine fiber/grain texture using repeating gradients */
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 2px,
+            rgba(160, 120, 60, 0.03) 2px,
+            rgba(160, 120, 60, 0.03) 4px
+        ),
+        repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 3px,
+            rgba(140, 105, 50, 0.02) 3px,
+            rgba(140, 105, 50, 0.02) 5px
+        ),
+        /* Larger color variation — simulates uneven aging */
+        linear-gradient(160deg, rgba(210, 180, 120, 0.15) 0%, transparent 30%),
+        linear-gradient(340deg, rgba(190, 150, 80, 0.12) 70%, transparent 100%),
+        linear-gradient(200deg, transparent 40%, rgba(180, 145, 75, 0.10) 100%);
+    background-attachment: fixed;
 }
 
+/* Primary noise layer — coarse parchment grain */
 [data-variant="quest-log"] body::before {
     content: '';
     position: fixed;
     inset: 0;
     pointer-events: none;
     z-index: 0;
-    opacity: 0.03;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    opacity: 0.12;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='400' height='400'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='5' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
     background-repeat: repeat;
+    mix-blend-mode: multiply;
+}
+
+/* Secondary noise layer — finer detail grain */
+[data-variant="quest-log"] body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.06;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='f'%3E%3CfeTurbulence type='turbulence' baseFrequency='1.5' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23f)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    mix-blend-mode: soft-light;
 }
 
 /* --- Cards: layered parchment pages with stacked-paper shadows --- */
 [data-variant="quest-log"] .glass-card {
-    background: var(--color-surface);
+    background:
+        /* Subtle radial stain on card surface */
+        radial-gradient(ellipse at 30% 20%, rgba(210, 180, 120, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(190, 155, 80, 0.08) 0%, transparent 50%),
+        /* Horizontal fiber lines */
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.025) 3px,
+            rgba(160, 130, 70, 0.025) 5px
+        ),
+        var(--color-surface);
     backdrop-filter: none;
     border: 2px solid var(--ql-parchment-edge);
     border-radius: 2px;
@@ -493,7 +545,17 @@ body {
 }
 
 [data-variant="quest-log"] .glass-card:hover {
-    background: var(--color-surface);
+    background:
+        radial-gradient(ellipse at 30% 20%, rgba(210, 180, 120, 0.14) 0%, transparent 60%),
+        radial-gradient(ellipse at 70% 80%, rgba(190, 155, 80, 0.10) 0%, transparent 50%),
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.025) 3px,
+            rgba(160, 130, 70, 0.025) 5px
+        ),
+        var(--color-surface);
     border-color: var(--ql-gold);
     box-shadow:
         0 4px 14px rgba(92, 74, 50, 0.22),
@@ -507,7 +569,16 @@ body {
 /* Cards with bg-panel (IntegrationCard, admin cards) get the same parchment treatment */
 [data-variant="quest-log"] .bg-panel\/50,
 [data-variant="quest-log"] [class*="bg-panel"] {
-    background: var(--color-surface) !important;
+    background:
+        radial-gradient(ellipse at 40% 30%, rgba(200, 170, 110, 0.10) 0%, transparent 55%),
+        repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 3px,
+            rgba(160, 130, 70, 0.02) 3px,
+            rgba(160, 130, 70, 0.02) 5px
+        ),
+        var(--color-surface) !important;
     border-color: var(--ql-parchment-edge) !important;
     box-shadow:
         0 2px 8px rgba(92, 74, 50, 0.12),
