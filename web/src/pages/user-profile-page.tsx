@@ -38,9 +38,6 @@ function PublicCharacterCard({ character }: { character: CharacterDto }) {
             <div className="min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-medium text-foreground truncate">{character.name}</span>
-                    {character.isMain && (
-                        <span className="text-yellow-400" title="Main character">⭐</span>
-                    )}
                     {character.faction && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${FACTION_STYLES[character.faction] ?? 'bg-faint text-muted'}`}>
                             {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}

@@ -440,7 +440,6 @@ export function EventDetailPage() {
                                                 id={signup.character.id}
                                                 name={signup.character.name}
                                                 avatarUrl={signup.character.avatarUrl}
-                                                isMain={signup.character.isMain}
                                                 faction={signup.character.faction}
                                                 level={signup.character.level}
                                                 race={signup.character.race}
