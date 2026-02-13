@@ -139,7 +139,7 @@ export function AdminSettingsPage() {
             </div>
 
             {/* ===== Core Section ===== */}
-            <AdminPluginSection title="Core" isCore>
+            <AdminPluginSection title="Core" description="Built-in integrations and settings">
                 {/* Discord OAuth */}
                 <IntegrationCard
                     title="Discord OAuth"
@@ -319,7 +319,7 @@ function PluginSection({
             badge={<NewBadge visible={isNew} />}
             onMouseEnter={markSeen}
             actions={actionButtons}
-            defaultExpanded={plugin.status === 'active'}
+            description={plugin.description ?? ''}
         >
             {plugin.status === 'active' ? (
                 <PluginSlot
