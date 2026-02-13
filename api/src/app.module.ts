@@ -24,6 +24,7 @@ import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
 import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
+import { VersionModule } from './version/version.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { FeedbackModule } from './feedback/feedback.module';
     WowCommonModule,
     RelayModule,
     FeedbackModule,
+    VersionModule,
   ],
   controllers: [AppController],
   providers: [AppService],

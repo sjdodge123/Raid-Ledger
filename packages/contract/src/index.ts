@@ -63,3 +63,6 @@ export * from './pug.schema.js';
 
 // Admin Onboarding Wizard (ROK-204)
 export * from './onboarding.schema.js';
+
+// Version & Update Check (ROK-294)
+export * from './version.schema.js';

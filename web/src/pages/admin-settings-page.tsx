@@ -15,6 +15,7 @@ import { RoleManagementCard } from '../components/admin/RoleManagementCard';
 import { NewBadge } from '../components/ui/new-badge';
 import { Modal } from '../components/ui/modal';
 import { PluginSlot } from '../plugins';
+import { UpdateBanner } from '../components/admin/UpdateBanner';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
 // Discord icon
@@ -131,6 +132,9 @@ export function AdminSettingsPage() {
 
     return (
         <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+            {/* Update available banner (ROK-294) */}
+            <UpdateBanner enabled={isAdminCheck(user)} />
+
             <div>
                 <h1 className="text-3xl font-bold text-foreground mb-2">Plugins</h1>
                 <p className="text-muted">
