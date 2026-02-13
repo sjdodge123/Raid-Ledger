@@ -5,6 +5,12 @@ import * as schema from '../drizzle/schema';
 import { eq, sql, ilike, asc, and, gte, desc } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
 
+/** Number of days to look back for "recently joined" users. */
+export const RECENT_MEMBER_DAYS = 30;
+
+/** Maximum number of recent members to return. */
+export const RECENT_MEMBER_LIMIT = 10;
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -339,8 +345,8 @@ export class UsersService {
       createdAt: Date;
     }>
   > {
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - RECENT_MEMBER_DAYS);
 
     return this.db
       .select({
@@ -352,9 +358,9 @@ export class UsersService {
         createdAt: schema.users.createdAt,
       })
       .from(schema.users)
-      .where(gte(schema.users.createdAt, thirtyDaysAgo))
+      .where(gte(schema.users.createdAt, cutoff))
       .orderBy(desc(schema.users.createdAt))
-      .limit(10);
+      .limit(RECENT_MEMBER_LIMIT);
   }
 
   async setCustomAvatar(userId: number, url: string | null) {
