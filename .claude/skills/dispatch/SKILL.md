@@ -1,41 +1,44 @@
 ---
 name: dispatch
-description: "Pull ready stories from Linear (Todo + Changes Requested), plan under-specced stories, spawn sequential dev agents"
+description: "Pull ready stories from Linear (Todo + Changes Requested), plan under-specced stories, spawn parallel dev agents via Agent Teams"
 argument-hint: "[ROK-XXX | rework | todo | all]"
 ---
 
-# Dispatch — Sequential Agent Orchestrator
+# Dispatch — Parallel Agent Teams Orchestrator
 
-Pulls dispatchable stories from Linear, plans under-specced stories via Plan agents, presents everything for user approval, and spawns implementation agents **one at a time**. Handles both **new work** (Todo) and **rework** (Changes Requested).
+Pulls dispatchable stories from Linear, plans under-specced stories via Plan agents, presents everything for user approval, and spawns implementation agents **in parallel via Agent Teams and git worktrees**. Handles both **new work** (Todo) and **rework** (Changes Requested).
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
 
 ---
 
-## Hard Constraint: Sequential Dev Agents
+## Parallel Execution via Agent Teams
 
-**NEVER run multiple implementation/coding agents at the same time.** All agents share
-a single git working directory. Concurrent dev agents cause:
+Dev agents run **in parallel**, each in its own git worktree (sibling directory). This eliminates branch switching, stash contamination, and wrong-branch commits.
 
-- Branch switching under each other (agent A checks out its branch, agent B switches away)
-- Files written by one agent get reverted when another agent does `git checkout`
-- Stash contamination — `git stash` captures another agent's staged changes
-- Commits land on wrong branches when agents race to commit
-- VS Code file watchers and linters revert files between write and `git add`
+**Architecture:**
+```
+Lead (main worktree — orchestrates, creates PRs, syncs Linear)
+  ├─ Dev Teammate 1 (worktree ../Raid-Ledger--rok-XXX)
+  ├─ Dev Teammate 2 (worktree ../Raid-Ledger--rok-YYY)
+  └─ Reviewer Teammate (main worktree — code-reviews PRs)
+```
+
+**Concurrency limit:** Max 2-3 dev teammates per batch.
 
 **What CAN run in parallel:**
-- **Planning agents** (read-only — no git writes, no file edits)
-- **Research agents** (read-only — web searches, file reads, analysis)
-- **One planning/research agent + one dev agent** (planning agent doesn't touch git)
+- Dev agents on stories with **no file overlap** (different domains, separate modules)
+- Planning agents (read-only — no git writes, no file edits)
+- Research agents (read-only — web searches, file reads, analysis)
+- The reviewer teammate (reads PRs via `gh`, doesn't edit files)
 
-**What MUST be sequential:**
-- Implementation agents (create branches, write files, commit)
-- Review agents (checkout branches, read diffs, fix code, merge)
-- Any agent that runs `git` commands or writes files
+**What MUST be serialized (separate batches):**
+- Stories modifying `packages/contract/` (shared dependency — all consumers must rebuild)
+- Stories generating database migrations (migration number collision)
+- Stories touching the same files (merge conflict risk)
 
-The dispatch flow is: plan in parallel → present batch → execute dev agents one at a time
-with review after each.
+**The dispatch flow is:** plan in parallel → present batch → create worktrees → spawn parallel team → lead manages PR pipeline → reviewer reviews → merge approved PRs.
 
 ---
 
@@ -233,78 +236,253 @@ For each planned story, display a condensed version:
 - User clarifications received
 - Estimated complexity
 
-### Execution Order:
-Determine the best execution order for sequential dispatch:
+### Parallel Batch Assignment:
 
-1. **Priority first** — P0/P1 stories before P2/P3
-2. **Rework before new work** — rework is usually smaller/faster
-3. **Dependencies** — if story B depends on story A's output (shared files), A goes first
-4. **Complexity** — simpler stories first to build momentum and reduce risk
+Group stories into parallel batches (from `/init` analysis or computed here):
 
-Present the proposed execution order to the user.
+1. **Contract/migration stories first** — run alone in batch 0
+2. **Non-overlapping stories** — group into parallel batches (max 2-3 per batch)
+3. **Overlapping stories** — separate batches, ordered by priority
+
+```
+=== Parallel Batches ===
+Batch 1 (parallel):
+  ROK-XXX (P1, rework) — [events]
+  ROK-YYY (P1, new) — [theme]
+  No file overlap ✅
+
+Batch 2 (after batch 1):
+  ROK-ZZZ (P1, new) — [events, db-schema] — needs migration
+```
+
+Present the proposed batch plan to the user.
 
 ---
 
 ## Step 6: Confirm Dispatch
 
 Ask the user:
-- **Dispatch all** — run all stories sequentially in the proposed order
-- **Select** — let user pick which stories to dispatch (and reorder if desired)
+- **Dispatch all** — run all batches in order (stories within each batch run in parallel)
+- **Select** — let user pick which stories/batches to dispatch
 - **Skip** — don't dispatch, just show the summary
 
 ---
 
-## Step 7: Sequential Dispatch Loop
+## Step 7: Parallel Dispatch (Agent Teams)
 
-Process stories **one at a time** in the confirmed order. For each story in the queue:
+Process stories in the confirmed batch order. For each batch:
 
-### 7a. Spawn Implementation Agent
+### 7a. Setup Infrastructure
 
-Spawn a **single** background agent for the current story using `run_in_background: true`.
-Use the appropriate prompt template below based on story type.
+1. **Reset staging branch:**
+   ```bash
+   git checkout staging && git reset --hard main && git push --force origin staging
+   git checkout main
+   ```
 
-### 7b. Stay Available While Agent Works
+2. **Create worktrees** for each story in the batch:
+   ```bash
+   git worktree add ../Raid-Ledger--rok-<num> -b rok-<num>-<short-name> main
+   ```
 
-**CRITICAL: Do NOT block on `TaskOutput` with a long timeout.** This locks the
-orchestrator and prevents the user from interacting. Instead:
+3. **Install dependencies** in each worktree:
+   ```bash
+   cd ../Raid-Ledger--rok-<num> && npm install --legacy-peer-deps && npm run build -w packages/contract
+   ```
 
-1. After spawning the agent, **tell the user it's running** and remain available for conversation
-2. When you receive a `task-notification` or `Agent ... progress` system reminder indicating
-   the agent completed, THEN check the output with `TaskOutput(block: false)` or read the output file
-3. While waiting, the user can:
-   - Ask questions, discuss upcoming stories, plan, or do non-git work
-   - Check agent progress manually if they want
-4. Do NOT spawn the next dev agent until the current one finishes (sequential constraint still applies)
-
-### 7c. Review Gate
-
-When the implementation agent completes, spawn a **review subagent** for its branch
-(also `run_in_background: true`). Stay available while it works — same pattern as 7b.
-The review agent merges to main and updates Linear.
-
-### 7d. Report Progress
-
-After each story completes its review cycle, report:
+### 7b. Create Agent Team
 
 ```
-## [N/total] ROK-XXX — <title> ✓
-Branch: merged to main | Commits: SHA1, SHA2 | Review fixes: N
-Next up: ROK-YYY — <title>
+TeamCreate(team_name: "dispatch-batch-N")
 ```
 
-### 7e. Loop
+Create tasks in the shared task list:
+- One **implementation task** per story (assigned to dev teammates)
+- One **review task** per story (blocked by implementation, assigned later to reviewer)
 
-Move to the next story in the queue. Repeat 7a–7d until all stories are done.
+### 7c. Spawn Dev Teammates
+
+Spawn one dev teammate per story in the batch using:
+```
+Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+     name: "dev-rok-<num>", mode: "bypassPermissions",
+     prompt: <implementation prompt — see templates below>)
+```
+
+### 7d. Spawn Reviewer Teammate
+
+Spawn one reviewer teammate for the batch:
+```
+Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+     name: "reviewer", model: "sonnet",
+     prompt: <reviewer prompt — see template below>)
+```
+
+### 7e. Lead Enters Delegate Mode
+
+After spawning all teammates, the lead:
+1. Tells the operator which stories are running and in which worktrees
+2. Remains available to answer teammate questions (via SendMessage)
+3. Monitors teammate progress via task list and messages
+4. Does NOT block on TaskOutput — stay responsive to the operator
 
 ---
 
-### Implementation Agent Prompt Templates
+## Step 8: PR + Staging Pipeline (as teammates complete)
 
-#### For Rework stories (Changes Requested):
+When a dev teammate messages the lead that their story is complete:
+
+### 8a. Push Branch + Create PR
+
+```bash
+git push -u origin rok-<num>-<short-name>
+
+gh pr create \
+  --title "ROK-<num>: <story title>" \
+  --body "$(cat <<'EOF'
+## Summary
+<1-3 bullet points from implementation>
+
+## Story
+[ROK-<num>](https://linear.app/roknuas-projects/issue/ROK-<num>)
+
+## Changes
+- <key files changed>
+
+## Test Plan
+- [ ] TypeScript compiles clean
+- [ ] Lint passes
+- [ ] Unit tests pass
+- [ ] Manual smoke test on staging
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+EOF
+)" \
+  --base main \
+  --head rok-<num>-<short-name>
+```
+
+### 8b. Merge to Staging + Deploy
+
+```bash
+git checkout staging
+git merge rok-<num>-<short-name>
+git push origin staging
+git checkout main
+```
+
+Notify operator: "ROK-XXX is on staging. Deploy with `./scripts/deploy_dev.sh --rebuild` to test."
+
+### 8c. Update Linear
+
+- Move story to "In Review"
+- Post comment: `PR created: <PR URL>\nMerged to staging for manual testing.`
+
+### 8d. Unblock Review Task
+
+Update the review task in the shared task list (remove blocker so reviewer can claim it).
+
+---
+
+## Step 9: Operator Tests + Code Review
+
+### 9a. Operator Manual Testing
+
+The operator tests the story on staging (localhost:5173). They signal:
+- "ROK-XXX looks good, send to code review" → proceed to 9b
+- "ROK-XXX has issues: <description>" → lead messages dev teammate with feedback
+
+### 9b. Reviewer Reviews PR
+
+The reviewer teammate claims the review task and:
+1. Runs `gh pr diff <number>` to inspect changes
+2. Checks: TypeScript strictness, Zod validation, security, error handling, pattern consistency, naming conventions
+3. Posts review: `gh pr review <number> --approve` or `--request-changes --body "..."`
+4. Messages the lead with the verdict
+
+---
+
+## Step 10: Handle Review Outcomes
+
+### If reviewer approves:
+
+1. Lead (or operator) merges PR:
+   ```bash
+   gh pr merge <number> --merge --delete-branch
+   ```
+2. Lead updates Linear → "Done", posts summary comment:
+   - Key files changed, commit SHA(s), PR number
+   - Notable decisions or deviations
+3. Lead removes worktree:
+   ```bash
+   git worktree remove ../Raid-Ledger--rok-<num>
+   ```
+4. Report progress:
+   ```
+   ## [N/total] ROK-XXX — <title> ✓
+   PR: #<num> merged to main | Commits: SHA1, SHA2
+   Next batch: <batch info or "all done">
+   ```
+
+### If reviewer requests changes:
+
+1. Lead updates Linear → "Changes Requested"
+2. Lead messages the dev teammate with specific feedback from the review
+3. Dev teammate fixes in its worktree, commits
+4. Lead pushes updated branch (force-push OK since PR is open)
+5. Lead re-merges to staging, notifies operator for re-test
+6. Cycle repeats from Step 9
+
+---
+
+## Step 11: Batch Completion + Next Batch
+
+After all stories in a batch are merged (or deferred):
+
+1. **Shut down batch teammates:**
+   ```
+   SendMessage(type: "shutdown_request", recipient: "dev-rok-<num>")
+   SendMessage(type: "shutdown_request", recipient: "reviewer")
+   ```
+
+2. **Clean up team:**
+   ```
+   TeamDelete()
+   ```
+
+3. **If more batches remain:** Go back to Step 7a for the next batch
+4. **If all batches done:** Proceed to Step 12
+
+---
+
+## Step 12: Final Summary
+
+After ALL batches have completed:
 
 ```
-You are working on the Raid Ledger project at /Users/sdodge/Documents/Projects/Raid-Ledger.
-Read CLAUDE.md for project conventions.
+## Dispatch Complete — N stories across M batches
+
+| Batch | Story | Dev Agent | PR | Review | Status |
+|-------|-------|-----------|-----|--------|--------|
+| 1 | ROK-XXX | dev-rok-xxx | #1 | approved | Done |
+| 1 | ROK-YYY | dev-rok-yyy | #2 | approved | Done |
+| 2 | ROK-ZZZ | dev-rok-zzz | #3 | approved | Done |
+
+All PRs merged to main.
+Staging reset to main.
+Run `deploy_dev.sh --rebuild` to test all changes.
+```
+
+---
+
+## Implementation Agent Prompt Templates
+
+### For Rework stories (Changes Requested):
+
+```
+You are a dev teammate working on the Raid Ledger project.
+Your worktree is at <WORKTREE_PATH>.
+Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
 
 ## Task: <ROK-XXX> — Review Feedback Fixes
 
@@ -325,20 +503,26 @@ The reviewer has requested changes on this story. Address ALL of the following f
 - Test your changes: TypeScript clean, ESLint clean, relevant tests pass.
 
 ### Workflow
-1. Create branch: `git checkout -b <rok-xxx>-rework main`
+1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Make changes to address ALL feedback items
 3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
 4. Commit with message: `fix: <description> (ROK-XXX)`
-5. **STOP HERE — do NOT merge to main.** Leave the branch as-is.
-6. Output a summary with: branch name, commit SHA, files changed, what was done.
-   A separate review agent will handle merge and Linear updates.
+5. **STOP HERE — do NOT push, create PRs, or switch branches.**
+6. Message the lead with: branch name, commit SHA, files changed, what was done.
+
+### Critical Rules
+- Do NOT push to remote — the lead handles all GitHub operations
+- Do NOT create pull requests
+- Do NOT switch branches or leave your worktree
+- Do NOT access Linear — the lead handles all Linear operations
 ```
 
-#### For New Work stories (Ready — full spec):
+### For New Work stories (Ready — full spec):
 
 ```
-You are working on the Raid Ledger project at /Users/sdodge/Documents/Projects/Raid-Ledger.
-Read CLAUDE.md for project conventions.
+You are a dev teammate working on the Raid Ledger project.
+Your worktree is at <WORKTREE_PATH>.
+Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
 
 ## Task: <ROK-XXX> — <title>
 
@@ -358,25 +542,27 @@ Implement this story from the spec below.
 - For new frontend pages: add routes in App.tsx, follow existing page component patterns.
 
 ### Workflow
-1. Create branch: `git checkout -b rok-<number>-<short-name> main`
+1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Implement all acceptance criteria
 3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
 4. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
 5. Commit with message: `feat: <description> (ROK-XXX)` (or `fix:` for bug fixes)
-6. **STOP HERE — do NOT merge to main.** Leave the branch as-is.
-7. Output a summary with: branch name, commit SHA, files changed, what was done.
-   A separate review agent will handle merge and Linear updates.
+6. **STOP HERE — do NOT push, create PRs, or switch branches.**
+7. Message the lead with: branch name, commit SHA, files changed, what was done.
+
+### Critical Rules
+- Do NOT push to remote — the lead handles all GitHub operations
+- Do NOT create pull requests
+- Do NOT switch branches or leave your worktree
+- Do NOT access Linear — the lead handles all Linear operations
 ```
 
-#### For New Work stories (Planned — enriched by Plan agent):
-
-The Plan agent already asked the user all clarifying questions and resolved ambiguities.
-The implementation agent gets a **clean, fully-resolved plan** with zero gaps. Its context
-is fresh — no planning baggage, just the plan + spec + instructions.
+### For New Work stories (Planned — enriched by Plan agent):
 
 ```
-You are working on the Raid Ledger project at /Users/sdodge/Documents/Projects/Raid-Ledger.
-Read CLAUDE.md for project conventions.
+You are a dev teammate working on the Raid Ledger project.
+Your worktree is at <WORKTREE_PATH>.
+Read <WORKTREE_PATH>/CLAUDE.md for project conventions.
 
 ## Task: <ROK-XXX> — <title>
 
@@ -402,107 +588,46 @@ with the user. Your job is to execute the plan.
 - For new frontend pages: add routes in App.tsx, follow existing page component patterns.
 
 ### Workflow
-1. Create branch: `git checkout -b rok-<number>-<short-name> main`
+1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Implement all acceptance criteria following the plan's step order
 3. Verify: `npx tsc --noEmit -p api/tsconfig.json` and/or `npx tsc --noEmit -p web/tsconfig.json`
 4. Run `npm run lint -w api` and/or `npm run lint -w web` — fix any issues in files you touched
 5. Commit with message: `feat: <description> (ROK-XXX)` (or `fix:` for bug fixes)
-6. **STOP HERE — do NOT merge to main.** Leave the branch as-is.
-7. Output a summary with: branch name, commit SHA, files changed, what was done.
-   A separate review agent will handle merge and Linear updates.
+6. **STOP HERE — do NOT push, create PRs, or switch branches.**
+7. Message the lead with: branch name, commit SHA, files changed, what was done.
+
+### Critical Rules
+- Do NOT push to remote — the lead handles all GitHub operations
+- Do NOT create pull requests
+- Do NOT switch branches or leave your worktree
+- Do NOT access Linear — the lead handles all Linear operations
 ```
 
 ---
 
-### Review Agent Prompt Template:
+### Reviewer Teammate Prompt Template:
 
 ```
-You are a CODE REVIEW agent for the Raid Ledger project at
-/Users/sdodge/Documents/Projects/Raid-Ledger.
+You are a code reviewer for the Raid Ledger project.
+Read /Users/sdodge/Documents/Projects/Raid-Ledger/CLAUDE.md for project conventions.
 
-Read CLAUDE.md for project conventions and architecture.
+Your job:
+1. Claim review tasks from the task list (TaskList → TaskUpdate to claim)
+2. For each PR assigned to you, run: `gh pr diff <number>`
+3. Check:
+   - TypeScript strictness (no `any`, proper types)
+   - Zod validation (schemas in contract package, not duplicated)
+   - Security (auth guards, input validation, no injection vectors)
+   - Error handling (try/catch, proper error responses)
+   - Pattern consistency (follows existing codebase conventions)
+   - Test coverage (relevant tests exist and pass)
+   - Naming conventions (files kebab-case, classes PascalCase, vars camelCase, DB snake_case)
+4. Post your review:
+   - If approved: `gh pr review <number> --approve --body "LGTM. <brief summary of what looks good>"`
+   - If changes needed: `gh pr review <number> --request-changes --body "<specific issues found>"`
+5. Message the lead with your verdict and key findings
+6. Mark the review task as completed and claim the next one
 
-## Review: <ROK-XXX> — <title>
-
-An implementation agent has completed work on branch `<branch-name>`.
-Your job is to review the changes, fix any issues, then merge to main.
-
-### What was implemented
-<paste the implementation agent's completion summary here>
-
-### Review Checklist
-
-Run these checks and FIX any issues you find (commit fixes to the same branch):
-
-#### 1. Compilation & Lint
-- Run `npx tsc --noEmit -p api/tsconfig.json` (if backend changes)
-- Run `npx tsc --noEmit -p web/tsconfig.json` (if frontend changes)
-- Run `npm run lint -w api` and/or `npm run lint -w web`
-- Fix ALL errors in files touched by this branch
-
-#### 2. Code Quality
-- Read every changed file (`git diff main...<branch-name>`)
-- Check for `any` types that slipped through
-- Check for unused imports, dead code, unreachable branches
-- Check for hardcoded values that should be configurable
-- Check for missing error handling on API calls or DB operations
-- Verify naming conventions: files kebab-case, classes PascalCase, vars camelCase, DB snake_case
-
-#### 3. Security
-- Check for unvalidated user input (missing Zod validation)
-- Check for missing auth guards on new endpoints
-- Check for SQL injection vectors (raw queries, string interpolation in SQL)
-- Check for XSS vectors (dangerouslySetInnerHTML, unescaped user content)
-- Check for secrets or credentials in committed code
-
-#### 4. Pattern Consistency
-- Do new components follow existing patterns in the codebase?
-- Are hooks, services, and controllers structured like their neighbors?
-- Are new routes registered correctly in App.tsx?
-- Are new Zod schemas in the contract package (not duplicated locally)?
-- Are new DB schemas using Drizzle conventions?
-
-#### 5. Tests
-- Run relevant tests: `npm run test -w api` and/or `npm run test -w web`
-- If tests fail on code from this branch, fix them
-- Pre-existing test failures in unrelated files can be noted but not fixed
-
-#### 6. Edge Cases
-- Are loading/empty/error states handled in new UI components?
-- Are new API endpoints returning consistent error responses?
-- Are nullable fields handled properly (no unchecked .property access)?
-
-### Fix Protocol
-- For each issue found: fix it directly, don't just report it
-- Commit fixes with message: `review: <description> (ROK-XXX)`
-- If a fix is ambiguous or would change the feature's behavior, use AskUserQuestion
-  to ask the user before making the change
-
-### After Review
-1. If fixes were made, verify compilation + lint again after your changes
-2. Merge to main: `git checkout main && git merge <branch-name> && git branch -d <branch-name>`
-3. Update Linear:
-   - Add comment with implementation summary (key files, ALL commit SHAs, notable decisions)
-   - Include a "Review Findings" section listing what was fixed
-   - Move status to "In Review"
-   Issue ID: <issue_id>
-4. Output: merge commit SHA, number of review fixes made, summary
-```
-
----
-
-## Step 8: Final Summary
-
-After ALL stories have completed the implement → review → merge cycle, show:
-
-```
-## Dispatch Complete — N stories processed sequentially
-
-| # | Story | Impl Agent | Review Agent | Commits | Review Fixes | Status |
-|---|-------|-----------|-------------|---------|-------------|--------|
-| 1 | ROK-XXX | <id> | <id> | SHA1, SHA2 | N fixes | In Review |
-| 2 | ROK-YYY | <id> | <id> | SHA3 | 0 fixes | In Review |
-
-All branches merged to main.
-Run `deploy_dev.sh --rebuild` to test all changes.
+You do NOT implement code. You do NOT merge PRs. You do NOT access Linear. You only review.
+If no review tasks are available yet (blocked), wait for the lead to unblock them.
 ```

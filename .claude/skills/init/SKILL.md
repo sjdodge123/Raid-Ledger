@@ -10,9 +10,9 @@ allowed-tools: "Read, Write, Glob, Grep, Bash(git status*), Bash(git log*), Bash
 
 Initialize the orchestrator session. Pull current state from Linear, load previous session context, regenerate local caches, and present the dispatch queue.
 
-**You are the orchestrator.** Your job is to coordinate with the operator (user) to manage subagents via `/dispatch`. You don't implement stories directly.
+**You are the orchestrator.** Your job is to coordinate with the operator (user) to manage agents via `/dispatch`. You don't implement stories directly.
 
-**Agent execution model:** Dev agents run **sequentially** (one at a time) because all agents share a single git working directory. Parallel dev agents cause branch switching, file reversion, stash contamination, and wrong-branch commits. Planning and research agents CAN run in parallel since they don't touch git.
+**Agent execution model:** Dev agents run **in parallel** via Agent Teams, each in its own git worktree (sibling directory). Max 2-3 dev agents at a time. Stories that touch the same files or shared dependencies (contract, migrations) must be serialized. The `/dispatch` skill handles worktree setup, team creation, PR pipeline, and staging deployment.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -37,9 +37,9 @@ If `session-notes.md` exists, display its contents under a "Previous Session" he
 
 ---
 
-## Step 3 — Domain Analysis & Execution Order
+## Step 3 — Domain Analysis & Parallel Batch Planning
 
-Analyze all Todo and Dispatch Ready stories to determine the best sequential execution order for `/dispatch`.
+Analyze all Todo and Dispatch Ready stories to determine which can run in parallel and which must be serialized.
 
 ### 3a. Build a Touch Map
 
@@ -66,25 +66,48 @@ For each candidate story (Todo + Dispatch Ready), estimate which **domains** it 
 - If a story is an audit, refactor, or "codebase-wide" task, mark it as `broad`.
 - A story can touch multiple domains (e.g., PUG slots touches `roster` + `db-schema` + `events`).
 
-### 3b. Determine Execution Order
+### 3b. Build Conflict Matrix
 
-Since dev agents run sequentially (one at a time), order stories for optimal execution:
+For each pair of candidate stories, check for overlap:
+
+| Conflict Type | Rule |
+|---------------|------|
+| **Same files** | Stories touching the same files → must serialize |
+| **Same domain** | Stories in the same domain → likely serialize (check file overlap) |
+| **Contract changes** | Stories modifying `packages/contract/` → must serialize |
+| **DB migrations** | Stories generating migrations → must serialize |
+| **No overlap** | Stories in completely different domains → can parallelize |
+
+### 3c. Group into Parallel Batches
+
+Group stories into batches that can run concurrently (max 2-3 per batch):
 
 1. **Priority first** — P0/P1 before P2/P3
 2. **Rework before new work** — rework is usually smaller/faster, clears the review queue
-3. **Dependencies** — if story B depends on story A's output, A goes first
-4. **Broad stories last** — they touch many domains, better to run after focused stories
-5. Stories that are blocked by unfinished dependencies go to "Needs Work" regardless
+3. **Dependencies** — if story B depends on story A's output, A goes first (different batch)
+4. **No conflicts within a batch** — stories in the same batch must have zero file overlap
+5. **Contract/migration stories run alone** — they go in their own batch, first
+6. **Broad stories last** — they touch many domains, safer as their own batch
+7. Stories that are blocked by unfinished dependencies go to "Needs Work" regardless
 
-### 3c. Output Execution Plan
+### 3d. Output Parallel Batch Plan
 
 Include in the dashboard:
 
 ```
-=== Execution Order (sequential — one agent at a time) ===
-1. ROK-XXX (P1) — [events, roster] — rework
-2. ROK-YYY (P1) — [admin, db-schema] — new work
-3. ROK-ZZZ (P2) — [theme] — new work
+=== Parallel Batch Plan ===
+Batch 1 (parallel):
+  ROK-XXX (P1) — [events, roster] — rework
+  ROK-YYY (P1) — [theme] — new work
+  (no conflicts — different domains)
+
+Batch 2 (sequential after batch 1):
+  ROK-ZZZ (P1) — [admin, db-schema] — new work (needs migration)
+
+Conflict Matrix:
+  ROK-XXX ↔ ROK-YYY: ✅ no overlap
+  ROK-XXX ↔ ROK-ZZZ: ⚠️ both touch db-schema → separate batches
+  ROK-YYY ↔ ROK-ZZZ: ✅ no overlap
 
 Not ready:
   ROK-AAA — blocked by ROK-DDD
@@ -148,10 +171,13 @@ Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state 
 <!-- Stories currently being worked on by agents or in review -->
 - [/] ROK-XXX: <title> (In Progress|In Review|Changes Requested)
 
-## Dispatch Queue (sequential execution order)
-<!-- Agents run one at a time — order matters -->
-1. [ ] ROK-XXX: <title>  (P1) — domains: [domain1, domain2]
-2. [ ] ROK-XXX: <title>  (P2) — domains: [domain3]
+## Dispatch Queue (parallel batches)
+<!-- Stories within a batch run in parallel via Agent Teams -->
+### Batch 1 (parallel)
+- [ ] ROK-XXX: <title>  (P1) — domains: [domain1, domain2]
+- [ ] ROK-XXX: <title>  (P2) — domains: [domain3]
+### Batch 2 (after batch 1)
+- [ ] ROK-XXX: <title>  (P1) — domains: [domain4]
 
 ## Todo → Needs Work
 <!-- Stories that need planning, spec, or unblocking before dispatch -->
@@ -164,7 +190,7 @@ Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state 
 
 Populate sections:
 - **Active Work:** In Progress + In Review + Changes Requested stories, sorted by ROK number
-- **Dispatch Queue:** Stories ordered by the execution plan (Step 3b). Include touched domains. Numbered to show execution order.
+- **Dispatch Queue:** Stories grouped by parallel batch (Step 3c). Include touched domains. Stories within a batch run concurrently.
 - **Todo → Needs Work:** Stories that are blocked, need planning, or lack spec. Sorted by priority then ROK number.
 - Include priority: `(P0)` Urgent, `(P1)` High, `(P2)` Normal, `(P3)` Low.
 
@@ -186,16 +212,27 @@ Linear: <total> issues synced
 === Pipeline ===
 In Review:      N stories
 Rework:         N stories (Changes Requested)
-Dispatch Queue: N stories (sequential — one agent at a time)
+Dispatch Queue: N stories (M parallel batches)
 Needs Work:     N stories (blocked/unspecced)
 Backlog:        N stories
 
-=== Dispatch Queue (sequential execution order) ===
-| # | Story | Pri | Title | Domains |
-|---|-------|-----|-------|---------|
-| 1 | ROK-XXX | P1 | <title> | events, roster |
-| 2 | ROK-YYY | P1 | <title> | admin, db-schema |
-| 3 | ROK-ZZZ | P2 | <title> | theme |
+=== Parallel Batch Plan ===
+
+--- Batch 1 (parallel — N stories) ---
+| Story | Pri | Title | Domains |
+|-------|-----|-------|---------|
+| ROK-XXX | P1 | <title> | events, roster |
+| ROK-YYY | P2 | <title> | theme |
+
+--- Batch 2 (after batch 1 — N stories) ---
+| Story | Pri | Title | Domains |
+|-------|-----|-------|---------|
+| ROK-ZZZ | P1 | <title> | admin, db-schema |
+
+=== Conflict Matrix ===
+ROK-XXX ↔ ROK-YYY: ✅ no overlap
+ROK-XXX ↔ ROK-ZZZ: ⚠️ both touch db-schema
+ROK-YYY ↔ ROK-ZZZ: ✅ no overlap
 
 === Needs Work ===
 | Story | Pri | Title | Issue |
@@ -210,10 +247,10 @@ Append a focus section with the Linear issue details (title, status, description
 
 ### Closing Prompt
 
-End with: **"Ready to `/dispatch` the queue (sequential), plan needs-work stories, or adjust the order?"**
+End with: **"Ready to `/dispatch` (parallel batches via Agent Teams), plan needs-work stories, or adjust batches?"**
 
 This sets up the operator to either:
-1. Run `/dispatch` to process the queue sequentially (one agent at a time)
+1. Run `/dispatch` to process the queue in parallel batches (Agent Teams + worktrees)
 2. Spec or plan needs-work stories to add them to the queue
-3. Reorder or adjust the dispatch queue
+3. Reorder stories or adjust parallel batch grouping
 4. Discuss priorities or story details first
