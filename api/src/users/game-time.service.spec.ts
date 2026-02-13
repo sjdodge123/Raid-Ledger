@@ -378,8 +378,8 @@ describe('GameTimeService', () => {
 
       // DB dayOfWeek 0 (Mon) → display dayOfWeek 1 (Mon in 0=Sun)
       expect(result.slots).toEqual([
-        { dayOfWeek: 1, hour: 18, status: 'available' },
-        { dayOfWeek: 1, hour: 19, status: 'available' },
+        { dayOfWeek: 1, hour: 18, status: 'available', fromTemplate: true },
+        { dayOfWeek: 1, hour: 19, status: 'available', fromTemplate: true },
       ]);
       expect(result.events).toEqual([]);
       expect(result.weekStart).toBe(weekStart.toISOString());
@@ -433,11 +433,13 @@ describe('GameTimeService', () => {
         dayOfWeek: 2,
         hour: 10,
         status: 'committed',
+        fromTemplate: false,
       });
       expect(result.slots).toContainEqual({
         dayOfWeek: 2,
         hour: 11,
         status: 'committed',
+        fromTemplate: false,
       });
     });
 

@@ -39,6 +39,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             slots: [],
             handleChange: vi.fn(),
             clear: vi.fn(),
+            discard: vi.fn(),
             save: vi.fn(),
             isDirty: false,
             isSaving: false,
@@ -50,6 +51,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             nextWeekEvents: [],
             nextWeekSlots: [],
             weekStart: '2026-02-08',
+            overrides: [],
             absences: [],
         });
     });
@@ -273,6 +275,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 slots: [],
                 handleChange: vi.fn(),
                 clear: vi.fn(),
+                discard: vi.fn(),
                 save: vi.fn(),
                 isDirty: false,
                 isSaving: false,
@@ -284,6 +287,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 nextWeekEvents: [],
                 nextWeekSlots: [],
                 weekStart: '2026-02-08',
+                overrides: [],
                 absences: [],
             };
             mockUseGameTimeEditor.mockReturnValue(mockEditor);
