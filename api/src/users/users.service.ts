@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc, and } from 'drizzle-orm';
+import { eq, sql, ilike, asc, and, gte, desc } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
 
 @Injectable()
@@ -323,6 +323,38 @@ export class UsersService {
       data: rows,
       total: Number(countResult.count),
     };
+  }
+
+  /**
+   * Find users created in the last 30 days, ordered by newest first.
+   * Used for the "New Members" highlight on the Players page (ROK-298).
+   */
+  async findRecent(): Promise<
+    Array<{
+      id: number;
+      username: string;
+      avatar: string | null;
+      discordId: string | null;
+      customAvatarUrl: string | null;
+      createdAt: Date;
+    }>
+  > {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    return this.db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        discordId: schema.users.discordId,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(gte(schema.users.createdAt, thirtyDaysAgo))
+      .orderBy(desc(schema.users.createdAt))
+      .limit(10);
   }
 
   async setCustomAvatar(userId: number, url: string | null) {

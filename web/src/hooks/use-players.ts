@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getPlayers } from '../lib/api-client';
+import { getPlayers, getRecentPlayers } from '../lib/api-client';
 
 /**
  * Query hook for fetching paginated player list.
@@ -14,5 +14,17 @@ export function usePlayers(page: number, search: string, gameId?: number) {
                 search: search || undefined,
                 gameId,
             }),
+    });
+}
+
+/**
+ * Query hook for fetching recently joined players (ROK-298).
+ * Returns up to 10 players who joined in the last 30 days.
+ */
+export function useRecentPlayers() {
+    return useQuery({
+        queryKey: ['players', 'recent'],
+        queryFn: getRecentPlayers,
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }

@@ -29,6 +29,7 @@ import { CharactersService } from '../characters/characters.service';
 import {
   UserProfileDto,
   PlayersListResponseDto,
+  RecentPlayersResponseDto,
   UserManagementListResponseDto,
   UpdatePreferenceSchema,
   UpdateUserRoleSchema,
@@ -90,6 +91,25 @@ export class UsersController {
     return {
       data: result.data,
       meta: { total: result.total, page, limit },
+    };
+  }
+
+  /**
+   * List recently joined players (last 30 days, max 10).
+   * Public endpoint for the "New Members" section on the Players page (ROK-298).
+   */
+  @Get('recent')
+  async listRecentPlayers(): Promise<RecentPlayersResponseDto> {
+    const rows = await this.usersService.findRecent();
+    return {
+      data: rows.map((u) => ({
+        id: u.id,
+        username: u.username,
+        avatar: u.avatar,
+        discordId: u.discordId,
+        customAvatarUrl: u.customAvatarUrl,
+        createdAt: u.createdAt.toISOString(),
+      })),
     };
   }
 

@@ -23,6 +23,7 @@ import type {
     UpdateRosterDto,
     UserProfileDto,
     PlayersListResponseDto,
+    RecentPlayersResponseDto,
     GameTimeResponse,
     GameTimeTemplateInput,
     CreateTemplateDto,
@@ -562,6 +563,13 @@ export async function getPlayers(params?: { page?: number; search?: string; game
     if (params?.gameId) searchParams.set('gameId', String(params.gameId));
     const query = searchParams.toString();
     return fetchApi(`/users${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Fetch recently joined players (last 30 days, max 10) for the New Members section (ROK-298).
+ */
+export async function getRecentPlayers(): Promise<RecentPlayersResponseDto> {
+    return fetchApi('/users/recent');
 }
 
 /**
