@@ -48,6 +48,10 @@ export function useUpdateCharacter() {
 
 /**
  * Mutation hook for setting a character as main.
+ * Invalidates all caches that display character isMain state:
+ *  - ['me', 'characters'] — profile characters list
+ *  - ['characters']       — individual character detail pages
+ *  - ['userProfile']      — public user profile (embeds characters)
  */
 export function useSetMainCharacter() {
     const queryClient = useQueryClient();
@@ -57,6 +61,8 @@ export function useSetMainCharacter() {
         onSuccess: () => {
             toast.success('Main character updated!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to set main character');
