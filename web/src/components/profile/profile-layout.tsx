@@ -1,19 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Outlet, Navigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { Outlet, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { ProfileSidebar } from './profile-sidebar';
-import { ProfileHeader } from './profile-header';
 import { IntegrationHub } from './IntegrationHub';
+import { toast } from '../../lib/toast';
 import './integration-hub.css';
 
 export function ProfileLayout() {
     const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
     const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const location = useLocation();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [mobileOpen, setMobileOpen] = useState(false);
 
     const closeMobile = useCallback(() => setMobileOpen(false), []);
+
+    // Handle Discord link callback search params (?linked=success/error)
+    const processedRef = useRef(false);
+    useEffect(() => {
+        if (processedRef.current) return;
+        const linked = searchParams.get('linked');
+        const message = searchParams.get('message');
+        if (linked === 'success') {
+            processedRef.current = true;
+            toast.success('Discord account linked successfully!');
+            setSearchParams({});
+            refetch();
+        } else if (linked === 'error') {
+            processedRef.current = true;
+            toast.error(message || 'Failed to link Discord account');
+            setSearchParams({});
+        }
+    }, [searchParams, setSearchParams, refetch]);
 
     useEffect(() => {
         if (!mobileOpen) return;
@@ -63,10 +82,7 @@ export function ProfileLayout() {
                     <IntegrationHub user={user} characters={characters} />
                 </div>
 
-                {/* Compact header strip below nav hub */}
-                <ProfileHeader user={user} characters={characters} onRefresh={refetch} />
-
-                <div className="flex items-center gap-3 mb-6 lg:hidden">
+                <div className="flex items-center gap-3 mb-6 mt-4 lg:hidden">
                     <button
                         type="button"
                         className="p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
