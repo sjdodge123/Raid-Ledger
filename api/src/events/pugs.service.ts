@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -72,7 +73,7 @@ export class PugsService {
         error instanceof Error &&
         error.message.includes('unique_event_pug')
       ) {
-        throw new ForbiddenException(
+        throw new ConflictException(
           `Discord user "${dto.discordUsername}" is already a PUG for this event`,
         );
       }
@@ -170,7 +171,7 @@ export class PugsService {
         error instanceof Error &&
         error.message.includes('unique_event_pug')
       ) {
-        throw new ForbiddenException(
+        throw new ConflictException(
           `Discord user "${dto.discordUsername}" is already a PUG for this event`,
         );
       }

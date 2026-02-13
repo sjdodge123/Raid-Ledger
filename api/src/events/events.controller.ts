@@ -10,6 +10,7 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
+  ParseUUIDPipe,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -430,7 +431,7 @@ export class EventsController {
   @UseGuards(AuthGuard('jwt'))
   async updatePug(
     @Param('id', ParseIntPipe) eventId: number,
-    @Param('pugId') pugId: string,
+    @Param('pugId', ParseUUIDPipe) pugId: string,
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<PugSlotResponseDto> {
@@ -456,7 +457,7 @@ export class EventsController {
   @UseGuards(AuthGuard('jwt'))
   async deletePug(
     @Param('id', ParseIntPipe) eventId: number,
-    @Param('pugId') pugId: string,
+    @Param('pugId', ParseUUIDPipe) pugId: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ message: string }> {
     await this.pugsService.remove(
