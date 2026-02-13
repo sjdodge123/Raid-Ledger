@@ -10,15 +10,15 @@ import {
     getDarkThemes,
 } from '../stores/theme-store';
 import type { ThemeDefinition, ThemeModePreference } from '../stores/theme-store';
-import { IntegrationHub } from '../components/profile/IntegrationHub';
+
 import { CharacterList, AddCharacterModal, NotificationPreferencesSection } from '../components/profile';
 import { TimezoneSection } from '../components/profile/TimezoneSection';
 import { GameTimePanel } from '../components/features/game-time';
-import '../components/profile/integration-hub.css';
+
 
 /**
- * User profile page with character and availability management.
- * ROK-195: Uses IntegrationHub (Hub & Spoke) instead of UserInfoCard.
+ * Legacy profile page — kept for reference but not routed.
+ * Active profile uses ProfileLayout with sidebar navigation (ROK-290).
  */
 export function ProfilePage() {
     const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
@@ -95,13 +95,6 @@ export function ProfilePage() {
                         Manage your characters, game time, and preferences
                     </p>
                 </div>
-
-                {/* Integration Hub (ROK-195) -- replaces old UserInfoCard */}
-                <IntegrationHub
-                    user={user}
-                    characters={characters}
-                    onRefresh={refetch}
-                />
 
                 {/* Appearance Section (ROK-280) */}
                 <AppearanceSection />

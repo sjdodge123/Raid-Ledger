@@ -1,15 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
-import { useMyCharacters } from '../../hooks/use-characters';
+
 import { ProfileSidebar } from './profile-sidebar';
-import { IntegrationHub } from './IntegrationHub';
 import { toast } from '../../lib/toast';
 import './integration-hub.css';
 
 export function ProfileLayout() {
     const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
-    const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const location = useLocation();
     const [searchParams, setSearchParams] = useSearchParams();
     const [mobileOpen, setMobileOpen] = useState(false);
@@ -69,20 +67,13 @@ export function ProfileLayout() {
         return <Navigate to="/" replace />;
     }
 
-    const characters = charactersData?.data ?? [];
-
     return (
         <div className="profile-page relative min-h-screen px-4">
             <div className="profile-page__nebula" />
             <div className="profile-page__stars" />
 
-            <div className="relative z-10 max-w-6xl mx-auto">
-                {/* Compact orbital nav hub — sticks to top on scroll */}
-                <div className="sticky top-0 z-30 bg-surface/80 backdrop-blur-sm border-b border-edge-subtle">
-                    <IntegrationHub user={user} characters={characters} />
-                </div>
-
-                <div className="flex items-center gap-3 mb-6 mt-4 lg:hidden">
+            <div className="relative z-10 max-w-6xl mx-auto pt-6">
+                <div className="flex items-center gap-3 mb-6 lg:hidden">
                     <button
                         type="button"
                         className="p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
@@ -98,7 +89,7 @@ export function ProfileLayout() {
 
                 <div className="flex gap-6">
                     <aside className="hidden lg:block w-56 flex-shrink-0">
-                        <div className="sticky top-72">
+                        <div className="sticky top-8">
                             <ProfileSidebar />
                         </div>
                     </aside>

@@ -2,7 +2,7 @@ export { UserInfoCard } from './UserInfoCard';
 export { CharacterList } from './CharacterList';
 export { CharacterCard } from './CharacterCard';
 export { AddCharacterModal } from './AddCharacterModal';
-export { IntegrationHub } from './IntegrationHub';
+
 export { AvatarSelectorModal } from './AvatarSelectorModal';
 export { NotificationPreferencesSection } from './NotificationPreferencesSection';
 export { ProfileSidebar } from './profile-sidebar';
