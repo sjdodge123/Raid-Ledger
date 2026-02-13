@@ -19,7 +19,7 @@ export function NewMembersSection() {
                     New Members
                 </h2>
                 <div
-                    className="flex gap-3 overflow-x-auto pb-2"
+                    className="flex gap-3 overflow-x-auto pt-2 pb-2"
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
                     {Array.from({ length: 5 }).map((_, i) => (
@@ -47,7 +47,7 @@ export function NewMembersSection() {
                 New Members
             </h2>
             <div
-                className="flex gap-3 overflow-x-auto pb-2"
+                className="flex gap-3 overflow-x-auto pt-2 pb-2"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
                 {players.map((player) => {
