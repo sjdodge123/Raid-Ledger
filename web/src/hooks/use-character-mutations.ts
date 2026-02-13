@@ -10,6 +10,8 @@ import type { CreateCharacterDto, UpdateCharacterDto } from '@raid-ledger/contra
 
 /**
  * Mutation hook for creating a character.
+ * Creating with isMain=true triggers a server-side swap, so invalidate
+ * all character-related caches to reflect the new main across views.
  */
 export function useCreateCharacter() {
     const queryClient = useQueryClient();
@@ -19,6 +21,8 @@ export function useCreateCharacter() {
         onSuccess: () => {
             toast.success('Character created!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to create character');
@@ -72,6 +76,8 @@ export function useSetMainCharacter() {
 
 /**
  * Mutation hook for deleting a character.
+ * Deleting a main character triggers server-side auto-promote of the
+ * next alt, so invalidate all character-related caches.
  */
 export function useDeleteCharacter() {
     const queryClient = useQueryClient();
@@ -81,6 +87,8 @@ export function useDeleteCharacter() {
         onSuccess: () => {
             toast.success('Character deleted');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to delete character');

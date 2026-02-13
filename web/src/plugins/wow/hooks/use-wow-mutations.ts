@@ -5,6 +5,8 @@ import type { ImportWowCharacterInput, RefreshCharacterInput } from '@raid-ledge
 
 /**
  * Mutation hook for importing a WoW character from Blizzard Armory (ROK-234).
+ * Importing with isMain=true triggers a server-side swap, so invalidate
+ * all character-related caches to reflect the new main across views.
  */
 export function useImportWowCharacter() {
     const queryClient = useQueryClient();
@@ -14,6 +16,8 @@ export function useImportWowCharacter() {
         onSuccess: () => {
             toast.success('Character imported from Armory!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to import character');
