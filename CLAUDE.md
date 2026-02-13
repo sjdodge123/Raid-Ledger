@@ -1,6 +1,7 @@
 # CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+<!-- Phase 2 test: validating Agent Teams PR workflow -->
 
 ## Project Overview
 
