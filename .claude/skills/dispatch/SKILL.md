@@ -330,10 +330,13 @@ After spawning all teammates, the lead:
 
 ## Step 8: PR + Staging Pipeline (as teammates complete)
 
-When a dev teammate messages the lead that their story is complete:
+When a dev teammate messages the lead that their story is complete, perform **all of 8a-8c as one atomic sequence** per story. Do NOT skip any sub-step.
 
-### 8a. Push Branch + Create PR
+### 8a. Push Branch + Create PR + Update Linear (ATOMIC — do all three)
 
+These three actions happen together, in order, for every completed story:
+
+**1. Push and create PR:**
 ```bash
 git push -u origin rok-<num>-<short-name>
 
@@ -362,8 +365,15 @@ EOF
   --head rok-<num>-<short-name>
 ```
 
-### 8b. Merge to Staging
+**2. Update Linear IMMEDIATELY (MANDATORY — do not defer):**
+```
+mcp__linear__update_issue(id: <issue_id>, state: "In Review")
+mcp__linear__create_comment(issueId: <issue_id>, body: "PR created: <PR URL>\nMerged to staging for manual testing.")
+```
 
+**⚠️ The operator uses Linear "In Review" to know what's on staging and needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
+
+**3. Merge to staging:**
 ```bash
 git checkout staging
 git merge rok-<num>-<short-name>
@@ -371,34 +381,28 @@ git push origin staging
 git checkout main
 ```
 
-Do this for each story as its PR is created. Do NOT deploy yet — wait until all stories in the batch have PRs (Step 8e).
-
-### 8c. Update Linear
-
-- Move story to "In Review"
-- Post comment: `PR created: <PR URL>\nMerged to staging for manual testing.`
-
-### 8d. Unblock Review Task
+### 8b. Unblock Review Task
 
 Update the review task in the shared task list (remove blocker so reviewer can claim it).
 
-### 8e. Auto-Deploy Staging (after all batch stories have PRs)
+### 8c. Auto-Deploy Staging (after all batch stories have PRs)
 
-Once ALL stories in the current batch have PRs created and are merged to staging, **automatically deploy** — do NOT ask the operator:
+Once ALL stories in the current batch have PRs created, Linear updated, and staging merged, **automatically deploy** — do NOT ask the operator:
 
 ```bash
 ./scripts/deploy_dev.sh --rebuild
 ```
 
-Then **pause and notify the operator:**
+Then **pause and notify the operator with confirmed Linear statuses:**
 
 ```
 ## Batch N — Staging Deployed
 All N stories are on staging at localhost:5173.
+All stories moved to "In Review" in Linear.
 
-PRs created:
-- ROK-XXX: #<num> — <title>
-- ROK-YYY: #<num> — <title>
+Ready for testing:
+- ROK-XXX: #<num> — <title> (Linear: In Review ✓)
+- ROK-YYY: #<num> — <title> (Linear: In Review ✓)
 
 Please smoke test, then say "approved" to proceed to code review,
 or report issues with specific story IDs.
