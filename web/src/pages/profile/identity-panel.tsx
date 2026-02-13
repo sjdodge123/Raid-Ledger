@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
@@ -54,8 +54,11 @@ export function IdentityPanel() {
         });
     }, [deleteAvatar, refetch]);
 
-    const characters = charactersData?.data ?? [];
-    const avatarOptions = user ? buildAvatarOptions(user, characters) : [];
+    const characters = useMemo(() => charactersData?.data ?? [], [charactersData?.data]);
+    const avatarOptions = useMemo(
+        () => (user ? buildAvatarOptions(user, characters) : []),
+        [user, characters],
+    );
 
     const handleAvatarSelect = useCallback((url: string) => {
         const idx = avatarOptions.findIndex(o => o.url === url);

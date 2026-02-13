@@ -20,7 +20,6 @@ const VELOCITY_THRESHOLD = 0.01;
 interface IntegrationHubProps {
     user: User;
     characters: { avatarUrl: string | null; name: string }[];
-    onRefresh?: () => void;
 }
 
 /** Nav section configuration */

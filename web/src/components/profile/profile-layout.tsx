@@ -60,7 +60,7 @@ export function ProfileLayout() {
             <div className="relative z-10 max-w-6xl mx-auto">
                 {/* Compact orbital nav hub — sticks to top on scroll */}
                 <div className="sticky top-0 z-30 bg-surface/80 backdrop-blur-sm border-b border-edge-subtle">
-                    <IntegrationHub user={user} characters={characters} onRefresh={refetch} />
+                    <IntegrationHub user={user} characters={characters} />
                 </div>
 
                 {/* Compact header strip below nav hub */}
