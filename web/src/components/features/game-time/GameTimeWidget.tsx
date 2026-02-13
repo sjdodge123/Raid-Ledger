@@ -218,7 +218,7 @@ export function GameTimeWidget({
                             Read-only view — your weekly availability with this event highlighted
                         </p>
                         <Link
-                            to="/profile#game-time"
+                            to="/profile/gaming/game-time"
                             onClick={() => setShowModal(false)}
                             className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
                         >

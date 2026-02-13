@@ -11,3 +11,6 @@ export { GhostNode } from './GhostNode';
 export { LightningArcs } from './LightningArcs';
 export { DiscordDetailsModal } from './DiscordDetailsModal';
 export { NotificationPreferencesSection } from './NotificationPreferencesSection';
+export { ProfileSidebar } from './profile-sidebar';
+export { ProfileHeader } from './profile-header';
+export { ProfileLayout } from './profile-layout';

@@ -8,7 +8,15 @@ import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { CreateEventPage } from './pages/create-event-page';
 import { EditEventPage } from './pages/edit-event-page';
-import { ProfilePage } from './pages/profile-page';
+import { ProfileLayout } from './components/profile/profile-layout';
+import { IdentityPanel } from './pages/profile/identity-panel';
+import { ProfileDiscordPanel } from './pages/profile/discord-panel';
+import { AvatarPanel } from './pages/profile/avatar-panel';
+import { AppearancePanel } from './pages/profile/appearance-panel';
+import { TimezonePanel } from './pages/profile/timezone-panel';
+import { NotificationsPanel } from './pages/profile/notifications-panel';
+import { ProfileGameTimePanel } from './pages/profile/game-time-panel';
+import { CharactersPanel } from './pages/profile/characters-panel';
 import { UserProfilePage } from './pages/user-profile-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 import { CalendarPage } from './pages/calendar-page';
@@ -70,7 +78,17 @@ function App() {
             <Route path="/events/:id/edit" element={<EditEventPage />} />
             {/* ROK-181: Public user profiles */}
             <Route path="/users/:userId" element={<UserProfilePage />} />
-            <Route path="/profile" element={<ProfilePage />} />
+            {/* ROK-290: Profile page with sidebar navigation */}
+            <Route path="/profile" element={<ProfileLayout />}>
+              <Route path="identity" element={<IdentityPanel />} />
+              <Route path="identity/discord" element={<ProfileDiscordPanel />} />
+              <Route path="identity/avatar" element={<AvatarPanel />} />
+              <Route path="preferences/appearance" element={<AppearancePanel />} />
+              <Route path="preferences/timezone" element={<TimezonePanel />} />
+              <Route path="preferences/notifications" element={<NotificationsPanel />} />
+              <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
+              <Route path="gaming/characters" element={<CharactersPanel />} />
+            </Route>
             {/* ROK-281: Admin Settings with always-expanded sidebar navigation */}
             <Route path="/admin/settings" element={<AdminSettingsLayout />}>
               <Route path="general" element={<GeneralPanel />} />
