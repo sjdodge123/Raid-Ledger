@@ -33,6 +33,14 @@ import type {
 import {
   ChangePasswordSchema,
   CommunityIdentitySchema,
+  UpdateStepSchema,
+  GameToggleSchema,
+  BulkToggleGamesSchema,
+} from '@raid-ledger/contract';
+import type {
+  UpdateStepDto,
+  GameToggleDto,
+  BulkToggleGamesDto,
 } from '@raid-ledger/contract';
 import { Request } from 'express';
 import { Req } from '@nestjs/common';
@@ -124,9 +132,16 @@ export class OnboardingController {
   @Patch('step')
   @HttpCode(HttpStatus.OK)
   async updateStep(
-    @Body() body: { step: number },
+    @Body() body: UpdateStepDto,
   ): Promise<{ success: boolean; step: number }> {
-    const step = Math.max(0, Math.min(4, body.step));
+    const parsed = UpdateStepSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+
+    const { step } = parsed.data;
     await this.settingsService.set(
       SETTING_KEYS.ONBOARDING_CURRENT_STEP,
       String(step),
@@ -278,8 +293,17 @@ export class OnboardingController {
   @HttpCode(HttpStatus.OK)
   async toggleGame(
     @Param('id') id: string,
-    @Body() body: { enabled: boolean },
+    @Body() body: GameToggleDto,
   ): Promise<{ success: boolean; id: string; enabled: boolean }> {
+    const parsed = GameToggleSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+
+    const { enabled } = parsed.data;
+
     const existing = await this.db
       .select({ id: schema.gameRegistry.id })
       .from(schema.gameRegistry)
@@ -292,10 +316,10 @@ export class OnboardingController {
 
     await this.db
       .update(schema.gameRegistry)
-      .set({ enabled: body.enabled })
+      .set({ enabled })
       .where(eq(schema.gameRegistry.id, id));
 
-    return { success: true, id, enabled: body.enabled };
+    return { success: true, id, enabled };
   }
 
   /**
@@ -305,19 +329,28 @@ export class OnboardingController {
   @Post('games/bulk-toggle')
   @HttpCode(HttpStatus.OK)
   async bulkToggleGames(
-    @Body() body: { ids: string[]; enabled: boolean },
+    @Body() body: BulkToggleGamesDto,
   ): Promise<{ success: boolean; count: number }> {
-    if (!body.ids || body.ids.length === 0) {
+    const parsed = BulkToggleGamesSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException(
+        parsed.error.errors.map((e) => e.message).join(', '),
+      );
+    }
+
+    const { ids, enabled } = parsed.data;
+
+    if (ids.length === 0) {
       return { success: true, count: 0 };
     }
 
     // Use a transaction for atomicity
     let count = 0;
     await this.db.transaction(async (tx) => {
-      for (const id of body.ids) {
+      for (const id of ids) {
         await tx
           .update(schema.gameRegistry)
-          .set({ enabled: body.enabled })
+          .set({ enabled })
           .where(eq(schema.gameRegistry.id, id));
         count++;
       }

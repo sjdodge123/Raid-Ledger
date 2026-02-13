@@ -58,11 +58,24 @@ export type CommunityIdentityDto = z.infer<typeof CommunityIdentitySchema>;
 // Step 3: Choose Games
 // ============================================================
 
+export const UpdateStepSchema = z.object({
+  step: z.number().int().min(0).max(4),
+});
+
+export type UpdateStepDto = z.infer<typeof UpdateStepSchema>;
+
 export const GameToggleSchema = z.object({
   enabled: z.boolean(),
 });
 
 export type GameToggleDto = z.infer<typeof GameToggleSchema>;
+
+export const BulkToggleGamesSchema = z.object({
+  ids: z.array(z.string().uuid()),
+  enabled: z.boolean(),
+});
+
+export type BulkToggleGamesDto = z.infer<typeof BulkToggleGamesSchema>;
 
 /** Game registry item extended with enabled flag for onboarding */
 export const OnboardingGameSchema = z.object({
