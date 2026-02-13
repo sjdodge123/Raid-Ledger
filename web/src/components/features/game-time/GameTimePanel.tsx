@@ -14,7 +14,7 @@ interface GameTimePanelProps {
     previewBlocks?: GameTimePreviewBlock[];
     /** Hour range to display (default [0, 24]). Use [6, 24] in modals. */
     hourRange?: [number, number];
-    /** Enable rolling/continual week (default true) */
+    /** Enable rolling/continual week (default true for non-profile modes) */
     rolling?: boolean;
     /** Called when user clicks an event block */
     onEventClick?: (event: GameTimeEventBlock) => void;
@@ -30,7 +30,9 @@ export function GameTimePanel({
     onEventClick,
     enabled = true,
 }: GameTimePanelProps) {
-    const editor = useGameTimeEditor({ enabled, rolling });
+    // Profile mode never uses rolling week — it's a static weekly template
+    const effectiveRolling = mode === 'profile' ? false : rolling;
+    const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
     const [showAbsenceForm, setShowAbsenceForm] = useState(false);
     const [absenceStartDate, setAbsenceStartDate] = useState('');
@@ -91,9 +93,9 @@ export function GameTimePanel({
             {mode === 'profile' && (
                 <div className="flex items-center justify-between mb-4">
                     <div>
-                        <h2 className="text-xl font-semibold text-foreground">My Game Time this week</h2>
+                        <h2 className="text-xl font-semibold text-foreground">My Game Time</h2>
                         <p className="text-muted text-sm mt-1">
-                            Your weekly template + this week's events
+                            Set your typical weekly availability
                         </p>
                     </div>
                     <div className="flex gap-2">
@@ -205,19 +207,22 @@ export function GameTimePanel({
                 onChange={isReadOnly ? undefined : editor.handleChange}
                 readOnly={isReadOnly}
                 tzLabel={editor.tzLabel}
-                events={editor.events}
-                onEventClick={handleEventClick}
-                previewBlocks={previewBlocks}
-                todayIndex={editor.todayIndex}
-                currentHour={editor.currentHour}
                 hourRange={hourRange}
-                nextWeekEvents={editor.nextWeekEvents}
-                nextWeekSlots={editor.nextWeekSlots}
-                weekStart={editor.weekStart}
+                fullDayNames={mode === 'profile'}
+                {...(mode !== 'profile' ? {
+                    events: editor.events,
+                    onEventClick: handleEventClick,
+                    previewBlocks,
+                    todayIndex: editor.todayIndex,
+                    currentHour: editor.currentHour,
+                    nextWeekEvents: editor.nextWeekEvents,
+                    nextWeekSlots: editor.nextWeekSlots,
+                    weekStart: editor.weekStart,
+                } : {})}
             />
 
-            {/* Event block popover */}
-            {popoverEvent && (
+            {/* Event block popover (not used in profile mode) */}
+            {mode !== 'profile' && popoverEvent && (
                 <EventBlockPopover
                     event={popoverEvent.event}
                     anchorRect={popoverEvent.anchorRect}
