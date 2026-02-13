@@ -86,7 +86,7 @@ export function EventBanner({
                     ⏱️ {timeStr} ({duration})
                 </span>
                 <span className="event-banner--collapsed__creator">
-                    👤 <UserLink
+                    <UserLink
                         userId={creator.id}
                         username={creator.username}
                         user={toAvatarUser({ ...creator, avatar: creator.avatar ?? null })}
@@ -135,10 +135,10 @@ export function EventBanner({
                     </span>
                     <span className="event-banner__separator">•</span>
                     <span className="event-banner__creator">
-                        <span role="img" aria-hidden="true">👤</span> <UserLink
+                        <UserLink
                             userId={creator.id}
                             username={creator.username}
-                            avatarUrl={creator.avatar}
+                            user={toAvatarUser({ ...creator, avatar: creator.avatar ?? null })}
                             showAvatar
                             size="sm"
                         />

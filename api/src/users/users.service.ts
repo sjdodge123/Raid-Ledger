@@ -239,6 +239,7 @@ export class UsersService {
       id: number;
       username: string;
       avatar: string | null;
+      discordId: string | null;
       customAvatarUrl: string | null;
     }>;
     total: number;
@@ -256,6 +257,7 @@ export class UsersService {
           id: schema.users.id,
           username: schema.users.username,
           avatar: schema.users.avatar,
+          discordId: schema.users.discordId,
           customAvatarUrl: schema.users.customAvatarUrl,
         })
         .from(schema.gameInterests)
@@ -308,6 +310,7 @@ export class UsersService {
         id: schema.users.id,
         username: schema.users.username,
         avatar: schema.users.avatar,
+        discordId: schema.users.discordId,
         customAvatarUrl: schema.users.customAvatarUrl,
       })
       .from(schema.users)
