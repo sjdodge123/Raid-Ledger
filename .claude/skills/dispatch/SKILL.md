@@ -238,7 +238,7 @@ For each planned story, display a condensed version:
 
 ### Parallel Batch Assignment:
 
-Group stories into parallel batches (from `/init` analysis or computed here):
+Group stories into parallel batches (computed here — no `/init` required):
 
 1. **Contract/migration stories first** — run alone in batch 0
 2. **Non-overlapping stories** — group into parallel batches (max 2-3 per batch)
@@ -330,10 +330,13 @@ After spawning all teammates, the lead:
 
 ## Step 8: PR + Staging Pipeline (as teammates complete)
 
-When a dev teammate messages the lead that their story is complete:
+When a dev teammate messages the lead that their story is complete, perform **all of 8a-8c as one atomic sequence** per story. Do NOT skip any sub-step.
 
-### 8a. Push Branch + Create PR
+### 8a. Push Branch + Create PR + Update Linear (ATOMIC — do all three)
 
+These three actions happen together, in order, for every completed story:
+
+**1. Push and create PR:**
 ```bash
 git push -u origin rok-<num>-<short-name>
 
@@ -362,8 +365,25 @@ EOF
   --head rok-<num>-<short-name>
 ```
 
-### 8b. Merge to Staging + Deploy
+**2. Update Linear IMMEDIATELY (MANDATORY — do not defer):**
+```
+mcp__linear__update_issue(id: <issue_id>, state: "In Review")
+mcp__linear__create_comment(issueId: <issue_id>, body: "PR created: <PR URL>\nMerged to staging for manual testing.")
+```
 
+**⚠️ The operator uses Linear "In Review" to know what's on staging and needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
+
+**3. Spawn QA Test Case Agent (runs in background — do not wait):**
+
+Spawn a Sonnet agent to generate manual testing steps and post them to Linear:
+```
+Task(subagent_type: "general-purpose", model: "sonnet", run_in_background: true,
+     prompt: <QA test case prompt — see template below>)
+```
+
+This runs in the background while other stories are being processed. It posts a testing checklist as a Linear comment so the operator sees it when they open the story.
+
+**4. Merge to staging:**
 ```bash
 git checkout staging
 git merge rok-<num>-<short-name>
@@ -371,42 +391,84 @@ git push origin staging
 git checkout main
 ```
 
-Notify operator: "ROK-XXX is on staging. Deploy with `./scripts/deploy_dev.sh --rebuild` to test."
-
-### 8c. Update Linear
-
-- Move story to "In Review"
-- Post comment: `PR created: <PR URL>\nMerged to staging for manual testing.`
-
-### 8d. Unblock Review Task
+### 8b. Unblock Review Task
 
 Update the review task in the shared task list (remove blocker so reviewer can claim it).
 
+### 8c. Auto-Deploy Staging (after all batch stories have PRs)
+
+Once ALL stories in the current batch have PRs created, Linear updated, and staging merged, **automatically deploy** — do NOT ask the operator:
+
+```bash
+./scripts/deploy_dev.sh --rebuild
+```
+
+Then **pause and notify the operator with confirmed Linear statuses:**
+
+```
+## Batch N — Staging Deployed
+All N stories are on staging at localhost:5173.
+All stories moved to "In Review" in Linear.
+
+Ready for testing:
+- ROK-XXX: PR #<num> — <title> (Linear: In Review ✓)
+- ROK-YYY: PR #<num> — <title> (Linear: In Review ✓)
+
+Testing checklists have been posted to each story in Linear.
+Test each story on staging. In Linear:
+  → Move to "Code Review" if testing passes
+  → Move to "Changes Requested" (with comments) if issues found
+Tell me when you're done testing, or if you need a dev to fix something.
+```
+
+**WAIT for operator response before proceeding.** This is the manual testing gate.
+
 ---
 
-## Step 9: Operator Tests + Code Review
+## Step 9: Status-Driven Review Pipeline
 
-### 9a. Operator Manual Testing
+The operator controls the testing gate by moving stories in Linear. The lead monitors and reacts.
 
-The operator tests the story on staging (localhost:5173). They signal:
-- "ROK-XXX looks good, send to code review" → proceed to 9b
-- "ROK-XXX has issues: <description>" → lead messages dev teammate with feedback
+### 9a. Operator Manual Testing (operator-driven)
 
-### 9b. Reviewer Reviews PR
+The operator tests on staging (localhost:5173) and updates Linear statuses:
+- **"Code Review"** = operator approved, ready for code review agent
+- **"Changes Requested"** (with comments) = operator found issues
 
-The reviewer teammate claims the review task and:
-1. Runs `gh pr diff <number>` to inspect changes
-2. Checks: TypeScript strictness, Zod validation, security, error handling, pattern consistency, naming conventions
-3. Posts review: `gh pr review <number> --approve` or `--request-changes --body "..."`
-4. Messages the lead with the verdict
+When the operator signals they're done testing, the lead checks Linear for status changes:
+```
+mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
+mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
+```
+
+### 9b. Handle Changes Requested (from operator testing)
+
+For stories the operator moved to "Changes Requested":
+1. Fetch comments to get the operator's feedback: `mcp__linear__list_comments(issueId: <id>)`
+2. Message the dev teammate with specific issues
+3. Dev teammate fixes in its worktree, commits
+4. Lead pushes updated branch
+5. Lead re-merges to staging, re-deploys
+6. Lead moves Linear back to "In Review"
+7. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
+
+### 9c. Dispatch Code Review (for "Code Review" stories)
+
+For stories the operator moved to "Code Review", dispatch the reviewer teammate:
+1. Unblock the review tasks in the shared task list
+2. Reviewer claims tasks and for each PR:
+   - Runs `gh pr diff <number>`
+   - Checks: TypeScript strictness, Zod validation, security, error handling, patterns, naming
+   - Posts: `gh pr review <number> --approve` or `--request-changes --body "..."`
+   - Messages the lead with verdict
 
 ---
 
-## Step 10: Handle Review Outcomes
+## Step 10: Handle Code Review Outcomes
 
 ### If reviewer approves:
 
-1. Lead (or operator) merges PR:
+1. Lead merges PR:
    ```bash
    gh pr merge <number> --merge --delete-branch
    ```
@@ -421,7 +483,6 @@ The reviewer teammate claims the review task and:
    ```
    ## [N/total] ROK-XXX — <title> ✓
    PR: #<num> merged to main | Commits: SHA1, SHA2
-   Next batch: <batch info or "all done">
    ```
 
 ### If reviewer requests changes:
@@ -429,9 +490,11 @@ The reviewer teammate claims the review task and:
 1. Lead updates Linear → "Changes Requested"
 2. Lead messages the dev teammate with specific feedback from the review
 3. Dev teammate fixes in its worktree, commits
-4. Lead pushes updated branch (force-push OK since PR is open)
-5. Lead re-merges to staging, notifies operator for re-test
-6. Cycle repeats from Step 9
+4. Lead pushes updated branch
+5. Lead re-merges to staging, re-deploys
+6. Lead moves Linear → "In Review"
+7. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
+8. Cycle repeats from Step 9a (operator re-tests)
 
 ---
 
@@ -450,7 +513,26 @@ After all stories in a batch are merged (or deferred):
    TeamDelete()
    ```
 
-3. **If more batches remain:** Go back to Step 7a for the next batch
+3. **If more batches remain:**
+   - **Auto-deploy main** (merged PRs are now on main):
+     ```bash
+     ./scripts/deploy_dev.sh --rebuild
+     ```
+   - **Pause and present next batch:**
+     ```
+     ## Batch N complete — N stories merged to main
+     Deployed to localhost:5173 for verification.
+
+     Next batch (N stories):
+     - ROK-XXX: <title> — [domains]
+     - ROK-YYY: <title> — [domains]
+
+     Say "next" to dispatch the next batch, or "stop" to end dispatch.
+     ```
+   - **WAIT for operator response** before starting the next batch
+   - On "next" → Go back to Step 7a for the next batch
+   - On "stop" → Proceed to Step 12
+
 4. **If all batches done:** Proceed to Step 12
 
 ---
@@ -630,4 +712,64 @@ Your job:
 
 You do NOT implement code. You do NOT merge PRs. You do NOT access Linear. You only review.
 If no review tasks are available yet (blocked), wait for the lead to unblock them.
+```
+
+---
+
+### QA Test Case Agent Prompt Template:
+
+```
+You are a QA test case designer for the Raid Ledger project.
+
+## Story: <ROK-XXX> — <title>
+
+### Story Spec
+<paste the full Linear issue description — especially acceptance criteria>
+
+### PR Diff
+Run this command to see exactly what changed:
+```bash
+gh pr diff <PR_NUMBER>
+```
+
+### Your Job
+Generate a manual testing checklist that the operator can follow to verify
+this story works correctly on staging (localhost:5173).
+
+### Guidelines
+- Read the story's acceptance criteria carefully — each AC should map to at least one test step
+- Read the PR diff to understand what actually changed (routes, components, API endpoints)
+- Include the specific URL paths to navigate to (e.g., localhost:5173/events, localhost:5173/profile)
+- Include specific actions: what to click, what to type, what to look for
+- Include edge cases: empty states, error states, mobile/responsive if relevant
+- Include regression checks: things that should still work after this change
+- Keep it practical — these are manual smoke tests, not exhaustive QA
+
+### Output Format
+Post your testing checklist as a Linear comment using this tool:
+```
+mcp__linear__create_comment(issueId: "<ISSUE_ID>", body: "<your checklist>")
+```
+
+Use this format for the comment body:
+
+## Manual Testing Checklist
+
+### Setup
+- [ ] Staging deployed at localhost:5173
+- [ ] Logged in as admin (password in .env ADMIN_PASSWORD)
+
+### Acceptance Criteria Tests
+- [ ] **AC1: <description>** — Navigate to <path>, <action>, verify <expected result>
+- [ ] **AC2: <description>** — <steps>
+
+### Edge Cases
+- [ ] <edge case 1> — <how to test>
+- [ ] <edge case 2> — <how to test>
+
+### Regression
+- [ ] <related feature> still works after this change
+
+---
+After posting the comment, you are done. Do NOT edit any files or make any code changes.
 ```

@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
-import { useCreateCharacter, useUpdateCharacter } from '../../hooks/use-character-mutations';
+import { useCreateCharacter, useUpdateCharacter, useSetMainCharacter } from '../../hooks/use-character-mutations';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
@@ -47,6 +47,7 @@ export function AddCharacterModal({
 }: AddCharacterModalProps) {
     const createMutation = useCreateCharacter();
     const updateMutation = useUpdateCharacter();
+    const setMainMutation = useSetMainCharacter();
     const { games: registryGames } = useGameRegistry();
     const isEditing = !!editingCharacter;
 
@@ -144,23 +145,38 @@ export function AddCharacterModal({
         }
 
         if (isEditing && editingCharacter) {
-            updateMutation.mutate(
-                {
-                    id: editingCharacter.id,
-                    dto: {
-                        name: form.name.trim(),
-                        class: showMmoFields ? (form.class.trim() || null) : null,
-                        spec: showMmoFields ? (form.spec.trim() || null) : null,
-                        roleOverride: showMmoFields ? (form.role || null) : null,
-                        realm: showMmoFields ? (form.realm.trim() || null) : null,
+            // If isMain was toggled on, set main first then update fields
+            const needsSetMain = form.isMain && !editingCharacter.isMain;
+
+            const doUpdate = () => {
+                updateMutation.mutate(
+                    {
+                        id: editingCharacter.id,
+                        dto: {
+                            name: form.name.trim(),
+                            class: showMmoFields ? (form.class.trim() || null) : null,
+                            spec: showMmoFields ? (form.spec.trim() || null) : null,
+                            roleOverride: showMmoFields ? (form.role || null) : null,
+                            realm: showMmoFields ? (form.realm.trim() || null) : null,
+                        },
                     },
-                },
-                {
+                    {
+                        onSuccess: () => {
+                            onClose();
+                        },
+                    }
+                );
+            };
+
+            if (needsSetMain) {
+                setMainMutation.mutate(editingCharacter.id, {
                     onSuccess: () => {
-                        onClose();
+                        doUpdate();
                     },
-                }
-            );
+                });
+            } else {
+                doUpdate();
+            }
         } else {
             createMutation.mutate(
                 {
@@ -194,7 +210,7 @@ export function AddCharacterModal({
         setForm((prev) => ({ ...prev, [field]: value }));
     }
 
-    const isPending = createMutation.isPending || updateMutation.isPending;
+    const isPending = createMutation.isPending || updateMutation.isPending || setMainMutation.isPending;
 
     return (
         <Modal
@@ -323,18 +339,22 @@ export function AddCharacterModal({
                                     </>
                                 )}
 
-                                {/* Set as Main (only for create) */}
-                                {!isEditing && (
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={form.isMain}
-                                            onChange={(e) => updateField('isMain', e.target.checked)}
-                                            className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500"
-                                        />
-                                        <span className="text-sm text-secondary">Set as main character</span>
-                                    </label>
-                                )}
+                                {/* Main character toggle */}
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={form.isMain}
+                                        onChange={(e) => updateField('isMain', e.target.checked)}
+                                        disabled={isEditing && editingCharacter?.isMain}
+                                        className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500 disabled:opacity-50"
+                                    />
+                                    <span className={`text-sm ${isEditing && editingCharacter?.isMain ? 'text-muted' : 'text-secondary'}`}>
+                                        Main character
+                                        {isEditing && editingCharacter?.isMain && (
+                                            <span className="ml-1 text-xs text-muted">(already main)</span>
+                                        )}
+                                    </span>
+                                </label>
                             </>
                         )}
 

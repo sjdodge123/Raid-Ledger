@@ -32,6 +32,8 @@ export function useCreateCharacter() {
 
 /**
  * Mutation hook for updating a character.
+ * Invalidates all character-related caches since edits may pair with
+ * a setMain call that changes isMain across characters.
  */
 export function useUpdateCharacter() {
     const queryClient = useQueryClient();
@@ -39,10 +41,11 @@ export function useUpdateCharacter() {
     return useMutation({
         mutationFn: ({ id, dto }: { id: string; dto: UpdateCharacterDto }) =>
             updateCharacter(id, dto),
-        onSuccess: (_data, variables) => {
+        onSuccess: () => {
             toast.success('Character updated!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
-            queryClient.invalidateQueries({ queryKey: ['characters', variables.id] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to update character');

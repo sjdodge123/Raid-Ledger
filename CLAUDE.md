@@ -177,16 +177,27 @@ Before a session is cleared with `/clear`, you MUST:
 3. Confirm the updates were made before proceeding with the clear
 
 ### Status Mapping
-| task.md | Linear Status | sprint-status.yaml |
-|---------|---------------|-------------------|
-| `[x]` | Done | `done` |
-| `[/]` | In Progress | `in-progress` |
-| `[ ]` | Todo | `ready-for-dev` |
-| `[ ]` | Dispatch Ready | `dispatch-ready` |
-| *(not listed)* | Backlog | `backlog` |
-| *(not listed)* | In Review | `review` |
-| *(not listed)* | Changes Requested | `changes-requested` |
-| *(not listed)* | Canceled | `deprecated` |
+| task.md | Linear Status | sprint-status.yaml | Meaning |
+|---------|---------------|-------------------|---------|
+| `[x]` | Done | `done` | PR merged to main |
+| `[/]` | In Progress | `in-progress` | Dev agent implementing |
+| `[ ]` | Todo | `ready-for-dev` | Ready for dispatch |
+| `[ ]` | Dispatch Ready | `dispatch-ready` | Spec complete, queued |
+| *(not listed)* | Backlog | `backlog` | Not yet planned |
+| *(not listed)* | In Review | `review` | On staging, awaiting operator testing |
+| *(not listed)* | Code Review | `code-review` | Operator approved, awaiting code review agent |
+| *(not listed)* | Changes Requested | `changes-requested` | Operator or reviewer found issues |
+| *(not listed)* | Canceled | `deprecated` | Dropped |
+
+### Status Flow
+```
+Dispatch Ready → In Progress → In Review (on staging)
+  → operator tests →
+    Changes Requested (issues found) → In Progress (dev fixes) → In Review
+    Code Review (operator approved) → reviewer agent reviews →
+      Changes Requested (reviewer issues) → In Progress → In Review
+      Done (PR merged to main)
+```
 
 ## Agent Teams (Parallel Development)
 

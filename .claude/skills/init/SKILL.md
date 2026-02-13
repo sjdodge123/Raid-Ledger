@@ -139,6 +139,8 @@ current_sprint:   # omit block if no active cycle
 development_status:
   # === Done ===
   ROK-XXX: done           # <title>
+  # === Code Review ===
+  ROK-XXX: code-review    # <title>
   # === In Review ===
   ROK-XXX: review         # <title>
   # === Changes Requested ===
@@ -155,7 +157,7 @@ development_status:
   ROK-XXX: deprecated     # <title>
 ```
 
-**Status mapping:** Done→`done`, In Progress→`in-progress`, Todo→`ready-for-dev`, Dispatch Ready→`dispatch-ready`, In Review→`review`, Changes Requested→`changes-requested`, Backlog→`backlog`, Canceled→`deprecated`, Duplicate→skip.
+**Status mapping:** Done→`done`, In Progress→`in-progress`, Todo→`ready-for-dev`, Dispatch Ready→`dispatch-ready`, In Review→`review`, Code Review→`code-review`, Changes Requested→`changes-requested`, Backlog→`backlog`, Canceled→`deprecated`, Duplicate→skip.
 
 Sort by ROK number within groups. Omit empty groups.
 
@@ -169,7 +171,7 @@ Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state 
 
 ## Active Work
 <!-- Stories currently being worked on by agents or in review -->
-- [/] ROK-XXX: <title> (In Progress|In Review|Changes Requested)
+- [/] ROK-XXX: <title> (In Progress|In Review|Code Review|Changes Requested)
 
 ## Dispatch Queue (parallel batches)
 <!-- Stories within a batch run in parallel via Agent Teams -->
