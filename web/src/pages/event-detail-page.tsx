@@ -204,9 +204,11 @@ export function EventDetailPage() {
 
     if (!event) return null;
 
-    // Group signups by status for roster display
-    const confirmedSignups = roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || [];
-    const pendingSignups = roster?.signups.filter(s => s.confirmationStatus === 'pending') || [];
+    // Group signups by status for roster display, sorted alphabetically (ROK-300)
+    const alphabetical = (a: { user: { username: string } }, b: { user: { username: string } }) =>
+        a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
+    const confirmedSignups = (roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || []).sort(alphabetical);
+    const pendingSignups = (roster?.signups.filter(s => s.confirmationStatus === 'pending') || []).sort(alphabetical);
 
     return (
         <div className="event-detail-page">
