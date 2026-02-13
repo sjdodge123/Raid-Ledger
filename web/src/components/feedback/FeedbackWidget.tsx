@@ -44,6 +44,7 @@ export function FeedbackWidget() {
     const [message, setMessage] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
     const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
+    const [screenshotError, setScreenshotError] = useState<string | null>(null);
     const [isCapturing, setIsCapturing] = useState(false);
 
     // Use ref for submitFeedback.reset to avoid dependency churn in useCallback
@@ -54,9 +55,17 @@ export function FeedbackWidget() {
         setCategory('bug');
         setMessage('');
         setScreenshotBase64(null);
+        setScreenshotError(null);
         setIsCapturing(false);
         resetRef.current();
     }, []);
+
+    const handleOpen = useCallback(() => {
+        // Reset form + mutation state so the modal is always fresh
+        reset();
+        setShowSuccess(false);
+        setIsOpen(true);
+    }, [reset]);
 
     const handleClose = useCallback(() => {
         setIsOpen(false);
@@ -91,6 +100,7 @@ export function FeedbackWidget() {
 
     const handleCaptureScreenshot = useCallback(async () => {
         setIsCapturing(true);
+        setScreenshotError(null);
         // Temporarily close the modal so it doesn't appear in the screenshot
         setIsOpen(false);
 
@@ -102,6 +112,9 @@ export function FeedbackWidget() {
             setScreenshotBase64(base64);
         } catch (err) {
             console.error('Screenshot capture failed:', err);
+            setScreenshotError(
+                'Screenshot capture is not available in this browser. You can still submit your feedback without a screenshot.',
+            );
         } finally {
             setIsOpen(true);
             setIsCapturing(false);
@@ -115,7 +128,7 @@ export function FeedbackWidget() {
         <div data-feedback-widget>
             {/* Floating trigger button */}
             <button
-                onClick={() => setIsOpen(true)}
+                onClick={handleOpen}
                 className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95"
                 style={{
                     backgroundColor: 'var(--color-accent)',
@@ -365,6 +378,17 @@ export function FeedbackWidget() {
                                                 style={{ maxHeight: '150px' }}
                                             />
                                         </div>
+                                    )}
+                                    {/* Screenshot capture error */}
+                                    {screenshotError && (
+                                        <p
+                                            className="mt-2 text-xs"
+                                            style={{
+                                                color: 'var(--color-warning, #f59e0b)',
+                                            }}
+                                        >
+                                            {screenshotError}
+                                        </p>
                                     )}
                                 </div>
 
