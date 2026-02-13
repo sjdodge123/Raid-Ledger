@@ -238,7 +238,7 @@ For each planned story, display a condensed version:
 
 ### Parallel Batch Assignment:
 
-Group stories into parallel batches (from `/init` analysis or computed here):
+Group stories into parallel batches (computed here — no `/init` required):
 
 1. **Contract/migration stories first** — run alone in batch 0
 2. **Non-overlapping stories** — group into parallel batches (max 2-3 per batch)
@@ -362,7 +362,7 @@ EOF
   --head rok-<num>-<short-name>
 ```
 
-### 8b. Merge to Staging + Deploy
+### 8b. Merge to Staging
 
 ```bash
 git checkout staging
@@ -371,7 +371,7 @@ git push origin staging
 git checkout main
 ```
 
-Notify operator: "ROK-XXX is on staging. Deploy with `./scripts/deploy_dev.sh --rebuild` to test."
+Do this for each story as its PR is created. Do NOT deploy yet — wait until all stories in the batch have PRs (Step 8e).
 
 ### 8c. Update Linear
 
@@ -382,19 +382,44 @@ Notify operator: "ROK-XXX is on staging. Deploy with `./scripts/deploy_dev.sh --
 
 Update the review task in the shared task list (remove blocker so reviewer can claim it).
 
+### 8e. Auto-Deploy Staging (after all batch stories have PRs)
+
+Once ALL stories in the current batch have PRs created and are merged to staging, **automatically deploy** — do NOT ask the operator:
+
+```bash
+./scripts/deploy_dev.sh --rebuild
+```
+
+Then **pause and notify the operator:**
+
+```
+## Batch N — Staging Deployed
+All N stories are on staging at localhost:5173.
+
+PRs created:
+- ROK-XXX: #<num> — <title>
+- ROK-YYY: #<num> — <title>
+
+Please smoke test, then say "approved" to proceed to code review,
+or report issues with specific story IDs.
+```
+
+**WAIT for operator response before proceeding.** This is the manual testing gate.
+
 ---
 
 ## Step 9: Operator Tests + Code Review
 
 ### 9a. Operator Manual Testing
 
-The operator tests the story on staging (localhost:5173). They signal:
-- "ROK-XXX looks good, send to code review" → proceed to 9b
-- "ROK-XXX has issues: <description>" → lead messages dev teammate with feedback
+The operator tests on staging (localhost:5173). They signal:
+- "approved" or "looks good" → proceed to 9b for ALL stories in batch
+- "ROK-XXX has issues: <description>" → lead messages dev teammate with feedback, wait for fix cycle
+- "approved except ROK-XXX" → proceed to 9b for approved stories, handle ROK-XXX separately
 
-### 9b. Reviewer Reviews PR
+### 9b. Reviewer Reviews PRs
 
-The reviewer teammate claims the review task and:
+The reviewer teammate claims review tasks and:
 1. Runs `gh pr diff <number>` to inspect changes
 2. Checks: TypeScript strictness, Zod validation, security, error handling, pattern consistency, naming conventions
 3. Posts review: `gh pr review <number> --approve` or `--request-changes --body "..."`
@@ -450,7 +475,26 @@ After all stories in a batch are merged (or deferred):
    TeamDelete()
    ```
 
-3. **If more batches remain:** Go back to Step 7a for the next batch
+3. **If more batches remain:**
+   - **Auto-deploy main** (merged PRs are now on main):
+     ```bash
+     ./scripts/deploy_dev.sh --rebuild
+     ```
+   - **Pause and present next batch:**
+     ```
+     ## Batch N complete — N stories merged to main
+     Deployed to localhost:5173 for verification.
+
+     Next batch (N stories):
+     - ROK-XXX: <title> — [domains]
+     - ROK-YYY: <title> — [domains]
+
+     Say "next" to dispatch the next batch, or "stop" to end dispatch.
+     ```
+   - **WAIT for operator response** before starting the next batch
+   - On "next" → Go back to Step 7a for the next batch
+   - On "stop" → Proceed to Step 12
+
 4. **If all batches done:** Proceed to Step 12
 
 ---
