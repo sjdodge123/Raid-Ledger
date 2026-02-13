@@ -375,7 +375,7 @@ export async function updateCharacter(
  */
 export async function setMainCharacter(characterId: string): Promise<CharacterDto> {
     return fetchApi(
-        `/users/me/characters/${characterId}/main`,
+        `/users/me/characters/${characterId}/set-main`,
         { method: 'PATCH' },
         CharacterSchema
     );
