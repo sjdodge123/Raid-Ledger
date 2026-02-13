@@ -21,6 +21,8 @@ interface PugFormModalProps {
     }) => void;
     /** Whether the form is submitting */
     isSubmitting?: boolean;
+    /** Whether to show class/spec fields (only for MMO games) */
+    showClassSpec?: boolean;
 }
 
 const ROLE_OPTIONS: { value: PugRole; label: string; emoji: string }[] = [
@@ -35,6 +37,7 @@ export function PugFormModal({
     editingPug,
     onSubmit,
     isSubmitting = false,
+    showClassSpec = false,
 }: PugFormModalProps) {
     const isEditing = !!editingPug;
 
@@ -52,6 +55,7 @@ export function PugFormModal({
                 onClose={onClose}
                 isSubmitting={isSubmitting}
                 isEditing={isEditing}
+                showClassSpec={showClassSpec}
             />
         </Modal>
     );
@@ -64,12 +68,14 @@ function PugFormBody({
     onClose,
     isSubmitting,
     isEditing,
+    showClassSpec,
 }: {
     editingPug?: PugSlotResponseDto | null;
     onSubmit: PugFormModalProps['onSubmit'];
     onClose: () => void;
     isSubmitting: boolean;
     isEditing: boolean;
+    showClassSpec: boolean;
 }) {
     const [discordUsername, setDiscordUsername] = useState(
         editingPug?.discordUsername ?? '',
@@ -137,41 +143,44 @@ function PugFormBody({
                 </div>
             </div>
 
-            {/* Class (optional) */}
-            <div>
-                <label
-                    htmlFor="pug-class"
-                    className="block text-sm font-medium text-secondary mb-1"
-                >
-                    Class <span className="text-dim">(optional)</span>
-                </label>
-                <input
-                    id="pug-class"
-                    type="text"
-                    value={charClass}
-                    onChange={(e) => setCharClass(e.target.value)}
-                    placeholder="e.g. Warrior, Paladin"
-                    className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-            </div>
+            {/* Class & Spec (optional, MMO games only) */}
+            {showClassSpec && (
+                <>
+                    <div>
+                        <label
+                            htmlFor="pug-class"
+                            className="block text-sm font-medium text-secondary mb-1"
+                        >
+                            Class <span className="text-dim">(optional)</span>
+                        </label>
+                        <input
+                            id="pug-class"
+                            type="text"
+                            value={charClass}
+                            onChange={(e) => setCharClass(e.target.value)}
+                            placeholder="e.g. Warrior, Paladin"
+                            className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                    </div>
 
-            {/* Spec (optional) */}
-            <div>
-                <label
-                    htmlFor="pug-spec"
-                    className="block text-sm font-medium text-secondary mb-1"
-                >
-                    Spec <span className="text-dim">(optional)</span>
-                </label>
-                <input
-                    id="pug-spec"
-                    type="text"
-                    value={spec}
-                    onChange={(e) => setSpec(e.target.value)}
-                    placeholder="e.g. Protection, Holy"
-                    className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                />
-            </div>
+                    <div>
+                        <label
+                            htmlFor="pug-spec"
+                            className="block text-sm font-medium text-secondary mb-1"
+                        >
+                            Spec <span className="text-dim">(optional)</span>
+                        </label>
+                        <input
+                            id="pug-spec"
+                            type="text"
+                            value={spec}
+                            onChange={(e) => setSpec(e.target.value)}
+                            placeholder="e.g. Protection, Holy"
+                            className="w-full rounded-lg border border-edge bg-panel px-3 py-2 text-foreground placeholder:text-dim focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                        />
+                    </div>
+                </>
+            )}
 
             {/* Notes (optional) */}
             <div>

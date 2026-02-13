@@ -15,9 +15,11 @@ interface PugSectionProps {
     eventId: number;
     /** Whether the current user can add/edit/remove PUGs */
     canManage: boolean;
+    /** Whether the event's game is an MMO (shows class/spec fields in PUG form) */
+    isMMOGame?: boolean;
 }
 
-export function PugSection({ eventId, canManage }: PugSectionProps) {
+export function PugSection({ eventId, canManage, isMMOGame = false }: PugSectionProps) {
     const { data: pugData, isLoading } = usePugs(eventId);
     const createPug = useCreatePug(eventId);
     const updatePug = useUpdatePug(eventId);
@@ -157,6 +159,7 @@ export function PugSection({ eventId, canManage }: PugSectionProps) {
                 editingPug={editingPug}
                 onSubmit={handleSubmit}
                 isSubmitting={createPug.isPending || updatePug.isPending}
+                showClassSpec={isMMOGame}
             />
         </div>
     );

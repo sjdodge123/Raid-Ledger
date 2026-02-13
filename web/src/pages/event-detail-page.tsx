@@ -370,6 +370,7 @@ export function EventDetailPage() {
                     <PugSection
                         eventId={eventId}
                         canManage={canManageRoster}
+                        isMMOGame={isMMOGame}
                     />
                 </div>
             )}
