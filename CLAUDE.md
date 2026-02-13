@@ -78,7 +78,7 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 
 ## Critical Rules
 
-- **Branch-per-story** — Multiple agents may work in this repo concurrently. **Always** create a new branch from `main` when starting a new story or feature (e.g., `git checkout -b rok-123-feature-name`). Commit work to the feature branch. When the story is complete, merge the feature branch into `main` (`git checkout main && git merge <branch>`) and delete the branch (`git branch -d <branch>`). Never commit directly to `main` for story/feature work. Never leave stale merged branches — clean them up immediately after merging.
+- **Branch-per-story + PR workflow** — Multiple agents may work in this repo concurrently via git worktrees. **Always** create a branch from `main` for each story (e.g., `rok-123-feature-name`). Dev teammates commit to their feature branch but do **not** push or create PRs — the lead handles all GitHub operations. When complete, the lead pushes the branch, creates a GitHub PR (`gh pr create --base main`), and merges it into the `staging` branch for manual testing. After operator testing and code review approval, the PR is merged to `main`. Never commit directly to `main` for story/feature work. Clean up worktrees and branches immediately after PR merge.
 - **Zod-first validation** — All data validation uses Zod schemas from the contract package
 - **TypeScript strict mode** — No `any` allowed in either api or web
 - **Naming conventions** — Files: `kebab-case`, Classes: `PascalCase`, Variables: `camelCase`, DB columns: `snake_case` (mapped in Drizzle)
@@ -156,13 +156,17 @@ When code is committed:
 2. **Update the relevant Linear story status immediately** — move to "In Progress" or "Done" as appropriate using the Linear MCP tools.
 
 ### On Story Completion
-When a story (ROK-XXX) is finished — all ACs met, code committed, status set to Done:
-1. Add a **Linear comment** on the issue summarizing what was implemented:
+When a story (ROK-XXX) is finished — all ACs met, code committed:
+1. **Dev teammate** messages the lead that implementation is complete
+2. **Lead** pushes the branch and creates a GitHub PR
+3. **Lead** merges branch into `staging` for manual testing, updates Linear → "In Review"
+4. **Lead** posts PR URL as a Linear comment on the issue
+5. After operator testing + code review approval, PR is merged to `main`
+6. **Lead** updates Linear → "Done" with a summary comment:
    - Key files changed
-   - Commit SHA(s)
+   - Commit SHA(s) and PR number
    - Any notable decisions or deviations from the original spec
-2. If on a feature branch, merge to main and delete the branch
-3. Update `task.md` checkbox to `[x]`
+7. Update `task.md` checkbox to `[x]`
 
 This replaces the need to invoke `/handover` for Linear sync. Agents document their work as they go, not as a separate ceremony.
 
@@ -183,6 +187,91 @@ Before a session is cleared with `/clear`, you MUST:
 | *(not listed)* | In Review | `review` |
 | *(not listed)* | Changes Requested | `changes-requested` |
 | *(not listed)* | Canceled | `deprecated` |
+
+## Agent Teams (Parallel Development)
+
+This repo uses Claude Code's Agent Teams feature for parallel story implementation via git worktrees.
+
+### Architecture
+
+```
+Operator (human)
+  └─ Lead (main worktree — orchestrates, creates PRs, syncs Linear)
+       ├─ Dev Teammate 1 (worktree ../Raid-Ledger--rok-XXX)
+       ├─ Dev Teammate 2 (worktree ../Raid-Ledger--rok-YYY)
+       └─ Reviewer Teammate (main worktree — code-reviews PRs)
+```
+
+### Team Roles
+
+| Role | Model | Working Directory | Responsibilities |
+|------|-------|-------------------|------------------|
+| **Lead** | Opus 4.6 | `Raid-Ledger/` (main) | Orchestrate, create PRs, merge to staging, sync Linear |
+| **Dev 1-3** | Opus 4.6 | `Raid-Ledger--rok-*/` | Implement stories, commit, message lead |
+| **Reviewer** | Sonnet 4.5 | `Raid-Ledger/` (main) | Code-review PRs via `gh`, approve/request changes |
+
+- Lead runs in delegate mode (coordination only)
+- Dev teammates do NOT push, create PRs, or access Linear — lead handles all external ops
+- Reviewer does NOT implement code or merge PRs — only reviews
+- Max 2-3 dev teammates at once
+
+### Worktree Convention
+
+Each parallel story gets its own worktree as a sibling directory:
+```
+/Users/sdodge/Documents/Projects/
+  Raid-Ledger/                    # Main worktree (lead)
+  Raid-Ledger--rok-219/           # Dev teammate worktree
+  Raid-Ledger--rok-274/           # Dev teammate worktree
+```
+
+Setup per story:
+```bash
+git worktree add ../Raid-Ledger--rok-<num> -b rok-<num>-<short-name> main
+cd ../Raid-Ledger--rok-<num> && npm install --legacy-peer-deps && npm run build -w packages/contract
+```
+
+Cleanup after PR merge:
+```bash
+git worktree remove ../Raid-Ledger--rok-<num>
+git branch -d rok-<num>-<short-name>
+```
+
+### PR Workflow
+
+```
+1. Teammate completes story → messages lead
+2. Lead pushes branch → creates PR (Linear → "In Review")
+3. Lead merges branch into staging → deploys for operator testing
+4. Operator manually tests on staging
+5. Reviewer code-reviews PR via gh pr review
+6. Approved → merge PR to main → Linear → "Done"
+   OR changes requested → Linear → "Changes Requested" → teammate fixes
+```
+
+### Staging Branch
+
+A persistent `staging` branch accumulates in-progress PRs for operator testing:
+```bash
+# Reset staging at dispatch start
+git checkout staging && git reset --hard main && git push --force origin staging
+
+# After each PR is created, merge PR branch into staging
+git checkout staging && git merge rok-<num>-<short-name> && git push origin staging
+
+# Deploy staging for testing
+./scripts/deploy_dev.sh --rebuild
+```
+
+### Parallelism Safety
+
+**Can run in parallel:** Stories touching different domains (e.g., one api-only, one web-only), stories in separate modules.
+
+**Must be sequential:** Stories modifying `packages/contract/` (shared dependency), stories generating database migrations (number collision), stories touching the same files.
+
+**Contract protocol:** If a story needs contract changes, it runs first. After merge, lead broadcasts: "Contract updated — rebase your branches."
+
+**Migration protocol:** Never run two migration-generating stories in parallel. After merge, run `./scripts/fix-migration-order.sh`.
 
 ## Compact Instructions
 
