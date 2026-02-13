@@ -45,6 +45,14 @@ const THEME_REGISTRY: ThemeDefinition[] = [
         preview: { surface: '#0a0a1a', accent: '#8b5cf6' },
         tokens: {},
     },
+    {
+        id: 'quest-log',
+        name: 'Quest Log',
+        mode: 'light',
+        isDark: false,
+        preview: { surface: '#f4e8c1', accent: '#c9a84c' },
+        tokens: {},
+    },
 ];
 
 export { THEME_REGISTRY };
@@ -99,13 +107,31 @@ function resolveTheme(
     );
 }
 
+/**
+ * Sub-theme config: maps theme IDs to their data-scheme, color-scheme, and
+ * optional data-variant attribute.
+ */
+const SUB_THEME_CONFIG: Record<
+    string,
+    { scheme: string; colorScheme: string; variant?: string }
+> = {
+    space: { scheme: 'space', colorScheme: 'dark' },
+    'quest-log': { scheme: 'light', colorScheme: 'light', variant: 'quest-log' },
+};
+
 function applyTheme(theme: ThemeDefinition, previousTokens: string[]) {
     const html = document.documentElement;
-    // Space theme uses its own data-scheme; color-scheme stays 'dark' for native elements
-    const scheme = theme.id === 'space' ? 'space' : theme.mode;
+    const sub = SUB_THEME_CONFIG[theme.id];
+    const scheme = sub?.scheme ?? theme.mode;
 
     html.setAttribute('data-scheme', scheme);
-    html.style.colorScheme = theme.id === 'space' ? 'dark' : scheme;
+    html.style.colorScheme = sub?.colorScheme ?? scheme;
+
+    if (sub?.variant) {
+        html.setAttribute('data-variant', sub.variant);
+    } else {
+        html.removeAttribute('data-variant');
+    }
 
     // Clear previous theme-specific overrides
     for (const prop of previousTokens) {
@@ -129,7 +155,13 @@ function persistToLocalStorage(
     localStorage.setItem(LS_DARK_THEME_KEY, darkTheme);
     // Keep legacy scheme key for the no-flash script
     // Space theme uses 'space' data-scheme even though its mode is 'dark'
-    const schemeForFlashScript = resolvedThemeId === 'space' ? 'space' : mode === 'auto' ? resolveSystemScheme() : mode;
+    const sub = SUB_THEME_CONFIG[resolvedThemeId];
+    const schemeForFlashScript =
+        sub?.scheme === 'space'
+            ? 'space'
+            : mode === 'auto'
+              ? resolveSystemScheme()
+              : mode;
     localStorage.setItem(LS_LEGACY_SCHEME_KEY, schemeForFlashScript);
 }
 

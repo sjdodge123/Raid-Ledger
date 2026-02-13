@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600;700&family=MedievalSharp&family=Uncial+Antiqua&display=swap');
 
 @import "tailwindcss";
 
@@ -403,4 +403,225 @@ body {
 
 [data-scheme="space"] ::-webkit-scrollbar-thumb:hover {
     background: rgba(139, 92, 246, 0.5);
+}
+
+/* ============================================
+   Quest Log Theme — Parchment & Scroll (ROK-291)
+   Light sub-theme using data-variant="quest-log"
+   on top of data-scheme="light". Inherits all
+   existing [data-scheme="light"] rules.
+   ============================================ */
+
+[data-variant="quest-log"] {
+    --color-backdrop: #f4e8c1;
+    --color-surface: #faf3e0;
+    --color-panel: #f0e4c8;
+    --color-overlay: #e8d8b0;
+    --color-faint: #c9b896;
+    --color-dim: #a89070;
+    --color-muted: #8b7355;
+    --color-secondary: #5c4a32;
+    --color-foreground: #2c1810;
+    --color-edge: #d4c4a0;
+    --color-edge-strong: #c9b896;
+    --color-edge-subtle: #e8dcc0;
+    --gt-widget-bg: rgba(240, 228, 200, 0.9);
+    --gt-widget-border: rgba(201, 184, 150, 0.6);
+    --gt-split-bg: rgba(232, 216, 176, 0.4);
+    --gt-past-highlight: rgba(201, 184, 150, 0.3);
+    --gt-hover-glow: rgba(139, 115, 85, 0.15);
+    --gt-proximity-line: 139, 115, 85;
+    --ql-gold: #c9a84c;
+    --ql-gold-hover: #b8952f;
+    --ql-gold-glow: rgba(201, 168, 76, 0.3);
+    --ql-ink: #2c1810;
+    --ql-ink-secondary: #5c4a32;
+    --ql-parchment-edge: #c4a86c;
+    --ql-seal-red: #8b2020;
+}
+
+[data-variant="quest-log"] body {
+    font-family: 'MedievalSharp', 'Cinzel', serif;
+}
+
+[data-variant="quest-log"] h1,
+[data-variant="quest-log"] h2,
+[data-variant="quest-log"] h3 {
+    font-family: 'Uncial Antiqua', 'Cinzel', serif;
+    color: var(--ql-ink);
+}
+
+[data-variant="quest-log"] .font-display {
+    font-family: 'Uncial Antiqua', 'Cinzel', serif;
+    letter-spacing: 0.03em;
+}
+
+[data-variant="quest-log"] body {
+    background-color: var(--color-backdrop);
+    background-image:
+        radial-gradient(ellipse at 20% 50%, rgba(201, 168, 76, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 115, 85, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 80%, rgba(201, 168, 76, 0.05) 0%, transparent 50%);
+}
+
+[data-variant="quest-log"] body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.03;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+}
+
+[data-variant="quest-log"] .glass-card {
+    background: var(--color-surface);
+    backdrop-filter: none;
+    border: 2px solid var(--ql-parchment-edge);
+    box-shadow: 0 2px 8px rgba(92, 74, 50, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    border-radius: 2px;
+}
+
+[data-variant="quest-log"] .glass-card:hover {
+    background: var(--color-surface);
+    border-color: var(--ql-gold);
+    box-shadow: 0 3px 12px rgba(92, 74, 50, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+[data-variant="quest-log"] .rounded-xl {
+    border-radius: 4px;
+    box-shadow: 0 1px 4px rgba(92, 74, 50, 0.1);
+}
+
+[data-variant="quest-log"] .bg-emerald-600 {
+    background-color: var(--ql-gold) !important;
+    color: var(--ql-ink) !important;
+    border: 1px solid var(--ql-gold-hover);
+    box-shadow: 0 2px 6px var(--ql-gold-glow);
+    font-family: 'MedievalSharp', serif;
+}
+
+[data-variant="quest-log"] .bg-emerald-600:hover {
+    background-color: var(--ql-gold-hover) !important;
+    box-shadow: 0 3px 10px rgba(201, 168, 76, 0.4);
+}
+
+[data-variant="quest-log"] .text-emerald-500,
+[data-variant="quest-log"] .text-emerald-400 {
+    color: var(--ql-gold) !important;
+}
+
+[data-variant="quest-log"] .border-emerald-500 {
+    border-color: var(--ql-gold) !important;
+}
+
+[data-variant="quest-log"] .glow-emerald {
+    box-shadow: 0 0 10px rgba(201, 168, 76, 0.2);
+}
+
+[data-variant="quest-log"] .glow-emerald:hover {
+    box-shadow: 0 0 15px rgba(201, 168, 76, 0.3);
+}
+
+[data-variant="quest-log"] .glow-indigo {
+    box-shadow: 0 0 10px rgba(139, 32, 32, 0.15);
+}
+
+[data-variant="quest-log"] .glow-indigo:hover {
+    box-shadow: 0 0 15px rgba(139, 32, 32, 0.25);
+}
+
+[data-variant="quest-log"] header {
+    background: linear-gradient(180deg, rgba(196, 168, 108, 0.15) 0%, transparent 100%);
+    border-bottom: 2px solid var(--ql-parchment-edge) !important;
+    box-shadow: 0 2px 8px rgba(92, 74, 50, 0.1);
+}
+
+[data-variant="quest-log"] input,
+[data-variant="quest-log"] select,
+[data-variant="quest-log"] textarea {
+    font-family: 'MedievalSharp', serif;
+    background-color: rgba(250, 243, 224, 0.8);
+    border-color: var(--color-edge);
+}
+
+[data-variant="quest-log"] input:focus,
+[data-variant="quest-log"] select:focus,
+[data-variant="quest-log"] textarea:focus {
+    box-shadow: 0 0 0 2px rgba(201, 168, 76, 0.25), 0 0 8px rgba(201, 168, 76, 0.1);
+    border-color: var(--ql-gold);
+}
+
+[data-variant="quest-log"] nav {
+    font-family: 'MedievalSharp', serif;
+}
+
+[data-variant="quest-log"] nav a {
+    border-left: 2px solid transparent;
+    transition: border-color 0.15s, color 0.15s;
+}
+
+[data-variant="quest-log"] nav a:hover {
+    border-left-color: var(--ql-gold);
+    text-shadow: none;
+    color: var(--ql-ink);
+}
+
+[data-variant="quest-log"] hr {
+    border-color: var(--ql-parchment-edge);
+    border-style: dashed;
+}
+
+[data-variant="quest-log"] a:hover {
+    text-shadow: none;
+    color: var(--ql-gold-hover);
+}
+
+[data-variant="quest-log"] details {
+    border: 2px solid var(--ql-parchment-edge);
+    border-radius: 4px;
+    background: var(--color-surface);
+    overflow: hidden;
+}
+
+[data-variant="quest-log"] details > summary {
+    font-family: 'MedievalSharp', serif;
+    cursor: pointer;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(180deg, rgba(196, 168, 108, 0.1) 0%, transparent 100%);
+    border-bottom: 1px solid var(--color-edge);
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+[data-variant="quest-log"] details > summary::-webkit-details-marker {
+    display: none;
+}
+
+[data-variant="quest-log"] details > summary::before {
+    content: '\25B6';
+    font-size: 0.7em;
+    color: var(--ql-gold);
+    transition: transform 0.2s;
+    display: inline-block;
+}
+
+[data-variant="quest-log"] details[open] > summary::before {
+    transform: rotate(90deg);
+}
+
+[data-variant="quest-log"] details[open] > summary {
+    border-bottom: 1px dashed var(--ql-parchment-edge);
+}
+
+[data-variant="quest-log"] ::-webkit-scrollbar { width: 8px; }
+[data-variant="quest-log"] ::-webkit-scrollbar-track { background: rgba(244, 232, 193, 0.5); }
+[data-variant="quest-log"] ::-webkit-scrollbar-thumb { background: var(--ql-parchment-edge); border-radius: 4px; }
+[data-variant="quest-log"] ::-webkit-scrollbar-thumb:hover { background: var(--ql-gold); }
+
+[data-variant="quest-log"] .border-t-emerald-500 {
+    border-top-color: var(--ql-gold) !important;
 }
