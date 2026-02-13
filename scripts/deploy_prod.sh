@@ -118,14 +118,11 @@ start_containers() {
 
     print_header "Starting Production Docker Stack"
 
-    # Fresh start: wipe volumes, generate new password, rebuild
+    # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
         print_warning "Fresh start: removing volumes and rebuilding..."
         docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" down -v 2>/dev/null || true
-
-        local password
-        password=$(generate_password)
-        print_success "New admin password generated and saved to .env"
+        print_success "Database wiped. New admin password will be generated on bootstrap."
 
         docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" build --no-cache
     elif [ "$rebuild" = "true" ]; then
@@ -133,10 +130,10 @@ start_containers() {
         docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" build
     fi
 
-    # Load env for ADMIN_PASSWORD passthrough
+    # Load env for DATABASE_URL and other config
     load_env
 
-    # Start containers — ADMIN_PASSWORD is passed through docker-compose.yml
+    # Start containers
     echo "Starting containers..."
     docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" up -d
 
