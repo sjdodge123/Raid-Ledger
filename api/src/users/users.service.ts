@@ -2,8 +2,14 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc, and } from 'drizzle-orm';
+import { eq, sql, ilike, asc, and, gte, desc } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
+
+/** Number of days to look back for "recently joined" users. */
+export const RECENT_MEMBER_DAYS = 30;
+
+/** Maximum number of recent members to return. */
+export const RECENT_MEMBER_LIMIT = 10;
 
 @Injectable()
 export class UsersService {
@@ -323,6 +329,38 @@ export class UsersService {
       data: rows,
       total: Number(countResult.count),
     };
+  }
+
+  /**
+   * Find users created in the last 30 days, ordered by newest first.
+   * Used for the "New Members" highlight on the Players page (ROK-298).
+   */
+  async findRecent(): Promise<
+    Array<{
+      id: number;
+      username: string;
+      avatar: string | null;
+      discordId: string | null;
+      customAvatarUrl: string | null;
+      createdAt: Date;
+    }>
+  > {
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - RECENT_MEMBER_DAYS);
+
+    return this.db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        discordId: schema.users.discordId,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(gte(schema.users.createdAt, cutoff))
+      .orderBy(desc(schema.users.createdAt))
+      .limit(RECENT_MEMBER_LIMIT);
   }
 
   async setCustomAvatar(userId: number, url: string | null) {

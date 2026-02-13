@@ -61,6 +61,30 @@ export const UserPreviewSchema = z.object({
 export type UserPreviewDto = z.infer<typeof UserPreviewSchema>;
 
 // ==========================================
+// Recent Player DTO (for new members section)
+// ==========================================
+
+/**
+ * User preview with createdAt, used for the "New Members" section on the Players page.
+ */
+export const RecentPlayerSchema = z.object({
+    id: z.number().int(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    discordId: z.string().nullable().optional(),
+    customAvatarUrl: z.string().nullable().optional(),
+    createdAt: z.string().datetime(),
+});
+
+export type RecentPlayerDto = z.infer<typeof RecentPlayerSchema>;
+
+export const RecentPlayersResponseSchema = z.object({
+    data: z.array(RecentPlayerSchema),
+});
+
+export type RecentPlayersResponseDto = z.infer<typeof RecentPlayersResponseSchema>;
+
+// ==========================================
 // Players List Response (paginated)
 // ==========================================
 

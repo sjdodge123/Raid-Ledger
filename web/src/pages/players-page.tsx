@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { usePlayers } from '../hooks/use-players';
 import { useGameDetail } from '../hooks/use-games-discover';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import { NewMembersSection } from '../components/players/NewMembersSection';
 
 export function PlayersPage() {
     const [searchParams] = useSearchParams();
@@ -51,6 +52,9 @@ export function PlayersPage() {
                     </Link>
                 </div>
             )}
+
+            {/* New Members section — hidden when search or game filter is active (AC-6) */}
+            {!debouncedSearch && !gameId && <NewMembersSection />}
 
             {/* Search */}
             <div className="relative">
