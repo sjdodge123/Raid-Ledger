@@ -103,7 +103,7 @@ export function IdentityPanel() {
                             <span className="text-lg font-bold text-foreground">{user.username}</span>
                             <RoleBadge role={user.role} />
                         </div>
-                        <p className="text-sm text-muted mt-0.5">{user.email || 'No email set'}</p>
+                        <p className="text-sm text-muted mt-0.5">{user.discordId && !user.discordId.startsWith('local:') ? 'Discord linked' : 'Local account'}</p>
                     </div>
                 </div>
             </div>

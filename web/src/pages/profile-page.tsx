@@ -21,7 +21,7 @@ import { GameTimePanel } from '../components/features/game-time';
  * Active profile uses ProfileLayout with sidebar navigation (ROK-290).
  */
 export function ProfilePage() {
-    const { user, isLoading: authLoading, isAuthenticated, refetch } = useAuth();
+    const { user, isLoading: authLoading, isAuthenticated } = useAuth();
     const { data: charactersData, isLoading: charactersLoading } = useMyCharacters(undefined, isAuthenticated);
     const { games } = useGameRegistry();
     const location = useLocation();
