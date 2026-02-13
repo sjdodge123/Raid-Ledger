@@ -138,3 +138,20 @@ export const UserManagementListResponseSchema = z.object({
 });
 
 export type UserManagementListResponseDto = z.infer<typeof UserManagementListResponseSchema>;
+
+// ==========================================
+// User Event Signups Response (ROK-299)
+// ==========================================
+
+import { EventResponseSchema } from './events.schema.js';
+
+/**
+ * Response for GET /users/:id/events/signups
+ * Returns upcoming events the user has signed up for.
+ */
+export const UserEventSignupsResponseSchema = z.object({
+    data: z.array(EventResponseSchema),
+    total: z.number().int(),
+});
+
+export type UserEventSignupsResponseDto = z.infer<typeof UserEventSignupsResponseSchema>;

@@ -32,6 +32,7 @@ import type {
     AggregateGameTimeResponse,
     RescheduleEventDto,
     UserHeartedGamesResponseDto,
+    UserEventSignupsResponseDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -585,6 +586,13 @@ export async function getUserProfile(userId: number): Promise<UserProfileDto> {
  */
 export async function getUserHeartedGames(userId: number): Promise<UserHeartedGamesResponseDto> {
     return fetchApi(`/users/${userId}/hearted-games`);
+}
+
+/**
+ * ROK-299: Fetch upcoming events a user has signed up for.
+ */
+export async function getUserEventSignups(userId: number): Promise<UserEventSignupsResponseDto> {
+    return fetchApi(`/users/${userId}/events/signups`);
 }
 
 // ============================================================

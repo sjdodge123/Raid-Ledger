@@ -26,6 +26,7 @@ import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
+import { EventsService } from '../events/events.service';
 import {
   UserProfileDto,
   PlayersListResponseDto,
@@ -37,6 +38,7 @@ import {
   GameTimeOverrideInputSchema,
   GameTimeAbsenceInputSchema,
   UserHeartedGamesResponseDto,
+  UserEventSignupsResponseDto,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
@@ -61,6 +63,7 @@ export class UsersController {
     private readonly preferencesService: PreferencesService,
     private readonly gameTimeService: GameTimeService,
     private readonly charactersService: CharactersService,
+    private readonly eventsService: EventsService,
   ) {}
 
   /**
@@ -158,6 +161,22 @@ export class UsersController {
 
     const games = await this.usersService.getHeartedGames(id);
     return { data: games };
+  }
+
+  /**
+   * ROK-299: Get upcoming events a user has signed up for.
+   * Public endpoint for displaying on a user's profile.
+   */
+  @Get(':id/events/signups')
+  async getUserEventSignups(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<UserEventSignupsResponseDto> {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    return this.eventsService.findUpcomingByUser(id);
   }
 
   /**

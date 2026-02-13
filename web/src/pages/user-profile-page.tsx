@@ -3,6 +3,7 @@ import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import { UserEventSignups } from '../components/profile/UserEventSignups';
 import './user-profile-page.css';
 
 const FACTION_STYLES: Record<string, string> = {
@@ -185,6 +186,9 @@ export function UserProfilePage() {
                         <p>No characters added yet.</p>
                     </div>
                 )}
+
+                {/* Upcoming Events Section (ROK-299) */}
+                {numericId && <UserEventSignups userId={numericId} />}
 
                 {/* Hearted Games Section (ROK-282) */}
                 {heartedGames.length > 0 && (
