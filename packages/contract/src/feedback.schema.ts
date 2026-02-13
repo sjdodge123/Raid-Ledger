@@ -19,6 +19,8 @@ export const CreateFeedbackSchema = z.object({
     pageUrl: z.string().url().optional(),
     /** Base64-encoded screenshot PNG (data URL prefix stripped) */
     screenshotBase64: z.string().max(5_000_000).optional(),
+    /** Browser console logs captured for bug reports */
+    clientLogs: z.string().max(50_000).optional(),
 });
 export type CreateFeedbackDto = z.infer<typeof CreateFeedbackSchema>;
 

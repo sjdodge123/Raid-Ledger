@@ -101,6 +101,7 @@ export class GitHubService {
     pageUrl: string | null;
     feedbackId: number;
     screenshotBase64: string | null;
+    clientLogs: string | null;
   }): Promise<GitHubIssueResult> {
     const token = await this.settingsService.getGitHubPat();
     if (!token) {
@@ -121,6 +122,7 @@ export class GitHubService {
       pageUrl,
       feedbackId,
       screenshotBase64,
+      clientLogs,
     } = params;
 
     // Upload screenshot first (if provided)
@@ -158,6 +160,25 @@ export class GitHubService {
         '### Screenshot',
         '',
         `![Screenshot](${screenshotUrl})`,
+      );
+    }
+
+    // Append client logs if provided
+    if (clientLogs) {
+      bodyParts.push(
+        '',
+        '---',
+        '',
+        '### Client Logs',
+        '',
+        '<details>',
+        '<summary>Console output (click to expand)</summary>',
+        '',
+        '```',
+        clientLogs,
+        '```',
+        '',
+        '</details>',
       );
     }
 

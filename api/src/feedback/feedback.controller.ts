@@ -64,7 +64,8 @@ export class FeedbackController {
     }
 
     const userId = req.user.id;
-    const { category, message, pageUrl, screenshotBase64 } = parsed.data;
+    const { category, message, pageUrl, screenshotBase64, clientLogs } =
+      parsed.data;
 
     // Insert feedback into local DB first
     const [inserted] = await this.db
@@ -99,6 +100,7 @@ export class FeedbackController {
         pageUrl: pageUrl ?? null,
         feedbackId: inserted.id,
         screenshotBase64: screenshotBase64 ?? null,
+        clientLogs: clientLogs ?? null,
       });
 
       if (result.success && result.issueUrl) {
@@ -109,6 +111,10 @@ export class FeedbackController {
           .update(schema.feedback)
           .set({ githubIssueUrl })
           .where(eq(schema.feedback.id, inserted.id));
+      } else if (!result.success) {
+        this.logger.warn(
+          `GitHub issue not created for feedback #${inserted.id}: ${result.error ?? 'unknown reason'}`,
+        );
       }
     } catch (error) {
       // Log but do not fail the request — local DB save is the fallback
