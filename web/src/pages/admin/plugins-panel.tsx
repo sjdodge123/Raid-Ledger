@@ -224,6 +224,7 @@ function PluginCard({
             badge={<NewBadge visible={isNew} />}
             onMouseEnter={markSeen}
             actions={actionButtons}
+            isPlugin
         >
             {/* Author */}
             <div className="flex items-center gap-2 text-sm">

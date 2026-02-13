@@ -9,6 +9,8 @@ interface AdminPluginCardProps {
     onMouseEnter?: () => void;
     actions?: ReactNode;
     children?: ReactNode;
+    /** When true, applies the indigo plugin color scheme (left border + subtle tint) */
+    isPlugin?: boolean;
 }
 
 const STATUS_STYLES = {
@@ -36,10 +38,15 @@ export function AdminPluginSection({
     onMouseEnter,
     actions,
     children,
+    isPlugin = false,
 }: AdminPluginCardProps) {
     return (
         <div
-            className="bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 overflow-hidden"
+            className={`backdrop-blur-sm rounded-xl overflow-hidden border ${
+                isPlugin
+                    ? 'bg-indigo-500/5 border-edge/50 border-l-2 border-l-indigo-400/60'
+                    : 'bg-panel/50 border-edge/50'
+            }`}
             onMouseEnter={onMouseEnter}
         >
             {/* Header */}
@@ -51,6 +58,11 @@ export function AdminPluginSection({
                             {version && (
                                 <span className="text-xs text-dim bg-overlay px-2 py-0.5 rounded-full whitespace-nowrap">
                                     v{version}
+                                </span>
+                            )}
+                            {isPlugin && (
+                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-indigo-500/20 text-indigo-400">
+                                    Plugin
                                 </span>
                             )}
                             {status && (
@@ -74,7 +86,9 @@ export function AdminPluginSection({
 
             {/* Body content — always visible */}
             {children && (
-                <div className="px-5 pb-5 pt-1 space-y-4 border-t border-edge/50 mt-2">
+                <div className={`px-5 pb-5 pt-1 space-y-4 border-t mt-2 ${
+                    isPlugin ? 'border-indigo-400/20' : 'border-edge/50'
+                }`}>
                     {children}
                 </div>
             )}
