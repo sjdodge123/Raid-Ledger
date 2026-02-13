@@ -159,14 +159,11 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant }: 
                         <span className="text-sm text-secondary">Set as main character</span>
                     </label>
 
-                    {/* Error — prominent "not found" style for search failures */}
+                    {/* Error — prominent styled card for search/validation failures */}
                     {error && (
                         <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
                             <span className="text-red-400 text-lg leading-none mt-0.5">&#10060;</span>
-                            <div className="text-sm">
-                                <p className="font-medium text-red-400">Character not found</p>
-                                <p className="text-red-400/80 mt-0.5">{error}</p>
-                            </div>
+                            <p className="text-sm text-red-400">{error}</p>
                         </div>
                     )}
 
