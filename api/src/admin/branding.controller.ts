@@ -73,9 +73,7 @@ export class BrandingController {
     if (body.communityName !== undefined) {
       const trimmed = body.communityName.trim();
       if (trimmed.length === 0 || trimmed.length > 60) {
-        throw new BadRequestException(
-          'Community name must be 1-60 characters',
-        );
+        throw new BadRequestException('Community name must be 1-60 characters');
       }
       await this.settingsService.setCommunityName(trimmed);
     }
@@ -138,9 +136,7 @@ export class BrandingController {
     const buffer = fs.readFileSync(file.path);
     const typeInfo = ALLOWED_TYPES[file.mimetype];
     if (typeInfo) {
-      const magicMatch = typeInfo.magic.every(
-        (byte, i) => buffer[i] === byte,
-      );
+      const magicMatch = typeInfo.magic.every((byte, i) => buffer[i] === byte);
       if (!magicMatch) {
         fs.unlinkSync(file.path);
         throw new BadRequestException(
@@ -176,7 +172,10 @@ export class BrandingController {
   async resetBranding() {
     // Remove logo file if it exists
     const branding = await this.settingsService.getBranding();
-    if (branding.communityLogoPath && fs.existsSync(branding.communityLogoPath)) {
+    if (
+      branding.communityLogoPath &&
+      fs.existsSync(branding.communityLogoPath)
+    ) {
       fs.unlinkSync(branding.communityLogoPath);
     }
 

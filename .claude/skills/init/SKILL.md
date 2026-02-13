@@ -1,47 +1,52 @@
 ---
 name: init
-description: "Initialize dev session — pull Linear, generate local caches, present dashboard"
+description: "Initialize orchestrator session — pull Linear, load previous context, present dispatch queue"
 disable-model-invocation: true
-argument-hint: "[ROK-XXX | planning | sprint]"
+argument-hint: "[ROK-XXX]"
 allowed-tools: "Read, Write, Glob, Grep, Bash(git status*), Bash(git log*), Bash(git diff*), mcp__linear__list_issues, mcp__linear__get_issue, mcp__linear__list_cycles"
 ---
 
 # Session Init
 
-Initialize a development session by pulling current state from Linear (source of truth) and regenerating lightweight local cache files.
+Initialize the orchestrator session. Pull current state from Linear, load previous session context, regenerate local caches, and present the dispatch queue.
 
-**Principle:** Linear is the single source of truth. Local files are regenerated caches:
-- `planning-artifacts/sprint-status.yaml` — project status + active sprint snapshot (Linear cache)
-- `task.md` — session working doc with checkboxes
+**You are the orchestrator.** Your job is to coordinate with the operator (user) to manage parallel subagents via `/dispatch`. You don't implement stories directly.
+
+**Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
+**Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
+
+---
 
 ## Step 1 — Parallel Data Gathering
 
-Fetch ALL of the following in a single parallel tool-call block:
+Fetch ALL in a single parallel block:
 
-1. **Linear issues:** `mcp__linear__list_issues` with `project: "Raid Ledger"`, `limit: 250`
-2. **Current cycle:** `mcp__linear__list_cycles` with `teamId: "0728c19f-5268-4e16-aa45-c944349ce386"`, `type: "current"`
-3. **Story file count:** Glob `implementation-artifacts/stories/ROK-*.md`
-4. **Git state:** Run `git status --porcelain` and `git log --oneline -5` (two Bash calls)
-5. **Focus story (conditional):** If `$ARGUMENTS` matches the pattern `ROK-` followed by digits, also read `implementation-artifacts/stories/$ARGUMENTS.md`
+1. `mcp__linear__list_issues(project: "Raid Ledger", limit: 250)`
+2. `mcp__linear__list_cycles(teamId: "0728c19f-5268-4e16-aa45-c944349ce386", type: "current")`
+3. Read `planning-artifacts/session-notes.md` (may not exist — that's fine)
+4. `git status --porcelain` and `git log --oneline -10`
+5. **If `$ARGUMENTS` matches `ROK-NNN`:** also `mcp__linear__get_issue(id: "$ARGUMENTS")`
 
-**Cycle handling:** If the cycle response is empty or has no active cycle, set `currentCycle = null`. All downstream steps use the fallback (no-sprint) path. If a cycle exists, use it to identify sprint-scoped stories (issues assigned to that cycle).
+---
 
-Do NOT read AGENTS.md — it is redundant with CLAUDE.md which is auto-loaded.
+## Step 2 — Previous Session Context
 
-## Step 2 — Regenerate Local Caches
+If `session-notes.md` exists, display its contents under a "Previous Session" heading. This preserves key insights across context resets. If it doesn't exist, skip silently.
 
-### 2a. sprint-status.yaml (Linear → local)
+---
 
-From the Linear issues response, **overwrite** `planning-artifacts/sprint-status.yaml`:
+## Step 3 — Regenerate Local Caches
+
+### 3a. sprint-status.yaml
+
+Overwrite `planning-artifacts/sprint-status.yaml` from Linear data:
 
 ```yaml
-# generated: <ISO-8601 timestamp>
-# source: Linear (Raid Ledger project) — do not hand-edit
-# regenerate: /init pulls from Linear
+# generated: <ISO-8601>
+# source: Linear (Raid Ledger) — do not hand-edit
 project: Raid Ledger
-tracking_system: linear
 
-current_sprint:
+current_sprint:   # omit block if no active cycle
   name: "<cycle name>"
   number: <N>
   starts: "<YYYY-MM-DD>"
@@ -52,157 +57,108 @@ current_sprint:
 
 development_status:
   # === Done ===
-  ROK-XXX: done           # <issue title>
-
+  ROK-XXX: done           # <title>
+  # === In Review ===
+  ROK-XXX: review         # <title>
+  # === Changes Requested ===
+  ROK-XXX: changes-requested  # <title>
   # === In Progress ===
-  ROK-XXX: in-progress    # <issue title>
-
+  ROK-XXX: in-progress    # <title>
+  # === Dispatch Ready ===
+  ROK-XXX: dispatch-ready # <title>
   # === Ready for Dev ===
-  ROK-XXX: ready-for-dev  # <issue title>
-
-  # === Review ===
-  ROK-XXX: review         # <issue title>
-
+  ROK-XXX: ready-for-dev  # <title>
   # === Backlog ===
-  ROK-XXX: backlog        # <issue title>
-
+  ROK-XXX: backlog        # <title>
   # === Deprecated ===
-  ROK-XXX: deprecated     # <issue title>
+  ROK-XXX: deprecated     # <title>
 ```
 
-**`current_sprint` block:** Only emitted when a cycle is active. Place above `development_status`. If no cycle exists, omit the entire block (backward compatible). Sprint stories are listed with their ROK identifier, title, and current status. `progress` counts done stories vs total stories in the cycle.
+**Status mapping:** Done→`done`, In Progress→`in-progress`, Todo→`ready-for-dev`, Dispatch Ready→`dispatch-ready`, In Review→`review`, Changes Requested→`changes-requested`, Backlog→`backlog`, Canceled→`deprecated`, Duplicate→skip.
 
-**Status mapping (Linear → local):**
+Sort by ROK number within groups. Omit empty groups.
 
-| Linear Status | Local Status |
-|---|---|
-| Done | `done` |
-| In Progress | `in-progress` |
-| Todo | `ready-for-dev` |
-| In Review | `review` |
-| Backlog | `backlog` |
-| Canceled | `deprecated` |
-| Duplicate | *(skip — do not include)* |
+### 3b. task.md
 
-Sort entries by ROK number (ascending) within each status group. Omit empty groups.
-
-### 2b. task.md (Session working doc)
-
-**Overwrite** `task.md` with the session's working document.
-
-**With active cycle (sprint-first layout):**
+Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state not individual story work:
 
 ```markdown
 # Session: <YYYY-MM-DD>
 <!-- Generated by /init from Linear -->
-<!-- [x] = done, [/] = in progress, [ ] = not started -->
 
-## Sprint: <cycle name> (<start YYYY-MM-DD> → <end YYYY-MM-DD>)
-<!-- Progress: X/Y stories done -->
-### In Progress
-- [/] ROK-XXX: <title>
-### Ready for Dev
-- [ ] ROK-XXX: <title>  (<priority>)
+## Active Work
+<!-- Stories currently being worked on by agents or in review -->
+- [/] ROK-XXX: <title> (In Progress|In Review|Changes Requested)
 
-## Other Work
-### In Progress
-- [/] ROK-XXX: <title>
-### Ready for Dev (top 10)
-- [ ] ROK-XXX: <title>  (<priority>)
+## Dispatch Queue
+<!-- Stories ready for parallel dispatch -->
+- [ ] ROK-XXX: <title>  (P1) — Dispatch Ready
+- [ ] ROK-XXX: <title>  (P2) — Dispatch Ready
 
-## Session Notes
-<!-- Add context, blockers, decisions as you work -->
-```
-
-Sprint stories (those assigned to the active cycle) appear under the Sprint heading. All other in-progress and ready-for-dev stories appear under "Other Work". Omit empty sub-sections.
-
-**No active cycle (flat fallback — identical to previous format):**
-
-```markdown
-# Session: <YYYY-MM-DD>
-<!-- Generated by /init from Linear -->
-<!-- [x] = done, [/] = in progress, [ ] = not started -->
-
-## In Progress
-- [/] ROK-XXX: <title>
-
-## Ready for Dev
-- [ ] ROK-XXX: <title>  (<priority>)
+## Todo → Dispatch Candidates
+<!-- Stories in Todo that may be ready for dispatch. Review and move to Dispatch Ready. -->
+- [ ] ROK-XXX: <title>  (P1)
 
 ## Session Notes
-<!-- Add context, blockers, decisions as you work -->
+<!-- Key decisions, blockers, context for next session -->
 ```
 
-Populate from Linear issues:
-- **In Progress:** All issues with status "In Progress", sorted by ROK number
-- **Ready for Dev:** All issues with status "Todo", sorted by priority (Urgent > High > Normal > Low > None), then by ROK number. Limit to top 15 (or top 10 for "Other Work" when a sprint is active).
-- Include priority label in parentheses: `(P0)` for Urgent, `(P1)` for High, `(P2)` for Normal, `(P3)` for Low. Omit if None.
+Populate sections:
+- **Active Work:** In Progress + In Review + Changes Requested stories, sorted by ROK number
+- **Dispatch Queue:** Dispatch Ready stories, sorted by priority then ROK number
+- **Todo → Dispatch Candidates:** Todo stories, sorted by priority then ROK number. Include priority: `(P0)` Urgent, `(P1)` High, `(P2)` Normal, `(P3)` Low.
 
-## Step 3 — Compute Derived Values
+---
 
-### Current Sprint
-If a cycle was returned in Step 1: extract name, start date, end date, and compute days remaining. If no cycle: "No active sprint".
+## Step 4 — Present Dashboard
 
-### Next Story Number
-From the Glob results of `implementation-artifacts/stories/ROK-*.md`, extract all numeric suffixes, find the highest, and add 1.
+Output a compact dashboard:
 
-### Top 3 Priorities
-When a sprint is active: draw from sprint stories first (in-progress, then ready-for-dev by priority). When no sprint: draw from the Ready for Dev section of task.md (first 3 entries, already sorted by priority).
-
-## Step 4 — Present Dashboard & Checkpoint
-
-Output a single compact dashboard.
-
-**With active sprint:**
 ```
 Session Init | <YYYY-MM-DD>
-Sprint: <name> | <start> → <end> | <done>/<total> done
+Sprint: <name> | <start> → <end> | <done>/<total> done | Z days left
+   (or: "No active sprint")
 
-Stories: <count> files | Next: ROK-<N>
-Git: <branch> | <clean/dirty — e.g. "3 modified, 1 untracked">
+Git: <branch> | <clean/dirty>
 Recent: <latest commit one-liner>
-Linear: <total issues> synced → sprint-status.yaml + task.md regenerated
-Sprint:  X/Y stories | Z days left
+Linear: <total> issues synced
 
-Sprint Priorities:
-  1. ROK-XXX  <priority>  <title>
-  2. ROK-XXX  <priority>  <title>
-  3. ROK-XXX  <priority>  <title>
+=== Pipeline ===
+In Review:    N stories
+Rework:       N stories (Changes Requested)
+Dispatching:  N stories (Dispatch Ready)
+Todo:         N stories (candidates for dispatch)
+Backlog:      N stories
 
-Summary: <done> done | <in-progress> active | <ready> ready | <backlog> backlog
+=== Dispatch Queue ===
+| Story | Pri | Title |
+|-------|-----|-------|
+| ROK-XXX | P1 | <title> |
+
+=== Todo → Dispatch Candidates ===
+| Story | Pri | Title | Dispatch Ready? |
+|-------|-----|-------|-----------------|
+| ROK-XXX | P1 | <title> | Yes — full spec |
+| ROK-YYY | P2 | <title> | Needs planning — no technical approach |
+| ROK-ZZZ | P2 | <title> | Blocked — depends on ROK-AAA |
 ```
 
-**No active sprint:**
-```
-Session Init | <YYYY-MM-DD>
-No active sprint
+### Dispatch Readiness Assessment
 
-Stories: <count> files | Next: ROK-<N>
-Git: <branch> | <clean/dirty — e.g. "3 modified, 1 untracked">
-Recent: <latest commit one-liner>
-Linear: <total issues> synced → sprint-status.yaml + task.md regenerated
+For each Todo story, briefly assess if it's ready to move to Dispatch Ready:
+- **Yes** — has clear ACs, technical approach, and enough detail
+- **Needs planning** — missing technical approach, vague ACs, or ambiguous scope (the `/dispatch` skill will handle planning via subagents)
+- **Blocked** — has unmet dependencies on other stories
 
-Top Priorities:
-  1. ROK-XXX  <priority>  <title>
-  2. ROK-XXX  <priority>  <title>
-  3. ROK-XXX  <priority>  <title>
+### If `$ARGUMENTS` matches `ROK-NNN`
 
-Summary: <done> done | <in-progress> active | <ready> ready | <backlog> backlog
-```
+Append a focus section with the Linear issue details (title, status, description preview, priority).
 
-### Checkpoint Behavior
+### Closing Prompt
 
-Route based on `$ARGUMENTS`:
+End with: **"Ready to `/dispatch`, move stories, or discuss priorities?"**
 
-- **No arguments:** After the dashboard, present: "Path? **active-sprint** or **planning**" — then wait for the user to choose.
-- **`sprint`:** After the dashboard, output: "Routing to active sprint. Top priority: ROK-XXX — <title>." — then stop.
-- **`planning`:** After the dashboard, output: "Routing to planning mode." — then stop.
-- **`ROK-XXX`** (a specific story ID): After the dashboard, append a **Focus Story** section:
-  ```
-  --- Focus: ROK-XXX ---
-  Status: <status from Linear>
-  <First 3 lines of the story file's "## Story" section>
-  ACs: <count of acceptance criteria checkboxes>
-  Deps: <dependency list or "none">
-  ```
-  Then stop.
+This sets up the operator to either:
+1. Move Todo candidates to Dispatch Ready
+2. Run `/dispatch` to plan and spawn agents
+3. Discuss priorities or story details first

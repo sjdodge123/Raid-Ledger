@@ -133,7 +133,10 @@ export class EventsController {
   async getMyDashboard(
     @Request() req: AuthenticatedRequest,
   ): Promise<DashboardResponseDto> {
-    return this.eventsService.getMyDashboard(req.user.id, isOperatorOrAdmin(req.user.role));
+    return this.eventsService.getMyDashboard(
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
   }
 
   /**
@@ -160,7 +163,12 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = UpdateEventSchema.parse(body);
-      return this.eventsService.update(id, req.user.id, isOperatorOrAdmin(req.user.role), dto);
+      return this.eventsService.update(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto,
+      );
     } catch (error) {
       handleValidationError(error);
     }
@@ -213,7 +221,11 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ message: string }> {
-    await this.eventsService.delete(id, req.user.id, isOperatorOrAdmin(req.user.role));
+    await this.eventsService.delete(
+      id,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
     return { message: 'Event deleted successfully' };
   }
 

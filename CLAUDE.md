@@ -178,8 +178,10 @@ Before a session is cleared with `/clear`, you MUST:
 | `[x]` | Done | `done` |
 | `[/]` | In Progress | `in-progress` |
 | `[ ]` | Todo | `ready-for-dev` |
+| `[ ]` | Dispatch Ready | `dispatch-ready` |
 | *(not listed)* | Backlog | `backlog` |
 | *(not listed)* | In Review | `review` |
+| *(not listed)* | Changes Requested | `changes-requested` |
 | *(not listed)* | Canceled | `deprecated` |
 
 ## Compact Instructions

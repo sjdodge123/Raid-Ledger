@@ -493,10 +493,7 @@ export class IgdbController {
         discordId: schema.users.discordId,
       })
       .from(schema.gameInterests)
-      .innerJoin(
-        schema.users,
-        eq(schema.gameInterests.userId, schema.users.id),
-      )
+      .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
       .where(eq(schema.gameInterests.gameId, gameId))
       .orderBy(schema.gameInterests.createdAt)
       .limit(8);
