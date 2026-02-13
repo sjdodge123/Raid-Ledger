@@ -722,7 +722,14 @@ export async function deactivatePlugin(slug: string): Promise<void> {
 // User Management API (ROK-272)
 // ============================================================
 
-import type { UserManagementListResponseDto, UserRole } from '@raid-ledger/contract';
+import type {
+    UserManagementListResponseDto,
+    UserRole,
+    CreatePugSlotDto,
+    UpdatePugSlotDto,
+    PugSlotResponseDto,
+    PugSlotListResponseDto,
+} from '@raid-ledger/contract';
 
 /**
  * Fetch paginated list of users with role info (admin-only).
@@ -750,5 +757,55 @@ export async function updateUserRole(
     return fetchApi(`/users/${userId}/role`, {
         method: 'PATCH',
         body: JSON.stringify({ role }),
+    });
+}
+
+// ============================================================
+// PUG Slots API (ROK-262)
+// ============================================================
+
+/**
+ * List PUG slots for an event
+ */
+export async function getEventPugs(eventId: number): Promise<PugSlotListResponseDto> {
+    return fetchApi(`/events/${eventId}/pugs`);
+}
+
+/**
+ * Add a PUG slot to an event
+ */
+export async function createPugSlot(
+    eventId: number,
+    dto: CreatePugSlotDto,
+): Promise<PugSlotResponseDto> {
+    return fetchApi(`/events/${eventId}/pugs`, {
+        method: 'POST',
+        body: JSON.stringify(dto),
+    });
+}
+
+/**
+ * Update a PUG slot
+ */
+export async function updatePugSlot(
+    eventId: number,
+    pugId: string,
+    dto: UpdatePugSlotDto,
+): Promise<PugSlotResponseDto> {
+    return fetchApi(`/events/${eventId}/pugs/${pugId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(dto),
+    });
+}
+
+/**
+ * Remove a PUG slot
+ */
+export async function deletePugSlot(
+    eventId: number,
+    pugId: string,
+): Promise<void> {
+    return fetchApi(`/events/${eventId}/pugs/${pugId}`, {
+        method: 'DELETE',
     });
 }

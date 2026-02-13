@@ -17,6 +17,7 @@ import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { RescheduleModal } from '../components/events/RescheduleModal';
+import { PugSection } from '../components/pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -363,6 +364,12 @@ export function EventDetailPage() {
                                 attendeeCount={roster?.count}
                             />
                         ) : undefined}
+                    />
+
+                    {/* ROK-262: PUG Slots Section */}
+                    <PugSection
+                        eventId={eventId}
+                        canManage={canManageRoster}
                     />
                 </div>
             )}

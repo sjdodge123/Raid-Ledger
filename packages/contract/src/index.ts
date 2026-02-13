@@ -57,3 +57,6 @@ export * from './plugins.schema.js';
 
 // Feedback (ROK-186)
 export * from './feedback.schema.js';
+
+// PUG Slots (ROK-262)
+export * from './pug.schema.js';

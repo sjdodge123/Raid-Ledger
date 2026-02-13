@@ -16,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { PugsService } from './pugs.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -23,6 +24,8 @@ import {
   CreateSignupSchema,
   ConfirmSignupSchema,
   RescheduleEventSchema,
+  CreatePugSlotSchema,
+  UpdatePugSlotSchema,
   EventResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
@@ -33,6 +36,8 @@ import {
   UpdateRosterSchema,
   RosterWithAssignments,
   AggregateGameTimeResponse,
+  PugSlotResponseDto,
+  PugSlotListResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -74,6 +79,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
+    private readonly pugsService: PugsService,
   ) {}
 
   /**
@@ -375,5 +381,90 @@ export class EventsController {
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  // ============================================================
+  // PUG Slot Endpoints (ROK-262)
+  // ============================================================
+
+  /**
+   * Add a PUG slot to an event.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Post(':id/pugs')
+  @UseGuards(AuthGuard('jwt'))
+  async createPug(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<PugSlotResponseDto> {
+    try {
+      const dto = CreatePugSlotSchema.parse(body);
+      return this.pugsService.create(
+        eventId,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * List PUG slots for an event.
+   * Public endpoint.
+   */
+  @Get(':id/pugs')
+  async listPugs(
+    @Param('id', ParseIntPipe) eventId: number,
+  ): Promise<PugSlotListResponseDto> {
+    return this.pugsService.findAll(eventId);
+  }
+
+  /**
+   * Update a PUG slot.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Patch(':id/pugs/:pugId')
+  @UseGuards(AuthGuard('jwt'))
+  async updatePug(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('pugId') pugId: string,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<PugSlotResponseDto> {
+    try {
+      const dto = UpdatePugSlotSchema.parse(body);
+      return this.pugsService.update(
+        eventId,
+        pugId,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Remove a PUG slot.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Delete(':id/pugs/:pugId')
+  @UseGuards(AuthGuard('jwt'))
+  async deletePug(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('pugId') pugId: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ message: string }> {
+    await this.pugsService.remove(
+      eventId,
+      pugId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
+    return { message: 'PUG slot removed successfully' };
   }
 }

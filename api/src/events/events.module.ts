@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { PugsService } from './pugs.service';
 import { TemplatesService } from './templates.service';
 import { EventsController } from './events.controller';
 import { TemplatesController } from './templates.controller';
@@ -23,10 +24,11 @@ import {
   providers: [
     EventsService,
     SignupsService,
+    PugsService,
     TemplatesService,
     BenchPromotionService,
     BenchPromotionProcessor,
   ],
-  exports: [EventsService, SignupsService],
+  exports: [EventsService, SignupsService, PugsService],
 })
 export class EventsModule {}

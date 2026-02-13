@@ -19,3 +19,4 @@ export * from './schema/event-reminders-sent';
 export * from './schema/event-templates';
 export * from './schema/plugins';
 export * from './schema/feedback';
+export * from './schema/pug-slots';
