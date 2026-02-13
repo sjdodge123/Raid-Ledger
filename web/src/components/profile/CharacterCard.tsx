@@ -67,11 +67,6 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                         <span className="font-medium text-foreground truncate">
                             {character.name}
                         </span>
-                        {character.isMain && (
-                            <span className="text-yellow-400" title="Main character">
-                                ⭐
-                            </span>
-                        )}
                         {/* Faction badge (ROK-234) */}
                         {character.faction && (
                             <span

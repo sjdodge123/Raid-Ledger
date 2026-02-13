@@ -9,7 +9,6 @@ interface CharacterCardCompactProps {
     id: string;
     name: string;
     avatarUrl?: string | null;
-    isMain?: boolean;
     faction?: string | null;
     level?: number | null;
     race?: string | null;
@@ -33,7 +32,6 @@ export function CharacterCardCompact({
     id,
     name,
     avatarUrl,
-    isMain,
     faction,
     level,
     race,
@@ -63,9 +61,6 @@ export function CharacterCardCompact({
             <div className="min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-medium text-foreground truncate">{name}</span>
-                    {isMain && (
-                        <span className="text-yellow-400" title="Main character">⭐</span>
-                    )}
                     {faction && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium border ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>
                             {faction.charAt(0).toUpperCase() + faction.slice(1)}
