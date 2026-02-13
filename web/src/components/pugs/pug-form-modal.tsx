@@ -21,8 +21,8 @@ interface PugFormModalProps {
     }) => void;
     /** Whether the form is submitting */
     isSubmitting?: boolean;
-    /** Whether to show class/spec fields (only for MMO games) */
-    showClassSpec?: boolean;
+    /** Whether the event's game is an MMO (shows role/class/spec fields) */
+    isMMOGame?: boolean;
 }
 
 const ROLE_OPTIONS: { value: PugRole; label: string; emoji: string }[] = [
@@ -37,7 +37,7 @@ export function PugFormModal({
     editingPug,
     onSubmit,
     isSubmitting = false,
-    showClassSpec = false,
+    isMMOGame = false,
 }: PugFormModalProps) {
     const isEditing = !!editingPug;
 
@@ -55,7 +55,7 @@ export function PugFormModal({
                 onClose={onClose}
                 isSubmitting={isSubmitting}
                 isEditing={isEditing}
-                showClassSpec={showClassSpec}
+                isMMOGame={isMMOGame}
             />
         </Modal>
     );
@@ -68,14 +68,14 @@ function PugFormBody({
     onClose,
     isSubmitting,
     isEditing,
-    showClassSpec,
+    isMMOGame,
 }: {
     editingPug?: PugSlotResponseDto | null;
     onSubmit: PugFormModalProps['onSubmit'];
     onClose: () => void;
     isSubmitting: boolean;
     isEditing: boolean;
-    showClassSpec: boolean;
+    isMMOGame: boolean;
 }) {
     const [discordUsername, setDiscordUsername] = useState(
         editingPug?.discordUsername ?? '',
@@ -119,32 +119,34 @@ function PugFormBody({
                 />
             </div>
 
-            {/* Role Selector */}
-            <div>
-                <label className="block text-sm font-medium text-secondary mb-1">
-                    Role <span className="text-red-400">*</span>
-                </label>
-                <div className="flex gap-2">
-                    {ROLE_OPTIONS.map((opt) => (
-                        <button
-                            key={opt.value}
-                            type="button"
-                            onClick={() => setRole(opt.value)}
-                            className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
-                                role === opt.value
-                                    ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
-                                    : 'border-edge bg-panel text-muted hover:bg-panel/80'
-                            }`}
-                        >
-                            <span className="mr-1">{opt.emoji}</span>
-                            {opt.label}
-                        </button>
-                    ))}
+            {/* Role Selector (MMO games only) */}
+            {isMMOGame && (
+                <div>
+                    <label className="block text-sm font-medium text-secondary mb-1">
+                        Role <span className="text-red-400">*</span>
+                    </label>
+                    <div className="flex gap-2">
+                        {ROLE_OPTIONS.map((opt) => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => setRole(opt.value)}
+                                className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                                    role === opt.value
+                                        ? 'border-indigo-500 bg-indigo-500/20 text-indigo-300'
+                                        : 'border-edge bg-panel text-muted hover:bg-panel/80'
+                                }`}
+                            >
+                                <span className="mr-1">{opt.emoji}</span>
+                                {opt.label}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
+            )}
 
             {/* Class & Spec (optional, MMO games only) */}
-            {showClassSpec && (
+            {isMMOGame && (
                 <>
                     <div>
                         <label

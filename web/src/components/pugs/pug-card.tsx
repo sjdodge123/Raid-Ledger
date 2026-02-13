@@ -24,9 +24,11 @@ interface PugCardProps {
     onEdit?: (pug: PugSlotResponseDto) => void;
     /** Called when remove is clicked */
     onRemove?: (pugId: string) => void;
+    /** Whether to display the role badge (only for MMO games) */
+    showRole?: boolean;
 }
 
-export function PugCard({ pug, canManage = false, onEdit, onRemove }: PugCardProps) {
+export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = false }: PugCardProps) {
     const [showMenu, setShowMenu] = useState(false);
     const statusInfo = STATUS_COLORS[pug.status] ?? STATUS_COLORS.pending;
 
@@ -50,12 +52,14 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove }: PugCardPro
                         Guest
                     </span>
 
-                    {/* Role badge */}
-                    <span
-                        className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[pug.role] ?? ''}`}
-                    >
-                        {ROLE_EMOJI[pug.role] ?? ''} {formatRole(pug.role)}
-                    </span>
+                    {/* Role badge (MMO games only) */}
+                    {showRole && (
+                        <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[pug.role] ?? ''}`}
+                        >
+                            {ROLE_EMOJI[pug.role] ?? ''} {formatRole(pug.role)}
+                        </span>
+                    )}
                 </div>
 
                 {/* Secondary info: class/spec and status */}

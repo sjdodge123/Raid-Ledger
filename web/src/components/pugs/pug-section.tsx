@@ -114,8 +114,8 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                 )}
             </div>
 
-            {/* Role composition summary */}
-            {pugs.length > 0 && Object.keys(pugCountByRole).length > 0 && (
+            {/* Role composition summary (MMO games only) */}
+            {isMMOGame && pugs.length > 0 && Object.keys(pugCountByRole).length > 0 && (
                 <div className="flex gap-3 mb-3 text-xs text-muted">
                     {Object.entries(pugCountByRole).map(([role, count]) => (
                         <span key={role}>
@@ -144,6 +144,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                             canManage={canManage}
                             onEdit={handleEdit}
                             onRemove={handleRemove}
+                            showRole={isMMOGame}
                         />
                     ))}
                 </div>
@@ -159,7 +160,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                 editingPug={editingPug}
                 onSubmit={handleSubmit}
                 isSubmitting={createPug.isPending || updatePug.isPending}
-                showClassSpec={isMMOGame}
+                isMMOGame={isMMOGame}
             />
         </div>
     );
