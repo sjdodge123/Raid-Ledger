@@ -1,15 +1,41 @@
 ---
 name: dispatch
-description: "Pull ready stories from Linear (Todo + Changes Requested), plan under-specced stories, spawn parallel subagents"
+description: "Pull ready stories from Linear (Todo + Changes Requested), plan under-specced stories, spawn sequential dev agents"
 argument-hint: "[ROK-XXX | rework | todo | all]"
 ---
 
-# Dispatch — Parallel Agent Orchestrator
+# Dispatch — Sequential Agent Orchestrator
 
-Pulls dispatchable stories from Linear, plans under-specced stories via Plan agents, presents everything for user approval, and spawns parallel implementation agents. Handles both **new work** (Todo) and **rework** (Changes Requested).
+Pulls dispatchable stories from Linear, plans under-specced stories via Plan agents, presents everything for user approval, and spawns implementation agents **one at a time**. Handles both **new work** (Todo) and **rework** (Changes Requested).
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
+
+---
+
+## Hard Constraint: Sequential Dev Agents
+
+**NEVER run multiple implementation/coding agents at the same time.** All agents share
+a single git working directory. Concurrent dev agents cause:
+
+- Branch switching under each other (agent A checks out its branch, agent B switches away)
+- Files written by one agent get reverted when another agent does `git checkout`
+- Stash contamination — `git stash` captures another agent's staged changes
+- Commits land on wrong branches when agents race to commit
+- VS Code file watchers and linters revert files between write and `git add`
+
+**What CAN run in parallel:**
+- **Planning agents** (read-only — no git writes, no file edits)
+- **Research agents** (read-only — web searches, file reads, analysis)
+- **One planning/research agent + one dev agent** (planning agent doesn't touch git)
+
+**What MUST be sequential:**
+- Implementation agents (create branches, write files, commit)
+- Review agents (checkout branches, read diffs, fix code, merge)
+- Any agent that runs `git` commands or writes files
+
+The dispatch flow is: plan in parallel → present batch → execute dev agents one at a time
+with review after each.
 
 ---
 
@@ -207,34 +233,67 @@ For each planned story, display a condensed version:
 - User clarifications received
 - Estimated complexity
 
-### Conflict Analysis:
-From ALL stories (rework + ready + planned), identify parallel-safe lanes:
+### Execution Order:
+Determine the best execution order for sequential dispatch:
 
-1. Identify **primary file areas** per story:
-   - `api/src/<module>/` — which backend modules
-   - `web/src/pages/` — which pages
-   - `web/src/components/` — which component directories
-   - `packages/contract/` — contract changes
-   - Shared files: `App.tsx`, `admin-sidebar.tsx`, router config
+1. **Priority first** — P0/P1 stories before P2/P3
+2. **Rework before new work** — rework is usually smaller/faster
+3. **Dependencies** — if story B depends on story A's output (shared files), A goes first
+4. **Complexity** — simpler stories first to build momentum and reduce risk
 
-2. Flag conflicts: two stories touching the same files cannot run in parallel.
-
-3. Group into **parallel-safe lanes**.
+Present the proposed execution order to the user.
 
 ---
 
 ## Step 6: Confirm Dispatch
 
 Ask the user:
-- **Dispatch all** — spawn agents for all stories in the planned lanes
-- **Select** — let user pick which stories to dispatch
+- **Dispatch all** — run all stories sequentially in the proposed order
+- **Select** — let user pick which stories to dispatch (and reorder if desired)
 - **Skip** — don't dispatch, just show the summary
 
 ---
 
-## Step 7: Spawn Implementation Agents
+## Step 7: Sequential Dispatch Loop
 
-### For Rework stories, use this prompt template:
+Process stories **one at a time** in the confirmed order. For each story in the queue:
+
+### 7a. Spawn Implementation Agent
+
+Spawn a **single** background agent for the current story using `run_in_background: true`.
+Use the appropriate prompt template below based on story type.
+
+### 7b. Wait for Completion
+
+Monitor the agent with `TaskOutput`. The orchestrator waits here — do NOT spawn the
+next dev agent until this one finishes. (Planning/research agents for future stories
+CAN run in parallel during this wait.)
+
+### 7c. Review Gate
+
+When the implementation agent completes, spawn a **review subagent** for its branch
+(also `run_in_background: true`). Wait for the review agent to complete. The review
+agent merges to main and updates Linear.
+
+### 7d. Report Progress
+
+After each story completes its review cycle, report:
+
+```
+## [N/total] ROK-XXX — <title> ✓
+Branch: merged to main | Commits: SHA1, SHA2 | Review fixes: N
+Next up: ROK-YYY — <title>
+```
+
+### 7e. Loop
+
+Move to the next story in the queue. Repeat 7a–7d until all stories are done.
+
+---
+
+### Implementation Agent Prompt Templates
+
+#### For Rework stories (Changes Requested):
 
 ```
 You are working on the Raid Ledger project at /Users/sdodge/Documents/Projects/Raid-Ledger.
@@ -268,7 +327,7 @@ The reviewer has requested changes on this story. Address ALL of the following f
    A separate review agent will handle merge and Linear updates.
 ```
 
-### For New Work stories (Ready — had full spec), use this prompt template:
+#### For New Work stories (Ready — full spec):
 
 ```
 You are working on the Raid Ledger project at /Users/sdodge/Documents/Projects/Raid-Ledger.
@@ -302,7 +361,7 @@ Implement this story from the spec below.
    A separate review agent will handle merge and Linear updates.
 ```
 
-### For New Work stories (Planned — enriched by Plan agent), use this prompt template:
+#### For New Work stories (Planned — enriched by Plan agent):
 
 The Plan agent already asked the user all clarifying questions and resolved ambiguities.
 The implementation agent gets a **clean, fully-resolved plan** with zero gaps. Its context
@@ -346,38 +405,7 @@ with the user. Your job is to execute the plan.
    A separate review agent will handle merge and Linear updates.
 ```
 
-### Dispatch Rules
-
-- Stories in the **same lane** are dispatched to a **single agent** that handles them sequentially.
-- Stories in **different lanes** are dispatched to **separate agents** running in parallel.
-- Use `run_in_background: true` for all agents.
-- Each agent prompt includes ALL stories assigned to its lane.
-
 ---
-
-## Step 8: Report
-
-After dispatching implementation agents, show:
-
-```
-## Agents Dispatched
-
-| Lane | Stories | Agent | Type | Planning |
-|------|---------|-------|------|----------|
-| 1 | ROK-XXX | <agent_id> | New Work | Pre-planned |
-| 2 | ROK-YYY | <agent_id> | Rework | N/A |
-| 3 | ROK-AAA, ROK-BBB | <agent_id> | New Work | Ready (full spec) |
-
-Agents will commit on feature branches. Review agents will be spawned after completion.
-```
-
----
-
-## Step 9: Review Gate
-
-When an implementation agent completes, the orchestrator spawns a **review subagent** for its branch. The review agent has fresh context — it hasn't seen the implementation and approaches the code with no assumptions.
-
-**Spawn one review agent per completed implementation agent**, using `run_in_background: true`.
 
 ### Review Agent Prompt Template:
 
@@ -454,25 +482,20 @@ Run these checks and FIX any issues you find (commit fixes to the same branch):
 4. Output: merge commit SHA, number of review fixes made, summary
 ```
 
-### Review Dispatch Rules
-
-- Spawn review agents **as implementation agents complete** — don't wait for all to finish
-- Each review agent handles one branch (one story or one lane's stories)
-- Review agents run in background with `run_in_background: true`
-- If the review agent finds zero issues, it still merges and updates Linear
-
 ---
 
-## Step 10: Final Summary
+## Step 8: Final Summary
 
-After ALL review agents complete, show:
+After ALL stories have completed the implement → review → merge cycle, show:
 
 ```
-## Dispatch Complete
+## Dispatch Complete — N stories processed sequentially
 
-| Story | Impl Agent | Review Agent | Branch | Commits | Review Fixes | Status |
-|-------|-----------|-------------|--------|---------|-------------|--------|
-| ROK-XXX | <id> | <id> | merged | SHA1, SHA2 | N fixes | In Review |
+| # | Story | Impl Agent | Review Agent | Commits | Review Fixes | Status |
+|---|-------|-----------|-------------|---------|-------------|--------|
+| 1 | ROK-XXX | <id> | <id> | SHA1, SHA2 | N fixes | In Review |
+| 2 | ROK-YYY | <id> | <id> | SHA3 | 0 fixes | In Review |
 
+All branches merged to main.
 Run `deploy_dev.sh --rebuild` to test all changes.
 ```

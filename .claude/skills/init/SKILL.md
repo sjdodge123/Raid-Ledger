@@ -10,7 +10,9 @@ allowed-tools: "Read, Write, Glob, Grep, Bash(git status*), Bash(git log*), Bash
 
 Initialize the orchestrator session. Pull current state from Linear, load previous session context, regenerate local caches, and present the dispatch queue.
 
-**You are the orchestrator.** Your job is to coordinate with the operator (user) to manage parallel subagents via `/dispatch`. You don't implement stories directly.
+**You are the orchestrator.** Your job is to coordinate with the operator (user) to manage subagents via `/dispatch`. You don't implement stories directly.
+
+**Agent execution model:** Dev agents run **sequentially** (one at a time) because all agents share a single git working directory. Parallel dev agents cause branch switching, file reversion, stash contamination, and wrong-branch commits. Planning and research agents CAN run in parallel since they don't touch git.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -35,9 +37,9 @@ If `session-notes.md` exists, display its contents under a "Previous Session" he
 
 ---
 
-## Step 3 — Conflict Avoidance Analysis
+## Step 3 — Domain Analysis & Execution Order
 
-Before populating the Dispatch Queue, analyze all Todo and Dispatch Ready stories to determine which can safely run in parallel. This prevents merge conflicts when multiple agents work concurrently.
+Analyze all Todo and Dispatch Ready stories to determine the best sequential execution order for `/dispatch`.
 
 ### 3a. Build a Touch Map
 
@@ -61,40 +63,32 @@ For each candidate story (Todo + Dispatch Ready), estimate which **domains** it 
 | broad | *(multiple domains — audits, refactors, infra changes)* | | |
 
 **Rules:**
-- If a story touches `packages/contract/` barrel exports (`index.ts`), mark it as touching `contract-barrel`. Multiple stories adding schemas is a trivial but frequent merge conflict source.
-- If a story is an audit, refactor, or "codebase-wide" task, mark it as `broad`. Broad stories conflict with everything.
+- If a story is an audit, refactor, or "codebase-wide" task, mark it as `broad`.
 - A story can touch multiple domains (e.g., PUG slots touches `roster` + `db-schema` + `events`).
 
-### 3b. Detect Conflicts
+### 3b. Determine Execution Order
 
-Compare every pair of candidate stories. Two stories **conflict** if:
-1. They share any domain (other than `contract-barrel`)
-2. Either story is marked `broad`
-3. One story depends on the other (blocked-by relationship)
+Since dev agents run sequentially (one at a time), order stories for optimal execution:
 
-`contract-barrel` overlap is flagged as a **soft conflict** (trivial merge fix) rather than a hard conflict.
+1. **Priority first** — P0/P1 before P2/P3
+2. **Rework before new work** — rework is usually smaller/faster, clears the review queue
+3. **Dependencies** — if story B depends on story A's output, A goes first
+4. **Broad stories last** — they touch many domains, better to run after focused stories
+5. Stories that are blocked by unfinished dependencies go to "Needs Work" regardless
 
-### 3c. Select the Safe Dispatch Set
+### 3c. Output Execution Plan
 
-Build the largest set of non-conflicting stories using a greedy approach:
-1. Sort candidates by priority (P0 > P1 > P2 > P3 > P-), then by ROK number
-2. Walk the sorted list. For each story:
-   - If it has no hard conflicts with any story already in the set → **add to Dispatch Queue**
-   - If it conflicts → **keep in Todo** with a conflict note
-3. Stories that are blocked by unfinished dependencies stay in Todo regardless
-
-### 3d. Output Conflict Report
-
-Include in the dashboard (between Pipeline and Dispatch Queue):
+Include in the dashboard:
 
 ```
-=== Conflict Analysis ===
-Safe batch: ROK-XXX, ROK-YYY, ROK-ZZZ (no domain overlap)
-Held back:
-  ROK-AAA — overlaps [domain] with ROK-XXX
-  ROK-BBB — broad scope, conflicts with all
-  ROK-CCC — blocked by ROK-DDD
-Soft conflicts: ROK-XXX + ROK-YYY (contract-barrel only — trivial merge)
+=== Execution Order (sequential — one agent at a time) ===
+1. ROK-XXX (P1) — [events, roster] — rework
+2. ROK-YYY (P1) — [admin, db-schema] — new work
+3. ROK-ZZZ (P2) — [theme] — new work
+
+Not ready:
+  ROK-AAA — blocked by ROK-DDD
+  ROK-BBB — needs planning (no technical approach)
 ```
 
 ---
@@ -154,15 +148,10 @@ Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state 
 <!-- Stories currently being worked on by agents or in review -->
 - [/] ROK-XXX: <title> (In Progress|In Review|Changes Requested)
 
-## Dispatch Queue
-<!-- Safe to run in parallel — no domain overlap (from conflict analysis) -->
-- [ ] ROK-XXX: <title>  (P1) — domains: [domain1, domain2]
-- [ ] ROK-XXX: <title>  (P2) — domains: [domain3]
-
-## Held Back (conflicts)
-<!-- Would conflict with dispatch queue stories — run in next batch -->
-- [ ] ROK-XXX: <title>  (P1) — overlaps [domain] with ROK-YYY
-- [ ] ROK-XXX: <title>  (P2) — broad scope
+## Dispatch Queue (sequential execution order)
+<!-- Agents run one at a time — order matters -->
+1. [ ] ROK-XXX: <title>  (P1) — domains: [domain1, domain2]
+2. [ ] ROK-XXX: <title>  (P2) — domains: [domain3]
 
 ## Todo → Needs Work
 <!-- Stories that need planning, spec, or unblocking before dispatch -->
@@ -175,8 +164,7 @@ Overwrite `task.md` — keep it minimal, the orchestrator tracks dispatch state 
 
 Populate sections:
 - **Active Work:** In Progress + In Review + Changes Requested stories, sorted by ROK number
-- **Dispatch Queue:** Stories selected as safe by the conflict analysis (Step 3c). Include touched domains. Sorted by priority then ROK number.
-- **Held Back:** Stories that passed spec/readiness checks but conflict with the dispatch queue. Include the conflict reason (which domain, which story). Sorted by priority then ROK number.
+- **Dispatch Queue:** Stories ordered by the execution plan (Step 3b). Include touched domains. Numbered to show execution order.
 - **Todo → Needs Work:** Stories that are blocked, need planning, or lack spec. Sorted by priority then ROK number.
 - Include priority: `(P0)` Urgent, `(P1)` High, `(P2)` Normal, `(P3)` Low.
 
@@ -196,31 +184,18 @@ Recent: <latest commit one-liner>
 Linear: <total> issues synced
 
 === Pipeline ===
-In Review:    N stories
-Rework:       N stories (Changes Requested)
-Dispatch Queue: N stories (safe to parallelize)
-Held Back:    N stories (conflicting — next batch)
-Needs Work:   N stories (blocked/unspecced)
-Backlog:      N stories
+In Review:      N stories
+Rework:         N stories (Changes Requested)
+Dispatch Queue: N stories (sequential — one agent at a time)
+Needs Work:     N stories (blocked/unspecced)
+Backlog:        N stories
 
-=== Conflict Analysis ===
-Safe batch: ROK-XXX, ROK-YYY, ROK-ZZZ (no domain overlap)
-Held back:
-  ROK-AAA — overlaps [domain] with ROK-XXX
-  ROK-BBB — broad scope, conflicts with all
-  ROK-CCC — blocked by ROK-DDD
-Soft conflicts: ROK-XXX + ROK-YYY (contract-barrel only — trivial merge)
-
-=== Dispatch Queue (safe to run in parallel) ===
-| Story | Pri | Title | Domains |
-|-------|-----|-------|---------|
-| ROK-XXX | P1 | <title> | auth, db-schema |
-| ROK-YYY | P2 | <title> | theme |
-
-=== Held Back ===
-| Story | Pri | Title | Conflict Reason |
-|-------|-----|-------|-----------------|
-| ROK-AAA | P1 | <title> | overlaps [profile] with ROK-XXX |
+=== Dispatch Queue (sequential execution order) ===
+| # | Story | Pri | Title | Domains |
+|---|-------|-----|-------|---------|
+| 1 | ROK-XXX | P1 | <title> | events, roster |
+| 2 | ROK-YYY | P1 | <title> | admin, db-schema |
+| 3 | ROK-ZZZ | P2 | <title> | theme |
 
 === Needs Work ===
 | Story | Pri | Title | Issue |
@@ -235,10 +210,10 @@ Append a focus section with the Linear issue details (title, status, description
 
 ### Closing Prompt
 
-End with: **"Ready to `/dispatch` the safe batch, spec held-back stories, or adjust priorities?"**
+End with: **"Ready to `/dispatch` the queue (sequential), plan needs-work stories, or adjust the order?"**
 
 This sets up the operator to either:
-1. Run `/dispatch` on the conflict-free batch
-2. Spec or plan held-back/needs-work stories for the next batch
-3. Override the conflict analysis (operator can force stories into the queue)
+1. Run `/dispatch` to process the queue sequentially (one agent at a time)
+2. Spec or plan needs-work stories to add them to the queue
+3. Reorder or adjust the dispatch queue
 4. Discuss priorities or story details first
