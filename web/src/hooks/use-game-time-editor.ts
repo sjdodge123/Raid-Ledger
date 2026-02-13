@@ -116,24 +116,12 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     }, []);
 
     const save = useCallback(async () => {
-        // Build the set of user-edited available slots
-        const editedAvailable = slots
+        // Build the set of user-edited available slots.
+        // The backend preserves committed slots server-side, so the frontend
+        // only needs to send the available slots the user is managing.
+        const templateSlots = slots
             .filter((s) => s.status === 'available' || !s.status)
             .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
-
-        // In profile (non-rolling) mode, committed/freed slots are filtered out
-        // of the display `slots`. But the backend save does a full delete+insert,
-        // so we must re-include the original committed template slots to avoid
-        // losing them. These are template hours where an event currently overlaps.
-        let templateSlots = editedAvailable;
-        if (!rolling && gameTimeData?.slots) {
-            const editedKeys = new Set(editedAvailable.map((s) => `${s.dayOfWeek}:${s.hour}`));
-            const committedOriginals = (gameTimeData.slots as GameTimeSlot[])
-                .filter((s) => s.status === 'committed' || s.status === 'freed')
-                .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }))
-                .filter((s) => !editedKeys.has(`${s.dayOfWeek}:${s.hour}`));
-            templateSlots = [...editedAvailable, ...committedOriginals];
-        }
 
         try {
             await saveGameTime.mutateAsync(templateSlots);
@@ -142,7 +130,7 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
         } catch {
             toast.error('Failed to save game time');
         }
-    }, [slots, saveGameTime, rolling, gameTimeData]);
+    }, [slots, saveGameTime]);
 
     const clear = useCallback(() => {
         setEditSlots([]);

@@ -101,7 +101,32 @@ describe('GameTimeService', () => {
   });
 
   describe('saveTemplate', () => {
-    it('should replace all slots via transaction', async () => {
+    /**
+     * Set up mocks for saveTemplate.
+     * Call order for getCommittedTemplateKeys:
+     *   1. Existing template slots query (.where)
+     *   2. Event signups query (.where) — only if template has slots
+     * Then the transaction runs (mocked separately).
+     */
+    function setupSaveTemplateMocks(
+      existingTemplateSlots: Array<{
+        dayOfWeek: number;
+        startHour: number;
+      }>,
+      eventSignups: Array<{ duration: [Date, Date] }> = [],
+    ) {
+      whereCallIndex = 0;
+      const results: unknown[] = [existingTemplateSlots];
+      if (existingTemplateSlots.length > 0) {
+        results.push(eventSignups);
+      }
+      whereResults = results;
+    }
+
+    it('should replace all slots via transaction when no committed slots exist', async () => {
+      // No existing template slots → no committed keys to preserve
+      setupSaveTemplateMocks([]);
+
       const mockTx = createChainMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
@@ -123,7 +148,9 @@ describe('GameTimeService', () => {
       expect(result.slots).toEqual(slots);
     });
 
-    it('should handle empty slots (clear all)', async () => {
+    it('should handle empty slots (clear all) with no committed slots', async () => {
+      setupSaveTemplateMocks([]);
+
       const mockTx = createChainMock();
       mockTx.where.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
@@ -135,6 +162,133 @@ describe('GameTimeService', () => {
       expect(mockTx.delete).toHaveBeenCalled();
       expect(mockTx.insert).not.toHaveBeenCalled();
       expect(result.slots).toEqual([]);
+    });
+
+    it('should preserve committed slots that are not in the save payload', async () => {
+      // Existing template: Mon 18:00 (DB dayOfWeek=0) and Mon 19:00
+      // Event covers Mon 18:00-20:00 UTC → Mon 18 and 19 are committed
+      const eventStart = new Date('2026-02-09T18:00:00.000Z'); // Mon 18:00 UTC
+      const eventEnd = new Date('2026-02-09T20:00:00.000Z'); // Mon 20:00 UTC
+
+      setupSaveTemplateMocks(
+        [
+          { dayOfWeek: 0, startHour: 18 }, // Mon 18:00
+          { dayOfWeek: 0, startHour: 19 }, // Mon 19:00
+        ],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createChainMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend only sends Tue 20:00 (0=Sun convention: dayOfWeek=2)
+      // Mon 18:00 and 19:00 are committed and should be auto-preserved
+      const slots = [{ dayOfWeek: 2, hour: 20 }]; // Tue 20:00
+
+      const result = await service.saveTemplate(1, slots);
+
+      // Result should include the user's slot + preserved committed slots
+      // Committed slots are in DB convention 0=Mon, returned in display convention 0=Sun
+      // DB Mon (0) → display Mon (1)
+      expect(result.slots).toEqual(
+        expect.arrayContaining([
+          { dayOfWeek: 2, hour: 20 }, // user-provided
+          { dayOfWeek: 1, hour: 18 }, // preserved committed (DB 0 → display 1)
+          { dayOfWeek: 1, hour: 19 }, // preserved committed (DB 0 → display 1)
+        ]),
+      );
+      expect(result.slots).toHaveLength(3);
+
+      // Verify transaction inserted all 3 slots
+      expect(mockTx.values).toHaveBeenCalled();
+      const valuesCall = mockTx.values.mock.calls[0] as unknown[];
+      expect(valuesCall[0]).toHaveLength(3);
+    });
+
+    it('should not duplicate committed slots already in payload', async () => {
+      // Existing template: Mon 18:00 (DB dayOfWeek=0)
+      // Event covers Mon 18:00-19:00 UTC
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T19:00:00.000Z');
+
+      setupSaveTemplateMocks(
+        [{ dayOfWeek: 0, startHour: 18 }],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createChainMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends Mon 18:00 (0=Sun: dayOfWeek=1) — already in the payload
+      const slots = [{ dayOfWeek: 1, hour: 18 }];
+
+      const result = await service.saveTemplate(1, slots);
+
+      // Should not duplicate: only 1 slot
+      expect(result.slots).toEqual([{ dayOfWeek: 1, hour: 18 }]);
+      expect(result.slots).toHaveLength(1);
+    });
+
+    it('should handle clear-all when committed slots exist (preserve only committed)', async () => {
+      // Existing template: Mon 18:00, Mon 19:00, Tue 20:00
+      // Event covers Mon 18:00-19:00 UTC → Mon 18 is committed
+      const eventStart = new Date('2026-02-09T18:00:00.000Z');
+      const eventEnd = new Date('2026-02-09T19:00:00.000Z');
+
+      setupSaveTemplateMocks(
+        [
+          { dayOfWeek: 0, startHour: 18 }, // committed
+          { dayOfWeek: 0, startHour: 19 }, // not committed
+          { dayOfWeek: 1, startHour: 20 }, // not committed
+        ],
+        [{ duration: [eventStart, eventEnd] }],
+      );
+
+      const mockTx = createChainMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends empty slots (user cleared everything)
+      const result = await service.saveTemplate(1, []);
+
+      // Only the committed Mon 18:00 should be preserved
+      expect(result.slots).toEqual([{ dayOfWeek: 1, hour: 18 }]); // DB 0 → display 1
+      expect(result.slots).toHaveLength(1);
+    });
+
+    it('should return no preserved slots when no events overlap', async () => {
+      // Existing template: Mon 18:00, but no events
+      setupSaveTemplateMocks(
+        [{ dayOfWeek: 0, startHour: 18 }],
+        [], // no event signups
+      );
+
+      const mockTx = createChainMock();
+      mockTx.where.mockResolvedValue(undefined);
+      mockTx.values.mockResolvedValue(undefined);
+      mockDb.transaction.mockImplementation(
+        async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
+      );
+
+      // Frontend sends only Tue 20:00
+      const slots = [{ dayOfWeek: 2, hour: 20 }];
+
+      const result = await service.saveTemplate(1, slots);
+
+      // No committed slots to preserve, just user's slots
+      expect(result.slots).toEqual([{ dayOfWeek: 2, hour: 20 }]);
+      expect(result.slots).toHaveLength(1);
     });
   });
 
