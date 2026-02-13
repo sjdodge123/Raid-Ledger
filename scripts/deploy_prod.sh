@@ -3,7 +3,7 @@
 # deploy_prod.sh - Production Docker Stack
 # =============================================================================
 # Runs the full Docker stack (API + Web + DB + Redis) on http://localhost:80
-# Shares the same DB volume as deploy_dev.sh — admin password stays in sync.
+# Shares the same DB volume as deploy_dev.sh.
 #
 # Usage:
 #   ./scripts/deploy_prod.sh                  # Start Docker stack (cached images)
@@ -50,7 +50,7 @@ print_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
-# Source .env file to get ADMIN_PASSWORD
+# Source .env file
 load_env() {
     if [ -f "$ENV_FILE" ]; then
         set -a
@@ -59,32 +59,10 @@ load_env() {
     fi
 }
 
-# Generate a new admin password and update .env
-generate_password() {
-    local password
-    password=$(openssl rand -base64 16)
-
-    if [ -f "$ENV_FILE" ]; then
-        # Update existing ADMIN_PASSWORD line or append
-        if grep -q "^ADMIN_PASSWORD=" "$ENV_FILE"; then
-            sed -i.bak "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$password|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
-        else
-            echo "ADMIN_PASSWORD=$password" >> "$ENV_FILE"
-        fi
-    else
-        echo "ADMIN_PASSWORD=$password" > "$ENV_FILE"
-    fi
-
-    export ADMIN_PASSWORD="$password"
-    echo "$password"
-}
-
 show_credentials() {
-    load_env
-    if [ -n "$ADMIN_PASSWORD" ]; then
-        echo -e "  ${GREEN}Admin Email:${NC}    admin@local"
-        echo -e "  ${GREEN}Admin Password:${NC} $ADMIN_PASSWORD"
-    fi
+    echo -e "  ${GREEN}Admin Email:${NC}    admin@local"
+    echo -e "  ${YELLOW}Password was shown during first bootstrap or last reset.${NC}"
+    echo -e "  ${YELLOW}To reset: set RESET_PASSWORD=true and restart, or use --reset-password${NC}"
 }
 
 show_status() {
@@ -125,13 +103,10 @@ reset_password() {
         sleep 5
     fi
 
-    local password
-    password=$(generate_password)
+    # Run bootstrap with RESET_PASSWORD=true against the shared DB
+    RESET_PASSWORD=true npx ts-node api/scripts/bootstrap-admin.ts
 
-    # Run bootstrap with --reset against the shared DB
-    ADMIN_PASSWORD="$password" npx ts-node api/scripts/bootstrap-admin.ts --reset
-
-    print_success "Admin password has been reset and saved to .env"
+    print_success "Admin password has been reset (check output above for new password)"
 }
 
 start_containers() {
