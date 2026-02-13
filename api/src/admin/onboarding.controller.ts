@@ -4,7 +4,6 @@ import {
   Patch,
   Post,
   Body,
-  Param,
   UseGuards,
   Inject,
   HttpCode,
@@ -27,21 +26,14 @@ import type {
   OnboardingStatusDto,
   ChangePasswordDto,
   CommunityIdentityDto,
-  OnboardingGameListDto,
   DataSourceStatusDto,
 } from '@raid-ledger/contract';
 import {
   ChangePasswordSchema,
   CommunityIdentitySchema,
   UpdateStepSchema,
-  GameToggleSchema,
-  BulkToggleGamesSchema,
 } from '@raid-ledger/contract';
-import type {
-  UpdateStepDto,
-  GameToggleDto,
-  BulkToggleGamesDto,
-} from '@raid-ledger/contract';
+import type { UpdateStepDto } from '@raid-ledger/contract';
 import { Request } from 'express';
 import { Req } from '@nestjs/common';
 
@@ -97,18 +89,16 @@ export class OnboardingController {
     // Determine step completion heuristically
     const secureAccount = false; // We can't determine if password was changed, so always show as available
     const communityIdentity = !!(communityName || defaultTimezone);
-    const chooseGames = true; // Games are pre-enabled, so this is "done" by default
-    const connectDataSources =
+    const connectPlugins =
       blizzardConfigured || igdbConfigured || discordConfigured;
 
     return {
       completed,
-      currentStep: Math.min(currentStep, 4),
+      currentStep: Math.min(currentStep, 3),
       steps: {
         secureAccount,
         communityIdentity,
-        chooseGames,
-        connectDataSources,
+        connectPlugins,
       },
     };
   }
@@ -122,6 +112,19 @@ export class OnboardingController {
   async complete(): Promise<{ success: boolean }> {
     await this.settingsService.set(SETTING_KEYS.ONBOARDING_COMPLETED, 'true');
     this.logger.log('Admin onboarding marked as completed');
+    return { success: true };
+  }
+
+  /**
+   * POST /admin/onboarding/reset
+   * Reset onboarding so the wizard can be re-run.
+   */
+  @Post('reset')
+  @HttpCode(HttpStatus.OK)
+  async reset(): Promise<{ success: boolean }> {
+    await this.settingsService.set(SETTING_KEYS.ONBOARDING_COMPLETED, 'false');
+    await this.settingsService.set(SETTING_KEYS.ONBOARDING_CURRENT_STEP, '0');
+    this.logger.log('Admin onboarding reset for re-run');
     return { success: true };
   }
 
@@ -253,114 +256,7 @@ export class OnboardingController {
   }
 
   // ============================================================
-  // Step 3: Choose Games
-  // ============================================================
-
-  /**
-   * GET /admin/onboarding/games
-   * List all games from game_registry with their enabled status.
-   */
-  @Get('games')
-  async listGames(): Promise<OnboardingGameListDto> {
-    const games = await this.db
-      .select({
-        id: schema.gameRegistry.id,
-        slug: schema.gameRegistry.slug,
-        name: schema.gameRegistry.name,
-        iconUrl: schema.gameRegistry.iconUrl,
-        colorHex: schema.gameRegistry.colorHex,
-        enabled: schema.gameRegistry.enabled,
-      })
-      .from(schema.gameRegistry)
-      .orderBy(schema.gameRegistry.name);
-
-    const enabledCount = games.filter((g) => g.enabled).length;
-
-    return {
-      data: games,
-      meta: {
-        total: games.length,
-        enabledCount,
-      },
-    };
-  }
-
-  /**
-   * PATCH /admin/onboarding/games/:id
-   * Toggle a game's enabled status.
-   */
-  @Patch('games/:id')
-  @HttpCode(HttpStatus.OK)
-  async toggleGame(
-    @Param('id') id: string,
-    @Body() body: GameToggleDto,
-  ): Promise<{ success: boolean; id: string; enabled: boolean }> {
-    const parsed = GameToggleSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException(
-        parsed.error.errors.map((e) => e.message).join(', '),
-      );
-    }
-
-    const { enabled } = parsed.data;
-
-    const existing = await this.db
-      .select({ id: schema.gameRegistry.id })
-      .from(schema.gameRegistry)
-      .where(eq(schema.gameRegistry.id, id))
-      .limit(1);
-
-    if (existing.length === 0) {
-      throw new BadRequestException('Game not found');
-    }
-
-    await this.db
-      .update(schema.gameRegistry)
-      .set({ enabled })
-      .where(eq(schema.gameRegistry.id, id));
-
-    return { success: true, id, enabled };
-  }
-
-  /**
-   * POST /admin/onboarding/games/bulk-toggle
-   * Enable or disable multiple games at once.
-   */
-  @Post('games/bulk-toggle')
-  @HttpCode(HttpStatus.OK)
-  async bulkToggleGames(
-    @Body() body: BulkToggleGamesDto,
-  ): Promise<{ success: boolean; count: number }> {
-    const parsed = BulkToggleGamesSchema.safeParse(body);
-    if (!parsed.success) {
-      throw new BadRequestException(
-        parsed.error.errors.map((e) => e.message).join(', '),
-      );
-    }
-
-    const { ids, enabled } = parsed.data;
-
-    if (ids.length === 0) {
-      return { success: true, count: 0 };
-    }
-
-    // Use a transaction for atomicity
-    let count = 0;
-    await this.db.transaction(async (tx) => {
-      for (const id of ids) {
-        await tx
-          .update(schema.gameRegistry)
-          .set({ enabled })
-          .where(eq(schema.gameRegistry.id, id));
-        count++;
-      }
-    });
-
-    return { success: true, count };
-  }
-
-  // ============================================================
-  // Step 4: Connect Data Sources
+  // Step 3: Connect Data Sources (used by plugins step)
   // ============================================================
 
   /**

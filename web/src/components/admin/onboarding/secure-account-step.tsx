@@ -98,6 +98,27 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
         </p>
       </div>
 
+      {/* Password Recovery Warning */}
+      <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+          </svg>
+          <div>
+            <p className="text-sm text-amber-400 font-medium">Password Recovery</p>
+            <p className="text-xs text-amber-400/70 mt-1">
+              If you forget your password, the only way to recover access is by
+              setting the{' '}
+              <code className="px-1 py-0.5 bg-amber-500/10 rounded text-amber-300 font-mono text-[11px]">
+                RESET_PASSWORD=true
+              </code>{' '}
+              environment variable and restarting the server. A new random password
+              will be logged to stdout on startup.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Password Change Section */}
       <div className="bg-panel/50 rounded-xl border border-edge/50 p-6 space-y-4">
         <div className="flex items-center justify-between">

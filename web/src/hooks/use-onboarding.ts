@@ -3,7 +3,6 @@ import { fetchApi } from '../lib/api-client';
 import { toast } from '../lib/toast';
 import type {
   OnboardingStatusDto,
-  OnboardingGameListDto,
   DataSourceStatusDto,
 } from '@raid-ledger/contract';
 
@@ -16,12 +15,6 @@ export function useOnboarding() {
   const statusQuery = useQuery({
     queryKey: ['admin', 'onboarding', 'status'],
     queryFn: () => fetchApi<OnboardingStatusDto>('/admin/onboarding/status'),
-    staleTime: 30_000,
-  });
-
-  const gamesQuery = useQuery({
-    queryKey: ['admin', 'onboarding', 'games'],
-    queryFn: () => fetchApi<OnboardingGameListDto>('/admin/onboarding/games'),
     staleTime: 30_000,
   });
 
@@ -86,51 +79,6 @@ export function useOnboarding() {
     },
   });
 
-  const toggleGame = useMutation({
-    mutationFn: async (data: { id: string; enabled: boolean }) => {
-      return fetchApi<{ success: boolean; id: string; enabled: boolean }>(
-        `/admin/onboarding/games/${data.id}`,
-        {
-          method: 'PATCH',
-          body: JSON.stringify({ enabled: data.enabled }),
-        },
-      );
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ['admin', 'onboarding', 'games'],
-      });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to toggle game');
-    },
-  });
-
-  const bulkToggleGames = useMutation({
-    mutationFn: async (data: { ids: string[]; enabled: boolean }) => {
-      return fetchApi<{ success: boolean; count: number }>(
-        '/admin/onboarding/games/bulk-toggle',
-        {
-          method: 'POST',
-          body: JSON.stringify(data),
-        },
-      );
-    },
-    onSuccess: (_data, variables) => {
-      toast.success(
-        variables.enabled
-          ? 'Games enabled'
-          : 'Games disabled',
-      );
-      void queryClient.invalidateQueries({
-        queryKey: ['admin', 'onboarding', 'games'],
-      });
-    },
-    onError: (err: Error) => {
-      toast.error(err.message || 'Failed to toggle games');
-    },
-  });
-
   const updateStep = useMutation({
     mutationFn: async (step: number) => {
       return fetchApi<{ success: boolean; step: number }>(
@@ -153,6 +101,29 @@ export function useOnboarding() {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'onboarding', 'status'],
       });
+      void queryClient.invalidateQueries({
+        queryKey: ['system', 'status'],
+      });
+    },
+  });
+
+  const resetOnboarding = useMutation({
+    mutationFn: async () => {
+      return fetchApi<{ success: boolean }>('/admin/onboarding/reset', {
+        method: 'POST',
+      });
+    },
+    onSuccess: () => {
+      toast.success('Setup wizard has been reset');
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'onboarding', 'status'],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ['system', 'status'],
+      });
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || 'Failed to reset setup wizard');
     },
   });
 
@@ -222,14 +193,12 @@ export function useOnboarding() {
 
   return {
     statusQuery,
-    gamesQuery,
     dataSourcesQuery,
     changePassword,
     updateCommunity,
-    toggleGame,
-    bulkToggleGames,
     updateStep,
     completeOnboarding,
+    resetOnboarding,
     saveBlizzardConfig,
     testBlizzardConfig,
     saveIgdbConfig,

@@ -11,15 +11,14 @@ import { z } from 'zod';
 export const OnboardingStepStatusSchema = z.object({
   secureAccount: z.boolean(),
   communityIdentity: z.boolean(),
-  chooseGames: z.boolean(),
-  connectDataSources: z.boolean(),
+  connectPlugins: z.boolean(),
 });
 
 export type OnboardingStepStatusDto = z.infer<typeof OnboardingStepStatusSchema>;
 
 export const OnboardingStatusSchema = z.object({
   completed: z.boolean(),
-  currentStep: z.number().min(0).max(4),
+  currentStep: z.number().min(0).max(3),
   steps: OnboardingStepStatusSchema,
 });
 
@@ -55,52 +54,17 @@ export const CommunityIdentitySchema = z.object({
 export type CommunityIdentityDto = z.infer<typeof CommunityIdentitySchema>;
 
 // ============================================================
-// Step 3: Choose Games
+// Step Navigation
 // ============================================================
 
 export const UpdateStepSchema = z.object({
-  step: z.number().int().min(0).max(4),
+  step: z.number().int().min(0).max(3),
 });
 
 export type UpdateStepDto = z.infer<typeof UpdateStepSchema>;
 
-export const GameToggleSchema = z.object({
-  enabled: z.boolean(),
-});
-
-export type GameToggleDto = z.infer<typeof GameToggleSchema>;
-
-export const BulkToggleGamesSchema = z.object({
-  ids: z.array(z.string().uuid()),
-  enabled: z.boolean(),
-});
-
-export type BulkToggleGamesDto = z.infer<typeof BulkToggleGamesSchema>;
-
-/** Game registry item extended with enabled flag for onboarding */
-export const OnboardingGameSchema = z.object({
-  id: z.string().uuid(),
-  slug: z.string(),
-  name: z.string(),
-  iconUrl: z.string().nullable(),
-  colorHex: z.string().nullable(),
-  enabled: z.boolean(),
-});
-
-export type OnboardingGameDto = z.infer<typeof OnboardingGameSchema>;
-
-export const OnboardingGameListSchema = z.object({
-  data: z.array(OnboardingGameSchema),
-  meta: z.object({
-    total: z.number(),
-    enabledCount: z.number(),
-  }),
-});
-
-export type OnboardingGameListDto = z.infer<typeof OnboardingGameListSchema>;
-
 // ============================================================
-// Step 4: Connect Data Sources
+// Step 3: Connect Data Sources
 // ============================================================
 
 export const DataSourceStatusSchema = z.object({

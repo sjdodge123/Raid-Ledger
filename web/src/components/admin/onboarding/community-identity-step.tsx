@@ -167,8 +167,9 @@ export function CommunityIdentityStep({
             Default Timezone
           </h3>
           <p className="text-xs text-muted mt-1">
-            New users will inherit this timezone setting. They can change it in
-            their profile.
+            Used as the default for community-wide displays (e.g., event
+            schedules). Individual users see times in their own browser timezone
+            by default and can override it in their profile.
           </p>
         </div>
         <select

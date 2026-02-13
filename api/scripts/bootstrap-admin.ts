@@ -5,6 +5,11 @@
  * Creates an initial admin account on first run if no local credentials exist.
  * Password can be set via ADMIN_PASSWORD environment variable, otherwise generated.
  *
+ * Reset triggers:
+ *   --reset flag           CLI argument to force password reset
+ *   RESET_PASSWORD=true    Env var (used by deploy scripts for --reset-password)
+ *   ADMIN_PASSWORD=xxx     Env var to set an explicit password
+ *
  * Usage:
  *   npx ts-node scripts/bootstrap-admin.ts           # Create admin if none exists
  *   npx ts-node scripts/bootstrap-admin.ts --reset   # Reset existing admin password
@@ -22,10 +27,10 @@ const DEFAULT_EMAIL = 'admin@local';
 
 async function bootstrapAdmin() {
     const databaseUrl = process.env.DATABASE_URL;
-    const resetMode = process.argv.includes('--reset');
+    const resetMode = process.argv.includes('--reset') || process.env.RESET_PASSWORD === 'true';
 
     if (!databaseUrl) {
-        console.error('❌ DATABASE_URL environment variable is required');
+        console.error('DATABASE_URL environment variable is required');
         process.exit(1);
     }
 
@@ -45,7 +50,7 @@ async function bootstrapAdmin() {
             const explicitPassword = process.env.ADMIN_PASSWORD;
 
             if (resetMode || explicitPassword) {
-                // --reset flag or ADMIN_PASSWORD env var: update password
+                // --reset flag, RESET_PASSWORD env var, or ADMIN_PASSWORD env var: update password
                 const password = explicitPassword || crypto.randomBytes(16).toString('base64');
                 const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
@@ -55,17 +60,17 @@ async function bootstrapAdmin() {
                     .where(eq(schema.localCredentials.email, DEFAULT_EMAIL));
 
                 console.log('');
-                console.log('╔════════════════════════════════════════════════════════════╗');
-                console.log('║          🔐 ADMIN PASSWORD RESET                           ║');
-                console.log('╠════════════════════════════════════════════════════════════╣');
-                console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
-                console.log(`║  Password: ${password.padEnd(46)} ║`);
-                console.log('╠════════════════════════════════════════════════════════════╣');
-                console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
-                console.log('╚════════════════════════════════════════════════════════════╝');
+                console.log('========================================================');
+                console.log('  ADMIN PASSWORD RESET');
+                console.log('========================================================');
+                console.log(`  Email:    ${DEFAULT_EMAIL}`);
+                console.log(`  Password: ${password}`);
+                console.log('--------------------------------------------------------');
+                console.log('  Save this password! It will not be shown again.');
+                console.log('========================================================');
                 console.log('');
             } else {
-                console.log('ℹ️  Local credentials already exist, skipping bootstrap');
+                console.log('Local credentials already exist, skipping bootstrap');
             }
 
             await sql.end();
@@ -96,15 +101,15 @@ async function bootstrapAdmin() {
             });
 
         console.log('');
-        console.log('╔════════════════════════════════════════════════════════════╗');
-        console.log('║          🔐 INITIAL ADMIN CREDENTIALS                      ║');
-        console.log('╠════════════════════════════════════════════════════════════╣');
-        console.log(`║  Email:    ${DEFAULT_EMAIL.padEnd(46)} ║`);
-        console.log(`║  Password: ${password.padEnd(46)} ║`);
-        console.log('╠════════════════════════════════════════════════════════════╣');
-        console.log('║  ⚠️  Save this password! It will not be shown again.       ║');
-        console.log('║  You can link your Discord account in the profile page.    ║');
-        console.log('╚════════════════════════════════════════════════════════════╝');
+        console.log('========================================================');
+        console.log('  INITIAL ADMIN CREDENTIALS');
+        console.log('========================================================');
+        console.log(`  Email:    ${DEFAULT_EMAIL}`);
+        console.log(`  Password: ${password}`);
+        console.log('--------------------------------------------------------');
+        console.log('  Save this password! It will not be shown again.');
+        console.log('  You can link your Discord account in the profile page.');
+        console.log('========================================================');
         console.log('');
 
         await sql.end();

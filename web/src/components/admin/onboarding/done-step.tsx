@@ -6,16 +6,14 @@ interface DoneStepProps {
 }
 
 /**
- * Step 5: Done (ROK-204 AC-7)
+ * Step 4: Done (ROK-204)
  * Summary of what was configured vs. skipped.
  */
 export function DoneStep({ onComplete }: DoneStepProps) {
-  const { statusQuery, dataSourcesQuery, gamesQuery } = useOnboarding();
+  const { statusQuery, dataSourcesQuery } = useOnboarding();
 
   const steps = statusQuery.data?.steps;
   const dataSources = dataSourcesQuery.data;
-  const enabledCount = gamesQuery.data?.meta.enabledCount ?? 0;
-  const totalCount = gamesQuery.data?.meta.total ?? 0;
 
   const items = [
     {
@@ -29,10 +27,9 @@ export function DoneStep({ onComplete }: DoneStepProps) {
       skipMessage: 'Using default settings',
     },
     {
-      label: 'Games Configured',
-      done: true, // Always "done" since games are pre-enabled
-      detail: `${enabledCount} of ${totalCount} games enabled`,
-      skipMessage: '',
+      label: 'Plugins',
+      done: steps?.connectPlugins ?? false,
+      skipMessage: 'No plugins configured',
     },
     {
       label: 'Blizzard API',
@@ -90,9 +87,6 @@ export function DoneStep({ onComplete }: DoneStepProps) {
             >
               <span className="text-sm text-foreground">{item.label}</span>
               <div className="flex items-center gap-2">
-                {item.detail && (
-                  <span className="text-xs text-muted">{item.detail}</span>
-                )}
                 {item.done ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400">
                     <svg

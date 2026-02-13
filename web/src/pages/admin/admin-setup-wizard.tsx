@@ -5,17 +5,17 @@ import { useOnboarding } from '../../hooks/use-onboarding';
 import { toast } from '../../lib/toast';
 import { SecureAccountStep } from '../../components/admin/onboarding/secure-account-step';
 import { CommunityIdentityStep } from '../../components/admin/onboarding/community-identity-step';
-import { ChooseGamesStep } from '../../components/admin/onboarding/choose-games-step';
-import { ConnectDataSourcesStep } from '../../components/admin/onboarding/connect-data-sources-step';
+import { ConnectPluginsStep } from '../../components/admin/onboarding/connect-plugins-step';
 import { DoneStep } from '../../components/admin/onboarding/done-step';
 
 const STEPS = [
   { key: 'secure-account', label: 'Secure Account', number: 1 },
   { key: 'community', label: 'Community', number: 2 },
-  { key: 'games', label: 'Games', number: 3 },
-  { key: 'data-sources', label: 'Data Sources', number: 4 },
-  { key: 'done', label: 'Done', number: 5 },
+  { key: 'plugins', label: 'Plugins', number: 3 },
+  { key: 'done', label: 'Done', number: 4 },
 ] as const;
+
+const MAX_STEP = STEPS.length - 1;
 
 /**
  * Admin Setup Wizard (ROK-204).
@@ -29,11 +29,11 @@ export function AdminSetupWizard() {
   // Local override: null means "use server step", number means "user navigated"
   const [stepOverride, setStepOverride] = useState<number | null>(null);
   const serverStep = statusQuery.data?.currentStep ?? 0;
-  const currentStep = stepOverride ?? serverStep;
+  const currentStep = stepOverride ?? Math.min(serverStep, MAX_STEP);
 
   const goToStep = useCallback(
     (step: number) => {
-      const clamped = Math.max(0, Math.min(4, step));
+      const clamped = Math.max(0, Math.min(MAX_STEP, step));
       setStepOverride(clamped);
       updateStep.mutate(clamped);
     },
@@ -41,7 +41,7 @@ export function AdminSetupWizard() {
   );
 
   const goNext = useCallback(() => {
-    if (currentStep < 4) {
+    if (currentStep < MAX_STEP) {
       goToStep(currentStep + 1);
     }
   }, [currentStep, goToStep]);
@@ -187,20 +187,13 @@ export function AdminSetupWizard() {
             />
           )}
           {currentStep === 2 && (
-            <ChooseGamesStep
+            <ConnectPluginsStep
               onNext={goNext}
               onBack={goBack}
               onSkip={goNext}
             />
           )}
-          {currentStep === 3 && (
-            <ConnectDataSourcesStep
-              onNext={goNext}
-              onBack={goBack}
-              onSkip={goNext}
-            />
-          )}
-          {currentStep === 4 && <DoneStep onComplete={handleComplete} />}
+          {currentStep === 3 && <DoneStep onComplete={handleComplete} />}
         </div>
       </div>
     </div>

@@ -263,17 +263,24 @@ Process stories **one at a time** in the confirmed order. For each story in the 
 Spawn a **single** background agent for the current story using `run_in_background: true`.
 Use the appropriate prompt template below based on story type.
 
-### 7b. Wait for Completion
+### 7b. Stay Available While Agent Works
 
-Monitor the agent with `TaskOutput`. The orchestrator waits here — do NOT spawn the
-next dev agent until this one finishes. (Planning/research agents for future stories
-CAN run in parallel during this wait.)
+**CRITICAL: Do NOT block on `TaskOutput` with a long timeout.** This locks the
+orchestrator and prevents the user from interacting. Instead:
+
+1. After spawning the agent, **tell the user it's running** and remain available for conversation
+2. When you receive a `task-notification` or `Agent ... progress` system reminder indicating
+   the agent completed, THEN check the output with `TaskOutput(block: false)` or read the output file
+3. While waiting, the user can:
+   - Ask questions, discuss upcoming stories, plan, or do non-git work
+   - Check agent progress manually if they want
+4. Do NOT spawn the next dev agent until the current one finishes (sequential constraint still applies)
 
 ### 7c. Review Gate
 
 When the implementation agent completes, spawn a **review subagent** for its branch
-(also `run_in_background: true`). Wait for the review agent to complete. The review
-agent merges to main and updates Linear.
+(also `run_in_background: true`). Stay available while it works — same pattern as 7b.
+The review agent merges to main and updates Linear.
 
 ### 7d. Report Progress
 
