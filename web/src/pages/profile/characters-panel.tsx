@@ -58,7 +58,10 @@ export function CharactersPanel() {
                         <div className="w-8 h-8 border-4 border-dim border-t-emerald-500 rounded-full animate-spin" />
                     </div>
                 ) : (
-                    <CharacterList characters={characters} onEdit={handleEditCharacter} />
+                    <CharacterList
+                        characters={characters}
+                        onEdit={handleEditCharacter}
+                    />
                 )}
             </div>
 

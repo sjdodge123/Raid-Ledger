@@ -1,9 +1,4 @@
 /* ============================================
-   Integration Hub — Orbital Ring Power Core
-   ROK-195: 3-Ring Hub & Spoke Model
-   ============================================ */
-
-/* ============================================
    Profile Page — Full-Page Space Background
    ============================================ */
 
@@ -55,716 +50,158 @@
     filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.3));
 }
 
-/* Hub Container */
-.integration-hub {
+/* ============================================
+   Navigation Hub — Compact Orbital Nav Map
+   ROK-290: Orbiting nav sectionals
+   ============================================ */
+
+.nav-hub {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 3rem 2rem;
-    min-height: 600px;
+    padding: 1.5rem 1rem;
+    min-height: 260px;
     overflow: visible;
 }
 
-/* Hover-pause handled by JS hook via isHoveredRef */
+/* Single orbit ring track */
+.nav-hub__ring {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 200px;
+    height: 200px;
+    transform: translate(-50%, -50%) rotateX(12deg);
+    border: 1.5px solid rgba(16, 185, 129, 0.35);
+    border-radius: 50%;
+    box-shadow:
+        0 0 8px rgba(16, 185, 129, 0.2),
+        inset 0 0 8px rgba(16, 185, 129, 0.1);
+    opacity: 0.6;
+    pointer-events: none;
+}
 
-/* ============================================
-   Power Core Avatar (Center Hub)
-   ============================================ */
-
-.power-core {
+/* Center avatar */
+.nav-hub__center {
     position: relative;
     z-index: 20;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    gap: 0.375rem;
 }
 
-.power-core__ring {
-    position: relative;
-    width: 160px;
-    height: 160px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-/* Inner neon ring — intense cyan glow */
-.power-core__ring::before {
-    content: '';
-    position: absolute;
-    inset: -4px;
-    border-radius: 50%;
-    background: transparent;
-    border: 2px solid rgba(6, 214, 160, 0.9);
-    box-shadow:
-        0 0 12px rgba(6, 214, 160, 0.7),
-        0 0 30px rgba(16, 185, 129, 0.5),
-        0 0 60px rgba(16, 185, 129, 0.2),
-        inset 0 0 12px rgba(16, 185, 129, 0.3);
-    animation: core-breathe 4s ease-in-out infinite;
-    z-index: -1;
-}
-
-/* Outer neon ring glow — wide bloom */
-.power-core__ring::after {
-    content: '';
-    position: absolute;
-    inset: -10px;
-    border-radius: 50%;
-    background: transparent;
-    border: 1px solid rgba(6, 214, 160, 0.4);
-    box-shadow:
-        0 0 15px rgba(16, 185, 129, 0.5),
-        0 0 40px rgba(16, 185, 129, 0.2),
-        0 0 80px rgba(16, 185, 129, 0.08);
-    animation: core-breathe 4s ease-in-out infinite reverse;
-    z-index: -2;
-}
-
-.power-core__avatar {
-    width: 148px;
-    height: 148px;
+.nav-hub__avatar {
+    width: 72px;
+    height: 72px;
     border-radius: 50%;
     object-fit: cover;
-    border: 2px solid rgba(6, 214, 160, 0.9);
+    border: 2px solid rgba(6, 214, 160, 0.7);
     background: rgba(30, 41, 59, 0.9);
     box-shadow:
-        0 0 15px rgba(6, 214, 160, 0.5),
-        0 0 30px rgba(16, 185, 129, 0.2);
+        0 0 10px rgba(6, 214, 160, 0.35),
+        0 0 20px rgba(16, 185, 129, 0.15);
+    animation: nav-hub-breathe 4s ease-in-out infinite;
 }
 
-.power-core__edit {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background: rgba(30, 41, 59, 0.95);
-    border: 2px solid rgba(148, 163, 184, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #94a3b8;
-    transition: all 0.3s ease;
-    z-index: 10;
-}
-
-.power-core__edit:hover {
-    background: rgba(16, 185, 129, 0.3);
-    border-color: rgba(16, 185, 129, 0.7);
-    color: #10b981;
-    transform: scale(1.1);
-}
-
-.power-core__ring-row {
-    display: flex;
-    align-items: center;
-    gap: 0;
-}
-
-.power-core__ring-row > .power-core__nav-btn {
-    margin: 0 -6px;
-    z-index: 25;
-}
-
-.power-core__nav-btn {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: rgba(30, 41, 59, 0.9);
-    border: 2px solid rgba(148, 163, 184, 0.3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #94a3b8;
-    font-size: 0.875rem;
-    transition: all 0.2s ease;
-}
-
-.power-core__nav-btn:hover {
-    background: rgba(16, 185, 129, 0.2);
-    border-color: rgba(16, 185, 129, 0.5);
-    color: #10b981;
-}
-
-.power-core__username {
-    font-size: 1.375rem;
-    font-weight: 700;
-    color: #fff;
+.nav-hub__username {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #e2e8f0;
     text-align: center;
-    text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-}
-
-.power-core__badges {
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
     display: flex;
-    gap: 0.5rem;
+    align-items: center;
 }
 
-/* ============================================
-   Orbital Rings
-   ============================================ */
-
-.orbit-ring {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-}
-
-/* Elliptical ring track with 3D tilt — enhanced glow */
-.orbit-ring__track {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: calc(var(--orbit-radius) * 2);
-    height: calc(var(--orbit-radius) * 2);
-    transform: translate(-50%, -50%) rotateX(15deg);
-    border: 1.5px solid var(--ring-color);
-    border-radius: 50%;
-    box-shadow:
-        0 0 12px var(--ring-color),
-        0 0 30px var(--ring-color),
-        inset 0 0 12px var(--ring-color);
-    opacity: 0.7;
-}
-
-/* Ring label */
-.orbit-ring__label {
-    position: absolute;
-    top: -30px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.1em;
-    color: var(--ring-color);
-    text-shadow: 0 0 10px var(--ring-color);
-    z-index: 15;
-    pointer-events: none;
-}
-
-/* Point container for nodes — JS positions children via translate */
-.orbit-ring__rotation {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    transform: translate(-50%, -50%);
-}
-
-/* ============================================
-   Integration Spoke (Hexagonal Platform Node)
-   ============================================ */
-
-.spoke-node {
+/* Orbiting nav section node */
+.nav-hub__node {
     position: absolute;
     top: 50%;
     left: 50%;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.5rem;
+    gap: 0.25rem;
     cursor: pointer;
     pointer-events: auto;
-    /* Fallback — JS overrides with trig position */
     transform: translate(-50%, -50%);
     z-index: 10;
+    background: none;
+    border: none;
+    padding: 0;
 }
 
-.spoke-node:hover {
+.nav-hub__node:hover {
     z-index: 30;
 }
 
-.spoke-node:hover .spoke-node__hex-frame {
+.nav-hub__node:hover .nav-hub__node-frame {
     transform: scale(1.15);
 }
 
-/* Circular frame (changed from hexagonal) */
-.spoke-node__hex-frame {
-    position: relative;
-    width: 72px;
-    height: 72px;
+/* Node circular frame */
+.nav-hub__node-frame {
+    width: 44px;
+    height: 44px;
     border-radius: 50%;
-    /* Circular instead of hexagonal */
     background: rgba(15, 23, 42, 0.9);
-    border: 3px solid rgba(148, 163, 184, 0.3);
+    border: 2px solid rgba(148, 163, 184, 0.3);
     display: flex;
     align-items: center;
     justify-content: center;
     transition: all 0.3s ease;
 }
 
-/* Active spoke — emerald glow */
-.spoke-node--active .spoke-node__hex-frame {
-    border-color: rgba(6, 214, 160, 0.9);
+/* Active node — emerald glow */
+.nav-hub__node--active .nav-hub__node-frame {
+    border-color: rgba(6, 214, 160, 0.8);
     background: rgba(16, 185, 129, 0.15);
     box-shadow:
-        0 0 20px rgba(16, 185, 129, 0.5),
-        0 0 40px rgba(16, 185, 129, 0.15),
-        inset 0 0 15px rgba(16, 185, 129, 0.2);
-    animation: power-pulse 2.5s ease-in-out infinite;
+        0 0 12px rgba(16, 185, 129, 0.4),
+        0 0 24px rgba(16, 185, 129, 0.12),
+        inset 0 0 8px rgba(16, 185, 129, 0.15);
 }
 
-/* Dormant spoke */
-.spoke-node--dormant .spoke-node__hex-frame {
-    border-color: rgba(148, 163, 184, 0.4);
-    opacity: 0.8;
+.nav-hub__node:not(.nav-hub__node--active):hover .nav-hub__node-frame {
+    border-color: rgba(148, 163, 184, 0.5);
+    background: rgba(30, 41, 59, 0.95);
 }
 
-.spoke-node--dormant:hover .spoke-node__hex-frame {
-    border-color: rgba(148, 163, 184, 0.6);
-    opacity: 1;
-}
-
-/* Placeholder spoke */
-.spoke-node--placeholder .spoke-node__hex-frame {
-    border-color: rgba(148, 163, 184, 0.2);
-    opacity: 0.4;
-    cursor: default;
-}
-
-.spoke-node--placeholder {
-    cursor: default;
-}
-
-.spoke-node--placeholder:hover .spoke-node__hex-frame {
-    transform: scale(1.15);
-}
-
-/* Icon container */
-.spoke-node__icon-container {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.spoke-node__icon {
-    width: 32px;
-    height: 32px;
+.nav-hub__node-icon {
+    width: 20px;
+    height: 20px;
     color: #94a3b8;
-    /* Removed transition - interferes with JS counter-rotation */
 }
 
-/* Active icons: full color */
-.spoke-node--active .spoke-node__icon {
-    color: #34d399;
-    opacity: 1;
-}
-
-/* Dormant/placeholder icons: grey and faded */
-.spoke-node--dormant .spoke-node__icon,
-.spoke-node--placeholder .spoke-node__icon {
-    filter: grayscale(100%);
-    opacity: 0.4;
-}
-
-.spoke-node__label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #cbd5e1;
-    text-align: center;
-    white-space: nowrap;
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-.spoke-node--active .spoke-node__label {
+.nav-hub__node--active .nav-hub__node-icon {
     color: #34d399;
 }
 
-.spoke-node__status {
+.nav-hub__node-label {
     font-size: 0.625rem;
     font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #64748b;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-}
-
-.spoke-node--active .spoke-node__status {
-    color: #10b981;
-}
-
-/* Status overlays */
-.spoke-node__plus {
-    position: absolute;
-    bottom: -4px;
-    right: -4px;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: rgba(16, 185, 129, 0.3);
-    border: 2px solid rgba(16, 185, 129, 0.6);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.875rem;
-    font-weight: 700;
-    color: #10b981;
-}
-
-.spoke-node__lock {
-    position: absolute;
-    bottom: -4px;
-    right: -4px;
-    width: 24px;
-    height: 24px;
-    border-radius: 50%;
-    background: rgba(51, 65, 85, 0.9);
-    border: 2px solid rgba(148, 163, 184, 0.3);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.75rem;
-    color: #64748b;
-}
-
-/* ============================================
-   Tractor Beam — hidden when lightning arcs active
-   ============================================ */
-
-.tractor-beam {
-    display: none;
-}
-
-/* ============================================
-   Lightning Arcs (SVG overlay)
-   ============================================ */
-
-.lightning-arcs {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 15;
-    overflow: visible;
-}
-
-/* ── Laser beam baseline — persistent pulsating guide line ─── */
-
-.beam-line {
-    fill: none;
-    stroke-linecap: round;
-}
-
-.beam-line--emerald {
-    stroke: rgba(6, 214, 160, 0.12);
-    animation: laser-breathe-emerald 2.5s ease-in-out infinite;
-}
-
-.beam-line--purple {
-    stroke: rgba(139, 92, 246, 0.12);
-    animation: laser-breathe-purple 2.5s ease-in-out infinite;
-}
-
-@keyframes laser-breathe-emerald {
-    0%, 100% {
-        stroke: rgba(6, 214, 160, 0.08);
-        filter: drop-shadow(0 0 2px rgba(6, 214, 160, 0.05));
-    }
-    50% {
-        stroke: rgba(6, 214, 160, 0.3);
-        filter: drop-shadow(0 0 8px rgba(6, 214, 160, 0.3));
-    }
-}
-
-@keyframes laser-breathe-purple {
-    0%, 100% {
-        stroke: rgba(139, 92, 246, 0.08);
-        filter: drop-shadow(0 0 2px rgba(139, 92, 246, 0.05));
-    }
-    50% {
-        stroke: rgba(139, 92, 246, 0.3);
-        filter: drop-shadow(0 0 8px rgba(139, 92, 246, 0.3));
-    }
-}
-
-/* ── Pulse Conduit layers (2-layer laser model) ─────────────── */
-
-/*
- * Periodic energy pulse: tight bright dash travelling outward like a laser bolt.
- * --path-len is set by JS (getTotalLength) for accurate stroke-dashoffset.
- */
-
-/* Outer glow — tight laser bloom */
-.pulse-line__glow {
-    filter: blur(3px) drop-shadow(0 0 4px currentColor);
-    stroke-dasharray: calc(var(--path-len, 200) * 0.06) calc(var(--path-len, 200) * 0.94);
-}
-
-.pulse-line__glow--emerald {
-    stroke: rgba(6, 214, 160, 0.6);
-    animation: pulse-travel 2s ease-in-out infinite;
-}
-
-.pulse-line__glow--purple {
-    stroke: rgba(139, 92, 246, 0.6);
-    animation: pulse-travel 2s ease-in-out infinite;
-}
-
-/* Inner bright core — white-hot laser center */
-.pulse-line__core {
-    stroke-dasharray: calc(var(--path-len, 200) * 0.05) calc(var(--path-len, 200) * 0.95);
-    filter: drop-shadow(0 0 2px currentColor);
-}
-
-.pulse-line__core--emerald {
-    stroke: rgba(200, 255, 230, 0.95);
-    animation: pulse-travel 2s ease-in-out infinite;
-}
-
-.pulse-line__core--purple {
-    stroke: rgba(220, 200, 255, 0.95);
-    animation: pulse-travel 2s ease-in-out infinite;
-}
-
-/*
- * Dash starts off-screen (offset = full path) and travels to 0 (end of path).
- * ease-in-out gives the pulse a smooth departure/arrival feel.
- */
-@keyframes pulse-travel {
-    0% {
-        stroke-dashoffset: 0;
-        opacity: 0;
-    }
-    5% {
-        opacity: 1;
-    }
-    85% {
-        opacity: 1;
-    }
-    100% {
-        stroke-dashoffset: var(--path-len, 200);
-        opacity: 0;
-    }
-}
-
-/* ── Activation Burst (one-shot, brighter) ─────────────── */
-
-.burst-line__glow {
-    filter: blur(12px);
-    stroke-dasharray: calc(var(--path-len, 200) * 0.15) calc(var(--path-len, 200) * 0.85);
-}
-
-.burst-line__glow--emerald {
-    stroke: rgba(6, 214, 160, 0.7);
-    animation: activation-burst 1.5s ease-out forwards;
-}
-
-.burst-line__glow--purple {
-    stroke: rgba(139, 92, 246, 0.7);
-    animation: activation-burst 1.5s ease-out forwards;
-    animation-delay: 0.5s;
-}
-
-.burst-line__core {
-    stroke-dasharray: calc(var(--path-len, 200) * 0.12) calc(var(--path-len, 200) * 0.88);
-}
-
-.burst-line__core--emerald {
-    stroke: rgba(255, 255, 255, 0.95);
-    animation: activation-burst 1.5s ease-out forwards;
-}
-
-.burst-line__core--purple {
-    stroke: rgba(255, 255, 255, 0.9);
-    animation: activation-burst 1.5s ease-out forwards;
-    animation-delay: 0.5s;
-}
-
-@keyframes activation-burst {
-    0% {
-        stroke-dashoffset: var(--path-len, 200);
-        opacity: 0;
-    }
-    8% {
-        opacity: 1;
-    }
-    80% {
-        opacity: 1;
-    }
-    100% {
-        stroke-dashoffset: 0;
-        opacity: 0;
-    }
-}
-
-/* ============================================
-   Ghost Node (Discord Echo on COMMS Ring)
-   ============================================ */
-
-.ghost-node {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.5rem;
-    opacity: 0.3;
-    pointer-events: none;
-    /* Fallback — JS overrides with trig position */
-    transform: translate(-50%, -50%);
-}
-
-/* Active ghost node when Discord is linked */
-.ghost-node--active {
-    opacity: 0.75;
-    pointer-events: auto;
-}
-
-.ghost-node__icon-ring {
-    width: 72px;
-    height: 72px;
-    border-radius: 50%;
-    background: rgba(139, 92, 246, 0.15);
-    border: 3px solid rgba(139, 92, 246, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.3s ease;
-}
-
-.ghost-node--active .ghost-node__icon-ring {
-    box-shadow:
-        0 0 12px rgba(139, 92, 246, 0.4),
-        0 0 25px rgba(139, 92, 246, 0.15);
-}
-
-.ghost-node__icon {
-    width: 32px;
-    height: 32px;
-    color: rgba(167, 139, 250, 0.6);
-}
-
-.ghost-node__label {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: rgba(167, 139, 250, 0.7);
-    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
-}
-
-/* AC-5: Sympathetic glow when primary Discord is hovered */
-.ghost-node--glowing {
-    opacity: 0.7;
-    transition: opacity 0.3s ease;
-}
-
-.ghost-node--glowing .ghost-node__icon-ring {
-    box-shadow: 0 0 20px rgba(139, 92, 246, 0.6);
-}
-
-.ghost-node--glowing .ghost-node__icon {
-    color: rgba(167, 139, 250, 0.9);
-}
-
-/* ============================================
-   Tooltip
-   ============================================ */
-
-.spoke-tooltip {
-    position: absolute;
-    padding: 0.5rem 0.75rem;
-    background: #0f172a;
-    border: 1px solid rgba(148, 163, 184, 0.4);
-    border-radius: 0.5rem;
-    font-size: 0.75rem;
-    color: #e2e8f0;
+    color: #94a3b8;
+    text-align: center;
     white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    z-index: 30;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7);
-
-    /* Default: above */
-    bottom: calc(100% + 12px);
-    left: 50%;
-    transform: translateX(-50%);
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
 }
 
-/* Tooltip below spoke */
-[data-tooltip-pos="below"] .spoke-tooltip {
-    bottom: auto;
-    top: calc(100% + 12px);
-    left: 50%;
-    right: auto;
-    transform: translateX(-50%);
+.nav-hub__node--active .nav-hub__node-label {
+    color: #34d399;
 }
 
-/* Tooltip to the right of spoke */
-[data-tooltip-pos="right"] .spoke-tooltip {
-    bottom: auto;
-    top: 50%;
-    left: calc(100% + 12px);
-    right: auto;
-    transform: translateY(-50%);
-}
-
-/* Tooltip to the left of spoke */
-[data-tooltip-pos="left"] .spoke-tooltip {
-    bottom: auto;
-    top: 50%;
-    left: auto;
-    right: calc(100% + 12px);
-    transform: translateY(-50%);
-}
-
-.spoke-node:hover .spoke-tooltip {
-    opacity: 1;
-}
-
-/* ============================================
-   Keyframe Animations
-   ============================================ */
-
-@keyframes core-breathe {
-
-    0%,
-    100% {
-        opacity: 0.7;
+@keyframes nav-hub-breathe {
+    0%, 100% {
         box-shadow:
-            0 0 12px rgba(6, 214, 160, 0.6),
-            0 0 30px rgba(16, 185, 129, 0.4),
-            0 0 50px rgba(16, 185, 129, 0.15),
-            inset 0 0 12px rgba(16, 185, 129, 0.2);
+            0 0 8px rgba(6, 214, 160, 0.3),
+            0 0 18px rgba(16, 185, 129, 0.12);
     }
-
-    50% {
-        opacity: 1;
-        box-shadow:
-            0 0 18px rgba(6, 214, 160, 0.8),
-            0 0 45px rgba(16, 185, 129, 0.6),
-            0 0 80px rgba(16, 185, 129, 0.25),
-            inset 0 0 18px rgba(16, 185, 129, 0.35);
-    }
-}
-
-@keyframes power-pulse {
-
-    0%,
-    100% {
-        box-shadow:
-            0 0 20px rgba(16, 185, 129, 0.5),
-            0 0 40px rgba(16, 185, 129, 0.15),
-            inset 0 0 12px rgba(16, 185, 129, 0.2);
-    }
-
     50% {
         box-shadow:
-            0 0 35px rgba(16, 185, 129, 0.7),
-            0 0 60px rgba(16, 185, 129, 0.25),
-            inset 0 0 20px rgba(16, 185, 129, 0.3);
+            0 0 14px rgba(6, 214, 160, 0.5),
+            0 0 28px rgba(16, 185, 129, 0.2);
     }
 }
 
@@ -823,198 +260,7 @@
 }
 
 /* ============================================
-   Mobile: Compact avatar
-   ============================================ */
-
-.mobile-avatar {
-    position: relative;
-    width: 96px;
-    height: 96px;
-}
-
-.mobile-avatar__img {
-    width: 96px;
-    height: 96px;
-    border-radius: 50%;
-    object-fit: cover;
-    border: 2px solid rgba(6, 214, 160, 0.7);
-    background: rgba(30, 41, 59, 0.9);
-    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
-}
-
-.mobile-avatar__edit {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: rgba(30, 41, 59, 0.95);
-    border: 2px solid rgba(148, 163, 184, 0.4);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: #94a3b8;
-    transition: all 0.2s ease;
-}
-
-.mobile-avatar__edit:hover {
-    border-color: rgba(16, 185, 129, 0.7);
-    color: #10b981;
-}
-
-/* ============================================
-   Mobile: Module row list
-   ============================================ */
-
-.mobile-module-row {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    width: 100%;
-    padding: 0.75rem;
-    border-radius: 0.75rem;
-    background: rgba(30, 41, 59, 0.5);
-    border: 1px solid rgba(71, 85, 105, 0.4);
-    transition: all 0.2s ease;
-    text-align: left;
-    cursor: pointer;
-}
-
-.mobile-module-row:not(:disabled):active {
-    transform: scale(0.98);
-    background: rgba(30, 41, 59, 0.7);
-}
-
-.mobile-module-row--placeholder {
-    opacity: 0.5;
-    cursor: default;
-}
-
-.mobile-module-row--active {
-    border-color: rgba(16, 185, 129, 0.3);
-    background: rgba(16, 185, 129, 0.05);
-}
-
-.mobile-module-row__icon {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    border: 2px solid rgba(148, 163, 184, 0.2);
-    background: rgba(15, 23, 42, 0.7);
-    color: #94a3b8;
-}
-
-.mobile-module-row--active .mobile-module-row__icon--emerald {
-    border-color: rgba(6, 214, 160, 0.6);
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    box-shadow: 0 0 8px rgba(16, 185, 129, 0.3);
-}
-
-.mobile-module-row__icon--teal {
-    color: #5eead4;
-}
-
-.mobile-module-row--active .mobile-module-row__icon--purple {
-    border-color: rgba(139, 92, 246, 0.5);
-    background: rgba(139, 92, 246, 0.15);
-    color: #a78bfa;
-    box-shadow: 0 0 8px rgba(139, 92, 246, 0.25);
-}
-
-.mobile-module-row__icon--purple {
-    color: #a78bfa;
-}
-
-.mobile-module-row__info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-}
-
-.mobile-module-row__name {
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: #e2e8f0;
-}
-
-.mobile-module-row--active .mobile-module-row__name {
-    color: #fff;
-}
-
-.mobile-module-row__ring {
-    font-size: 0.625rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #64748b;
-}
-
-.mobile-module-row__status {
-    flex-shrink: 0;
-}
-
-.mobile-module-row__badge {
-    display: inline-block;
-    padding: 0.25rem 0.625rem;
-    border-radius: 9999px;
-    font-size: 0.6875rem;
-    font-weight: 600;
-}
-
-.mobile-module-row__badge--active {
-    background: rgba(16, 185, 129, 0.15);
-    color: #34d399;
-    border: 1px solid rgba(16, 185, 129, 0.3);
-}
-
-.mobile-module-row__badge--dormant {
-    background: rgba(99, 102, 241, 0.15);
-    color: #a5b4fc;
-    border: 1px solid rgba(99, 102, 241, 0.3);
-}
-
-.mobile-module-row__badge--placeholder {
-    background: rgba(51, 65, 85, 0.5);
-    color: #64748b;
-    border: 1px solid rgba(71, 85, 105, 0.3);
-}
-
-/* ============================================
-   Mobile: Pulse conduit SVG overlay
-   ============================================ */
-
-/* Container wrapping avatar + module list for pulse SVG overlay */
-.mobile-hub-content {
-    position: relative;
-}
-
-.mobile-module-list {
-    padding: 0 0.75rem 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-}
-
-.mobile-pulse-conduits {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: visible;
-}
-
-/* ============================================
-   Light Theme Overrides (ROK-124)
+   Light Theme Overrides
    ============================================ */
 
 /* Hide space background in light mode */
@@ -1023,172 +269,47 @@
     display: none;
 }
 
-/* Reduce glow intensity in light mode */
-[data-scheme="light"] .power-core__ring::before {
-    border-color: rgba(16, 185, 129, 0.7);
-    box-shadow:
-        0 0 8px rgba(16, 185, 129, 0.35),
-        0 0 18px rgba(16, 185, 129, 0.18),
-        inset 0 0 8px rgba(16, 185, 129, 0.12);
-}
-
-[data-scheme="light"] .power-core__ring::after {
+/* Nav hub light mode */
+[data-scheme="light"] .nav-hub__ring {
     border-color: rgba(16, 185, 129, 0.25);
     box-shadow:
-        0 0 10px rgba(16, 185, 129, 0.25),
-        0 0 24px rgba(16, 185, 129, 0.1);
+        0 0 6px rgba(16, 185, 129, 0.15),
+        inset 0 0 6px rgba(16, 185, 129, 0.08);
 }
 
-[data-scheme="light"] .power-core__avatar {
-    border-color: rgba(16, 185, 129, 0.7);
+[data-scheme="light"] .nav-hub__avatar {
+    border-color: rgba(16, 185, 129, 0.6);
     background: rgba(255, 255, 255, 0.9);
-    box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);
+    box-shadow: 0 0 8px rgba(16, 185, 129, 0.2);
 }
 
-[data-scheme="light"] .power-core__edit {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(203, 213, 225, 0.5);
-}
-
-[data-scheme="light"] .power-core__nav-btn {
-    background: rgba(255, 255, 255, 0.9);
-    border-color: rgba(203, 213, 225, 0.5);
-}
-
-[data-scheme="light"] .power-core__username {
+[data-scheme="light"] .nav-hub__username {
     color: #0f172a;
     text-shadow: none;
 }
 
-[data-scheme="light"] .spoke-node__hex-frame {
+[data-scheme="light"] .nav-hub__node-frame {
     background: rgba(255, 255, 255, 0.9);
     border-color: rgba(203, 213, 225, 0.5);
 }
 
-[data-scheme="light"] .spoke-node--active .spoke-node__hex-frame {
-    border-color: rgba(16, 185, 129, 0.8);
+[data-scheme="light"] .nav-hub__node--active .nav-hub__node-frame {
+    border-color: rgba(16, 185, 129, 0.7);
     background: rgba(16, 185, 129, 0.08);
     box-shadow:
-        0 0 10px rgba(16, 185, 129, 0.35),
-        0 0 24px rgba(16, 185, 129, 0.12);
+        0 0 8px rgba(16, 185, 129, 0.25),
+        0 0 16px rgba(16, 185, 129, 0.1);
 }
 
-[data-scheme="light"] .spoke-node__label {
+[data-scheme="light"] .nav-hub__node-label {
     color: #475569;
     text-shadow: none;
 }
 
-[data-scheme="light"] .spoke-node__status {
-    text-shadow: none;
-}
-
-[data-scheme="light"] .spoke-tooltip {
-    background: #ffffff;
-    border-color: rgba(203, 213, 225, 0.6);
-    color: #334155;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-[data-scheme="light"] .orbit-ring__track {
-    opacity: 0.4;
-}
-
-[data-scheme="light"] .orbit-ring__label {
-    text-shadow: none;
-}
-
-[data-scheme="light"] .ghost-node__icon-ring {
-    background: rgba(139, 92, 246, 0.08);
-}
-
-[data-scheme="light"] .ghost-node__label {
-    text-shadow: none;
-}
-
-/* Mobile module rows light mode */
-[data-scheme="light"] .mobile-module-row {
-    background: rgba(255, 255, 255, 0.7);
-    border-color: rgba(203, 213, 225, 0.5);
-}
-
-[data-scheme="light"] .mobile-module-row:not(:disabled):active {
-    background: rgba(241, 245, 249, 0.9);
-}
-
-[data-scheme="light"] .mobile-module-row__icon {
-    background: rgba(248, 250, 252, 0.9);
-    border-color: rgba(203, 213, 225, 0.3);
-}
-
-[data-scheme="light"] .mobile-module-row__name {
-    color: #334155;
-}
-
-[data-scheme="light"] .mobile-module-row--active .mobile-module-row__name {
-    color: #0f172a;
-}
-
-[data-scheme="light"] .mobile-avatar__img {
-    background: rgba(255, 255, 255, 0.9);
-}
-
-[data-scheme="light"] .mobile-avatar__edit {
-    background: rgba(255, 255, 255, 0.95);
-    border-color: rgba(203, 213, 225, 0.5);
+[data-scheme="light"] .nav-hub__node--active .nav-hub__node-label {
+    color: #059669;
 }
 
 [data-scheme="light"] .avatar-selector-option {
     background: rgba(241, 245, 249, 0.8);
-}
-
-/* ── Light mode laser conduit overrides ── */
-
-[data-scheme="light"] .beam-line--emerald {
-    animation-name: laser-breathe-emerald-light;
-}
-
-[data-scheme="light"] .beam-line--purple {
-    animation-name: laser-breathe-purple-light;
-}
-
-[data-scheme="light"] .pulse-line__glow {
-    filter: blur(3px) drop-shadow(0 0 6px currentColor);
-}
-
-[data-scheme="light"] .pulse-line__glow--emerald {
-    stroke: rgba(16, 185, 129, 0.8);
-}
-
-[data-scheme="light"] .pulse-line__glow--purple {
-    stroke: rgba(139, 92, 246, 0.8);
-}
-
-[data-scheme="light"] .pulse-line__core--emerald {
-    stroke: rgba(6, 214, 160, 0.95);
-}
-
-[data-scheme="light"] .pulse-line__core--purple {
-    stroke: rgba(167, 139, 250, 0.95);
-}
-
-@keyframes laser-breathe-emerald-light {
-    0%, 100% {
-        stroke: rgba(16, 185, 129, 0.12);
-        filter: drop-shadow(0 0 3px rgba(16, 185, 129, 0.1));
-    }
-    50% {
-        stroke: rgba(16, 185, 129, 0.5);
-        filter: drop-shadow(0 0 10px rgba(16, 185, 129, 0.4));
-    }
-}
-
-@keyframes laser-breathe-purple-light {
-    0%, 100% {
-        stroke: rgba(139, 92, 246, 0.12);
-        filter: drop-shadow(0 0 3px rgba(139, 92, 246, 0.1));
-    }
-    50% {
-        stroke: rgba(139, 92, 246, 0.5);
-        filter: drop-shadow(0 0 10px rgba(139, 92, 246, 0.4));
-    }
 }

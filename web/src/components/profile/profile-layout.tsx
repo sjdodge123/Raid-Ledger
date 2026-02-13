@@ -4,6 +4,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { ProfileSidebar } from './profile-sidebar';
 import { ProfileHeader } from './profile-header';
+import { IntegrationHub } from './IntegrationHub';
 import './integration-hub.css';
 
 export function ProfileLayout() {
@@ -52,17 +53,23 @@ export function ProfileLayout() {
     const characters = charactersData?.data ?? [];
 
     return (
-        <div className="profile-page relative min-h-screen py-8 px-4">
+        <div className="profile-page relative min-h-screen px-4">
             <div className="profile-page__nebula" />
             <div className="profile-page__stars" />
 
             <div className="relative z-10 max-w-6xl mx-auto">
+                {/* Compact orbital nav hub — sticks to top on scroll */}
+                <div className="sticky top-0 z-30 bg-surface/80 backdrop-blur-sm border-b border-edge-subtle">
+                    <IntegrationHub user={user} characters={characters} onRefresh={refetch} />
+                </div>
+
+                {/* Compact header strip below nav hub */}
                 <ProfileHeader user={user} characters={characters} onRefresh={refetch} />
 
-                <div className="flex items-center gap-3 mb-6">
+                <div className="flex items-center gap-3 mb-6 lg:hidden">
                     <button
                         type="button"
-                        className="lg:hidden p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
+                        className="p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
                         onClick={() => setMobileOpen(true)}
                         aria-label="Open profile menu"
                     >
@@ -70,15 +77,12 @@ export function ProfileLayout() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
                         </svg>
                     </button>
-                    <div>
-                        <h1 className="text-2xl font-bold text-foreground">My Profile</h1>
-                        <p className="text-sm text-muted mt-0.5">Manage your characters, game time, and preferences</p>
-                    </div>
+                    <h1 className="text-lg font-bold text-foreground">My Profile</h1>
                 </div>
 
                 <div className="flex gap-6">
                     <aside className="hidden lg:block w-56 flex-shrink-0">
-                        <div className="sticky top-24">
+                        <div className="sticky top-72">
                             <ProfileSidebar />
                         </div>
                     </aside>

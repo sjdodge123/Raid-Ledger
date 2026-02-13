@@ -37,7 +37,7 @@ const SECTIONS: NavSection[] = [
         label: 'Identity',
         icon: IdentityIcon,
         children: [
-            { to: '/profile/identity', label: 'Integration Hub' },
+            { to: '/profile/identity', label: 'My Profile' },
             { to: '/profile/identity/discord', label: 'Discord' },
             { to: '/profile/identity/avatar', label: 'Avatar' },
         ],
