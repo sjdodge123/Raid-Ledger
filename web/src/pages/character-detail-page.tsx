@@ -189,7 +189,7 @@ export function CharacterDetailPage() {
                                 </span>
                             ) : null}
                             {character.isMain && (
-                                <span className="text-yellow-400" title="Main character">⭐</span>
+                                <span className="text-yellow-400 inline-flex items-center gap-1 text-sm font-semibold" title="Main character">⭐ Main</span>
                             )}
                         </div>
 

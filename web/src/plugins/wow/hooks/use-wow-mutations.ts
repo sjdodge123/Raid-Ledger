@@ -27,6 +27,8 @@ export function useImportWowCharacter() {
 
 /**
  * Mutation hook for refreshing a character from Blizzard Armory (ROK-234).
+ * Invalidates all character-related caches since refresh may affect
+ * isMain state or data displayed across multiple views.
  */
 export function useRefreshCharacterFromArmory() {
     const queryClient = useQueryClient();
@@ -34,10 +36,11 @@ export function useRefreshCharacterFromArmory() {
     return useMutation({
         mutationFn: ({ id, dto }: { id: string; dto: RefreshCharacterInput }) =>
             refreshCharacterFromArmory(id, dto),
-        onSuccess: (_data, variables) => {
+        onSuccess: () => {
             toast.success('Character refreshed from Armory!');
             queryClient.invalidateQueries({ queryKey: ['me', 'characters'] });
-            queryClient.invalidateQueries({ queryKey: ['characters', variables.id] });
+            queryClient.invalidateQueries({ queryKey: ['characters'] });
+            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to refresh character');

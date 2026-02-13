@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
-import { useSetMainCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
+import { useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { PluginSlot } from '../../plugins';
 
 interface CharacterCardProps {
@@ -17,14 +17,10 @@ const FACTION_STYLES: Record<string, string> = {
  * Card displaying a single character with actions.
  * Enhanced for ROK-234: shows level, race, faction badge for Armory-imported characters.
  * Click-through to character detail page for equipment view.
+ * ROK-206: "Set as main" moved into Edit Character modal.
  */
 export function CharacterCard({ character, onEdit }: CharacterCardProps) {
-    const setMainMutation = useSetMainCharacter();
     const deleteMutation = useDeleteCharacter();
-
-    function handleSetMain() {
-        setMainMutation.mutate(character.id);
-    }
 
     function handleDelete() {
         const shouldDelete = window.confirm(`Are you sure you want to delete ${character.name}?`);
@@ -110,6 +106,12 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
 
             {/* Actions */}
             <div className="flex items-center gap-2 flex-shrink-0">
+                {/* Main badge */}
+                {character.isMain && (
+                    <span className="text-yellow-400 text-sm font-semibold inline-flex items-center gap-1" title="Main character">
+                        ⭐ Main
+                    </span>
+                )}
                 {/* Plugin slot for refresh button + armory link (ROK-242) */}
                 <PluginSlot
                     name="profile:character-actions"
@@ -121,16 +123,6 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                         profileUrl: character.profileUrl,
                     }}
                 />
-                {!character.isMain && (
-                    <button
-                        onClick={handleSetMain}
-                        disabled={setMainMutation.isPending}
-                        className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
-                        title="Set as main"
-                    >
-                        ⭐ Main
-                    </button>
-                )}
                 <button
                     onClick={() => onEdit(character)}
                     className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
