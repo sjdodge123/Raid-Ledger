@@ -76,20 +76,23 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const currentHour = now.getHours() + now.getMinutes() / 60;
 
     // Derive displayed slots
-    // In non-rolling (profile) mode, remap committed/freed → available so template
-    // slots that overlap with events still appear in the weekly template editor.
-    // Filtering them out caused a bug where saved template slots would vanish
-    // after reload because the composite view marked them as 'committed'.
+    // In non-rolling (profile) mode:
+    //  - Filter out event-only committed slots (fromTemplate=false) — those are
+    //    injected by the composite view for calendar display, not user-set template slots.
+    //  - Remap template committed/freed → available so template slots that overlap
+    //    with events remain visible and editable in the weekly template editor.
     const slots = useMemo<GameTimeSlot[]>(() => {
         if (editSlots !== null) return editSlots;
         if (!gameTimeData?.slots) return [];
-        return gameTimeData.slots.map((s: GameTimeSlot) => ({
-            dayOfWeek: s.dayOfWeek,
-            hour: s.hour,
-            status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
-                ? 'available'
-                : (s.status ?? 'available'),
-        }));
+        return gameTimeData.slots
+            .filter((s: GameTimeSlot) => rolling || s.fromTemplate !== false)
+            .map((s: GameTimeSlot) => ({
+                dayOfWeek: s.dayOfWeek,
+                hour: s.hour,
+                status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
+                    ? 'available'
+                    : (s.status ?? 'available'),
+            }));
     }, [editSlots, gameTimeData, rolling]);
 
     const events = useMemo<GameTimeEventBlock[]>(

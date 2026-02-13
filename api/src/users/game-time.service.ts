@@ -13,6 +13,7 @@ export interface CompositeSlot {
   dayOfWeek: number;
   hour: number;
   status: 'available' | 'committed' | 'blocked' | 'freed';
+  fromTemplate?: boolean;
 }
 
 export interface EventBlockDescriptor {
@@ -599,7 +600,7 @@ export class GameTimeService {
       const dateStr = dayDate.toISOString().split('T')[0];
 
       if (absenceDates.has(dateStr)) {
-        slots.push({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'blocked' });
+        slots.push({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'blocked', fromTemplate: true });
       } else {
         // Check override
         const overrideKey = `${dateStr}:${s.hour}`;
@@ -609,12 +610,14 @@ export class GameTimeService {
             dayOfWeek: s.dayOfWeek,
             hour: s.hour,
             status: overrideStatus as CompositeSlot['status'],
+            fromTemplate: true,
           });
         } else {
           slots.push({
             dayOfWeek: s.dayOfWeek,
             hour: s.hour,
             status: committedSet.has(key) ? 'committed' : 'available',
+            fromTemplate: true,
           });
         }
       }
@@ -628,6 +631,7 @@ export class GameTimeService {
           dayOfWeek: day,
           hour,
           status: 'committed',
+          fromTemplate: false,
         });
       }
     }

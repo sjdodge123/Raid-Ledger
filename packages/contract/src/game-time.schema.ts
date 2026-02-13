@@ -14,11 +14,14 @@ export type GameTimeStatus = z.infer<typeof GameTimeStatusEnum>;
 
 /**
  * A single game time slot: day-of-week + hour + optional status.
+ * fromTemplate distinguishes user-set template slots from event-only committed slots
+ * that the composite view injects for calendar display.
  */
 export const GameTimeSlotSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6),
   hour: z.number().int().min(0).max(23),
   status: GameTimeStatusEnum.optional(),
+  fromTemplate: z.boolean().optional(),
 });
 export type GameTimeSlot = z.infer<typeof GameTimeSlotSchema>;
 
