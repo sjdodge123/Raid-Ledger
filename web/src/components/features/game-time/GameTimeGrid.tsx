@@ -57,9 +57,12 @@ export interface GameTimeGridProps {
     heatmapOverlay?: HeatmapCell[];
     /** Callback when a cell is clicked (ROK-223, used in reschedule modal) */
     onCellClick?: (dayOfWeek: number, hour: number) => void;
+    /** Use full day names ("Sunday" instead of "Sun") — used for weekly template view */
+    fullDayNames?: boolean;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
+const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
 
 function formatHour(hour: number): string {
@@ -235,6 +238,7 @@ export function GameTimeGrid({
     weekStart,
     heatmapOverlay,
     onCellClick,
+    fullDayNames,
 }: GameTimeGridProps) {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
     const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
@@ -532,6 +536,7 @@ export function GameTimeGrid({
                     )}
                 </div>
                 {DAYS.map((day, i) => {
+                    const displayDay = fullDayNames ? FULL_DAYS[i] : day;
                     const isToday = todayIndex === i;
                     const isTodaySplit = isToday && !!nextWeekSlots;
                     const isRollingPast = todayIndex !== undefined && nextWeekSlots && i < todayIndex;
@@ -556,12 +561,12 @@ export function GameTimeGrid({
                         >
                             {isRollingPast && nextDateLabel ? (
                                 <span className="flex flex-col items-center leading-none gap-0.5">
-                                    <span>{day}</span>
+                                    <span>{displayDay}</span>
                                     <span className="text-[9px] opacity-60 leading-none">{nextDateLabel}</span>
                                 </span>
                             ) : isTodaySplit && dateLabel && nextDateLabel ? (
                                 <span className="flex flex-col items-center leading-none gap-0.5">
-                                    <span>{day}</span>
+                                    <span>{displayDay}</span>
                                     <span className="text-[9px] leading-none flex items-center gap-0.5">
                                         <span className="text-muted">{nextDateLabel}</span>
                                         <span className="text-dim">/</span>
@@ -570,11 +575,11 @@ export function GameTimeGrid({
                                 </span>
                             ) : dateLabel ? (
                                 <span className="flex flex-col items-center leading-none gap-0.5">
-                                    <span>{day}</span>
+                                    <span>{displayDay}</span>
                                     <span className="text-[9px] opacity-60 leading-none">{dateLabel}</span>
                                 </span>
                             ) : (
-                                day
+                                displayDay
                             )}
                         </div>
                     );

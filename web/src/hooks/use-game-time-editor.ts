@@ -76,15 +76,24 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     const currentHour = now.getHours() + now.getMinutes() / 60;
 
     // Derive displayed slots
+    // In non-rolling (profile) mode:
+    //  - Filter out event-only committed slots (fromTemplate=false) — those are
+    //    injected by the composite view for calendar display, not user-set template slots.
+    //  - Remap template committed/freed → available so template slots that overlap
+    //    with events remain visible and editable in the weekly template editor.
     const slots = useMemo<GameTimeSlot[]>(() => {
         if (editSlots !== null) return editSlots;
         if (!gameTimeData?.slots) return [];
-        return gameTimeData.slots.map((s: GameTimeSlot) => ({
-            dayOfWeek: s.dayOfWeek,
-            hour: s.hour,
-            status: s.status ?? 'available',
-        }));
-    }, [editSlots, gameTimeData]);
+        return gameTimeData.slots
+            .filter((s: GameTimeSlot) => rolling || s.fromTemplate !== false)
+            .map((s: GameTimeSlot) => ({
+                dayOfWeek: s.dayOfWeek,
+                hour: s.hour,
+                status: (!rolling && (s.status === 'committed' || s.status === 'freed'))
+                    ? 'available'
+                    : (s.status ?? 'available'),
+            }));
+    }, [editSlots, gameTimeData, rolling]);
 
     const events = useMemo<GameTimeEventBlock[]>(
         () => (gameTimeData?.events as GameTimeEventBlock[]) ?? [],
@@ -112,9 +121,13 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
     }, []);
 
     const save = useCallback(async () => {
+        // Build the set of user-edited available slots.
+        // The backend preserves committed slots server-side, so the frontend
+        // only needs to send the available slots the user is managing.
         const templateSlots = slots
             .filter((s) => s.status === 'available' || !s.status)
             .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.hour }));
+
         try {
             await saveGameTime.mutateAsync(templateSlots);
             setEditSlots(null);

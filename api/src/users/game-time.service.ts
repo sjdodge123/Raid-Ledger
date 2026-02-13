@@ -13,6 +13,7 @@ export interface CompositeSlot {
   dayOfWeek: number;
   hour: number;
   status: 'available' | 'committed' | 'blocked' | 'freed';
+  fromTemplate?: boolean;
 }
 
 export interface EventBlockDescriptor {
@@ -81,6 +82,12 @@ export class GameTimeService {
   /**
    * Replace a user's game time template entirely (delete + bulk insert in transaction).
    * Frontend sends 0=Sun convention; we convert to DB 0=Mon convention.
+   *
+   * Committed-slot preservation: template slots that overlap with active event
+   * signups are automatically preserved server-side, even if the frontend does
+   * not include them in the payload. This prevents a race condition where stale
+   * TanStack Query cache on the frontend could cause committed slots to be
+   * dropped during a save.
    */
   async saveTemplate(
     userId: number,
@@ -92,6 +99,18 @@ export class GameTimeService {
       dayOfWeek: (s.dayOfWeek + 6) % 7,
     }));
 
+    // Find template slots that overlap with active event signups.
+    // These must be preserved even if the frontend didn't include them.
+    const committedDbKeys = await this.getCommittedTemplateKeys(userId);
+
+    // Merge: incoming slots + committed slots not already in payload
+    const payloadKeys = new Set(dbSlots.map((s) => `${s.dayOfWeek}:${s.hour}`));
+    const preservedSlots = committedDbKeys
+      .filter((k) => !payloadKeys.has(`${k.dayOfWeek}:${k.hour}`))
+      .map((k) => ({ dayOfWeek: k.dayOfWeek, hour: k.hour }));
+
+    const mergedDbSlots = [...dbSlots, ...preservedSlots];
+
     await this.db.transaction(async (tx) => {
       // Delete all existing template slots
       await tx
@@ -99,10 +118,10 @@ export class GameTimeService {
         .where(eq(schema.gameTimeTemplates.userId, userId));
 
       // Bulk insert new slots (if any)
-      if (dbSlots.length > 0) {
+      if (mergedDbSlots.length > 0) {
         const now = new Date();
         await tx.insert(schema.gameTimeTemplates).values(
-          dbSlots.map((s) => ({
+          mergedDbSlots.map((s) => ({
             userId,
             dayOfWeek: s.dayOfWeek,
             startHour: s.hour,
@@ -113,7 +132,76 @@ export class GameTimeService {
       }
     });
 
-    return { slots };
+    // Return all slots in display convention (convert preserved slots back)
+    const preservedDisplay = preservedSlots.map((s) => ({
+      dayOfWeek: (s.dayOfWeek + 1) % 7,
+      hour: s.hour,
+    }));
+    return { slots: [...slots, ...preservedDisplay] };
+  }
+
+  /**
+   * Get template slot keys (DB convention: 0=Mon) that overlap with active
+   * event signups in the current or next week. Used by saveTemplate to
+   * preserve committed slots server-side.
+   */
+  private async getCommittedTemplateKeys(
+    userId: number,
+  ): Promise<Array<{ dayOfWeek: number; hour: number }>> {
+    // Get existing template slots
+    const existingSlots = await this.db
+      .select({
+        dayOfWeek: schema.gameTimeTemplates.dayOfWeek,
+        startHour: schema.gameTimeTemplates.startHour,
+      })
+      .from(schema.gameTimeTemplates)
+      .where(eq(schema.gameTimeTemplates.userId, userId));
+
+    if (existingSlots.length === 0) return [];
+
+    // Query event signups for this user within the next 2 weeks
+    const now = new Date();
+    const twoWeeksLater = new Date(now);
+    twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
+    const rangeStr = `[${now.toISOString()},${twoWeeksLater.toISOString()})`;
+
+    const signedUpEvents = await this.db
+      .select({ duration: schema.events.duration })
+      .from(schema.eventSignups)
+      .innerJoin(
+        schema.events,
+        eq(schema.eventSignups.eventId, schema.events.id),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.userId, userId),
+          sql`${schema.events.duration} && ${rangeStr}::tsrange`,
+        ),
+      );
+
+    if (signedUpEvents.length === 0) return [];
+
+    // Convert event durations to day-of-week + hour keys (DB convention: 0=Mon)
+    const committedKeys = new Set<string>();
+    for (const event of signedUpEvents) {
+      const [eventStart, eventEnd] = event.duration;
+      const cursor = new Date(eventStart);
+      cursor.setUTCMinutes(0, 0, 0);
+      if (cursor < eventStart) cursor.setUTCHours(cursor.getUTCHours() + 1);
+
+      while (cursor < eventEnd) {
+        // Convert UTC day to DB convention (0=Mon): getUTCDay() returns 0=Sun
+        const utcDay = cursor.getUTCDay();
+        const dbDay = (utcDay + 6) % 7; // 0=Sun → 6, 1=Mon → 0, etc.
+        committedKeys.add(`${dbDay}:${cursor.getUTCHours()}`);
+        cursor.setUTCHours(cursor.getUTCHours() + 1);
+      }
+    }
+
+    // Return only existing template slots that overlap with committed events
+    return existingSlots
+      .filter((s) => committedKeys.has(`${s.dayOfWeek}:${s.startHour}`))
+      .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.startHour }));
   }
 
   /**
@@ -512,7 +600,7 @@ export class GameTimeService {
       const dateStr = dayDate.toISOString().split('T')[0];
 
       if (absenceDates.has(dateStr)) {
-        slots.push({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'blocked' });
+        slots.push({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'blocked', fromTemplate: true });
       } else {
         // Check override
         const overrideKey = `${dateStr}:${s.hour}`;
@@ -522,12 +610,14 @@ export class GameTimeService {
             dayOfWeek: s.dayOfWeek,
             hour: s.hour,
             status: overrideStatus as CompositeSlot['status'],
+            fromTemplate: true,
           });
         } else {
           slots.push({
             dayOfWeek: s.dayOfWeek,
             hour: s.hour,
             status: committedSet.has(key) ? 'committed' : 'available',
+            fromTemplate: true,
           });
         }
       }
@@ -541,6 +631,7 @@ export class GameTimeService {
           dayOfWeek: day,
           hour,
           status: 'committed',
+          fromTemplate: false,
         });
       }
     }
