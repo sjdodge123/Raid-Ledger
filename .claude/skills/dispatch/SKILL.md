@@ -401,41 +401,63 @@ All N stories are on staging at localhost:5173.
 All stories moved to "In Review" in Linear.
 
 Ready for testing:
-- ROK-XXX: #<num> — <title> (Linear: In Review ✓)
-- ROK-YYY: #<num> — <title> (Linear: In Review ✓)
+- ROK-XXX: PR #<num> — <title> (Linear: In Review ✓)
+- ROK-YYY: PR #<num> — <title> (Linear: In Review ✓)
 
-Please smoke test, then say "approved" to proceed to code review,
-or report issues with specific story IDs.
+Test each story on staging. In Linear:
+  → Move to "Code Review" if testing passes
+  → Move to "Changes Requested" (with comments) if issues found
+Tell me when you're done testing, or if you need a dev to fix something.
 ```
 
 **WAIT for operator response before proceeding.** This is the manual testing gate.
 
 ---
 
-## Step 9: Operator Tests + Code Review
+## Step 9: Status-Driven Review Pipeline
 
-### 9a. Operator Manual Testing
+The operator controls the testing gate by moving stories in Linear. The lead monitors and reacts.
 
-The operator tests on staging (localhost:5173). They signal:
-- "approved" or "looks good" → proceed to 9b for ALL stories in batch
-- "ROK-XXX has issues: <description>" → lead messages dev teammate with feedback, wait for fix cycle
-- "approved except ROK-XXX" → proceed to 9b for approved stories, handle ROK-XXX separately
+### 9a. Operator Manual Testing (operator-driven)
 
-### 9b. Reviewer Reviews PRs
+The operator tests on staging (localhost:5173) and updates Linear statuses:
+- **"Code Review"** = operator approved, ready for code review agent
+- **"Changes Requested"** (with comments) = operator found issues
 
-The reviewer teammate claims review tasks and:
-1. Runs `gh pr diff <number>` to inspect changes
-2. Checks: TypeScript strictness, Zod validation, security, error handling, pattern consistency, naming conventions
-3. Posts review: `gh pr review <number> --approve` or `--request-changes --body "..."`
-4. Messages the lead with the verdict
+When the operator signals they're done testing, the lead checks Linear for status changes:
+```
+mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
+mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
+```
+
+### 9b. Handle Changes Requested (from operator testing)
+
+For stories the operator moved to "Changes Requested":
+1. Fetch comments to get the operator's feedback: `mcp__linear__list_comments(issueId: <id>)`
+2. Message the dev teammate with specific issues
+3. Dev teammate fixes in its worktree, commits
+4. Lead pushes updated branch
+5. Lead re-merges to staging, re-deploys
+6. Lead moves Linear back to "In Review"
+7. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
+
+### 9c. Dispatch Code Review (for "Code Review" stories)
+
+For stories the operator moved to "Code Review", dispatch the reviewer teammate:
+1. Unblock the review tasks in the shared task list
+2. Reviewer claims tasks and for each PR:
+   - Runs `gh pr diff <number>`
+   - Checks: TypeScript strictness, Zod validation, security, error handling, patterns, naming
+   - Posts: `gh pr review <number> --approve` or `--request-changes --body "..."`
+   - Messages the lead with verdict
 
 ---
 
-## Step 10: Handle Review Outcomes
+## Step 10: Handle Code Review Outcomes
 
 ### If reviewer approves:
 
-1. Lead (or operator) merges PR:
+1. Lead merges PR:
    ```bash
    gh pr merge <number> --merge --delete-branch
    ```
@@ -450,7 +472,6 @@ The reviewer teammate claims review tasks and:
    ```
    ## [N/total] ROK-XXX — <title> ✓
    PR: #<num> merged to main | Commits: SHA1, SHA2
-   Next batch: <batch info or "all done">
    ```
 
 ### If reviewer requests changes:
@@ -458,9 +479,11 @@ The reviewer teammate claims review tasks and:
 1. Lead updates Linear → "Changes Requested"
 2. Lead messages the dev teammate with specific feedback from the review
 3. Dev teammate fixes in its worktree, commits
-4. Lead pushes updated branch (force-push OK since PR is open)
-5. Lead re-merges to staging, notifies operator for re-test
-6. Cycle repeats from Step 9
+4. Lead pushes updated branch
+5. Lead re-merges to staging, re-deploys
+6. Lead moves Linear → "In Review"
+7. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
+8. Cycle repeats from Step 9a (operator re-tests)
 
 ---
 
