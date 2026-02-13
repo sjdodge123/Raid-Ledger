@@ -23,6 +23,8 @@ export const gameRegistry = pgTable('game_registry', {
   hasRoles: boolean('has_roles').default(false).notNull(),
   /** Whether this game has specializations/specs */
   hasSpecs: boolean('has_specs').default(false).notNull(),
+  /** Whether this game is enabled for event/character creation (ROK-204) */
+  enabled: boolean('enabled').default(true).notNull(),
   /** Maximum characters a user can register per game */
   maxCharactersPerUser: integer('max_characters_per_user')
     .default(10)

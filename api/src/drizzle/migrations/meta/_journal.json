@@ -267,6 +267,13 @@
       "when": 1770946760447,
       "tag": "0037_charming_reaper",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1770947809758,
+      "tag": "0038_yellow_skreet",
+      "breakpoints": true
     }
   ]
 }

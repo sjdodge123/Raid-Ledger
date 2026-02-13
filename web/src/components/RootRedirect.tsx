@@ -1,16 +1,19 @@
 import { Navigate } from 'react-router-dom';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isAdmin } from '../hooks/use-auth';
+import { useSystemStatus } from '../hooks/use-system-status';
 import { LoginPage } from '../pages/login-page';
 
 /**
  * RootRedirect component (ROK-175 AC-1, AC-2).
- * 
+ *
  * Handles the root URL behavior:
+ * - Authenticated admin with incomplete onboarding → redirect to /admin/setup (ROK-204)
  * - Authenticated users → redirect to /calendar (or /events until calendar is built)
  * - Unauthenticated users → render LoginPage inline (no redirect)
  */
 export function RootRedirect() {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { user, isAuthenticated, isLoading } = useAuth();
+    const { data: systemStatus } = useSystemStatus();
 
     // Show loading state while checking auth
     if (isLoading) {
@@ -21,8 +24,13 @@ export function RootRedirect() {
         );
     }
 
-    // Authenticated users go to calendar (ROK-175 AC-1)
+    // Authenticated users
     if (isAuthenticated) {
+        // ROK-204 AC-1: Redirect admin to onboarding wizard if not completed
+        if (isAdmin(user) && systemStatus?.onboardingCompleted === false) {
+            return <Navigate to="/admin/setup" replace />;
+        }
+        // ROK-175 AC-1: Regular users go to calendar
         return <Navigate to="/calendar" replace />;
     }
 

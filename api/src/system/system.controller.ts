@@ -2,6 +2,7 @@ import { Controller, Get } from '@nestjs/common';
 import * as path from 'path';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import type { SystemStatusDto } from '@raid-ledger/contract';
 
@@ -24,13 +25,19 @@ export class SystemController {
    */
   @Get('status')
   async getStatus(): Promise<SystemStatusDto> {
-    const [userCount, discordConfigured, blizzardConfigured, branding] =
-      await Promise.all([
-        this.usersService.count(),
-        this.settingsService.isDiscordConfigured(),
-        this.settingsService.isBlizzardConfigured(),
-        this.settingsService.getBranding(),
-      ]);
+    const [
+      userCount,
+      discordConfigured,
+      blizzardConfigured,
+      branding,
+      onboardingCompletedRaw,
+    ] = await Promise.all([
+      this.usersService.count(),
+      this.settingsService.isDiscordConfigured(),
+      this.settingsService.isBlizzardConfigured(),
+      this.settingsService.getBranding(),
+      this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
+    ]);
 
     return {
       isFirstRun: userCount === 0,
@@ -43,6 +50,7 @@ export class SystemController {
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : undefined,
       communityAccentColor: branding.communityAccentColor ?? undefined,
+      onboardingCompleted: onboardingCompletedRaw === 'true',
     };
   }
 }
