@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CharacterSchema } from './characters.schema.js';
+import { EventResponseSchema } from './events.schema.js';
 
 // ==========================================
 // User Role (ROK-272)
@@ -142,8 +143,6 @@ export type UserManagementListResponseDto = z.infer<typeof UserManagementListRes
 // ==========================================
 // User Event Signups Response (ROK-299)
 // ==========================================
-
-import { EventResponseSchema } from './events.schema.js';
 
 /**
  * Response for GET /users/:id/events/signups

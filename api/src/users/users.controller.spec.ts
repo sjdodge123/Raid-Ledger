@@ -207,20 +207,23 @@ describe('UsersController', () => {
 
   describe('getUserEventSignups (ROK-299)', () => {
     it('should return upcoming events for valid user', async () => {
-      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as any);
-      jest
+      const findByIdSpy = jest
+        .spyOn(usersService, 'findById')
+        .mockResolvedValue(mockUser as never);
+      const findUpcomingSpy = jest
         .spyOn(eventsService, 'findUpcomingByUser')
         .mockResolvedValue(mockEventsResponse);
 
       const result = await controller.getUserEventSignups(1);
 
       expect(result).toEqual(mockEventsResponse);
-      expect(usersService.findById).toHaveBeenCalledWith(1);
-      expect(eventsService.findUpcomingByUser).toHaveBeenCalledWith(1);
+      expect(findByIdSpy).toHaveBeenCalledWith(1);
+      expect(findUpcomingSpy).toHaveBeenCalledWith(1);
     });
 
     it('should throw NotFoundException when user does not exist', async () => {
-      jest.spyOn(usersService, 'findById').mockResolvedValue(null);
+      jest.spyOn(usersService, 'findById').mockResolvedValue(undefined);
+      const findUpcomingSpy = jest.spyOn(eventsService, 'findUpcomingByUser');
 
       await expect(controller.getUserEventSignups(999)).rejects.toThrow(
         NotFoundException,
@@ -228,12 +231,12 @@ describe('UsersController', () => {
       await expect(controller.getUserEventSignups(999)).rejects.toThrow(
         'User not found',
       );
-      expect(eventsService.findUpcomingByUser).not.toHaveBeenCalled();
+      expect(findUpcomingSpy).not.toHaveBeenCalled();
     });
 
     it('should return empty data when user has no signups', async () => {
       const emptyResponse = { data: [], total: 0 };
-      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as any);
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
       jest
         .spyOn(eventsService, 'findUpcomingByUser')
         .mockResolvedValue(emptyResponse);
@@ -267,7 +270,7 @@ describe('UsersController', () => {
         total: 10,
       };
 
-      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as any);
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
       jest
         .spyOn(eventsService, 'findUpcomingByUser')
         .mockResolvedValue(manyEventsResponse);
