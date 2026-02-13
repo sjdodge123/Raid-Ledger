@@ -93,4 +93,69 @@ describe('RosterList', () => {
         render(<RosterList signups={confirmedSignups} />);
         expect(screen.getByText('⚔️')).toBeInTheDocument(); // DPS role icon
     });
+
+    it('sorts signups alphabetically by username (case-insensitive)', () => {
+        const unsortedSignups = [
+            {
+                id: 3,
+                user: { id: 789, discordId: '111', username: 'charlie', avatar: null },
+                signedUpAt: new Date(Date.now() - 1000).toISOString(),
+                characterId: null,
+                character: null,
+                confirmationStatus: 'pending' as const,
+            },
+            {
+                id: 1,
+                user: { id: 123, discordId: '222', username: 'alice', avatar: null },
+                signedUpAt: new Date(Date.now() - 2000).toISOString(),
+                characterId: null,
+                character: null,
+                confirmationStatus: 'pending' as const,
+            },
+            {
+                id: 2,
+                user: { id: 456, discordId: '333', username: 'Bob', avatar: null },
+                signedUpAt: new Date(Date.now() - 3000).toISOString(),
+                characterId: null,
+                character: null,
+                confirmationStatus: 'pending' as const,
+            },
+        ];
+
+        const { container } = render(<RosterList signups={unsortedSignups} />);
+        const items = container.querySelectorAll('.font-medium.text-foreground');
+
+        // Should be sorted: alice, Bob, charlie (case-insensitive)
+        expect(items[0]).toHaveTextContent('alice');
+        expect(items[1]).toHaveTextContent('Bob');
+        expect(items[2]).toHaveTextContent('charlie');
+    });
+
+    it('does not mutate the original signups array', () => {
+        const signups = [
+            {
+                id: 2,
+                user: { id: 456, discordId: '222', username: 'zebra', avatar: null },
+                signedUpAt: new Date().toISOString(),
+                characterId: null,
+                character: null,
+                confirmationStatus: 'pending' as const,
+            },
+            {
+                id: 1,
+                user: { id: 123, discordId: '111', username: 'aardvark', avatar: null },
+                signedUpAt: new Date().toISOString(),
+                characterId: null,
+                character: null,
+                confirmationStatus: 'pending' as const,
+            },
+        ];
+
+        const originalOrder = signups.map((s) => s.user.username);
+        render(<RosterList signups={signups} />);
+
+        // Original array should remain unchanged
+        expect(signups[0].user.username).toBe(originalOrder[0]);
+        expect(signups[1].user.username).toBe(originalOrder[1]);
+    });
 });

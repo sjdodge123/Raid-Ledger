@@ -57,4 +57,90 @@ describe('UnassignedBar', () => {
         const bar = screen.getByRole('button');
         expect(bar).toHaveAttribute('aria-label', '5 unassigned players. Click to view.');
     });
+
+    it('sorts pool alphabetically by username (case-insensitive)', () => {
+        const unsortedPool: RosterAssignmentResponse[] = [
+            {
+                id: 3,
+                signupId: 3,
+                userId: 103,
+                discordId: '103',
+                username: 'charlie',
+                avatar: null,
+                slot: null,
+                position: 0,
+                isOverride: false,
+                character: null,
+            },
+            {
+                id: 1,
+                signupId: 1,
+                userId: 101,
+                discordId: '101',
+                username: 'alice',
+                avatar: null,
+                slot: null,
+                position: 0,
+                isOverride: false,
+                character: null,
+            },
+            {
+                id: 2,
+                signupId: 2,
+                userId: 102,
+                discordId: '102',
+                username: 'Bob',
+                avatar: null,
+                slot: null,
+                position: 0,
+                isOverride: false,
+                character: null,
+            },
+        ];
+
+        const { container } = render(<UnassignedBar pool={unsortedPool} onBarClick={mockOnBarClick} />);
+        const avatars = container.querySelectorAll('.unassigned-bar__avatar');
+
+        // Should be sorted: alice, Bob, charlie (case-insensitive)
+        // Verify by checking the initials fallback text
+        expect(avatars[0]).toHaveTextContent('A');
+        expect(avatars[1]).toHaveTextContent('B');
+        expect(avatars[2]).toHaveTextContent('C');
+    });
+
+    it('does not mutate the original pool array', () => {
+        const pool: RosterAssignmentResponse[] = [
+            {
+                id: 2,
+                signupId: 2,
+                userId: 102,
+                discordId: '102',
+                username: 'zebra',
+                avatar: null,
+                slot: null,
+                position: 0,
+                isOverride: false,
+                character: null,
+            },
+            {
+                id: 1,
+                signupId: 1,
+                userId: 101,
+                discordId: '101',
+                username: 'aardvark',
+                avatar: null,
+                slot: null,
+                position: 0,
+                isOverride: false,
+                character: null,
+            },
+        ];
+
+        const originalOrder = pool.map((p) => p.username);
+        render(<UnassignedBar pool={pool} onBarClick={mockOnBarClick} />);
+
+        // Original array should remain unchanged
+        expect(pool[0].username).toBe(originalOrder[0]);
+        expect(pool[1].username).toBe(originalOrder[1]);
+    });
 });
