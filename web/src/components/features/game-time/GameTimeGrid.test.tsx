@@ -222,4 +222,47 @@ describe('GameTimeGrid', () => {
             expect(block.textContent).toContain('Raid Night');
         });
     });
+
+    describe('fullDayNames prop (ROK-301)', () => {
+        it('renders abbreviated day names by default', () => {
+            render(<GameTimeGrid slots={[]} />);
+
+            expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
+            expect(screen.getByTestId('day-header-1')).toHaveTextContent('Mon');
+            expect(screen.getByTestId('day-header-2')).toHaveTextContent('Tue');
+            expect(screen.getByTestId('day-header-3')).toHaveTextContent('Wed');
+            expect(screen.getByTestId('day-header-4')).toHaveTextContent('Thu');
+            expect(screen.getByTestId('day-header-5')).toHaveTextContent('Fri');
+            expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
+        });
+
+        it('renders full day names when fullDayNames=true', () => {
+            render(<GameTimeGrid slots={[]} fullDayNames={true} />);
+
+            expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sunday');
+            expect(screen.getByTestId('day-header-1')).toHaveTextContent('Monday');
+            expect(screen.getByTestId('day-header-2')).toHaveTextContent('Tuesday');
+            expect(screen.getByTestId('day-header-3')).toHaveTextContent('Wednesday');
+            expect(screen.getByTestId('day-header-4')).toHaveTextContent('Thursday');
+            expect(screen.getByTestId('day-header-5')).toHaveTextContent('Friday');
+            expect(screen.getByTestId('day-header-6')).toHaveTextContent('Saturday');
+        });
+
+        it('renders abbreviated day names when fullDayNames=false', () => {
+            render(<GameTimeGrid slots={[]} fullDayNames={false} />);
+
+            expect(screen.getByTestId('day-header-0')).toHaveTextContent('Sun');
+            expect(screen.getByTestId('day-header-1')).toHaveTextContent('Mon');
+            expect(screen.getByTestId('day-header-6')).toHaveTextContent('Sat');
+        });
+
+        it('full day names work with weekStart dates', () => {
+            render(<GameTimeGrid slots={[]} fullDayNames={true} weekStart="2026-02-08" />);
+
+            const header0 = screen.getByTestId('day-header-0');
+            expect(header0).toHaveTextContent('Sunday');
+            // Should also show the date (2/8)
+            expect(header0).toHaveTextContent('2/8');
+        });
+    });
 });
