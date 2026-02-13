@@ -193,7 +193,9 @@ export function AdminSetupWizard() {
               onSkip={goNext}
             />
           )}
-          {currentStep === 3 && <DoneStep onComplete={handleComplete} />}
+          {currentStep === 3 && (
+            <DoneStep onComplete={handleComplete} goToStep={goToStep} />
+          )}
         </div>
       </div>
     </div>

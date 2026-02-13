@@ -3,13 +3,15 @@ import { useOnboarding } from '../../../hooks/use-onboarding';
 
 interface DoneStepProps {
   onComplete: () => void;
+  goToStep: (step: number) => void;
 }
 
 /**
  * Step 4: Done (ROK-204)
  * Summary of what was configured vs. skipped.
+ * Each summary item is clickable to navigate back to that step for editing.
  */
-export function DoneStep({ onComplete }: DoneStepProps) {
+export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
   const { statusQuery, dataSourcesQuery } = useOnboarding();
 
   const steps = statusQuery.data?.steps;
@@ -20,31 +22,37 @@ export function DoneStep({ onComplete }: DoneStepProps) {
       label: 'Password Changed',
       done: steps?.secureAccount ?? false,
       skipMessage: 'Default password still in use',
+      wizardStep: 0,
     },
     {
       label: 'Community Identity',
       done: steps?.communityIdentity ?? false,
       skipMessage: 'Using default settings',
+      wizardStep: 1,
     },
     {
       label: 'Plugins',
       done: steps?.connectPlugins ?? false,
       skipMessage: 'No plugins configured',
+      wizardStep: 2,
     },
     {
       label: 'Blizzard API',
       done: dataSources?.blizzard.configured ?? false,
       skipMessage: 'Not connected',
+      wizardStep: 2,
     },
     {
       label: 'IGDB / Twitch API',
       done: dataSources?.igdb.configured ?? false,
       skipMessage: 'Not connected',
+      wizardStep: 2,
     },
     {
       label: 'Discord OAuth',
       done: dataSources?.discord.configured ?? false,
       skipMessage: 'Not configured',
+      wizardStep: 0,
     },
   ];
 
@@ -70,7 +78,8 @@ export function DoneStep({ onComplete }: DoneStepProps) {
           You're All Set!
         </h2>
         <p className="text-sm text-muted mt-2 max-w-md mx-auto">
-          Your community is ready to go. Here's a summary of your setup.
+          Your community is ready to go. Here's a summary of your setup. Click
+          any item to go back and edit it.
         </p>
       </div>
 
@@ -81,11 +90,15 @@ export function DoneStep({ onComplete }: DoneStepProps) {
         </h3>
         <div className="space-y-2">
           {items.map((item) => (
-            <div
+            <button
               key={item.label}
-              className="flex items-center justify-between py-2 border-b border-edge/20 last:border-0"
+              type="button"
+              onClick={() => goToStep(item.wizardStep)}
+              className="w-full flex items-center justify-between py-2 px-3 -mx-3 border-b border-edge/20 last:border-0 rounded-lg hover:bg-surface/50 transition-colors cursor-pointer group text-left"
             >
-              <span className="text-sm text-foreground">{item.label}</span>
+              <span className="text-sm text-foreground group-hover:text-emerald-400 transition-colors">
+                {item.label}
+              </span>
               <div className="flex items-center gap-2">
                 {item.done ? (
                   <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400">
@@ -107,8 +120,21 @@ export function DoneStep({ onComplete }: DoneStepProps) {
                     Skipped
                   </span>
                 )}
+                <svg
+                  className="w-4 h-4 text-muted group-hover:text-emerald-400 transition-colors"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                  />
+                </svg>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>

@@ -11,11 +11,9 @@ export function GeneralPanel() {
     const { resetOnboarding } = useOnboarding();
 
     const handleRerunWizard = () => {
-        resetOnboarding.mutate(undefined, {
-            onSuccess: () => {
-                navigate('/admin/setup');
-            },
-        });
+        // Fire-and-forget reset, navigate immediately (ROK-204 feedback)
+        resetOnboarding.mutate();
+        navigate('/admin/setup');
     };
 
     return (
