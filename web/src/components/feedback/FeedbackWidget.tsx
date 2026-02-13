@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSubmitFeedback } from '../../hooks/use-feedback';
 import type { FeedbackCategory, CreateFeedbackDto } from '@raid-ledger/contract';
@@ -14,24 +14,6 @@ const MIN_LENGTH = 10;
 const MAX_LENGTH = 2000;
 
 /**
- * Capture a screenshot of the current page using html2canvas.
- * Returns the raw base64 content (no data URL prefix).
- */
-async function captureScreenshot(): Promise<string> {
-    const { default: html2canvas } = await import('html2canvas');
-    const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        scale: window.devicePixelRatio > 1 ? 1 : window.devicePixelRatio,
-        logging: false,
-        // Ignore the feedback widget itself in the screenshot
-        ignoreElements: (el) => el.closest('[data-feedback-widget]') !== null,
-    });
-    // Convert to PNG data URL, then strip the prefix for raw base64
-    const dataUrl = canvas.toDataURL('image/png', 0.8);
-    return dataUrl.replace(/^data:image\/png;base64,/, '');
-}
-
-/**
  * Floating feedback widget — available to all authenticated users.
  * ROK-186: User Feedback Widget.
  */
@@ -43,33 +25,29 @@ export function FeedbackWidget() {
     const [category, setCategory] = useState<FeedbackCategory>('bug');
     const [message, setMessage] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
-    const [screenshotBase64, setScreenshotBase64] = useState<string | null>(null);
-    const [screenshotError, setScreenshotError] = useState<string | null>(null);
-    const [isCapturing, setIsCapturing] = useState(false);
 
     // Use ref for submitFeedback.reset to avoid dependency churn in useCallback
     const resetRef = useRef(submitFeedback.reset);
-    resetRef.current = submitFeedback.reset;
+    useEffect(() => {
+        resetRef.current = submitFeedback.reset;
+    }, [submitFeedback.reset]);
 
     const reset = useCallback(() => {
         setCategory('bug');
         setMessage('');
-        setScreenshotBase64(null);
-        setScreenshotError(null);
-        setIsCapturing(false);
+        setShowSuccess(false);
         resetRef.current();
     }, []);
 
     const handleOpen = useCallback(() => {
-        // Reset form + mutation state so the modal is always fresh
+        // Always reset form state when opening to prevent stale state
+        // from blocking subsequent submissions
         reset();
-        setShowSuccess(false);
         setIsOpen(true);
     }, [reset]);
 
     const handleClose = useCallback(() => {
         setIsOpen(false);
-        setShowSuccess(false);
         // Delay reset so close animation completes
         setTimeout(reset, 200);
     }, [reset]);
@@ -83,11 +61,6 @@ export function FeedbackWidget() {
             pageUrl: window.location.href,
         };
 
-        // Include screenshot if captured
-        if (screenshotBase64) {
-            payload.screenshotBase64 = screenshotBase64;
-        }
-
         submitFeedback.mutate(payload, {
             onSuccess: () => {
                 setShowSuccess(true);
@@ -96,30 +69,7 @@ export function FeedbackWidget() {
                 }, 2000);
             },
         });
-    }, [category, message, screenshotBase64, submitFeedback, handleClose]);
-
-    const handleCaptureScreenshot = useCallback(async () => {
-        setIsCapturing(true);
-        setScreenshotError(null);
-        // Temporarily close the modal so it doesn't appear in the screenshot
-        setIsOpen(false);
-
-        // Wait for the modal to close and the DOM to settle
-        await new Promise((resolve) => setTimeout(resolve, 300));
-
-        try {
-            const base64 = await captureScreenshot();
-            setScreenshotBase64(base64);
-        } catch (err) {
-            console.error('Screenshot capture failed:', err);
-            setScreenshotError(
-                'Screenshot capture is not available in this browser. You can still submit your feedback without a screenshot.',
-            );
-        } finally {
-            setIsOpen(true);
-            setIsCapturing(false);
-        }
-    }, []);
+    }, [category, message, submitFeedback, handleClose]);
 
     // Only render for authenticated users
     if (!isAuthenticated) return null;
@@ -313,84 +263,14 @@ export function FeedbackWidget() {
                                     </div>
                                 </div>
 
-                                {/* Screenshot section */}
-                                <div className="mb-4">
-                                    <div className="flex items-center gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={handleCaptureScreenshot}
-                                            disabled={isCapturing || submitFeedback.isPending}
-                                            className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-all disabled:cursor-not-allowed disabled:opacity-50"
-                                            style={{
-                                                backgroundColor: 'var(--color-overlay)',
-                                                color: 'var(--color-foreground)',
-                                                border: '1px solid var(--color-border)',
-                                            }}
-                                            title="Capture a screenshot of the current page"
-                                        >
-                                            {/* Camera icon */}
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                viewBox="0 0 20 20"
-                                                fill="currentColor"
-                                                className="h-4 w-4"
-                                            >
-                                                <path
-                                                    fillRule="evenodd"
-                                                    d="M1 8a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 018.07 3h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0016.07 6H17a2 2 0 012 2v7a2 2 0 01-2 2H3a2 2 0 01-2-2V8zm13.5 3a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM10 14a3 3 0 100-6 3 3 0 000 6z"
-                                                    clipRule="evenodd"
-                                                />
-                                            </svg>
-                                            {isCapturing ? 'Capturing...' : 'Capture Screenshot'}
-                                        </button>
-                                        {screenshotBase64 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => setScreenshotBase64(null)}
-                                                className="rounded-lg p-1.5 text-sm transition-colors hover:bg-[var(--color-overlay)]"
-                                                style={{ color: 'var(--color-muted)' }}
-                                                title="Remove screenshot"
-                                                aria-label="Remove screenshot"
-                                            >
-                                                <svg
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    viewBox="0 0 20 20"
-                                                    fill="currentColor"
-                                                    className="h-4 w-4"
-                                                >
-                                                    <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-                                                </svg>
-                                            </button>
-                                        )}
-                                    </div>
-                                    {/* Screenshot preview */}
-                                    {screenshotBase64 && (
-                                        <div
-                                            className="mt-2 overflow-hidden rounded-lg"
-                                            style={{
-                                                border: '1px solid var(--color-border)',
-                                            }}
-                                        >
-                                            <img
-                                                src={`data:image/png;base64,${screenshotBase64}`}
-                                                alt="Screenshot preview"
-                                                className="w-full object-contain"
-                                                style={{ maxHeight: '150px' }}
-                                            />
-                                        </div>
-                                    )}
-                                    {/* Screenshot capture error */}
-                                    {screenshotError && (
-                                        <p
-                                            className="mt-2 text-xs"
-                                            style={{
-                                                color: 'var(--color-warning, #f59e0b)',
-                                            }}
-                                        >
-                                            {screenshotError}
-                                        </p>
-                                    )}
-                                </div>
+                                {/* Screenshot tip */}
+                                <p
+                                    className="mb-4 text-xs"
+                                    style={{ color: 'var(--color-muted)' }}
+                                >
+                                    Tip: If a GitHub issue is created, you can paste
+                                    screenshots directly into the issue on GitHub.
+                                </p>
 
                                 {/* Error display */}
                                 {submitFeedback.isError && (
