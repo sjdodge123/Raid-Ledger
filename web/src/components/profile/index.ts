@@ -14,7 +14,3 @@ export { NotificationPreferencesSection } from './NotificationPreferencesSection
 export { ProfileSidebar } from './profile-sidebar';
 export { ProfileHeader } from './profile-header';
 export { ProfileLayout } from './profile-layout';
-
-export { ProfileSidebar } from './profile-sidebar';
-export { ProfileHeader } from './profile-header';
-export { ProfileLayout } from './profile-layout';
