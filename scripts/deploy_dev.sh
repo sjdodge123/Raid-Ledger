@@ -3,7 +3,7 @@
 # deploy_dev.sh - Local Development Environment
 # =============================================================================
 # Runs native API (watch mode) + Vite dev server against Docker DB + Redis.
-# Shares the same DB volume as deploy_prod.sh — admin password stays in sync.
+# Shares the same DB volume as deploy_prod.sh.
 #
 # Usage:
 #   ./scripts/deploy_dev.sh                  # Start dev environment
