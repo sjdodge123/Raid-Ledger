@@ -3,6 +3,7 @@ import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
+import { NotificationService } from '../notifications/notification.service';
 
 describe('EventsService', () => {
   let service: EventsService;
@@ -124,6 +125,12 @@ describe('EventsService', () => {
             findForUsersInRange: jest.fn().mockResolvedValue(new Map()),
           },
         },
+        {
+          provide: NotificationService,
+          useValue: {
+            create: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -231,4 +238,5 @@ describe('EventsService', () => {
       );
     });
   });
+
 });
