@@ -16,6 +16,9 @@ interface UnassignedBarProps {
  */
 export function UnassignedBar({ pool, onBarClick, inline }: UnassignedBarProps) {
     const inlineStyle = inline ? { position: 'static' as const, zIndex: 'auto' as const } : undefined;
+    const sorted = [...pool].sort((a, b) =>
+        a.username.localeCompare(b.username, undefined, { sensitivity: 'base' }),
+    );
 
     if (pool.length === 0) {
         return (
@@ -37,7 +40,7 @@ export function UnassignedBar({ pool, onBarClick, inline }: UnassignedBarProps) 
         >
             <span className="unassigned-bar__label">Unassigned</span>
             <div className="unassigned-bar__avatars">
-                {pool.slice(0, 6).map((item, i) => (
+                {sorted.slice(0, 6).map((item, i) => (
                     <div
                         key={item.signupId}
                         className="unassigned-bar__avatar"

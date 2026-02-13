@@ -61,9 +61,13 @@ export function RosterList({ signups, isLoading, gameId }: RosterListProps) {
         );
     }
 
+    const sorted = [...signups].sort((a, b) =>
+        a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' }),
+    );
+
     return (
         <div className="space-y-2">
-            {signups.map((signup) => (
+            {sorted.map((signup) => (
                 <RosterItem key={signup.id} signup={signup} gameId={gameId} />
             ))}
         </div>
