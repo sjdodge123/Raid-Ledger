@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { PugsService } from './pugs.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -14,6 +15,7 @@ describe('EventsController', () => {
   let controller: EventsController;
   let mockEventsService: Partial<EventsService>;
   let mockSignupsService: Partial<SignupsService>;
+  let mockPugsService: Partial<PugsService>;
 
   const mockEvent = {
     id: 1,
@@ -62,11 +64,19 @@ describe('EventsController', () => {
         .mockResolvedValue({ eventId: 1, signups: [mockSignup], count: 1 }),
     };
 
+    mockPugsService = {
+      create: jest.fn().mockResolvedValue({}),
+      findAll: jest.fn().mockResolvedValue({ pugs: [] }),
+      update: jest.fn().mockResolvedValue({}),
+      remove: jest.fn().mockResolvedValue(undefined),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [EventsController],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
         { provide: SignupsService, useValue: mockSignupsService },
+        { provide: PugsService, useValue: mockPugsService },
       ],
     }).compile();
 
