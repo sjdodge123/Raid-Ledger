@@ -14,6 +14,7 @@ export function ProfileLayout() {
 
     const closeMobile = useCallback(() => setMobileOpen(false), []);
 
+    useEffect(() => {
         if (!mobileOpen) return;
         function handleEscape(e: KeyboardEvent) {
             if (e.key === 'Escape') setMobileOpen(false);
