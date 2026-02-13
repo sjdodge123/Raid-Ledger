@@ -36,6 +36,9 @@ export const SETTING_KEYS = {
   ONBOARDING_COMPLETED: 'onboarding_completed',
   ONBOARDING_CURRENT_STEP: 'onboarding_current_step',
   DEFAULT_TIMEZONE: 'default_timezone',
+  LATEST_VERSION: 'latest_version',
+  VERSION_CHECK_LAST_RUN: 'version_check_last_run',
+  UPDATE_AVAILABLE: 'update_available',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
