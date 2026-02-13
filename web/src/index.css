@@ -440,10 +440,6 @@ body {
     --ql-seal-red: #8b2020;
 }
 
-[data-variant="quest-log"] body {
-    font-family: 'MedievalSharp', 'Cinzel', serif;
-}
-
 [data-variant="quest-log"] h1,
 [data-variant="quest-log"] h2,
 [data-variant="quest-log"] h3 {
@@ -457,6 +453,7 @@ body {
 }
 
 [data-variant="quest-log"] body {
+    font-family: 'MedievalSharp', 'Cinzel', serif;
     background-color: var(--color-backdrop);
     background-image:
         radial-gradient(ellipse at 20% 50%, rgba(201, 168, 76, 0.08) 0%, transparent 50%),
@@ -488,10 +485,10 @@ body {
         /* inner top highlight (parchment sheen) */
         inset 0 1px 0 rgba(255, 255, 255, 0.5),
         /* stacked page layer 1 */
-        2px 2px 0 0 #f0e4c8,
+        2px 2px 0 0 var(--color-panel),
         2px 2px 0 1px var(--ql-parchment-edge),
         /* stacked page layer 2 */
-        4px 4px 0 0 #e8dcc0,
+        4px 4px 0 0 var(--color-edge-subtle),
         4px 4px 0 1px rgba(196, 168, 108, 0.5);
 }
 
@@ -501,9 +498,9 @@ body {
     box-shadow:
         0 4px 14px rgba(92, 74, 50, 0.22),
         inset 0 1px 0 rgba(255, 255, 255, 0.6),
-        2px 2px 0 0 #f0e4c8,
+        2px 2px 0 0 var(--color-panel),
         2px 2px 0 1px var(--ql-gold),
-        4px 4px 0 0 #e8dcc0,
+        4px 4px 0 0 var(--color-edge-subtle),
         4px 4px 0 1px rgba(201, 168, 76, 0.6);
 }
 
@@ -515,7 +512,7 @@ body {
     box-shadow:
         0 2px 8px rgba(92, 74, 50, 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.4),
-        2px 2px 0 0 #f0e4c8,
+        2px 2px 0 0 var(--color-panel),
         2px 2px 0 1px var(--ql-parchment-edge);
 }
 
@@ -524,7 +521,7 @@ body {
     box-shadow:
         0 2px 6px rgba(92, 74, 50, 0.12),
         inset 0 1px 0 rgba(255, 255, 255, 0.35),
-        2px 2px 0 0 #f0e4c8,
+        2px 2px 0 0 var(--color-panel),
         2px 2px 0 1px rgba(196, 168, 108, 0.4);
 }
 
@@ -608,6 +605,17 @@ body {
         0 3px 12px rgba(139, 32, 32, 0.4),
         inset 0 1px 0 rgba(255, 120, 120, 0.3),
         inset 0 -1px 0 rgba(50, 10, 10, 0.25);
+}
+
+[data-variant="quest-log"] .bg-indigo-600:active {
+    background: linear-gradient(
+        180deg,
+        var(--ql-seal-red) 0%,
+        #6b1515 100%
+    ) !important;
+    box-shadow:
+        inset 0 2px 3px rgba(50, 10, 10, 0.4),
+        0 1px 4px rgba(139, 32, 32, 0.2);
 }
 
 [data-variant="quest-log"] .text-emerald-500,
