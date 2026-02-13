@@ -51,7 +51,7 @@ print_error() {
     echo -e "${RED}✗ $1${NC}"
 }
 
-# Source .env file to get ADMIN_PASSWORD
+# Source .env file
 load_env() {
     if [ -f "$ENV_FILE" ]; then
         set -a
@@ -60,31 +60,10 @@ load_env() {
     fi
 }
 
-# Generate a new admin password and update .env
-generate_password() {
-    local password
-    password=$(openssl rand -base64 16)
-
-    if [ -f "$ENV_FILE" ]; then
-        if grep -q "^ADMIN_PASSWORD=" "$ENV_FILE"; then
-            sed -i.bak "s|^ADMIN_PASSWORD=.*|ADMIN_PASSWORD=$password|" "$ENV_FILE" && rm -f "$ENV_FILE.bak"
-        else
-            echo "ADMIN_PASSWORD=$password" >> "$ENV_FILE"
-        fi
-    else
-        echo "ADMIN_PASSWORD=$password" > "$ENV_FILE"
-    fi
-
-    export ADMIN_PASSWORD="$password"
-    echo "$password"
-}
-
 show_credentials() {
-    load_env
-    if [ -n "$ADMIN_PASSWORD" ]; then
-        echo -e "  ${GREEN}Admin Email:${NC}    admin@local"
-        echo -e "  ${GREEN}Admin Password:${NC} $ADMIN_PASSWORD"
-    fi
+    echo -e "  ${GREEN}Admin Email:${NC}    admin@local"
+    echo -e "  ${YELLOW}Password was shown during first bootstrap or last reset.${NC}"
+    echo -e "  ${YELLOW}To reset: set RESET_PASSWORD=true and restart, or use --reset-password${NC}"
 }
 
 # Stop Docker API/Web containers if running (they'd conflict on ports)
@@ -188,13 +167,10 @@ reset_password() {
         wait_for_db
     fi
 
-    local password
-    password=$(generate_password)
-
     load_env
-    ADMIN_PASSWORD="$password" npx ts-node api/scripts/bootstrap-admin.ts --reset
+    RESET_PASSWORD=true npx ts-node api/scripts/bootstrap-admin.ts
 
-    print_success "Admin password has been reset and saved to .env"
+    print_success "Admin password has been reset (check output above for new password)"
 }
 
 start_dev() {
@@ -209,14 +185,11 @@ start_dev() {
 
     print_header "Starting Dev Environment"
 
-    # Fresh start: wipe volumes, generate new password
+    # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
         print_warning "Fresh start: wiping database volume..."
         docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
-
-        local password
-        password=$(generate_password)
-        print_success "New admin password generated and saved to .env"
+        print_success "Database wiped. New admin password will be generated on bootstrap."
     fi
 
     # Start infrastructure containers
@@ -236,7 +209,7 @@ start_dev() {
         fi
     fi
 
-    # Load env for DATABASE_URL and ADMIN_PASSWORD
+    # Load env for DATABASE_URL
     load_env
 
     # Run migrations
