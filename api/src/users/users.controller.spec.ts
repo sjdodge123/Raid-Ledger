@@ -1,36 +1,116 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
 import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
+import { EventsService } from '../events/events.service';
 import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
 
 describe('UsersController', () => {
   let controller: UsersController;
-  let mockUsersService: Partial<UsersService>;
+  let usersService: UsersService;
+  let eventsService: EventsService;
+
+  const mockUser = {
+    id: 1,
+    username: 'testuser',
+    avatar: null,
+    discordId: '123',
+    customAvatarUrl: null,
+    role: 'member',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockEventsResponse = {
+    data: [
+      {
+        id: 1,
+        title: 'Test Event',
+        description: 'Test description',
+        startTime: '2026-02-14T18:00:00Z',
+        endTime: '2026-02-14T20:00:00Z',
+        creator: {
+          id: 1,
+          username: 'testuser',
+          avatar: null,
+          discordId: '123',
+          customAvatarUrl: null,
+        },
+        game: null,
+        signupCount: 3,
+        createdAt: '2026-02-01T00:00:00Z',
+        updatedAt: '2026-02-01T00:00:00Z',
+      },
+    ],
+    total: 1,
+  };
 
   beforeEach(async () => {
-    mockUsersService = {
-      findRecent: jest.fn(),
-      findAll: jest.fn(),
-      findById: jest.fn(),
-      getHeartedGames: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UsersController],
       providers: [
-        { provide: UsersService, useValue: mockUsersService },
-        { provide: AvatarService, useValue: {} },
-        { provide: PreferencesService, useValue: {} },
-        { provide: GameTimeService, useValue: {} },
-        { provide: CharactersService, useValue: {} },
+        {
+          provide: UsersService,
+          useValue: {
+            findById: jest.fn(),
+            findRecent: jest.fn(),
+            findAll: jest.fn(),
+            getHeartedGames: jest.fn(),
+            unlinkDiscord: jest.fn(),
+            setCustomAvatar: jest.fn(),
+            findAllWithRoles: jest.fn(),
+            setRole: jest.fn(),
+          },
+        },
+        {
+          provide: AvatarService,
+          useValue: {
+            checkRateLimit: jest.fn(),
+            validateAndProcess: jest.fn(),
+            save: jest.fn(),
+            delete: jest.fn(),
+          },
+        },
+        {
+          provide: PreferencesService,
+          useValue: {
+            getUserPreferences: jest.fn(),
+            setUserPreference: jest.fn(),
+          },
+        },
+        {
+          provide: GameTimeService,
+          useValue: {
+            getCompositeView: jest.fn(),
+            saveTemplate: jest.fn(),
+            saveOverrides: jest.fn(),
+            createAbsence: jest.fn(),
+            deleteAbsence: jest.fn(),
+            getAbsences: jest.fn(),
+          },
+        },
+        {
+          provide: CharactersService,
+          useValue: {
+            findAllForUser: jest.fn(),
+          },
+        },
+        {
+          provide: EventsService,
+          useValue: {
+            findUpcomingByUser: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
     controller = module.get<UsersController>(UsersController);
+    usersService = module.get<UsersService>(UsersService);
+    eventsService = module.get<EventsService>(EventsService);
   });
 
   it('should be defined', () => {
@@ -58,7 +138,7 @@ describe('UsersController', () => {
         },
       ];
 
-      (mockUsersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
 
       const result = await controller.listRecentPlayers();
 
@@ -87,7 +167,7 @@ describe('UsersController', () => {
         },
       ];
 
-      (mockUsersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
 
       const result = await controller.listRecentPlayers();
 
@@ -107,7 +187,7 @@ describe('UsersController', () => {
         },
       ];
 
-      (mockUsersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
+      (usersService.findRecent as jest.Mock).mockResolvedValue(mockRows);
 
       const result = await controller.listRecentPlayers();
 
@@ -117,11 +197,88 @@ describe('UsersController', () => {
     });
 
     it('should return empty data array when no recent users', async () => {
-      (mockUsersService.findRecent as jest.Mock).mockResolvedValue([]);
+      (usersService.findRecent as jest.Mock).mockResolvedValue([]);
 
       const result = await controller.listRecentPlayers();
 
       expect(result.data).toEqual([]);
+    });
+  });
+
+  describe('getUserEventSignups (ROK-299)', () => {
+    it('should return upcoming events for valid user', async () => {
+      const findByIdSpy = jest
+        .spyOn(usersService, 'findById')
+        .mockResolvedValue(mockUser as never);
+      const findUpcomingSpy = jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(mockEventsResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result).toEqual(mockEventsResponse);
+      expect(findByIdSpy).toHaveBeenCalledWith(1);
+      expect(findUpcomingSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should throw NotFoundException when user does not exist', async () => {
+      jest.spyOn(usersService, 'findById').mockResolvedValue(undefined);
+      const findUpcomingSpy = jest.spyOn(eventsService, 'findUpcomingByUser');
+
+      await expect(controller.getUserEventSignups(999)).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(controller.getUserEventSignups(999)).rejects.toThrow(
+        'User not found',
+      );
+      expect(findUpcomingSpy).not.toHaveBeenCalled();
+    });
+
+    it('should return empty data when user has no signups', async () => {
+      const emptyResponse = { data: [], total: 0 };
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(emptyResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should return limited results when user has many signups', async () => {
+      const manyEventsResponse = {
+        data: Array.from({ length: 6 }, (_, i) => ({
+          id: i + 1,
+          title: `Event ${i + 1}`,
+          description: 'Test description',
+          startTime: `2026-02-${14 + i}T18:00:00Z`,
+          endTime: `2026-02-${14 + i}T20:00:00Z`,
+          creator: {
+            id: 1,
+            username: 'testuser',
+            avatar: null,
+            discordId: '123',
+            customAvatarUrl: null,
+          },
+          game: null,
+          signupCount: 1,
+          createdAt: '2026-02-01T00:00:00Z',
+          updatedAt: '2026-02-01T00:00:00Z',
+        })),
+        total: 10,
+      };
+
+      jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
+      jest
+        .spyOn(eventsService, 'findUpcomingByUser')
+        .mockResolvedValue(manyEventsResponse);
+
+      const result = await controller.getUserEventSignups(1);
+
+      expect(result.data.length).toBe(6);
+      expect(result.total).toBe(10);
     });
   });
 });

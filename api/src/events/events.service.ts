@@ -22,6 +22,7 @@ import {
   UserWithAvailabilitySlots,
   AggregateGameTimeResponse,
   RescheduleEventDto,
+  UserEventSignupsResponseDto,
 } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { AvailabilityService } from '../availability/availability.service';
@@ -565,6 +566,79 @@ export class EventsService {
       },
       events: dashboardEvents,
     };
+  }
+
+  /**
+   * Get upcoming events a user has signed up for (ROK-299).
+   * Returns events where start_time > now, ordered by start_time ASC.
+   * @param userId - ID of the user
+   * @param limit - Max events to return (default 6)
+   * @returns List of upcoming events the user is signed up for
+   */
+  async findUpcomingByUser(
+    userId: number,
+    limit = 6,
+  ): Promise<UserEventSignupsResponseDto> {
+    const now = new Date().toISOString();
+
+    // Get event IDs the user is signed up for where start_time > now
+    const signedUpEventIds = this.db
+      .select({ eventId: schema.eventSignups.eventId })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.userId, userId));
+
+    const conditions = [
+      inArray(schema.events.id, signedUpEventIds),
+      gte(sql`lower(${schema.events.duration})`, sql`${now}::timestamp`),
+    ];
+
+    // Count total matching events (before limit)
+    const countResult = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.events)
+      .where(and(...conditions));
+
+    const total = Number(countResult[0].count);
+
+    // Subquery for signup counts
+    const signupCountSubquery = this.db
+      .select({
+        eventId: schema.eventSignups.eventId,
+        count: sql<number>`count(*)`.as('signup_count'),
+      })
+      .from(schema.eventSignups)
+      .groupBy(schema.eventSignups.eventId)
+      .as('signup_counts');
+
+    const events = await this.db
+      .select({
+        events: schema.events,
+        users: schema.users,
+        games: schema.games,
+        gameRegistry: schema.gameRegistry,
+        signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
+      })
+      .from(schema.events)
+      .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
+      .leftJoin(
+        schema.games,
+        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
+      )
+      .leftJoin(
+        schema.gameRegistry,
+        eq(schema.events.registryGameId, schema.gameRegistry.id),
+      )
+      .leftJoin(
+        signupCountSubquery,
+        eq(schema.events.id, signupCountSubquery.eventId),
+      )
+      .where(and(...conditions))
+      .orderBy(asc(sql`lower(${schema.events.duration})`))
+      .limit(limit);
+
+    const data = events.map((row) => this.mapToResponse(row));
+
+    return { data, total };
   }
 
   /**

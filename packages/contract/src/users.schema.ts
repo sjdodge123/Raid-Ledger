@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CharacterSchema } from './characters.schema.js';
+import { EventResponseSchema } from './events.schema.js';
 
 // ==========================================
 // User Role (ROK-272)
@@ -138,3 +139,18 @@ export const UserManagementListResponseSchema = z.object({
 });
 
 export type UserManagementListResponseDto = z.infer<typeof UserManagementListResponseSchema>;
+
+// ==========================================
+// User Event Signups Response (ROK-299)
+// ==========================================
+
+/**
+ * Response for GET /users/:id/events/signups
+ * Returns upcoming events the user has signed up for.
+ */
+export const UserEventSignupsResponseSchema = z.object({
+    data: z.array(EventResponseSchema),
+    total: z.number().int(),
+});
+
+export type UserEventSignupsResponseDto = z.infer<typeof UserEventSignupsResponseSchema>;
