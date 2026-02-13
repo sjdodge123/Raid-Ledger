@@ -494,7 +494,8 @@ describe('CharactersService', () => {
   });
 
   describe('delete', () => {
-    it('should delete a non-main character', async () => {
+    it('should delete a non-main character when main still exists', async () => {
+      // findOne returns the alt character
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
@@ -505,8 +506,21 @@ describe('CharactersService', () => {
         }),
       });
 
+      // Remaining characters query — main still exists
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: true }]),
+          }),
+        }),
+      });
+
       await service.delete(1, 'char-uuid-2');
       expect(mockDb.delete).toHaveBeenCalled();
+      // Main still exists, so no update needed
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
 
     // ROK-206: Deleting main auto-promotes lowest-order alt
@@ -521,12 +535,13 @@ describe('CharactersService', () => {
         }),
       });
 
+      // Remaining characters — alt exists but none is main
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            orderBy: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([mockAltCharacter]),
-            }),
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockAltCharacter, isMain: false }]),
           }),
         }),
       });
@@ -548,12 +563,11 @@ describe('CharactersService', () => {
         }),
       });
 
+      // No remaining characters
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            orderBy: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([]),
-            }),
+            orderBy: jest.fn().mockResolvedValue([]),
           }),
         }),
       });
@@ -561,6 +575,38 @@ describe('CharactersService', () => {
       await service.delete(1, 'char-uuid-1');
       expect(mockDb.delete).toHaveBeenCalled();
       expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    // ROK-206: Deleting non-main when only 1 character remains should auto-main the last one
+    it('should auto-main the last remaining character after deleting a non-main', async () => {
+      // findOne returns the alt (non-main) that's being deleted
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { ...mockAltCharacter, userId: 1, isMain: false },
+              ]),
+          }),
+        }),
+      });
+
+      // After deletion, only one character remains and it has no main
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest
+              .fn()
+              .mockResolvedValue([{ ...mockCharacter, isMain: false }]),
+          }),
+        }),
+      });
+
+      await service.delete(1, 'char-uuid-2');
+      expect(mockDb.delete).toHaveBeenCalled();
+      // Should auto-promote the last remaining character
+      expect(mockDb.update).toHaveBeenCalled();
     });
   });
 

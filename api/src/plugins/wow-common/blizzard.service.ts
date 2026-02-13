@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   SettingsService,
@@ -581,8 +581,13 @@ export class BlizzardService {
       this.logger.error(
         `Blizzard profile API error: ${profileRes.status} ${text}`,
       );
+      if (profileRes.status === 404) {
+        throw new NotFoundException(
+          `Character "${name}" not found on ${realm} (${region.toUpperCase()}). Check the spelling and realm.`,
+        );
+      }
       throw new Error(
-        `Character not found or Blizzard API error (${profileRes.status})`,
+        `Blizzard API error (${profileRes.status}). Please try again later.`,
       );
     }
 

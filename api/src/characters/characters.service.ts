@@ -236,28 +236,34 @@ export class CharactersService {
       .delete(schema.characters)
       .where(eq(schema.characters.id, characterId));
 
-    // ROK-206: If we deleted the main, auto-promote the lowest-order alt
-    if (character.isMain) {
-      const [nextAlt] = await this.db
-        .select()
-        .from(schema.characters)
-        .where(
-          and(
-            eq(schema.characters.userId, userId),
-            eq(schema.characters.gameId, character.gameId),
-          ),
-        )
-        .orderBy(asc(schema.characters.displayOrder))
-        .limit(1);
+    // ROK-206: After deletion, check remaining characters for this game.
+    // If the deleted character was main, promote the lowest-order remaining.
+    // Also: if only one character remains for this game, ensure it's the main
+    // (covers the case where a non-main was deleted leaving a single character).
+    const remaining = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.gameId, character.gameId),
+        ),
+      )
+      .orderBy(asc(schema.characters.displayOrder));
 
-      if (nextAlt) {
+    if (remaining.length > 0) {
+      const hasMain = remaining.some((c) => c.isMain);
+
+      if (!hasMain) {
+        // No main exists — promote the lowest-order character
+        const promote = remaining[0];
         await this.db
           .update(schema.characters)
           .set({ isMain: true, updatedAt: new Date() })
-          .where(eq(schema.characters.id, nextAlt.id));
+          .where(eq(schema.characters.id, promote.id));
 
         this.logger.log(
-          `Auto-promoted character ${nextAlt.id} (${nextAlt.name}) to main after deletion of ${characterId}`,
+          `Auto-promoted character ${promote.id} (${promote.name}) to main after deletion of ${characterId}`,
         );
       }
     }
