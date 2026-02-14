@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DiscordBotClientService } from './discord-bot-client.service';
@@ -29,11 +29,22 @@ jest.mock('discord.js', () => {
       Guilds: 1,
       GuildMessages: 2,
       GuildMembers: 4,
-      DirectMessages: 8,
+      GuildVoiceStates: 16,
+      GuildPresences: 32,
+      DirectMessages: 64,
     },
     Events: {
       ClientReady: 'ready',
       Error: 'error',
+    },
+    PermissionsBitField: {
+      Flags: {
+        ManageRoles: BigInt(1),
+        SendMessages: BigInt(2),
+        EmbedLinks: BigInt(4),
+        ReadMessageHistory: BigInt(8),
+        ViewChannel: BigInt(16),
+      },
     },
   };
 });
@@ -99,7 +110,7 @@ describe('DiscordBotClientService', () => {
       mockClient = (service as any).client;
       mockClient.emit(Events.Error, error);
 
-      await expect(connectPromise).rejects.toThrow('Invalid token');
+      await expect(connectPromise).rejects.toThrow('Invalid bot token. Please check the token and try again.');
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         DISCORD_BOT_EVENTS.ERROR,
         error,
@@ -164,14 +175,14 @@ describe('DiscordBotClientService', () => {
       setImmediate(() => {
         const loginSpy = mockClient.login as jest.Mock;
         const loginPromise = loginSpy.mock.results[0].value;
-        loginPromise.catch(() => {}); // Prevent unhandled rejection
+        loginPromise.catch(() => { }); // Prevent unhandled rejection
 
         // Simulate login failure by rejecting and clearing the client
         (service as any).client = null;
         mockClient.emit(Events.Error, error);
       });
 
-      await expect(connectPromise).rejects.toThrow('Login failed');
+      await expect(connectPromise).rejects.toThrow('Failed to connect with provided token');
     });
 
     it('should handle non-Error login rejection', async () => {
@@ -186,7 +197,7 @@ describe('DiscordBotClientService', () => {
         mockClient.emit(Events.Error, new Error('String error message'));
       });
 
-      await expect(connectPromise).rejects.toThrow('String error message');
+      await expect(connectPromise).rejects.toThrow('Failed to connect with provided token');
     });
   });
 
@@ -407,6 +418,77 @@ describe('DiscordBotClientService', () => {
       await expect(
         service.sendDirectMessage(discordId, message),
       ).rejects.toThrow('Cannot send messages to this user');
+    });
+  });
+
+  describe('checkPermissions', () => {
+    it('should return all false when no client exists', () => {
+      const results = service.checkPermissions();
+
+      expect(results).toHaveLength(5);
+      results.forEach((r) => expect(r.granted).toBe(false));
+    });
+
+    it('should return all false when client is not ready', async () => {
+      service.connect('valid-token');
+      // Don't fire ready event
+
+      const results = service.checkPermissions();
+
+      expect(results).toHaveLength(5);
+      results.forEach((r) => expect(r.granted).toBe(false));
+    });
+
+    it('should return all false when no guild is cached', async () => {
+      const client = new Client({} as any);
+      client.user = { tag: 'Bot#1234' } as any;
+      (client.isReady as jest.Mock).mockReturnValue(true);
+      client.guilds.cache.first = jest.fn().mockReturnValue(null);
+      (service as any).client = client;
+
+      const results = service.checkPermissions();
+
+      expect(results).toHaveLength(5);
+      results.forEach((r) => expect(r.granted).toBe(false));
+    });
+
+    it('should return all false when guild.members.me is null', async () => {
+      const client = new Client({} as any);
+      client.user = { tag: 'Bot#1234' } as any;
+      (client.isReady as jest.Mock).mockReturnValue(true);
+      const mockGuild = { members: { me: null } };
+      client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
+      (service as any).client = client;
+
+      const results = service.checkPermissions();
+
+      expect(results).toHaveLength(5);
+      results.forEach((r) => expect(r.granted).toBe(false));
+    });
+
+    it('should return correct permission check results', async () => {
+      const client = new Client({} as any);
+      client.user = { tag: 'Bot#1234' } as any;
+      (client.isReady as jest.Mock).mockReturnValue(true);
+      const mockMe = {
+        permissions: {
+          has: jest.fn().mockImplementation((flag: bigint) => {
+            // Grant all except ManageRoles (BigInt(1))
+            return flag !== BigInt(1);
+          }),
+        },
+      };
+      const mockGuild = { members: { me: mockMe } };
+      client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
+      (service as any).client = client;
+
+      const results = service.checkPermissions();
+
+      expect(results).toHaveLength(5);
+      const manageRoles = results.find((r) => r.name === 'Manage Roles');
+      expect(manageRoles?.granted).toBe(false);
+      const sendMessages = results.find((r) => r.name === 'Send Messages');
+      expect(sendMessages?.granted).toBe(true);
     });
   });
 });

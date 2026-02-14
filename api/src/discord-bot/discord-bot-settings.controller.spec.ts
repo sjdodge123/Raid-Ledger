@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -76,7 +76,7 @@ describe('DiscordBotSettingsController', () => {
       );
       expect(result).toEqual({
         success: true,
-        message: 'Discord bot configuration saved and bot is starting...',
+        message: 'Configuration saved.',
       });
     });
 
@@ -94,7 +94,7 @@ describe('DiscordBotSettingsController', () => {
       );
       expect(result).toEqual({
         success: true,
-        message: 'Discord bot configuration saved. Bot is disabled.',
+        message: 'Configuration saved.',
       });
     });
 

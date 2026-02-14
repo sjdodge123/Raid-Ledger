@@ -44,11 +44,19 @@ export class DiscordBotSettingsController {
   constructor(
     private readonly discordBotService: DiscordBotService,
     private readonly settingsService: SettingsService,
-  ) {}
+  ) { }
 
   @Get()
   async getStatus(): Promise<DiscordBotStatusResponse> {
     return this.discordBotService.getStatus();
+  }
+
+  @Get('permissions')
+  checkPermissions(): {
+    allGranted: boolean;
+    permissions: { name: string; granted: boolean }[];
+  } {
+    return this.discordBotService.checkPermissions();
   }
 
   @Put()
@@ -68,9 +76,7 @@ export class DiscordBotSettingsController {
 
       return {
         success: true,
-        message: config.enabled
-          ? 'Discord bot configuration saved and bot is starting...'
-          : 'Discord bot configuration saved. Bot is disabled.',
+        message: 'Configuration saved.',
       };
     } catch (error) {
       handleValidationError(error);

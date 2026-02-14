@@ -336,13 +336,12 @@ function PluginCard({
                 )}
                 <span className="text-secondary">{integration.name}</span>
                 <span
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    integration.configured
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${integration.configured
                       ? 'bg-emerald-500/20 text-emerald-400'
                       : 'bg-gray-500/20 text-gray-400'
-                  }`}
+                    }`}
                 >
-                  {integration.configured ? 'Configured' : 'Not Configured'}
+                  {integration.configured ? 'Online' : 'Offline'}
                 </span>
               </div>
             ))}

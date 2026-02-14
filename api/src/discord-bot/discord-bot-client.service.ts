@@ -1,19 +1,37 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Client, GatewayIntentBits, Events } from 'discord.js';
-import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
+import { Client, GatewayIntentBits, Events, PermissionsBitField } from 'discord.js';
+import { DISCORD_BOT_EVENTS, friendlyDiscordErrorMessage } from './discord-bot.constants';
 
 export interface GuildInfo {
   name: string;
   memberCount: number;
 }
 
+export interface PermissionCheckResult {
+  name: string;
+  granted: boolean;
+}
+
+/**
+ * The permissions the bot needs to function properly.
+ * Maps a human-readable label → discord.js permission flag.
+ */
+const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
+  { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
+  { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
+  { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
+  { label: 'Read Message History', flag: PermissionsBitField.Flags.ReadMessageHistory },
+  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
+];
+
 @Injectable()
 export class DiscordBotClientService {
   private readonly logger = new Logger(DiscordBotClientService.name);
   private client: Client | null = null;
+  private connecting = false;
 
-  constructor(private readonly eventEmitter: EventEmitter2) {}
+  constructor(private readonly eventEmitter: EventEmitter2) { }
 
   async connect(token: string): Promise<void> {
     // Disconnect any existing client first
@@ -26,41 +44,63 @@ export class DiscordBotClientService {
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildPresences,
         GatewayIntentBits.DirectMessages,
       ],
     });
+
+    this.connecting = true;
 
     return new Promise<void>((resolve, reject) => {
       const client = this.client!;
 
       const timeout = setTimeout(() => {
+        this.connecting = false;
         reject(new Error('Discord bot connection timed out after 15s'));
       }, 15_000);
 
       client.once(Events.ClientReady, () => {
         clearTimeout(timeout);
+        this.connecting = false;
         this.logger.log(`Discord bot connected as ${client.user?.tag}`);
+
+        // Warn if bot is in multiple guilds — we only use the first one
+        const guildCount = client.guilds.cache.size;
+        if (guildCount > 1) {
+          this.logger.warn(
+            `Bot is in ${guildCount} guilds but only the first one is used. ` +
+            `Remove the bot from extra guilds to avoid confusion.`,
+          );
+        }
+
         this.eventEmitter.emit(DISCORD_BOT_EVENTS.CONNECTED);
         resolve();
       });
 
       client.once(Events.Error, (error: Error) => {
         clearTimeout(timeout);
-        this.logger.error('Discord bot connection error:', error);
+        this.connecting = false;
+        const message = friendlyDiscordErrorMessage(error);
+        this.logger.error('Discord bot connection error:', message);
         this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error);
-        reject(error);
+        reject(new Error(message));
       });
 
       client.login(token).catch((err: unknown) => {
         clearTimeout(timeout);
-        this.logger.error('Discord bot login failed:', err);
+        this.connecting = false;
+        const message = friendlyDiscordErrorMessage(err);
+        this.logger.error('Discord bot login failed:', message);
         this.client = null;
-        reject(err instanceof Error ? err : new Error(String(err)));
+        reject(new Error(message));
       });
     });
   }
 
   async disconnect(): Promise<void> {
+    this.connecting = false;
+
     if (!this.client) return;
 
     try {
@@ -76,6 +116,10 @@ export class DiscordBotClientService {
 
   isConnected(): boolean {
     return this.client?.isReady() ?? false;
+  }
+
+  isConnecting(): boolean {
+    return this.connecting;
   }
 
   getGuildInfo(): GuildInfo | null {
@@ -107,5 +151,29 @@ export class DiscordBotClientService {
       this.logger.error(`Failed to send DM to ${discordId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Check whether the bot has every required permission in its guild.
+   */
+  checkPermissions(): PermissionCheckResult[] {
+    if (!this.client?.isReady()) {
+      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+    }
+
+    const guild = this.client.guilds.cache.first();
+    if (!guild) {
+      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+    }
+
+    const me = guild.members.me;
+    if (!me) {
+      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+    }
+
+    return REQUIRED_PERMISSIONS.map((p) => ({
+      name: p.label,
+      granted: me.permissions.has(p.flag),
+    }));
   }
 }
