@@ -24,10 +24,12 @@ export type UserRole = z.infer<typeof UserRoleSchema>;
 export const UserProfileSchema = z.object({
     id: z.number().int(),
     username: z.string(),
+    displayName: z.string().nullable().optional(),
     avatar: z.string().nullable(),
     discordId: z.string().nullable().optional(),
     customAvatarUrl: z.string().nullable().optional(),
     role: UserRoleSchema.optional(),
+    onboardingCompletedAt: z.string().datetime().nullable().optional(),
     createdAt: z.string().datetime(),
     characters: z.array(CharacterSchema),
 });
@@ -139,6 +141,50 @@ export const UserManagementListResponseSchema = z.object({
 });
 
 export type UserManagementListResponseDto = z.infer<typeof UserManagementListResponseSchema>;
+
+// ==========================================
+// FTE Onboarding (ROK-219)
+// ==========================================
+
+/**
+ * Schema for updating user profile (display name).
+ * Used by PATCH /users/me
+ */
+export const UpdateUserProfileSchema = z.object({
+    displayName: z.string().min(2).max(30),
+});
+
+export type UpdateUserProfileDto = z.infer<typeof UpdateUserProfileSchema>;
+
+/**
+ * Query schema for checking display name availability.
+ * GET /users/check-display-name?name=xyz
+ */
+export const CheckDisplayNameQuerySchema = z.object({
+    name: z.string().min(2).max(30),
+});
+
+export type CheckDisplayNameQueryDto = z.infer<typeof CheckDisplayNameQuerySchema>;
+
+/**
+ * Response for display name availability check.
+ */
+export const CheckDisplayNameResponseSchema = z.object({
+    available: z.boolean(),
+});
+
+export type CheckDisplayNameResponseDto = z.infer<typeof CheckDisplayNameResponseSchema>;
+
+/**
+ * Response for completing onboarding.
+ * POST /users/me/complete-onboarding
+ */
+export const CompleteOnboardingResponseSchema = z.object({
+    success: z.boolean(),
+    onboardingCompletedAt: z.string().datetime(),
+});
+
+export type CompleteOnboardingResponseDto = z.infer<typeof CompleteOnboardingResponseSchema>;
 
 // ==========================================
 // User Event Signups Response (ROK-299)

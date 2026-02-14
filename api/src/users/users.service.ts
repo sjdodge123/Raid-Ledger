@@ -2,7 +2,7 @@ import { Inject, Injectable, ConflictException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, sql, ilike, asc, and, gte, desc } from 'drizzle-orm';
+import { eq, sql, ilike, asc, and, gte, desc, ne } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
 
 /** Number of days to look back for "recently joined" users. */
@@ -367,6 +367,54 @@ export class UsersService {
     const [updated] = await this.db
       .update(schema.users)
       .set({ customAvatarUrl: url, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * ROK-219: Check if a display name is available.
+   * Excludes a specific user ID to allow updating own display name.
+   */
+  async checkDisplayNameAvailability(
+    displayName: string,
+    excludeUserId?: number,
+  ): Promise<boolean> {
+    const conditions = excludeUserId
+      ? and(
+          ilike(schema.users.displayName, displayName),
+          ne(schema.users.id, excludeUserId),
+        )
+      : ilike(schema.users.displayName, displayName);
+
+    const [result] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users)
+      .where(conditions);
+
+    return Number(result.count) === 0;
+  }
+
+  /**
+   * ROK-219: Set a user's display name.
+   */
+  async setDisplayName(userId: number, displayName: string) {
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ displayName, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  /**
+   * ROK-219: Mark onboarding as completed.
+   */
+  async completeOnboarding(userId: number) {
+    const now = new Date();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ onboardingCompletedAt: now, updatedAt: now })
       .where(eq(schema.users.id, userId))
       .returning();
     return updated;

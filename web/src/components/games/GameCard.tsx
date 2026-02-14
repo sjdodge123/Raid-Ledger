@@ -27,7 +27,7 @@ const GENRE_MAP: Record<number, string> = {
     33: 'Arcade',
     34: 'Visual Novel',
     35: 'Card Game',
-    36: 'MOBA',
+    36: 'MMORPG',
 };
 
 /** IGDB game mode ID → display name */

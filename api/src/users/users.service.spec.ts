@@ -145,6 +145,145 @@ describe('UsersService', () => {
     });
   });
 
+  describe('checkDisplayNameAvailability (ROK-219)', () => {
+    it('should return true when display name is available', async () => {
+      mockDb.where.mockResolvedValue([{ count: 0 }]);
+
+      const result = await service.checkDisplayNameAvailability('AvailableName');
+
+      expect(result).toBe(true);
+      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockDb.from).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    it('should return false when display name is taken', async () => {
+      mockDb.where.mockResolvedValue([{ count: 1 }]);
+
+      const result = await service.checkDisplayNameAvailability('TakenName');
+
+      expect(result).toBe(false);
+    });
+
+    it('should exclude specified userId from uniqueness check', async () => {
+      mockDb.where.mockResolvedValue([{ count: 0 }]);
+
+      const result = await service.checkDisplayNameAvailability('MyName', 5);
+
+      expect(result).toBe(true);
+      expect(mockDb.where).toHaveBeenCalled();
+    });
+
+    it('should perform case-insensitive check', async () => {
+      mockDb.where.mockResolvedValue([{ count: 1 }]);
+
+      const result = await service.checkDisplayNameAvailability('testname');
+
+      expect(result).toBe(false);
+      expect(mockDb.where).toHaveBeenCalled();
+    });
+  });
+
+  describe('setDisplayName (ROK-219)', () => {
+    it('should update user display name', async () => {
+      const updatedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'NewDisplayName',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockDb.returning.mockResolvedValue([updatedUser]);
+
+      const result = await service.setDisplayName(1, 'NewDisplayName');
+
+      expect(result).toEqual(updatedUser);
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+      expect(mockDb.returning).toHaveBeenCalled();
+    });
+
+    it('should update the updatedAt timestamp', async () => {
+      const now = new Date();
+      const updatedUser = {
+        id: 2,
+        username: 'user2',
+        displayName: 'UpdatedName',
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: now,
+      };
+
+      mockDb.returning.mockResolvedValue([updatedUser]);
+
+      const result = await service.setDisplayName(2, 'UpdatedName');
+
+      expect(result.updatedAt).toBeInstanceOf(Date);
+    });
+  });
+
+  describe('completeOnboarding (ROK-219)', () => {
+    it('should set onboardingCompletedAt timestamp', async () => {
+      const now = new Date();
+      const completedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'TestUser',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: now,
+        createdAt: new Date(),
+        updatedAt: now,
+      };
+
+      mockDb.returning.mockResolvedValue([completedUser]);
+
+      const result = await service.completeOnboarding(1);
+
+      expect(result.onboardingCompletedAt).toBeInstanceOf(Date);
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+      expect(mockDb.returning).toHaveBeenCalled();
+    });
+
+    it('should update both onboardingCompletedAt and updatedAt', async () => {
+      const now = new Date();
+      const completedUser = {
+        id: 2,
+        username: 'user2',
+        displayName: null,
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: now,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: now,
+      };
+
+      mockDb.returning.mockResolvedValue([completedUser]);
+
+      const result = await service.completeOnboarding(2);
+
+      expect(result.onboardingCompletedAt).toBeDefined();
+      expect(result.updatedAt).toBeDefined();
+    });
+  });
+
   describe('constants', () => {
     it('should export RECENT_MEMBER_DAYS as 30', () => {
       expect(RECENT_MEMBER_DAYS).toBe(30);

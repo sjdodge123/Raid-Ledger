@@ -39,6 +39,8 @@ import {
   GameTimeAbsenceInputSchema,
   UserHeartedGamesResponseDto,
   UserEventSignupsResponseDto,
+  UpdateUserProfileSchema,
+  CheckDisplayNameQuerySchema,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
@@ -177,6 +179,94 @@ export class UsersController {
     }
 
     return this.eventsService.findUpcomingByUser(id);
+  }
+
+  /**
+   * ROK-219: Check if a display name is available.
+   * Authenticated to allow excluding current user from uniqueness check.
+   */
+  @Get('check-display-name')
+  @UseGuards(AuthGuard('jwt'))
+  async checkDisplayName(
+    @Request() req: AuthenticatedRequest,
+    @Query('name') name?: string,
+  ) {
+    if (!name) {
+      throw new BadRequestException('name query parameter is required');
+    }
+
+    try {
+      const parsed = CheckDisplayNameQuerySchema.parse({ name });
+      const available = await this.usersService.checkDisplayNameAvailability(
+        parsed.name,
+        req.user.id,
+      );
+      return { available };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * ROK-219: Update current user's profile (display name).
+   */
+  @Patch('me')
+  @UseGuards(AuthGuard('jwt'))
+  async updateMyProfile(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    try {
+      const dto = UpdateUserProfileSchema.parse(body);
+
+      // Check display name availability
+      const available = await this.usersService.checkDisplayNameAvailability(
+        dto.displayName,
+        req.user.id,
+      );
+      if (!available) {
+        throw new BadRequestException('Display name is already taken');
+      }
+
+      const updated = await this.usersService.setDisplayName(
+        req.user.id,
+        dto.displayName,
+      );
+      return {
+        data: {
+          id: updated.id,
+          username: updated.username,
+          displayName: updated.displayName,
+        },
+      };
+    } catch (error) {
+      if (error instanceof ZodError) {
+        throw new BadRequestException({
+          message: 'Validation failed',
+          errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+        });
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * ROK-219: Mark FTE onboarding as completed.
+   */
+  @Post('me/complete-onboarding')
+  @UseGuards(AuthGuard('jwt'))
+  async completeOnboarding(@Request() req: AuthenticatedRequest) {
+    const updated = await this.usersService.completeOnboarding(req.user.id);
+    return {
+      success: true,
+      onboardingCompletedAt: updated.onboardingCompletedAt!.toISOString(),
+    };
   }
 
   /**

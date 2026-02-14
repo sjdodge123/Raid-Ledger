@@ -64,6 +64,9 @@ describe('UsersController', () => {
             setCustomAvatar: jest.fn(),
             findAllWithRoles: jest.fn(),
             setRole: jest.fn(),
+            checkDisplayNameAvailability: jest.fn(),
+            setDisplayName: jest.fn(),
+            completeOnboarding: jest.fn(),
           },
         },
         {
@@ -279,6 +282,203 @@ describe('UsersController', () => {
 
       expect(result.data.length).toBe(6);
       expect(result.total).toBe(10);
+    });
+  });
+
+  describe('checkDisplayName (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should return available:true when display name is available', async () => {
+      const checkSpy = jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+
+      const result = await controller.checkDisplayName(
+        mockRequest as never,
+        'AvailableName',
+      );
+
+      expect(result.available).toBe(true);
+      expect(checkSpy).toHaveBeenCalledWith('AvailableName', 1);
+    });
+
+    it('should return available:false when display name is taken', async () => {
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(false);
+
+      const result = await controller.checkDisplayName(
+        mockRequest as never,
+        'TakenName',
+      );
+
+      expect(result.available).toBe(false);
+    });
+
+    it('should throw BadRequestException when name parameter is missing', async () => {
+      await expect(
+        controller.checkDisplayName(mockRequest as never, undefined),
+      ).rejects.toThrow('name query parameter is required');
+    });
+
+    it('should validate display name with Zod (min 2 chars)', async () => {
+      await expect(
+        controller.checkDisplayName(mockRequest as never, 'a'),
+      ).rejects.toThrow();
+    });
+
+    it('should validate display name with Zod (max 30 chars)', async () => {
+      const longName = 'a'.repeat(31);
+      await expect(
+        controller.checkDisplayName(mockRequest as never, longName),
+      ).rejects.toThrow();
+    });
+
+    it('should exclude current user from uniqueness check', async () => {
+      const checkSpy = jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+
+      await controller.checkDisplayName(mockRequest as never, 'TestName');
+
+      expect(checkSpy).toHaveBeenCalledWith('TestName', 1);
+    });
+  });
+
+  describe('updateMyProfile (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should update user display name when available', async () => {
+      const updatedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'NewName',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+      const setDisplayNameSpy = jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
+
+      const result = await controller.updateMyProfile(mockRequest as never, {
+        displayName: 'NewName',
+      });
+
+      expect(result.data.displayName).toBe('NewName');
+      expect(setDisplayNameSpy).toHaveBeenCalledWith(1, 'NewName');
+    });
+
+    it('should throw BadRequestException when display name is taken', async () => {
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(false);
+
+      await expect(
+        controller.updateMyProfile(mockRequest as never, {
+          displayName: 'TakenName',
+        }),
+      ).rejects.toThrow('Display name is already taken');
+    });
+
+    it('should validate input with Zod schema', async () => {
+      await expect(
+        controller.updateMyProfile(mockRequest as never, {
+          displayName: 'x',
+        }),
+      ).rejects.toThrow();
+    });
+
+    it('should return updated user data', async () => {
+      const updatedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'ValidName',
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'checkDisplayNameAvailability')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
+
+      const result = await controller.updateMyProfile(mockRequest as never, {
+        displayName: 'ValidName',
+      });
+
+      expect(result.data).toHaveProperty('id', 1);
+      expect(result.data).toHaveProperty('username', 'testuser');
+      expect(result.data).toHaveProperty('displayName', 'ValidName');
+    });
+  });
+
+  describe('completeOnboarding (ROK-219)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should mark onboarding as completed', async () => {
+      const completedUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'TestUser',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: new Date('2026-02-13T12:00:00Z'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      const completeSpy = jest
+        .spyOn(usersService, 'completeOnboarding')
+        .mockResolvedValue(completedUser as never);
+
+      const result = await controller.completeOnboarding(mockRequest as never);
+
+      expect(result.success).toBe(true);
+      expect(result.onboardingCompletedAt).toBe('2026-02-13T12:00:00.000Z');
+      expect(completeSpy).toHaveBeenCalledWith(1);
+    });
+
+    it('should return success and timestamp', async () => {
+      const completedUser = {
+        id: 2,
+        username: 'user2',
+        displayName: null,
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: new Date('2026-02-13T15:30:00Z'),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      jest
+        .spyOn(usersService, 'completeOnboarding')
+        .mockResolvedValue(completedUser as never);
+
+      const result = await controller.completeOnboarding(mockRequest as never);
+
+      expect(result).toHaveProperty('success', true);
+      expect(result).toHaveProperty('onboardingCompletedAt');
+      expect(typeof result.onboardingCompletedAt).toBe('string');
     });
   });
 });

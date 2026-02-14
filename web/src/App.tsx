@@ -38,6 +38,7 @@ import { CharacterDetailPage } from './pages/character-detail-page';
 import { PlayersPage } from './pages/players-page';
 import { MyEventsPage } from './pages/my-events-page';
 import { AdminSetupWizard } from './pages/admin/admin-setup-wizard';
+import { OnboardingWizardPage } from './pages/onboarding-wizard-page';
 import { FeedbackWidget } from './components/feedback/FeedbackWidget';
 import './plugins/wow/register';
 import './App.css';
@@ -67,6 +68,8 @@ function App() {
 
           {/* -- Protected routes (ROK-283: global auth guard) -- */}
           <Route element={<AuthGuard />}>
+            {/* ROK-219: First-time user experience wizard */}
+            <Route path="/onboarding" element={<OnboardingWizardPage />} />
             {/* ROK-204: Admin onboarding wizard */}
             <Route path="/admin/setup" element={<AdminSetupWizard />} />
             <Route path="/calendar" element={<CalendarPage />} />

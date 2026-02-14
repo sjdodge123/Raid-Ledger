@@ -9,9 +9,11 @@ export interface User {
     id: number;
     discordId: string;
     username: string;
+    displayName: string | null;
     avatar: string | null;
     customAvatarUrl: string | null;
     role?: UserRole;
+    onboardingCompletedAt: string | null;
 }
 
 /** Check if user has admin role */

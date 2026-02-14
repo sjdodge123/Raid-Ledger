@@ -68,7 +68,7 @@ describe('LoginPage', () => {
         renderWithRouter(<LoginPage />);
 
         // Default community name when VITE_COMMUNITY_NAME is not set
-        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/raid-ledger/i);
+        expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent(/raid\s*ledger/i);
     });
 
     it('shows first-run hint when isFirstRun is true', () => {

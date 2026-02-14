@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
+import { API_BASE_URL } from '../lib/config';
 
 /**
  * Handles OAuth callback - extracts token from URL and logs user in.
@@ -44,7 +45,22 @@ export function AuthSuccessPage() {
             (async () => {
                 try {
                     // Store token and wait for auth state to update (refetchQueries awaits)
-                    await login(token);
+                    const success = await login(token);
+
+                    // ROK-219: Redirect new non-admin users to onboarding wizard
+                    if (success) {
+                        // Fetch fresh user data to check onboarding status
+                        const authData = await fetch(`${API_BASE_URL}/auth/me`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                        }).then((r) => r.json()) as { role?: string; onboardingCompletedAt?: string | null };
+
+                        if (authData.role !== 'admin' && !authData.onboardingCompletedAt) {
+                            toast.success('Welcome! Let\'s get you set up.');
+                            navigate('/onboarding', { replace: true });
+                            return;
+                        }
+                    }
+
                     const redirectTo = consumeAuthRedirect() || '/calendar';
                     toast.success('Logged in successfully!');
                     navigate(redirectTo, { replace: true });
