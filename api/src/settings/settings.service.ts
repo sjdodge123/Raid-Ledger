@@ -29,11 +29,17 @@ export interface BrandingConfig {
   communityAccentColor: string | null;
 }
 
+export interface DiscordBotConfig {
+  token: string;
+  enabled: boolean;
+}
+
 export const SETTINGS_EVENTS = {
   OAUTH_DISCORD_UPDATED: 'settings.oauth.discord.updated',
   IGDB_UPDATED: 'settings.igdb.updated',
   BLIZZARD_UPDATED: 'settings.blizzard.updated',
   DEMO_MODE_UPDATED: 'settings.demo_mode.updated',
+  DISCORD_BOT_UPDATED: 'settings.discord-bot.updated',
 } as const;
 
 @Injectable()
@@ -337,5 +343,52 @@ export class SettingsService {
    */
   async isGitHubConfigured(): Promise<boolean> {
     return this.exists(SETTING_KEYS.GITHUB_PAT);
+  }
+
+  /**
+   * Get Discord bot configuration (ROK-117)
+   */
+  async getDiscordBotConfig(): Promise<DiscordBotConfig | null> {
+    const token = await this.get(SETTING_KEYS.DISCORD_BOT_TOKEN);
+    if (!token) return null;
+
+    const enabledVal = await this.get(SETTING_KEYS.DISCORD_BOT_ENABLED);
+    return { token, enabled: enabledVal === 'true' };
+  }
+
+  /**
+   * Set Discord bot configuration (ROK-117)
+   */
+  async setDiscordBotConfig(token: string, enabled: boolean): Promise<void> {
+    await Promise.all([
+      this.set(SETTING_KEYS.DISCORD_BOT_TOKEN, token),
+      this.set(SETTING_KEYS.DISCORD_BOT_ENABLED, enabled ? 'true' : 'false'),
+    ]);
+
+    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, {
+      token,
+      enabled,
+    });
+    this.logger.log('Discord bot configuration updated');
+  }
+
+  /**
+   * Check if Discord bot is configured (ROK-117)
+   */
+  async isDiscordBotConfigured(): Promise<boolean> {
+    return this.exists(SETTING_KEYS.DISCORD_BOT_TOKEN);
+  }
+
+  /**
+   * Clear Discord bot configuration (ROK-117)
+   */
+  async clearDiscordBotConfig(): Promise<void> {
+    await Promise.all([
+      this.delete(SETTING_KEYS.DISCORD_BOT_TOKEN),
+      this.delete(SETTING_KEYS.DISCORD_BOT_ENABLED),
+    ]);
+
+    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
+    this.logger.log('Discord bot configuration cleared');
   }
 }

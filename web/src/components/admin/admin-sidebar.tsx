@@ -35,6 +35,7 @@ const AppearanceIcon = (<svg className="w-5 h-5" fill="none" stroke="currentColo
 /** Build core integration nav items with live status from hooks */
 function buildCoreIntegrationItems(statuses: {
     discord: { configured: boolean; loading: boolean };
+    discordBot: { connected: boolean; configured: boolean; loading: boolean };
     igdb: { configured: boolean; loading: boolean };
     relay: { connected: boolean; loading: boolean };
     github: { configured: boolean; loading: boolean };
@@ -45,6 +46,13 @@ function buildCoreIntegrationItems(statuses: {
             label: 'Discord OAuth',
             status: statuses.discord.loading ? 'loading'
                 : statuses.discord.configured ? 'online' : 'not-configured',
+        },
+        {
+            to: '/admin/settings/integrations/discord-bot',
+            label: 'Discord Bot',
+            status: statuses.discordBot.loading ? 'loading'
+                : statuses.discordBot.connected ? 'online'
+                : statuses.discordBot.configured ? 'configured' : 'not-configured',
         },
         {
             to: '/admin/settings/integrations/igdb',
@@ -117,13 +125,18 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { oauthStatus, igdbStatus, githubStatus } = useAdminSettings();
+    const { oauthStatus, igdbStatus, githubStatus, discordBotStatus } = useAdminSettings();
     const { relayStatus } = useRelaySettings();
 
     const coreIntegrations = buildCoreIntegrationItems({
         discord: {
             configured: oauthStatus.data?.configured ?? false,
             loading: oauthStatus.isLoading,
+        },
+        discordBot: {
+            connected: discordBotStatus.data?.connected ?? false,
+            configured: discordBotStatus.data?.configured ?? false,
+            loading: discordBotStatus.isLoading,
         },
         igdb: {
             configured: igdbStatus.data?.configured ?? false,

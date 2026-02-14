@@ -39,6 +39,8 @@ export const SETTING_KEYS = {
   LATEST_VERSION: 'latest_version',
   VERSION_CHECK_LAST_RUN: 'version_check_last_run',
   UPDATE_AVAILABLE: 'update_available',
+  DISCORD_BOT_TOKEN: 'discord_bot_token',
+  DISCORD_BOT_ENABLED: 'discord_bot_enabled',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
