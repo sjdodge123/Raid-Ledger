@@ -1,14 +1,41 @@
-/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await, @typescript-eslint/no-floating-promises, @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter } from 'events';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DISCORD_BOT_EVENTS } from './discord-bot.constants';
-import { Client, Events } from 'discord.js';
+import { Events } from 'discord.js';
+
+/**
+ * Typed interface for the mock Discord.js Client used in these tests.
+ * Eliminates `as any` casts by providing a contract matching the mock factory below.
+ */
+interface MockDiscordClient extends EventEmitter {
+  user: { tag: string } | null;
+  guilds: {
+    cache: Map<string, unknown> & { first: jest.Mock };
+  };
+  users: {
+    fetch: jest.Mock;
+  };
+  login: jest.Mock;
+  destroy: jest.Mock;
+  isReady: jest.Mock;
+}
+
+// Helper to access the private `client` field without `as any`
+function getClient(service: DiscordBotClientService): MockDiscordClient | null {
+  return (service as unknown as { client: MockDiscordClient | null }).client;
+}
+function setClient(
+  service: DiscordBotClientService,
+  client: MockDiscordClient | null,
+): void {
+  (service as unknown as { client: MockDiscordClient | null }).client = client;
+}
 
 // Mock discord.js Client
 jest.mock('discord.js', () => {
-  const EventEmitter = require('events');
-
   class MockClient extends EventEmitter {
     user: { tag: string } | null = null;
     guilds = {
@@ -52,7 +79,7 @@ jest.mock('discord.js', () => {
 describe('DiscordBotClientService', () => {
   let service: DiscordBotClientService;
   let eventEmitter: EventEmitter2;
-  let mockClient: Client;
+  let mockClient: MockDiscordClient;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -87,7 +114,7 @@ describe('DiscordBotClientService', () => {
       const connectPromise = service.connect(token);
 
       // Get the client that was created
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
 
       // Simulate successful connection
       mockClient.user = { tag: 'TestBot#1234' };
@@ -107,7 +134,7 @@ describe('DiscordBotClientService', () => {
 
       const connectPromise = service.connect(token);
 
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.emit(Events.Error, error);
 
       await expect(connectPromise).rejects.toThrow(
@@ -141,9 +168,9 @@ describe('DiscordBotClientService', () => {
 
       // First connection
       const firstConnect = service.connect(firstToken);
-      const firstClient = (service as any).client;
+      const firstClient = getClient(service)!;
       firstClient.user = { tag: 'Bot1#1234' };
-      (firstClient.isReady as jest.Mock).mockReturnValue(true);
+      firstClient.isReady.mockReturnValue(true);
       firstClient.emit(Events.ClientReady);
       await firstConnect;
 
@@ -160,7 +187,7 @@ describe('DiscordBotClientService', () => {
       expect(destroySpy).toHaveBeenCalled();
 
       // Complete the second connection
-      const secondClient = (service as any).client;
+      const secondClient = getClient(service)!;
       secondClient.user = { tag: 'Bot2#5678' };
       secondClient.emit(Events.ClientReady);
       await secondConnect;
@@ -171,16 +198,16 @@ describe('DiscordBotClientService', () => {
       const error = new Error('Login failed');
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
 
       // Trigger login failure immediately
       setImmediate(() => {
-        const loginSpy = mockClient.login as jest.Mock;
-        const loginPromise = loginSpy.mock.results[0].value;
+        const loginPromise = mockClient.login.mock.results[0]
+          .value as Promise<void>;
         loginPromise.catch(() => {}); // Prevent unhandled rejection
 
         // Simulate login failure by rejecting and clearing the client
-        (service as any).client = null;
+        setClient(service, null);
         mockClient.emit(Events.Error, error);
       });
 
@@ -193,11 +220,11 @@ describe('DiscordBotClientService', () => {
       const token = 'bad-token';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
 
       // Trigger login failure with non-Error value
       setImmediate(() => {
-        (service as any).client = null;
+        setClient(service, null);
         mockClient.emit(Events.Error, new Error('String error message'));
       });
 
@@ -212,7 +239,7 @@ describe('DiscordBotClientService', () => {
       const token = 'valid-token';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
       mockClient.emit(Events.ClientReady);
       await connectPromise;
@@ -225,7 +252,7 @@ describe('DiscordBotClientService', () => {
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         DISCORD_BOT_EVENTS.DISCONNECTED,
       );
-      expect((service as any).client).toBeNull();
+      expect(getClient(service)).toBeNull();
     });
 
     it('should do nothing if no client is connected', async () => {
@@ -238,7 +265,7 @@ describe('DiscordBotClientService', () => {
       const token = 'valid-token';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
       mockClient.emit(Events.ClientReady);
       await connectPromise;
@@ -250,7 +277,7 @@ describe('DiscordBotClientService', () => {
       await expect(service.disconnect()).resolves.not.toThrow();
 
       // Client should still be nulled out
-      expect((service as any).client).toBeNull();
+      expect(getClient(service)).toBeNull();
     });
   });
 
@@ -259,12 +286,10 @@ describe('DiscordBotClientService', () => {
       expect(service.isConnected()).toBe(false);
     });
 
-    it('should return false when client is not ready', async () => {
-      const token = 'valid-token';
-
+    it('should return false when client is not ready', () => {
       // Start connection but don't complete it
-      service.connect(token);
-      mockClient = (service as any).client;
+      void service.connect('valid-token');
+      mockClient = getClient(service)!;
 
       expect(service.isConnected()).toBe(false);
     });
@@ -273,9 +298,9 @@ describe('DiscordBotClientService', () => {
       const token = 'valid-token';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
-      (mockClient.isReady as jest.Mock).mockReturnValue(true);
+      mockClient.isReady.mockReturnValue(true);
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
@@ -288,20 +313,18 @@ describe('DiscordBotClientService', () => {
       expect(service.getGuildInfo()).toBeNull();
     });
 
-    it('should return null when client is not ready', async () => {
-      const token = 'valid-token';
-
-      service.connect(token);
-      mockClient = (service as any).client;
+    it('should return null when client is not ready', () => {
+      void service.connect('valid-token');
+      mockClient = getClient(service)!;
 
       expect(service.getGuildInfo()).toBeNull();
     });
 
-    it('should return guild info when connected', async () => {
+    it('should return guild info when connected', () => {
       // Manually create a connected state
-      const client = new Client({} as any);
-      client.user = { tag: 'Bot#1234' } as any;
-      (client.isReady as jest.Mock).mockReturnValue(true);
+      const client = createMockClient();
+      client.user = { tag: 'Bot#1234' };
+      client.isReady.mockReturnValue(true);
 
       // Mock guild data
       const mockGuild = {
@@ -311,7 +334,7 @@ describe('DiscordBotClientService', () => {
       client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
 
       // Inject the client
-      (service as any).client = client;
+      setClient(service, client);
 
       const info = service.getGuildInfo();
 
@@ -325,9 +348,9 @@ describe('DiscordBotClientService', () => {
       const token = 'valid-token';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
-      (mockClient.isReady as jest.Mock).mockReturnValue(true);
+      mockClient.isReady.mockReturnValue(true);
       mockClient.guilds.cache.first = jest.fn().mockReturnValue(null);
       mockClient.emit(Events.ClientReady);
       await connectPromise;
@@ -337,9 +360,9 @@ describe('DiscordBotClientService', () => {
 
     it('should handle errors gracefully', () => {
       // Manually create a connected state
-      const client = new Client({} as any);
-      client.user = { tag: 'Bot#1234' } as any;
-      (client.isReady as jest.Mock).mockReturnValue(true);
+      const client = createMockClient();
+      client.user = { tag: 'Bot#1234' };
+      client.isReady.mockReturnValue(true);
 
       // Mock guilds.cache.first() to throw
       client.guilds.cache.first = jest.fn().mockImplementation(() => {
@@ -347,7 +370,7 @@ describe('DiscordBotClientService', () => {
       });
 
       // Inject the client
-      (service as any).client = client;
+      setClient(service, client);
 
       expect(service.getGuildInfo()).toBeNull();
     });
@@ -360,16 +383,16 @@ describe('DiscordBotClientService', () => {
       const message = 'Hello, user!';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
-      (mockClient.isReady as jest.Mock).mockReturnValue(true);
+      mockClient.isReady.mockReturnValue(true);
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
       const mockUser = {
         send: jest.fn().mockResolvedValue(undefined),
       };
-      (mockClient.users.fetch as jest.Mock).mockResolvedValue(mockUser);
+      mockClient.users.fetch.mockResolvedValue(mockUser);
 
       await service.sendDirectMessage(discordId, message);
 
@@ -389,14 +412,14 @@ describe('DiscordBotClientService', () => {
       const message = 'Hello';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
-      (mockClient.isReady as jest.Mock).mockReturnValue(true);
+      mockClient.isReady.mockReturnValue(true);
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
       const error = new Error('User not found');
-      (mockClient.users.fetch as jest.Mock).mockRejectedValue(error);
+      mockClient.users.fetch.mockRejectedValue(error);
 
       await expect(
         service.sendDirectMessage(discordId, message),
@@ -409,9 +432,9 @@ describe('DiscordBotClientService', () => {
       const message = 'Hello';
 
       const connectPromise = service.connect(token);
-      mockClient = (service as any).client;
+      mockClient = getClient(service)!;
       mockClient.user = { tag: 'Bot#1234' };
-      (mockClient.isReady as jest.Mock).mockReturnValue(true);
+      mockClient.isReady.mockReturnValue(true);
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
@@ -419,7 +442,7 @@ describe('DiscordBotClientService', () => {
       const mockUser = {
         send: jest.fn().mockRejectedValue(error),
       };
-      (mockClient.users.fetch as jest.Mock).mockResolvedValue(mockUser);
+      mockClient.users.fetch.mockResolvedValue(mockUser);
 
       await expect(
         service.sendDirectMessage(discordId, message),
@@ -435,8 +458,8 @@ describe('DiscordBotClientService', () => {
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
-    it('should return all false when client is not ready', async () => {
-      service.connect('valid-token');
+    it('should return all false when client is not ready', () => {
+      void service.connect('valid-token');
       // Don't fire ready event
 
       const results = service.checkPermissions();
@@ -445,12 +468,12 @@ describe('DiscordBotClientService', () => {
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
-    it('should return all false when no guild is cached', async () => {
-      const client = new Client({} as any);
-      client.user = { tag: 'Bot#1234' } as any;
-      (client.isReady as jest.Mock).mockReturnValue(true);
+    it('should return all false when no guild is cached', () => {
+      const client = createMockClient();
+      client.user = { tag: 'Bot#1234' };
+      client.isReady.mockReturnValue(true);
       client.guilds.cache.first = jest.fn().mockReturnValue(null);
-      (service as any).client = client;
+      setClient(service, client);
 
       const results = service.checkPermissions();
 
@@ -458,13 +481,13 @@ describe('DiscordBotClientService', () => {
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
-    it('should return all false when guild.members.me is null', async () => {
-      const client = new Client({} as any);
-      client.user = { tag: 'Bot#1234' } as any;
-      (client.isReady as jest.Mock).mockReturnValue(true);
+    it('should return all false when guild.members.me is null', () => {
+      const client = createMockClient();
+      client.user = { tag: 'Bot#1234' };
+      client.isReady.mockReturnValue(true);
       const mockGuild = { members: { me: null } };
       client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
-      (service as any).client = client;
+      setClient(service, client);
 
       const results = service.checkPermissions();
 
@@ -472,10 +495,10 @@ describe('DiscordBotClientService', () => {
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
-    it('should return correct permission check results', async () => {
-      const client = new Client({} as any);
-      client.user = { tag: 'Bot#1234' } as any;
-      (client.isReady as jest.Mock).mockReturnValue(true);
+    it('should return correct permission check results', () => {
+      const client = createMockClient();
+      client.user = { tag: 'Bot#1234' };
+      client.isReady.mockReturnValue(true);
       const mockMe = {
         permissions: {
           has: jest.fn().mockImplementation((flag: bigint) => {
@@ -486,7 +509,7 @@ describe('DiscordBotClientService', () => {
       };
       const mockGuild = { members: { me: mockMe } };
       client.guilds.cache.first = jest.fn().mockReturnValue(mockGuild);
-      (service as any).client = client;
+      setClient(service, client);
 
       const results = service.checkPermissions();
 
@@ -498,3 +521,15 @@ describe('DiscordBotClientService', () => {
     });
   });
 });
+
+/**
+ * Creates a fresh MockDiscordClient instance using the mocked Client constructor.
+ * This avoids needing to import the real Client while keeping typed access.
+ */
+function createMockClient(): MockDiscordClient {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { Client } = require('discord.js') as {
+    Client: new (opts: unknown) => MockDiscordClient;
+  };
+  return new Client({});
+}

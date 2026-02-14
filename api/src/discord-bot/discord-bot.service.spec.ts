@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
-import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('DiscordBotService', () => {
   let service: DiscordBotService;
@@ -307,16 +307,6 @@ describe('DiscordBotService', () => {
 
   describe('testToken', () => {
     it('should return success when token is valid and bot is in guilds', async () => {
-      // Mock the test client that will be created internally
-      const mockTestClient = {
-        connect: jest.fn().mockResolvedValue(undefined),
-        disconnect: jest.fn().mockResolvedValue(undefined),
-        getGuildInfo: jest.fn().mockReturnValue({
-          name: 'Test Guild',
-          memberCount: 50,
-        }),
-      };
-
       // We need to mock the DiscordBotClientService constructor
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
