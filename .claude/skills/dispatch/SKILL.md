@@ -416,9 +416,13 @@ SendMessage(type: "shutdown_request", recipient: "test-rok-<num>")
 
 Do NOT wait until batch completion — shut them down as soon as their PR is pushed.
 
-### 8d. Unblock Review Task
+### 8d. Keep Review Tasks Blocked
 
-Update the review task in the shared task list (remove blocker so reviewer can claim it).
+DO NOT unblock review tasks yet. Review tasks remain blocked until the operator
+completes manual testing on staging and approves the story (moves to "Code Review"
+status in Linear).
+
+The lead will unblock review tasks in Step 9c after polling detects operator approval.
 
 ### 8e. Auto-Deploy Staging (after all batch stories have PRs)
 
@@ -479,23 +483,35 @@ Test each story on staging. Update each story's status in Linear when done:
 
 The operator controls the testing gate by moving stories in Linear. The lead polls Linear and reacts — **it does NOT ask the operator for results in the terminal.**
 
-### 9a. Poll Linear for Status Changes
+### 9a. Poll for Operator Test Results
 
-The operator tests on staging and updates Linear:
-- **"Code Review"** = operator approved, ready for code review agent
-- **"Changes Requested"** (with comments) = operator found issues
+**Polling loop:**
+1. Check Linear every 5 minutes for status updates to stories in "In Review"
+2. Detect status transitions:
+   - **"Code Review"** = operator approved, ready for code review
+   - **"Changes Requested"** = operator found issues during testing
+   - **"In Review"** (unchanged) = operator still testing, wait
+3. Continue polling until ALL stories have moved out of "In Review" status
 
-The lead polls Linear to detect changes:
+**Polling commands:**
 ```
 mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
 mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
 ```
 
-Process any stories that have changed status. Stories still in "In Review" haven't been tested yet — leave them alone.
+**Important:** Do NOT proceed to Step 9b/9c for a story until its Linear status
+has changed from "In Review". The operator approval gate is mandatory.
+
+**Edge case:** If stories remain in "In Review" for >24 hours, message the
+user to check on operator testing progress.
 
 ### 9b. Handle Changes Requested (from operator testing)
 
 For stories the operator moved to "Changes Requested":
+
+**IMPORTANT:** Ensure the review task remains BLOCKED (do not unblock it). The story
+must pass operator testing before code review can begin.
+
 1. Fetch comments to get the operator's feedback: `mcp__linear__list_comments(issueId: <id>)`
 2. **Re-spawn the dev teammate** (it was shut down after PR creation in Step 8c):
    ```
@@ -517,16 +533,26 @@ For stories the operator moved to "Changes Requested":
    ```
 8. Lead moves Linear back to "In Review"
 9. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
+10. **Review task stays BLOCKED** — cycle repeats from Step 9a (operator re-tests)
 
-### 9c. Dispatch Code Review (for "Code Review" stories)
+### 9c. Unblock Review Tasks & Dispatch Code Review (for "Code Review" stories)
 
-For stories the operator moved to "Code Review", dispatch the reviewer teammate:
-1. Unblock the review tasks in the shared task list
-2. Reviewer claims tasks and for each PR:
-   - Runs `gh pr diff <number>`
-   - Checks: TypeScript strictness, Zod validation, security, error handling, patterns, naming
-   - Posts: `gh pr review <number> --approve` or `--request-changes --body "..."`
-   - Messages the lead with verdict
+For stories the operator moved to "Code Review" (operator approved):
+
+**1. Unblock the corresponding review task** in the shared task list (remove blocker).
+   This allows the reviewer to claim the task and begin code review.
+   Do NOT send a message to the reviewer (they will auto-poll the task list).
+
+**2. Reviewer claims operator-approved tasks** and for each PR:
+   - **VERIFY the story has "Code Review" status in Linear** (operator approved)
+   - If status is NOT "Code Review", DO NOT review — message lead about premature unblock
+   - Run `gh pr diff <number>` to see code changes
+   - Check: TypeScript strictness, Zod validation, security, error handling, patterns, naming
+   - Post review: `gh pr review <number> --approve` or `--request-changes --body "..."`
+   - Message the lead with verdict
+
+**Critical:** The reviewer should ONLY review stories that have been moved to
+"Code Review" status by the operator. Code review is gated on operator approval.
 
 ---
 
@@ -554,17 +580,19 @@ For stories the operator moved to "Code Review", dispatch the reviewer teammate:
 ### If reviewer requests changes:
 
 1. Lead updates Linear → "Changes Requested"
-2. **Re-spawn the dev teammate** (it was shut down after PR creation in Step 8c):
+2. **Re-block the review task** in the shared task list (add blocker back)
+   - The story must pass operator re-testing before code review can resume
+3. **Re-spawn the dev teammate** (it was shut down after PR creation in Step 8c):
    ```
    Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
         name: "dev-rok-<num>", mode: "bypassPermissions",
         prompt: <rework prompt with reviewer feedback>)
    ```
-3. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
-4. Dev teammate runs all tests to verify they pass, messages lead when done
-5. **Shut down dev teammate** after fixes are committed
-6. Lead pushes updated branch: `git push origin rok-<num>-<short-name>`
-7. Lead re-merges to staging and deploys **from staging**:
+4. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
+5. Dev teammate runs all tests to verify they pass, messages lead when done
+6. **Shut down dev teammate** after fixes are committed
+7. Lead pushes updated branch: `git push origin rok-<num>-<short-name>`
+8. Lead re-merges to staging and deploys **from staging**:
    ```bash
    git checkout staging
    git merge rok-<num>-<short-name>
@@ -572,9 +600,9 @@ For stories the operator moved to "Code Review", dispatch the reviewer teammate:
    ./scripts/deploy_dev.sh --rebuild
    git checkout main
    ```
-8. Lead moves Linear → "In Review"
-9. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
-10. Cycle repeats from Step 9a (operator re-tests)
+9. Lead moves Linear → "In Review"
+10. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
+11. **Review task stays BLOCKED** — cycle repeats from Step 9a (operator re-tests)
 
 ---
 
@@ -774,9 +802,13 @@ You are a code reviewer for the Raid Ledger project.
 Read /Users/sdodge/Documents/Projects/Raid-Ledger/CLAUDE.md for project conventions.
 
 Your job:
-1. Claim review tasks from the task list (TaskList → TaskUpdate to claim)
-2. For each PR assigned to you, run: `gh pr diff <number>`
-3. Check:
+1. Poll the shared task list for review tasks that are **unblocked**
+2. Claim a task using TaskUpdate
+3. **VERIFY the story has "Code Review" status in Linear** (operator approved)
+   - Use `mcp__linear__get_issue` to check the status
+   - If status is NOT "Code Review", DO NOT review — message lead about premature unblock
+4. For each PR assigned to you, run: `gh pr diff <number>`
+5. Check:
    - TypeScript strictness (no `any`, proper types)
    - Zod validation (schemas in contract package, not duplicated)
    - Security (auth guards, input validation, no injection vectors)
@@ -784,13 +816,16 @@ Your job:
    - Pattern consistency (follows existing codebase conventions)
    - Test coverage (relevant tests exist and pass)
    - Naming conventions (files kebab-case, classes PascalCase, vars camelCase, DB snake_case)
-4. Post your review:
+6. Post your review:
    - If approved: `gh pr review <number> --approve --body "LGTM. <brief summary of what looks good>"`
    - If changes needed: `gh pr review <number> --request-changes --body "<specific issues found>"`
-5. Message the lead with your verdict and key findings
-6. Mark the review task as completed and claim the next one
+7. Message the lead with your verdict and key findings
+8. Mark the review task as completed and claim the next one
 
-You do NOT implement code. You do NOT merge PRs. You do NOT access Linear. You only review.
+**Important:** You should ONLY review PRs that have passed operator testing.
+The story MUST be in "Code Review" status in Linear before you begin review.
+
+You do NOT implement code. You do NOT merge PRs. You only review.
 If no review tasks are available yet (blocked), wait for the lead to unblock them.
 ```
 
