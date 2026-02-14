@@ -5,7 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { UserProfilePage } from './user-profile-page';
 import * as useUserProfileHook from '../hooks/use-user-profile';
 import * as useGameRegistryHook from '../hooks/use-game-registry';
-import type { UserProfileResponseDto, CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
+import type { UserProfileDto, CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
 
 // Mock the hooks
 vi.mock('../hooks/use-user-profile');
@@ -41,7 +41,7 @@ const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDt
     ...overrides,
 });
 
-const createMockProfile = (overrides: Partial<UserProfileResponseDto> = {}): UserProfileResponseDto => ({
+const createMockProfile = (overrides: Partial<UserProfileDto> = {}): UserProfileDto => ({
     id: 1,
     username: 'TestUser',
     avatar: null,
@@ -313,7 +313,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             });
 
             const heartedGames: UserHeartedGameDto[] = [
-                { id: 'game-uuid-ff14', name: 'Final Fantasy XIV', coverUrl: null },
+                { id: 1, igdbId: 12345, name: 'Final Fantasy XIV', slug: 'final-fantasy-xiv', coverUrl: null },
             ];
 
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({

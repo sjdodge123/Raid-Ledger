@@ -83,7 +83,7 @@ describe('NewMembersSection', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: { data: [] },
             isLoading: false,
-        } as ReturnType<typeof usePlayersModule.useRecentPlayers>);
+        } as any);
 
         const { container } = renderWithRouter(<NewMembersSection />);
 
