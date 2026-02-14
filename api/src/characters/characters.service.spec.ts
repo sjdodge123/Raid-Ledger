@@ -513,6 +513,88 @@ describe('CharactersService', () => {
         expect.objectContaining({ isMain: true }),
       );
     });
+
+    // ROK-312: Cross-user duplicate claim check
+    it('should throw ConflictException when another user owns the same name+realm', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockGame]),
+          }),
+        }),
+      });
+
+      // Duplicate claim check returns an existing claim by another user
+      mockDb.transaction.mockImplementationOnce(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            select: mockTxSelectDualCall(
+              [{ id: 'other-char-id', userId: 999 }], // existingClaim found
+              [{ charCount: 0 }],
+            ),
+          };
+          return callback(tx);
+        },
+      );
+
+      const dto = {
+        gameId: 'game-uuid-1',
+        name: 'Thrall',
+        realm: 'Area 52',
+        isMain: false,
+      };
+
+      await expect(service.create(1, dto)).rejects.toThrow(ConflictException);
+    });
+
+    // ROK-312: No-realm games skip duplicate claim check
+    it('should skip duplicate claim check for non-realm characters', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockGame]),
+          }),
+        }),
+      });
+
+      const txInsertMock = jest.fn().mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          returning: jest
+            .fn()
+            .mockResolvedValue([{ ...mockCharacter, realm: null, isMain: true }]),
+        }),
+      });
+
+      // Only one tx.select call expected (charCount only, no claim check)
+      // charCount uses .from().where() (no .limit())
+      const txSelectMock = jest.fn().mockReturnValue({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([{ charCount: 0 }]),
+        }),
+      });
+
+      mockDb.transaction.mockImplementationOnce(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            select: txSelectMock,
+            insert: txInsertMock,
+          };
+          return callback(tx);
+        },
+      );
+
+      const dto = {
+        gameId: 'game-uuid-1',
+        name: 'Shadow',
+        // No realm — should skip duplicate claim check
+        isMain: false,
+      };
+
+      const result = await service.create(1, dto);
+      expect(result.isMain).toBe(true); // auto-main (charCount: 0)
+      // Only 1 select call (charCount), not 2 (no claim check)
+      expect(txSelectMock).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('update', () => {

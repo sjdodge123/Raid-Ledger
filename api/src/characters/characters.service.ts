@@ -45,7 +45,7 @@ export class CharactersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
-  ) {}
+  ) { }
 
   /**
    * Find a CharacterSyncAdapter that can handle the given game variant.
@@ -67,6 +67,43 @@ export class CharactersService {
       if (slugs.length > 0) return adapter;
     }
     return undefined;
+  }
+
+  /**
+   * Check if a character with the same name+realm is already claimed by another user.
+   * Only applies when realm is provided — non-realm games skip this check since
+   * character names aren't globally unique in non-MMO titles.
+   */
+  private async checkDuplicateClaim(
+    tx: PostgresJsDatabase<typeof schema>,
+    gameId: string,
+    userId: number,
+    name: string,
+    realm?: string | null,
+  ): Promise<void> {
+    if (!realm) return; // Non-realm games: skip cross-user uniqueness check
+
+    const [existingClaim] = await tx
+      .select({
+        id: schema.characters.id,
+        userId: schema.characters.userId,
+      })
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.gameId, gameId),
+          ne(schema.characters.userId, userId),
+          ilike(schema.characters.name, name),
+          eq(schema.characters.realm, realm),
+        ),
+      )
+      .limit(1);
+
+    if (existingClaim) {
+      throw new ConflictException(
+        `${name} on ${realm} is already claimed by another player`,
+      );
+    }
   }
 
   /**
@@ -146,34 +183,8 @@ export class CharactersService {
     // Use transaction for atomic demotion + insert to prevent race conditions
     try {
       return await this.db.transaction(async (tx) => {
-        // Cross-user duplicate check: prevent claiming a character already owned by another user
-        const realmConditions = dto.realm
-          ? [
-              ilike(schema.characters.name, dto.name),
-              eq(schema.characters.realm, dto.realm),
-            ]
-          : [ilike(schema.characters.name, dto.name)];
-
-        const [existingClaim] = await tx
-          .select({
-            id: schema.characters.id,
-            userId: schema.characters.userId,
-          })
-          .from(schema.characters)
-          .where(
-            and(
-              eq(schema.characters.gameId, dto.gameId),
-              ne(schema.characters.userId, userId),
-              ...realmConditions,
-            ),
-          )
-          .limit(1);
-
-        if (existingClaim) {
-          throw new ConflictException(
-            `${dto.name} is already claimed by another player`,
-          );
-        }
+        // Cross-user duplicate check (realm-only — non-MMO games skip)
+        await this.checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm);
 
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx
@@ -410,34 +421,8 @@ export class CharactersService {
     // Create the character with external data
     try {
       return await this.db.transaction(async (tx) => {
-        // Cross-user duplicate check: prevent claiming a character already owned by another user
-        const importRealmConditions = profile.realm
-          ? [
-              ilike(schema.characters.name, profile.name),
-              eq(schema.characters.realm, profile.realm),
-            ]
-          : [ilike(schema.characters.name, profile.name)];
-
-        const [existingImportClaim] = await tx
-          .select({
-            id: schema.characters.id,
-            userId: schema.characters.userId,
-          })
-          .from(schema.characters)
-          .where(
-            and(
-              eq(schema.characters.gameId, game.id),
-              ne(schema.characters.userId, userId),
-              ...importRealmConditions,
-            ),
-          )
-          .limit(1);
-
-        if (existingImportClaim) {
-          throw new ConflictException(
-            `${profile.name} on ${profile.realm} is already claimed by another player`,
-          );
-        }
+        // Cross-user duplicate check (realm-only — non-MMO games skip)
+        await this.checkDuplicateClaim(tx, game.id, userId, profile.name, profile.realm);
 
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx

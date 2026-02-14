@@ -67,6 +67,7 @@ describe('UsersController', () => {
             checkDisplayNameAvailability: jest.fn(),
             setDisplayName: jest.fn(),
             completeOnboarding: jest.fn(),
+            resetOnboarding: jest.fn(),
           },
         },
         {
@@ -479,6 +480,21 @@ describe('UsersController', () => {
       expect(result).toHaveProperty('success', true);
       expect(result).toHaveProperty('onboardingCompletedAt');
       expect(typeof result.onboardingCompletedAt).toBe('string');
+    });
+  });
+
+  describe('resetOnboarding (ROK-312)', () => {
+    const mockRequest = { user: { id: 1, role: 'member' } };
+
+    it('should reset onboarding and return success', async () => {
+      const resetSpy = jest
+        .spyOn(usersService, 'resetOnboarding')
+        .mockResolvedValue(undefined as never);
+
+      const result = await controller.resetOnboarding(mockRequest as never);
+
+      expect(result).toEqual({ success: true });
+      expect(resetSpy).toHaveBeenCalledWith(1);
     });
   });
 });

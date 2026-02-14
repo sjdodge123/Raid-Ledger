@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 
@@ -20,9 +21,12 @@ export class VersionCheckService implements OnModuleInit {
   private readonly currentVersion: string;
 
   constructor(private readonly settingsService: SettingsService) {
-    // Read version from root package.json at startup
+    // Read version from package.json at startup — use process.cwd() so the
+    // path resolves correctly both locally (cwd = api/) and in Docker (cwd = /app).
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const rootPkg = require('../../../../package.json') as { version: string };
+    const rootPkg = require(join(process.cwd(), 'package.json')) as {
+      version: string;
+    };
     this.currentVersion = rootPkg.version;
   }
 
