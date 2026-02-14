@@ -22,7 +22,7 @@ vi.mock('../../hooks/use-onboarding-fte', () => ({
         isLoading: false,
     })),
     useUpdateUserProfile: vi.fn(() => ({
-        mutate: vi.fn((displayName, options) => {
+        mutate: vi.fn((_displayName, options) => {
             options?.onSuccess?.();
         }),
         isPending: false,
