@@ -87,6 +87,43 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 - **Database schema changes** — Use Drizzle Kit migrations only, never modify schema manually
 - **npm config** — `.npmrc` has `legacy-peer-deps=true` for NestJS compatibility
 
+## GitHub Branch Protection
+
+GitHub branch protection rules are enforced on `main` and `staging` branches to prevent destructive operations and ensure code quality.
+
+### Main Branch Protection (Production)
+
+The `main` branch has the following protections active:
+- ✅ **Requires Pull Request** — No direct commits allowed, all changes via PR
+- ✅ **Requires 1 approval** — Lead/maintainer must approve before merge
+- ✅ **Requires CI checks to pass** — Both `build-lint-test` and `build-and-push` workflows must succeed
+- ✅ **Requires conversation resolution** — All PR comments must be resolved
+- ✅ **Dismisses stale reviews** — New commits invalidate previous approvals (forces re-review)
+- ✅ **Blocks force pushes** — Protects git history from being rewritten
+- ✅ **Blocks branch deletion** — Prevents accidental removal
+- ✅ **Enforces on admins** — Rules apply to everyone, no bypassing
+
+**Impact:** GitHub UI will block merge until CI passes (green checkmarks), 1 approval received, and all conversations resolved. Direct pushes to `main` will be rejected.
+
+### Staging Branch Protection (Testing)
+
+The `staging` branch has relaxed protections for testing flexibility:
+- ✅ **Allows force pushes** — Enables `git reset --hard main` during `/dispatch` workflow
+- ✅ **Blocks branch deletion** — Prevents accidental removal
+- ❌ **No required CI checks** — Branches already validated on their PR to main
+- ❌ **No required approvals** — Lead merges directly for rapid testing iteration
+
+### Managing Branch Protection
+
+Update or restore branch protection rules anytime:
+```bash
+./scripts/setup-branch-protection.sh
+```
+
+The script is idempotent and safe to run multiple times. It configures both `main` and `staging` protection via GitHub API.
+
+**Documentation:** See `implementation-artifacts/branch-protection-setup.md` for full configuration details, verification steps, and rollback instructions.
+
 ## Deploy Scripts
 
 Both scripts share the same Docker DB volume and `.env` `ADMIN_PASSWORD` — the admin password never desyncs between dev and prod.
