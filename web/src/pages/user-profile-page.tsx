@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
+import { useGameRegistry } from '../hooks/use-game-registry';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
@@ -97,6 +98,70 @@ function HeartedGameCard({ game }: { game: UserHeartedGameDto }) {
     );
 }
 
+/** Characters grouped by game, matching the My Characters page pattern (ROK-308) */
+function GroupedCharacters({
+    characters,
+    games,
+}: {
+    characters: CharacterDto[];
+    games: { id: string; name: string }[];
+}) {
+    const gameNameMap = new Map(games.map((g) => [g.id, g.name]));
+
+    const grouped = characters.reduce(
+        (acc, char) => {
+            const game = char.gameId;
+            if (!acc[game]) acc[game] = [];
+            acc[game].push(char);
+            return acc;
+        },
+        {} as Record<string, CharacterDto[]>,
+    );
+
+    Object.values(grouped).forEach((chars) => {
+        chars.sort((a, b) => {
+            if (a.isMain && !b.isMain) return -1;
+            if (!a.isMain && b.isMain) return 1;
+            return a.displayOrder - b.displayOrder;
+        });
+    });
+
+    return (
+        <div className="user-profile-section">
+            <h2 className="user-profile-section-title">
+                Characters ({characters.length})
+            </h2>
+            <div className="space-y-6">
+                {Object.entries(grouped).map(([gameId, chars]) => {
+                    const gameName = gameNameMap.get(gameId) ?? 'Unknown Game';
+                    return (
+                        <div key={gameId}>
+                            <div className="flex items-center gap-3 mb-3">
+                                <h3 className="text-sm font-semibold text-foreground">
+                                    {gameName}
+                                </h3>
+                                <span className="text-xs text-muted">
+                                    {chars.length} character
+                                    {chars.length !== 1 ? 's' : ''}
+                                </span>
+                                <div className="flex-1 border-t border-edge-subtle" />
+                            </div>
+                            <div className="space-y-2">
+                                {chars.map((character) => (
+                                    <PublicCharacterCard
+                                        key={character.id}
+                                        character={character}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 /**
  * Public user profile page (ROK-181).
  * Shows username, avatar, member since, and characters.
@@ -108,6 +173,7 @@ export function UserProfilePage() {
     const { data: profile, isLoading, error } = useUserProfile(numericId);
     const { data: heartedGamesData } = useUserHeartedGames(numericId);
     const heartedGames = heartedGamesData?.data ?? [];
+    const { games } = useGameRegistry();
 
     if (isLoading) {
         return (
@@ -167,28 +233,13 @@ export function UserProfilePage() {
                     </div>
                 </div>
 
-                {/* Characters Section */}
-                {profile.characters.length > 0 && (
-                    <div className="user-profile-section">
-                        <h2 className="user-profile-section-title">
-                            Characters ({profile.characters.length})
-                        </h2>
-                        <div className="flex flex-col gap-2">
-                            {profile.characters.map((char) => (
-                                <PublicCharacterCard key={char.id} character={char} />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {profile.characters.length === 0 && (
-                    <div className="user-profile-empty">
-                        <p>No characters added yet.</p>
-                    </div>
-                )}
-
                 {/* Upcoming Events Section (ROK-299) */}
                 {numericId && <UserEventSignups userId={numericId} />}
+
+                {/* Characters Section (ROK-308: grouped by game) */}
+                {profile.characters.length > 0 && (
+                    <GroupedCharacters characters={profile.characters} games={games} />
+                )}
 
                 {/* Hearted Games Section (ROK-282) */}
                 {heartedGames.length > 0 && (
