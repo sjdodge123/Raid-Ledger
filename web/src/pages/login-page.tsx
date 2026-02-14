@@ -67,6 +67,17 @@ export function LoginPage() {
                 }, 1000);
             }
 
+            // ROK-219: Redirect new non-admin users to onboarding wizard
+            const authData = await fetch(`${API_BASE_URL}/auth/me`, {
+                headers: { Authorization: `Bearer ${data.access_token}` },
+            }).then((r) => r.json()) as { role?: string; onboardingCompletedAt?: string | null };
+
+            if (authData.role !== 'admin' && !authData.onboardingCompletedAt) {
+                toast.success('Welcome! Let\'s get you set up.');
+                navigate('/onboarding', { replace: true });
+                return;
+            }
+
             // Respect saved redirect destination (ROK-175: default to calendar)
             const redirectTo = consumeAuthRedirect() || '/calendar';
             navigate(redirectTo, { replace: true });

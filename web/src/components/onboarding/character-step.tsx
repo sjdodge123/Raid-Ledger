@@ -1,137 +1,326 @@
 import { useState } from 'react';
-import { useGamesDiscover } from '../../hooks/use-games-discover';
-import { InlineCharacterForm } from '../characters/inline-character-form';
-import type { CharacterDto } from '@raid-ledger/contract';
-
-/** IGDB genre ID 36 = MMORPG */
-const MMO_GENRE_ID = 36;
+import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
+import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
+import { useMyCharacters } from '../../hooks/use-characters';
+import { PluginSlot } from '../../plugins';
 
 interface CharacterStepProps {
-    onNext: () => void;
-    onBack: () => void;
-    onSkip: () => void;
+    /** The registry game to create a character for (pre-filled from hearted games) */
+    preselectedGame: GameRegistryDto;
+    /** Which character slot this step represents (0-based) */
+    charIndex: number;
+    /** Register a validator fn with the wizard. Return false = block Next. */
+    onRegisterValidator?: (fn: () => boolean) => void;
+    /** Insert a new character step for the same game and advance to it */
+    onAddAnother?: () => void;
+    /** Remove this extra step (only for charIndex > 0) */
+    onRemoveStep?: () => void;
+}
+
+interface FormState {
+    name: string;
+    class: string;
+    spec: string;
+    role: CharacterRole | '';
+    realm: string;
+}
+
+const ROLE_COLORS: Record<string, string> = {
+    tank: 'bg-blue-600',
+    healer: 'bg-emerald-600',
+    dps: 'bg-red-600',
+};
+
+/**
+ * Mini read-only character card for display in the wizard.
+ * Mirrors the profile page CharacterCard style but without edit/delete actions.
+ */
+function MiniCharacterCard({ character }: { character: CharacterDto }) {
+    return (
+        <div className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3">
+            {character.avatarUrl ? (
+                <img
+                    src={character.avatarUrl}
+                    alt={character.name}
+                    className="w-8 h-8 rounded-full bg-overlay"
+                />
+            ) : (
+                <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-muted text-xs">
+                    👤
+                </div>
+            )}
+            <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground text-sm truncate">
+                        {character.name}
+                    </span>
+                    {character.isMain && (
+                        <span className="text-yellow-400 text-xs font-semibold">⭐ Main</span>
+                    )}
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-muted">
+                    {character.level && (
+                        <>
+                            <span className="text-amber-400">Lv.{character.level}</span>
+                            <span>•</span>
+                        </>
+                    )}
+                    {character.race && <span>{character.race}</span>}
+                    {character.race && character.class && <span>•</span>}
+                    {character.class && <span>{character.class}</span>}
+                    {character.spec && <span>• {character.spec}</span>}
+                    {character.effectiveRole && (
+                        <span
+                            className={`px-1.5 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.effectiveRole] || 'bg-faint'}`}
+                        >
+                            {character.effectiveRole.toUpperCase()}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
 }
 
 /**
- * Step 3: Create a Character (ROK-219).
- * Only shown when user selected MMO games in Step 2.
- * Reuses InlineCharacterForm component.
+ * Step: Create a Character for a specific game.
+ * Each step is 1:1 with a character slot (by charIndex).
+ * Shows the saved character or the creation form.
  */
-export function CharacterStep({ onNext, onBack, onSkip }: CharacterStepProps) {
-    const { data: discoverData } = useGamesDiscover();
-    const [createdCharacter, setCreatedCharacter] = useState<CharacterDto | null>(null);
-    const [selectedGameId, setSelectedGameId] = useState<string>('');
+export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator, onAddAnother, onRemoveStep }: CharacterStepProps) {
+    const createMutation = useCreateCharacter();
+    const deleteMutation = useDeleteCharacter();
+    const { data: myCharsData } = useMyCharacters(preselectedGame.id);
 
-    // Get MMO games from discover data
-    const mmoGames =
-        discoverData?.rows
-            ?.flatMap((row) => row.games)
-            .filter((g) => g.genres.includes(MMO_GENRE_ID))
-            .filter((g, i, arr) => arr.findIndex((x) => x.id === g.id) === i) ?? [];
+    const [activeTab, setActiveTab] = useState<'manual' | 'import'>('manual');
+    const [form, setForm] = useState<FormState>({
+        name: '',
+        class: '',
+        spec: '',
+        role: '',
+        realm: '',
+    });
+    const [error, setError] = useState('');
 
-    const handleCharacterCreated = (character: CharacterDto) => {
-        setCreatedCharacter(character);
-    };
+    const showMmoFields = preselectedGame.hasRoles;
+    const currentSlug = preselectedGame.slug;
+
+    // Characters already created for this game — this step shows charIndex-th one
+    const existingChars = myCharsData?.data ?? [];
+    const savedCharacter = existingChars[charIndex] ?? null;
+    const hasCharacter = !!savedCharacter;
+
+    function updateField<K extends keyof FormState>(field: K, value: FormState[K]) {
+        setForm((prev) => ({ ...prev, [field]: value }));
+    }
+
+    function resetForm() {
+        setForm({ name: '', class: '', spec: '', role: '', realm: '' });
+        setError('');
+        setActiveTab('manual');
+    }
+
+    function handleDeleteCharacter(id: string) {
+        deleteMutation.mutate(id, {
+            onSuccess: () => {
+                // If this is an extra step (not the first), remove the step entirely
+                if (charIndex > 0) {
+                    onRemoveStep?.();
+                }
+            },
+        });
+    }
+
+    function handleSubmit(e: React.FormEvent) {
+        e.preventDefault();
+        setError('');
+
+        if (!form.name.trim()) {
+            setError('Character name is required');
+            return;
+        }
+
+        createMutation.mutate(
+            {
+                gameId: preselectedGame.id,
+                name: form.name.trim(),
+                class: showMmoFields ? (form.class.trim() || undefined) : undefined,
+                spec: showMmoFields ? (form.spec.trim() || undefined) : undefined,
+                role: showMmoFields ? (form.role || undefined) : undefined,
+                realm: showMmoFields ? (form.realm.trim() || undefined) : undefined,
+                isMain: existingChars.length === 0, // first character for this game is main
+            },
+            {
+                onSuccess: () => {
+                    resetForm();
+                },
+                onError: () => {
+                    setError('Failed to create character. Please try again.');
+                },
+            },
+        );
+    }
 
     return (
-        <div className="space-y-5">
+        <div className="space-y-4">
             <div className="text-center">
-                <h2 className="text-2xl font-bold text-foreground">Create a Character</h2>
-                <p className="text-muted mt-2">
-                    Add your main character for one of your MMO games.
-                    You can add more later from your profile.
+                <h2 className="text-xl font-bold text-foreground">
+                    Create a Character — {preselectedGame.name}
+                </h2>
+                <p className="text-muted text-sm mt-1">
+                    You can always add more from your profile later.
                 </p>
             </div>
 
-            {createdCharacter ? (
-                <div className="max-w-md mx-auto">
-                    <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-4 text-center">
-                        <svg
-                            className="w-8 h-8 mx-auto mb-2 text-emerald-400"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+            {/* Saved character card — 1:1 with this step */}
+            {hasCharacter && (
+                <div className="max-w-md mx-auto space-y-3">
+                    <div className="relative">
+                        <MiniCharacterCard character={savedCharacter} />
+                        <button
+                            type="button"
+                            onClick={() => handleDeleteCharacter(savedCharacter.id)}
+                            disabled={deleteMutation.isPending}
+                            title="Remove character"
+                            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/40 hover:text-red-300 transition-colors disabled:opacity-40"
                         >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2}
-                                d="M5 13l4 4L19 7"
-                            />
-                        </svg>
-                        <p className="text-foreground font-medium">
-                            {createdCharacter.name} created!
-                        </p>
-                        <p className="text-sm text-muted mt-1">
-                            {createdCharacter.class && `${createdCharacter.class} `}
-                            {createdCharacter.role && `(${createdCharacter.role})`}
-                        </p>
-                    </div>
-                </div>
-            ) : (
-                <div className="max-w-md mx-auto space-y-4">
-                    {/* Game selector */}
-                    <div>
-                        <label
-                            htmlFor="game-select"
-                            className="block text-sm font-medium text-foreground mb-1"
-                        >
-                            Game
-                        </label>
-                        <select
-                            id="game-select"
-                            value={selectedGameId}
-                            onChange={(e) => setSelectedGameId(e.target.value)}
-                            className="w-full px-3 py-2.5 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
-                        >
-                            <option value="">Select a game...</option>
-                            {mmoGames.map((game) => (
-                                <option key={game.id} value={String(game.id)}>
-                                    {game.name}
-                                </option>
-                            ))}
-                        </select>
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
 
-                    {/* Character form */}
-                    {selectedGameId && (
-                        <InlineCharacterForm
-                            gameId={selectedGameId}
-                            hasRoles
-                            gameSlug={
-                                mmoGames.find((g) => String(g.id) === selectedGameId)
-                                    ?.slug
-                            }
-                            onCharacterCreated={handleCharacterCreated}
-                        />
-                    )}
+                    {/* Add Another — inserts a new step */}
+                    <button
+                        type="button"
+                        onClick={onAddAnother}
+                        className="w-full px-4 py-2 bg-panel hover:bg-overlay text-muted hover:text-foreground border border-edge/50 rounded-lg transition-colors text-sm"
+                    >
+                        + Add Another Character
+                    </button>
                 </div>
             )}
 
-            {/* Navigation */}
-            <div className="flex gap-3 justify-center max-w-sm mx-auto">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Back
-                </button>
-                <button
-                    type="button"
-                    onClick={onSkip}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Skip
-                </button>
-                <button
-                    type="button"
-                    onClick={onNext}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                    Next
-                </button>
-            </div>
+            {/* Character creation form — shown when no character saved for this step */}
+            {!hasCharacter && (
+                <form onSubmit={handleSubmit} className="max-w-md mx-auto space-y-4">
+                    {/* Plugin: Import form tab toggle (e.g. WoW Armory) */}
+                    {currentSlug && (
+                        <PluginSlot
+                            name="character-create:import-form"
+                            context={{
+                                onClose: () => { /* cache invalidation hides form */ },
+                                gameSlug: currentSlug,
+                                activeTab,
+                                onTabChange: setActiveTab,
+                                existingCharacters: existingChars,
+                                onRegisterValidator,
+                            }}
+                        />
+                    )}
+
+                    {activeTab === 'manual' && (
+                        <>
+                            {/* Character Name */}
+                            <div>
+                                <label className="block text-sm font-medium text-foreground mb-1">
+                                    Name <span className="text-red-400">*</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    value={form.name}
+                                    onChange={(e) => updateField('name', e.target.value)}
+                                    placeholder="Character name"
+                                    maxLength={100}
+                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                />
+                            </div>
+
+                            {/* MMO-specific fields */}
+                            {showMmoFields && (
+                                <>
+                                    {/* Class & Spec */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-sm font-medium text-foreground mb-1">
+                                                Class
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.class}
+                                                onChange={(e) => updateField('class', e.target.value)}
+                                                placeholder="e.g. Warrior"
+                                                maxLength={50}
+                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-foreground mb-1">
+                                                Spec
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={form.spec}
+                                                onChange={(e) => updateField('spec', e.target.value)}
+                                                placeholder="e.g. Arms"
+                                                maxLength={50}
+                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Role */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground mb-1">
+                                            Role
+                                        </label>
+                                        <select
+                                            value={form.role}
+                                            onChange={(e) => updateField('role', e.target.value as CharacterRole | '')}
+                                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                        >
+                                            <option value="">Select role...</option>
+                                            <option value="tank">Tank</option>
+                                            <option value="healer">Healer</option>
+                                            <option value="dps">DPS</option>
+                                        </select>
+                                    </div>
+
+                                    {/* Realm */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-foreground mb-1">
+                                            Realm/Server
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={form.realm}
+                                            onChange={(e) => updateField('realm', e.target.value)}
+                                            placeholder="e.g. Illidan"
+                                            maxLength={100}
+                                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            {/* Error */}
+                            {error && (
+                                <p className="text-sm text-red-400">{error}</p>
+                            )}
+
+                            {/* Submit */}
+                            <button
+                                type="submit"
+                                disabled={createMutation.isPending}
+                                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm"
+                            >
+                                {createMutation.isPending ? 'Creating...' : 'Create Character'}
+                            </button>
+                        </>
+                    )}
+                </form>
+            )}
+
         </div>
     );
 }

@@ -365,7 +365,7 @@ describe('UsersController', () => {
       jest
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
-      const setDisplayNameSpy = jest
+      const setNameSpy = jest
         .spyOn(usersService, 'setDisplayName')
         .mockResolvedValue(updatedUser as never);
 
@@ -374,7 +374,7 @@ describe('UsersController', () => {
       });
 
       expect(result.data.displayName).toBe('NewName');
-      expect(setDisplayNameSpy).toHaveBeenCalledWith(1, 'NewName');
+      expect(setNameSpy).toHaveBeenCalledWith(1, 'NewName');
     });
 
     it('should throw BadRequestException when display name is taken', async () => {

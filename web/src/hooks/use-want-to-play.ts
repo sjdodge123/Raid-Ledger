@@ -67,6 +67,10 @@ export function useWantToPlay(gameId: number | undefined) {
             queryClient.invalidateQueries({
                 queryKey: ['games', 'discover'],
             });
+            // Invalidate hearted games so wizard character steps update in real-time
+            queryClient.invalidateQueries({
+                queryKey: ['userHeartedGames'],
+            });
         },
     });
 

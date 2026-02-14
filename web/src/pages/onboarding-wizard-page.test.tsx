@@ -26,16 +26,23 @@ vi.mock('../hooks/use-onboarding-fte', () => ({
         }),
         isPending: false,
     })),
-    useCheckDisplayName: vi.fn(() => ({
-        data: { available: true },
-        isLoading: false,
-    })),
-    useUpdateUserProfile: vi.fn(() => ({
-        mutate: vi.fn((_, options) => {
-            options?.onSuccess?.();
-        }),
+    useResetOnboarding: vi.fn(() => ({
+        mutate: vi.fn(),
         isPending: false,
     })),
+}));
+
+vi.mock('../hooks/use-game-registry', () => ({
+    useGameRegistry: vi.fn(() => ({
+        games: [],
+        isLoading: false,
+    })),
+}));
+
+vi.mock('../stores/plugin-store', () => ({
+    usePluginStore: vi.fn((selector: (s: { activeSlugs: Set<string> }) => unknown) =>
+        selector({ activeSlugs: new Set() }),
+    ),
 }));
 
 vi.mock('../hooks/use-games-discover', () => ({
@@ -80,6 +87,30 @@ vi.mock('../hooks/use-game-search', () => ({
     })),
 }));
 
+vi.mock('../hooks/use-want-to-play', () => ({
+    useWantToPlay: vi.fn(() => ({
+        wantToPlay: false,
+        count: 0,
+        toggle: vi.fn(),
+        isToggling: false,
+    })),
+}));
+
+vi.mock('../hooks/use-character-mutations', () => ({
+    useCreateCharacter: vi.fn(() => ({
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+    useUpdateCharacter: vi.fn(() => ({
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+    useSetMainCharacter: vi.fn(() => ({
+        mutate: vi.fn(),
+        isPending: false,
+    })),
+}));
+
 vi.mock('../lib/toast', () => ({
     toast: {
         info: vi.fn(),
@@ -99,16 +130,16 @@ function createQueryClient() {
     });
 }
 
-function renderWithRouter(ui: React.ReactElement) {
+function renderWithRouter(ui: React.ReactElement, initialEntries = ['/onboarding']) {
     return render(
         <QueryClientProvider client={createQueryClient()}>
-            <MemoryRouter initialEntries={['/onboarding']}>
+            <MemoryRouter initialEntries={initialEntries}>
                 <Routes>
                     <Route path="/onboarding" element={ui} />
                     <Route path="/calendar" element={<div>Calendar Page</div>} />
                 </Routes>
             </MemoryRouter>
-        </QueryClientProvider>
+        </QueryClientProvider>,
     );
 }
 
@@ -124,6 +155,7 @@ describe('OnboardingWizardPage', () => {
                 id: 1,
                 username: 'admin',
                 role: 'admin',
+                discordId: '123',
                 onboardingCompletedAt: null,
             },
         });
@@ -140,6 +172,7 @@ describe('OnboardingWizardPage', () => {
                 id: 1,
                 username: 'testuser',
                 role: 'member',
+                discordId: '123',
                 onboardingCompletedAt: '2026-02-01T00:00:00Z',
             },
         });
@@ -149,46 +182,68 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
-    it('renders wizard for new users', () => {
+    it('allows re-run when ?rerun=1 even if onboarding completed', () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'testuser',
+                role: 'member',
+                discordId: '123',
+                onboardingCompletedAt: '2026-02-01T00:00:00Z',
+            },
+        });
+
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?rerun=1']);
+
+        // Should NOT redirect — wizard should render
+        expect(screen.queryByText('Calendar Page')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
+    it('renders wizard for new users with Discord (skips connect step)', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
                 username: 'newuser',
                 role: 'member',
+                discordId: '12345',
                 onboardingCompletedAt: null,
             },
         });
 
         renderWithRouter(<OnboardingWizardPage />);
 
-        // Since no MMO games in mock data, character step is excluded => 4 steps
-        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
-        expect(screen.getByText(/skip all/i)).toBeInTheDocument();
+        // No connect step, no character step = Games, GameTime, Personalize = 3 steps
+        expect(screen.getByText(/step 1 of 3/i)).toBeInTheDocument();
+        // First step should be Games
+        expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
     });
 
-    it('displays progress dots for all steps', () => {
+    it('shows connect step for local-auth user without Discord', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
-                username: 'newuser',
+                username: 'localuser',
                 role: 'member',
+                discordId: 'local:localuser',
                 onboardingCompletedAt: null,
             },
         });
 
-        const { container } = renderWithRouter(<OnboardingWizardPage />);
+        renderWithRouter(<OnboardingWizardPage />);
 
-        const dots = container.querySelectorAll('[class*="rounded-full"]');
-        // 5 steps = 5 dots
-        expect(dots.length).toBeGreaterThanOrEqual(5);
+        // Connect + Games + GameTime + Personalize = 4 steps
+        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
+        expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 
-    it('shows Skip All button on all steps except Done', () => {
+    it('shows Skip All button on non-final steps', () => {
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
                 username: 'newuser',
                 role: 'member',
+                discordId: '123',
                 onboardingCompletedAt: null,
             },
         });
@@ -204,6 +259,7 @@ describe('OnboardingWizardPage', () => {
                 id: 1,
                 username: 'newuser',
                 role: 'member',
+                discordId: '123',
                 onboardingCompletedAt: null,
             },
         });
@@ -223,6 +279,7 @@ describe('OnboardingWizardPage', () => {
                 id: 1,
                 username: 'newuser',
                 role: 'member',
+                discordId: '123',
                 onboardingCompletedAt: null,
             },
         });
@@ -233,127 +290,6 @@ describe('OnboardingWizardPage', () => {
 
         await waitFor(() => {
             expect(mockNavigate).toHaveBeenCalledWith('/calendar', { replace: true });
-        });
-    });
-
-    it('renders step 1 (Welcome) initially', () => {
-        mockUseAuth.mockReturnValue({
-            user: {
-                id: 1,
-                username: 'newuser',
-                displayName: null,
-                role: 'member',
-                onboardingCompletedAt: null,
-            },
-        });
-
-        renderWithRouter(<OnboardingWizardPage />);
-
-        expect(screen.getByText(/welcome to raid ledger!/i)).toBeInTheDocument();
-        expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
-    });
-
-    it('advances to step 2 when Next is clicked on step 1', async () => {
-        mockUseAuth.mockReturnValue({
-            user: {
-                id: 1,
-                username: 'newuser',
-                displayName: null,
-                role: 'member',
-                onboardingCompletedAt: null,
-            },
-        });
-
-        renderWithRouter(<OnboardingWizardPage />);
-
-        // Fill in display name
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'ValidName' } });
-
-        // Wait for availability check
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-
-        // Click Next
-        fireEvent.click(screen.getByRole('button', { name: /next/i }));
-
-        // Should now be on step 2 (4 total steps since no MMO)
-        await waitFor(() => {
-            expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument();
-            expect(screen.getByText(/what do you play\?/i)).toBeInTheDocument();
-        });
-    });
-
-    it('allows navigating back from step 2 to step 1', async () => {
-        mockUseAuth.mockReturnValue({
-            user: {
-                id: 1,
-                username: 'newuser',
-                displayName: null,
-                role: 'member',
-                onboardingCompletedAt: null,
-            },
-        });
-
-        renderWithRouter(<OnboardingWizardPage />);
-
-        // Advance to step 2
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'ValidName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', { name: /next/i }));
-
-        await waitFor(() => {
-            expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument();
-        });
-
-        // Click Back
-        fireEvent.click(screen.getByRole('button', { name: /back/i }));
-
-        await waitFor(() => {
-            expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
-            expect(screen.getByText(/welcome to raid ledger!/i)).toBeInTheDocument();
-        });
-    });
-
-    it('conditional step 3 (character) is excluded when no MMO games', async () => {
-        mockUseAuth.mockReturnValue({
-            user: {
-                id: 1,
-                username: 'newuser',
-                displayName: null,
-                role: 'member',
-                onboardingCompletedAt: null,
-            },
-        });
-
-        renderWithRouter(<OnboardingWizardPage />);
-
-        // Advance through step 1
-        const input = screen.getByLabelText(/display name/i);
-        fireEvent.change(input, { target: { value: 'ValidName' } });
-
-        await waitFor(() => {
-            expect(screen.getByText(/available/i)).toBeInTheDocument();
-        });
-
-        fireEvent.click(screen.getByRole('button', { name: /next/i }));
-
-        await waitFor(() => {
-            expect(screen.getByText(/step 2 of 4/i)).toBeInTheDocument();
-        });
-
-        // Advance from step 2 (games)
-        fireEvent.click(screen.getAllByRole('button', { name: /next/i })[0]);
-
-        // Should skip to step 4 (availability) since no MMO
-        await waitFor(() => {
-            expect(screen.getByText(/step 3 of 4/i)).toBeInTheDocument();
         });
     });
 });

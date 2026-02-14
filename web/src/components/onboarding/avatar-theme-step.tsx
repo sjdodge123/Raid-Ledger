@@ -3,18 +3,15 @@ import { useAuth } from '../../hooks/use-auth';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { AvatarUploadZone } from '../profile/AvatarUploadZone';
 import { AppearancePanel } from '../../pages/profile/appearance-panel';
+import { TimezoneSection } from '../profile/TimezoneSection';
 
-interface AvatarThemeStepProps {
-    onComplete: () => void;
-    onBack: () => void;
-    isCompleting: boolean;
-}
 
 /**
- * Step 6: Avatar & Theme (ROK-219 redesign).
- * Replaces the old DoneStep. Embeds avatar upload and appearance settings.
+ * Final Step: Personalize Your Profile (ROK-219 redesign / ROK-312 merge).
+ * Combines timezone, avatar upload, and appearance settings into one step.
+ * ROK-312: Merged TimezoneStep into this step, added reminder note.
  */
-export function AvatarThemeStep({ onComplete, onBack, isCompleting }: AvatarThemeStepProps) {
+export function AvatarThemeStep() {
     const { user, refetch } = useAuth();
     const { upload, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
 
@@ -38,7 +35,7 @@ export function AvatarThemeStep({ onComplete, onBack, isCompleting }: AvatarThem
             <div className="text-center">
                 <h2 className="text-2xl font-bold text-foreground">Personalize Your Profile</h2>
                 <p className="text-muted mt-2">
-                    Upload an avatar and choose your theme. You can change these anytime.
+                    Upload an avatar, set your timezone, and choose your theme.
                 </p>
             </div>
 
@@ -53,29 +50,21 @@ export function AvatarThemeStep({ onComplete, onBack, isCompleting }: AvatarThem
                 />
             </div>
 
+            {/* Timezone section */}
+            <div className="max-w-md mx-auto">
+                <TimezoneSection />
+            </div>
+
             {/* Theme section */}
             <div className="max-w-lg mx-auto">
                 <AppearancePanel />
             </div>
 
-            {/* Navigation */}
-            <div className="flex gap-3 justify-center max-w-sm mx-auto">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Back
-                </button>
-                <button
-                    type="button"
-                    onClick={onComplete}
-                    disabled={isCompleting}
-                    className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm"
-                >
-                    {isCompleting ? 'Finishing...' : 'Finish Setup'}
-                </button>
-            </div>
+            {/* Reminder note */}
+            <p className="text-center text-sm text-muted">
+                You can always re-run this setup or change these settings from your profile page.
+            </p>
+
         </div>
     );
 }

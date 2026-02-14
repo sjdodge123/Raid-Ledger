@@ -60,3 +60,21 @@ export function useCompleteOnboardingFte() {
         },
     });
 }
+
+/**
+ * Hook for resetting onboarding to allow wizard re-run from settings.
+ * ROK-219: Calls POST /users/me/reset-onboarding.
+ */
+export function useResetOnboarding() {
+    const queryClient = useQueryClient();
+
+    return useMutation<{ success: boolean }>({
+        mutationFn: () =>
+            fetchApi<{ success: boolean }>('/users/me/reset-onboarding', {
+                method: 'POST',
+            }),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+        },
+    });
+}

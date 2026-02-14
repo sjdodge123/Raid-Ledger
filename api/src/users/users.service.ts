@@ -421,6 +421,18 @@ export class UsersService {
   }
 
   /**
+   * ROK-219: Reset onboarding (allow wizard re-run).
+   */
+  async resetOnboarding(userId: number) {
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ onboardingCompletedAt: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
+    return updated;
+  }
+
+  /**
    * ROK-282: Fetch games a user has hearted (game interests).
    * Returns basic game info for display on the public profile.
    */
