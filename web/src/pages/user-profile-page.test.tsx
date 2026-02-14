@@ -313,7 +313,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             });
 
             const heartedGames: UserHeartedGameDto[] = [
-                { id: 'game-uuid-ff14', name: 'Final Fantasy XIV', coverUrl: null },
+                { id: 1, igdbId: 1234, name: 'Final Fantasy XIV', slug: 'final-fantasy-xiv', coverUrl: null },
             ];
 
             vi.spyOn(useUserProfileHook, 'useUserProfile').mockReturnValue({
