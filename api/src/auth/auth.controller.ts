@@ -325,9 +325,11 @@ export class AuthController {
       id: user.id,
       discordId: user.discordId,
       username: user.username,
+      displayName: user.displayName,
       avatar: user.avatar,
       customAvatarUrl: user.customAvatarUrl,
       role: user.role,
+      onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
     };
   }
 }
