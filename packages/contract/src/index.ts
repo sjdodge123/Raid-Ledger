@@ -66,3 +66,6 @@ export * from './onboarding.schema.js';
 
 // Version & Update Check (ROK-294)
 export * from './version.schema.js';
+
+// Discord Bot (ROK-117)
+export * from './discord-bot.schema.js';

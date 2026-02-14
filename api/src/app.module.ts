@@ -25,6 +25,7 @@ import { QueueModule } from './queue/queue.module';
 import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { VersionModule } from './version/version.module';
+import { DiscordBotModule } from './discord-bot/discord-bot.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { VersionModule } from './version/version.module';
     RelayModule,
     FeedbackModule,
     VersionModule,
+    DiscordBotModule,
   ],
   controllers: [AppController],
   providers: [AppService],

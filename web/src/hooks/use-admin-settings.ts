@@ -50,6 +50,24 @@ interface BlizzardConfigDto {
     clientSecret: string;
 }
 
+interface DiscordBotStatusResponse {
+    configured: boolean;
+    connected: boolean;
+    guildName?: string;
+    memberCount?: number;
+}
+
+interface DiscordBotConfigDto {
+    botToken: string;
+    enabled: boolean;
+}
+
+interface DiscordBotTestResult {
+    success: boolean;
+    guildName?: string;
+    message: string;
+}
+
 interface ApiResponse {
     success: boolean;
     message: string;
@@ -444,6 +462,67 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Discord Bot (ROK-117)
+    // ============================================================
+
+    const discordBotStatus = useQuery<DiscordBotStatusResponse>({
+        queryKey: ['admin', 'settings', 'discord-bot'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch Discord bot status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 15_000,
+    });
+
+    const updateDiscordBot = useMutation<ApiResponse, Error, DiscordBotConfigDto>({
+        mutationFn: async (config) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(config),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update Discord bot configuration' }));
+                throw new Error(error.message || 'Failed to update Discord bot configuration');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot'] });
+        },
+    });
+
+    const testDiscordBot = useMutation<DiscordBotTestResult, Error, { botToken?: string }>({
+        mutationFn: async (body) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/test`, {
+                method: 'POST',
+                headers: getHeaders(),
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) throw new Error('Failed to test Discord bot connection');
+            return response.json();
+        },
+    });
+
+    const clearDiscordBot = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to clear Discord bot configuration');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -466,5 +545,9 @@ export function useAdminSettings() {
         updateGitHub,
         testGitHub,
         clearGitHub,
+        discordBotStatus,
+        updateDiscordBot,
+        testDiscordBot,
+        clearDiscordBot,
     };
 }
