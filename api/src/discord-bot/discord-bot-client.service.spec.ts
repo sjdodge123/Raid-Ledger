@@ -133,13 +133,15 @@ describe('DiscordBotClientService', () => {
       firstClient.emit(Events.ClientReady);
       await firstConnect;
 
-      const destroySpy = jest.spyOn(firstClient, 'destroy').mockResolvedValue(undefined);
+      const destroySpy = jest
+        .spyOn(firstClient, 'destroy')
+        .mockResolvedValue(undefined);
 
       // Second connection should disconnect the first
       const secondConnect = service.connect(secondToken);
 
       // Wait a tick for disconnect to be called
-      await new Promise(resolve => setImmediate(resolve));
+      await new Promise((resolve) => setImmediate(resolve));
 
       expect(destroySpy).toHaveBeenCalled();
 
@@ -378,9 +380,9 @@ describe('DiscordBotClientService', () => {
       const error = new Error('User not found');
       (mockClient.users.fetch as jest.Mock).mockRejectedValue(error);
 
-      await expect(service.sendDirectMessage(discordId, message)).rejects.toThrow(
-        'User not found',
-      );
+      await expect(
+        service.sendDirectMessage(discordId, message),
+      ).rejects.toThrow('User not found');
     });
 
     it('should throw when DM send fails', async () => {
@@ -401,9 +403,9 @@ describe('DiscordBotClientService', () => {
       };
       (mockClient.users.fetch as jest.Mock).mockResolvedValue(mockUser);
 
-      await expect(service.sendDirectMessage(discordId, message)).rejects.toThrow(
-        'Cannot send messages to this user',
-      );
+      await expect(
+        service.sendDirectMessage(discordId, message),
+      ).rejects.toThrow('Cannot send messages to this user');
     });
   });
 });

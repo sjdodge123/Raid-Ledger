@@ -600,7 +600,12 @@ export class GameTimeService {
       const dateStr = dayDate.toISOString().split('T')[0];
 
       if (absenceDates.has(dateStr)) {
-        slots.push({ dayOfWeek: s.dayOfWeek, hour: s.hour, status: 'blocked', fromTemplate: true });
+        slots.push({
+          dayOfWeek: s.dayOfWeek,
+          hour: s.hour,
+          status: 'blocked',
+          fromTemplate: true,
+        });
       } else {
         // Check override
         const overrideKey = `${dateStr}:${s.hour}`;

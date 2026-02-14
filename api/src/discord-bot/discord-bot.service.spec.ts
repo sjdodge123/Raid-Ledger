@@ -63,7 +63,9 @@ describe('DiscordBotService', () => {
     });
 
     it('should not connect when config is null', async () => {
-      jest.spyOn(settingsService, 'getDiscordBotConfig').mockResolvedValue(null);
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue(null);
 
       await service.onModuleInit();
 
@@ -267,11 +269,15 @@ describe('DiscordBotService', () => {
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
         .mockResolvedValue(undefined);
-      jest.spyOn(DiscordBotClientService.prototype, 'disconnect').mockResolvedValue();
-      jest.spyOn(DiscordBotClientService.prototype, 'getGuildInfo').mockReturnValue({
-        name: 'Test Guild',
-        memberCount: 50,
-      });
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'disconnect')
+        .mockResolvedValue();
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'getGuildInfo')
+        .mockReturnValue({
+          name: 'Test Guild',
+          memberCount: 50,
+        });
 
       const result = await service.testToken('valid-token');
 
@@ -286,8 +292,12 @@ describe('DiscordBotService', () => {
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
         .mockResolvedValue(undefined);
-      jest.spyOn(DiscordBotClientService.prototype, 'disconnect').mockResolvedValue();
-      jest.spyOn(DiscordBotClientService.prototype, 'getGuildInfo').mockReturnValue(null);
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'disconnect')
+        .mockResolvedValue();
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'getGuildInfo')
+        .mockReturnValue(null);
 
       const result = await service.testToken('valid-token-no-guilds');
 
@@ -332,10 +342,12 @@ describe('DiscordBotService', () => {
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
         .mockResolvedValue(undefined);
-      jest.spyOn(DiscordBotClientService.prototype, 'getGuildInfo').mockReturnValue({
-        name: 'Guild',
-        memberCount: 10,
-      });
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'getGuildInfo')
+        .mockReturnValue({
+          name: 'Guild',
+          memberCount: 10,
+        });
 
       await service.testToken('valid-token');
 

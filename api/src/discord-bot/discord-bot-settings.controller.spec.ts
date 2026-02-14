@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotService } from './discord-bot.service';
 import { SettingsService } from '../settings/settings.service';
@@ -33,8 +34,7 @@ describe('DiscordBotSettingsController', () => {
     controller = module.get<DiscordBotSettingsController>(
       DiscordBotSettingsController,
     );
-    discordBotService =
-      module.get<DiscordBotService>(DiscordBotService);
+    discordBotService = module.get<DiscordBotService>(DiscordBotService);
     settingsService = module.get<SettingsService>(SettingsService);
   });
 
@@ -97,48 +97,39 @@ describe('DiscordBotSettingsController', () => {
       });
     });
 
-    it('should return error when botToken is missing', async () => {
+    it('should throw validation error when botToken is empty', async () => {
       const body = {
         botToken: '',
         enabled: true,
       };
 
-      const result = await controller.updateConfig(body);
-
-      expect(result).toEqual({
-        success: false,
-        message: 'Bot token and enabled flag are required',
-      });
+      await expect(controller.updateConfig(body)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
     });
 
-    it('should return error when enabled is not boolean', async () => {
+    it('should throw validation error when enabled is not boolean', async () => {
       const body = {
         botToken: 'token',
         enabled: 'true' as any,
       };
 
-      const result = await controller.updateConfig(body);
-
-      expect(result).toEqual({
-        success: false,
-        message: 'Bot token and enabled flag are required',
-      });
+      await expect(controller.updateConfig(body)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
     });
 
-    it('should return error when enabled is undefined', async () => {
+    it('should throw validation error when enabled is undefined', async () => {
       const body = {
         botToken: 'token',
         enabled: undefined as any,
       };
 
-      const result = await controller.updateConfig(body);
-
-      expect(result).toEqual({
-        success: false,
-        message: 'Bot token and enabled flag are required',
-      });
+      await expect(controller.updateConfig(body)).rejects.toThrow(
+        BadRequestException,
+      );
       expect(settingsService.setDiscordBotConfig).not.toHaveBeenCalled();
     });
 
@@ -167,9 +158,7 @@ describe('DiscordBotSettingsController', () => {
         message: 'Connected to Test Guild (50 members)',
       };
 
-      jest
-        .spyOn(discordBotService, 'testToken')
-        .mockResolvedValue(mockResult);
+      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
       const result = await controller.testConnection(body);
 
@@ -188,9 +177,7 @@ describe('DiscordBotSettingsController', () => {
       jest
         .spyOn(settingsService, 'getDiscordBotConfig')
         .mockResolvedValue(mockConfig);
-      jest
-        .spyOn(discordBotService, 'testToken')
-        .mockResolvedValue(mockResult);
+      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
       const result = await controller.testConnection(body);
 
@@ -202,7 +189,9 @@ describe('DiscordBotSettingsController', () => {
     it('should return error when no token and no config', async () => {
       const body = {};
 
-      jest.spyOn(settingsService, 'getDiscordBotConfig').mockResolvedValue(null);
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue(null);
 
       const result = await controller.testConnection(body);
 
@@ -213,24 +202,10 @@ describe('DiscordBotSettingsController', () => {
       expect(discordBotService.testToken).not.toHaveBeenCalled();
     });
 
-    it('should handle undefined body', async () => {
-      const mockConfig = { token: 'stored-token', enabled: true };
-      const mockResult = {
-        success: true,
-        message: 'Connected',
-      };
-
-      jest
-        .spyOn(settingsService, 'getDiscordBotConfig')
-        .mockResolvedValue(mockConfig);
-      jest
-        .spyOn(discordBotService, 'testToken')
-        .mockResolvedValue(mockResult);
-
-      const result = await controller.testConnection(undefined as any);
-
-      expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
-      expect(discordBotService.testToken).toHaveBeenCalledWith('stored-token');
+    it('should throw validation error when body is undefined', async () => {
+      await expect(controller.testConnection(undefined as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should prefer provided token over stored config', async () => {
@@ -244,13 +219,13 @@ describe('DiscordBotSettingsController', () => {
       jest
         .spyOn(settingsService, 'getDiscordBotConfig')
         .mockResolvedValue(mockConfig);
-      jest
-        .spyOn(discordBotService, 'testToken')
-        .mockResolvedValue(mockResult);
+      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
       const result = await controller.testConnection(body);
 
-      expect(discordBotService.testToken).toHaveBeenCalledWith('provided-token');
+      expect(discordBotService.testToken).toHaveBeenCalledWith(
+        'provided-token',
+      );
       expect(settingsService.getDiscordBotConfig).not.toHaveBeenCalled();
     });
 
@@ -265,9 +240,7 @@ describe('DiscordBotSettingsController', () => {
       jest
         .spyOn(settingsService, 'getDiscordBotConfig')
         .mockResolvedValue(mockConfig);
-      jest
-        .spyOn(discordBotService, 'testToken')
-        .mockResolvedValue(mockResult);
+      jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
       const result = await controller.testConnection(body);
 

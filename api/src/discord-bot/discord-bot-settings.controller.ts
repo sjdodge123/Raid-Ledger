@@ -8,15 +8,33 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotService } from './discord-bot.service';
 import { SettingsService } from '../settings/settings.service';
-import type {
-  DiscordBotStatusResponse,
-  DiscordBotTestResult,
+import {
+  DiscordBotConfigSchema,
+  DiscordBotTestConnectionSchema,
+  type DiscordBotStatusResponse,
+  type DiscordBotTestResult,
 } from '@raid-ledger/contract';
+import { ZodError } from 'zod';
+
+/**
+ * Handle Zod validation errors by converting to BadRequestException.
+ */
+function handleValidationError(error: unknown): never {
+  if (error instanceof Error && error.name === 'ZodError') {
+    const zodError = error as ZodError;
+    throw new BadRequestException({
+      message: 'Validation failed',
+      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+    });
+  }
+  throw error;
+}
 
 @Controller('admin/settings/discord-bot')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -36,47 +54,53 @@ export class DiscordBotSettingsController {
   @Put()
   @HttpCode(HttpStatus.OK)
   async updateConfig(
-    @Body() body: { botToken: string; enabled: boolean },
+    @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    if (!body.botToken || typeof body.enabled !== 'boolean') {
+    try {
+      const config = DiscordBotConfigSchema.parse(body);
+
+      await this.settingsService.setDiscordBotConfig(
+        config.botToken,
+        config.enabled,
+      );
+
+      this.logger.log('Discord bot configuration updated via admin UI');
+
       return {
-        success: false,
-        message: 'Bot token and enabled flag are required',
+        success: true,
+        message: config.enabled
+          ? 'Discord bot configuration saved and bot is starting...'
+          : 'Discord bot configuration saved. Bot is disabled.',
       };
+    } catch (error) {
+      handleValidationError(error);
     }
-
-    await this.settingsService.setDiscordBotConfig(body.botToken, body.enabled);
-
-    this.logger.log('Discord bot configuration updated via admin UI');
-
-    return {
-      success: true,
-      message: body.enabled
-        ? 'Discord bot configuration saved and bot is starting...'
-        : 'Discord bot configuration saved. Bot is disabled.',
-    };
   }
 
   @Post('test')
   @HttpCode(HttpStatus.OK)
-  async testConnection(
-    @Body() body: { botToken?: string },
-  ): Promise<DiscordBotTestResult> {
-    // Use provided token or fall back to stored one
-    let token = body?.botToken;
+  async testConnection(@Body() body: unknown): Promise<DiscordBotTestResult> {
+    try {
+      const dto = DiscordBotTestConnectionSchema.parse(body);
 
-    if (!token) {
-      const config = await this.settingsService.getDiscordBotConfig();
-      if (!config) {
-        return {
-          success: false,
-          message: 'No bot token configured',
-        };
+      // Use provided token or fall back to stored one
+      let token = dto.botToken;
+
+      if (!token) {
+        const config = await this.settingsService.getDiscordBotConfig();
+        if (!config) {
+          return {
+            success: false,
+            message: 'No bot token configured',
+          };
+        }
+        token = config.token;
       }
-      token = config.token;
-    }
 
-    return this.discordBotService.testToken(token);
+      return this.discordBotService.testToken(token);
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   @Post('clear')
