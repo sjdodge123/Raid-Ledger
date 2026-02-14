@@ -33,6 +33,7 @@ scripts/*
 !scripts/deploy_prod.sh
 !scripts/deploy_dev.sh
 !scripts/fix-migration-order.sh
+!scripts/setup-branch-protection.sh
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
