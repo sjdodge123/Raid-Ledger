@@ -52,7 +52,7 @@ function buildCoreIntegrationItems(statuses: {
             label: 'Discord Bot',
             status: statuses.discordBot.loading ? 'loading'
                 : statuses.discordBot.connected ? 'online'
-                : statuses.discordBot.configured ? 'configured' : 'not-configured',
+                    : statuses.discordBot.configured ? 'configured' : 'not-configured',
         },
         {
             to: '/admin/settings/integrations/igdb',
@@ -96,21 +96,30 @@ function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[] {
 /** Build the full sections list, merging core and plugin integrations */
 function buildNavSections(coreIntegrations: NavItem[], pluginIntegrations: NavItem[]): NavSection[] {
     return [
-        { id: 'general', label: 'General', icon: GeneralIcon, children: [
-            { to: '/admin/settings/general', label: 'Site Settings' },
-            { to: '/admin/settings/general/roles', label: 'Role Management' },
-            { to: '/admin/settings/general/data', label: 'Demo Data' },
-        ]},
-        { id: 'integrations', label: 'Integrations', icon: IntegrationsIcon, children: [
-            ...coreIntegrations,
-            ...pluginIntegrations,
-        ]},
-        { id: 'plugins', label: 'Plugins', icon: PluginsIcon, children: [
-            { to: '/admin/settings/plugins', label: 'Manage Plugins' },
-        ]},
-        { id: 'appearance', label: 'Appearance', icon: AppearanceIcon, children: [
-            { to: '/admin/settings/appearance', label: 'Branding' },
-        ]},
+        {
+            id: 'general', label: 'General', icon: GeneralIcon, children: [
+                { to: '/admin/settings/general', label: 'Site Settings' },
+                { to: '/admin/settings/general/roles', label: 'Role Management' },
+                { to: '/admin/settings/general/data', label: 'Demo Data' },
+                { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
+            ]
+        },
+        {
+            id: 'integrations', label: 'Integrations', icon: IntegrationsIcon, children: [
+                ...coreIntegrations,
+                ...pluginIntegrations,
+            ]
+        },
+        {
+            id: 'plugins', label: 'Plugins', icon: PluginsIcon, children: [
+                { to: '/admin/settings/plugins', label: 'Manage Plugins' },
+            ]
+        },
+        {
+            id: 'appearance', label: 'Appearance', icon: AppearanceIcon, children: [
+                { to: '/admin/settings/appearance', label: 'Branding' },
+            ]
+        },
     ];
 }
 
@@ -220,13 +229,11 @@ function SidebarNavItem({
             onClick={onNavigate}
             onMouseEnter={item.newBadgeKey ? markSeen : undefined}
             title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                item.pluginSource ? 'border-l-2 border-indigo-400/60 ' : ''
-            }${
-                isActive
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${item.pluginSource ? 'border-l-2 border-indigo-400/60 ' : ''
+                }${isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
-            }`}
+                }`}
         >
             <span className="truncate min-w-0 flex-1">{item.label}</span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}

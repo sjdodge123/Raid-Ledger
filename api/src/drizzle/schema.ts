@@ -20,3 +20,5 @@ export * from './schema/event-templates';
 export * from './schema/plugins';
 export * from './schema/feedback';
 export * from './schema/pug-slots';
+export * from './schema/cron-jobs';
+export * from './schema/cron-job-executions';

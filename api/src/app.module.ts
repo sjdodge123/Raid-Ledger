@@ -26,6 +26,7 @@ import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { VersionModule } from './version/version.module';
 import { DiscordBotModule } from './discord-bot/discord-bot.module';
+import { CronJobModule } from './cron-jobs/cron-job.module';
 
 @Module({
   imports: [
@@ -53,6 +54,7 @@ import { DiscordBotModule } from './discord-bot/discord-bot.module';
     FeedbackModule,
     VersionModule,
     DiscordBotModule,
+    CronJobModule,
   ],
   controllers: [AppController],
   providers: [AppService],

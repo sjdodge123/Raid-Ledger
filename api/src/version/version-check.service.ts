@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 interface GitHubRelease {
   tag_name: string;
@@ -20,7 +21,10 @@ export class VersionCheckService implements OnModuleInit {
   private readonly logger = new Logger(VersionCheckService.name);
   private readonly currentVersion: string;
 
-  constructor(private readonly settingsService: SettingsService) {
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
+  ) {
     // Read version from package.json at startup — use process.cwd() so the
     // path resolves correctly both locally (cwd = api/) and in Docker (cwd = /app).
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -49,9 +53,16 @@ export class VersionCheckService implements OnModuleInit {
   /**
    * Cron: run every day at midnight.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+    name: 'VersionCheckService_handleCron',
+  })
   async handleCron() {
-    await this.checkForUpdates();
+    await this.cronJobService.executeWithTracking(
+      'VersionCheckService_handleCron',
+      async () => {
+        await this.checkForUpdates();
+      },
+    );
   }
 
   /**
