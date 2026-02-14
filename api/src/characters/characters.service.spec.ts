@@ -11,13 +11,43 @@ import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.se
 
 /**
  * Helper: build a mock tx.select chain that resolves to `rows`.
+ * Supports both direct where-resolve and .where().limit() patterns.
  */
 function mockTxSelect(rows: unknown[]) {
   return jest.fn().mockReturnValue({
     from: jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(rows),
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue(rows),
+      }),
     }),
   });
+}
+
+/**
+ * Helper: build a mock tx.select that handles two sequential calls:
+ *   1st call → duplicate claim check → .from().where().limit(1) → claimRows
+ *   2nd call → charCount            → .from().where()           → countRows
+ */
+function mockTxSelectDualCall(
+  claimRows: unknown[],
+  countRows: unknown[],
+) {
+  const fn = jest.fn();
+  // 1st call: duplicate claim check (.where().limit())
+  fn.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue(claimRows),
+      }),
+    }),
+  });
+  // 2nd call: charCount (where resolves directly)
+  fn.mockReturnValueOnce({
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(countRows),
+    }),
+  });
+  return fn;
 }
 
 describe('CharactersService', () => {
@@ -124,11 +154,11 @@ describe('CharactersService', () => {
     };
     mockDb.delete.mockReturnValue(deleteChain);
 
-    // Default transaction mock — includes tx.select for ROK-206 charCount
+    // Default transaction mock — includes tx.select for duplicate claim check + ROK-206 charCount
     mockDb.transaction.mockImplementation(
       (callback: (tx: Record<string, jest.Mock>) => unknown) => {
         const tx = {
-          select: mockTxSelect([{ charCount: 1 }]),
+          select: mockTxSelectDualCall([], [{ charCount: 1 }]),
           update: jest.fn().mockReturnValue({
             set: jest.fn().mockReturnValue({
               where: jest.fn().mockReturnValue({
@@ -267,7 +297,7 @@ describe('CharactersService', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 1 }]),
+            select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             insert: jest.fn().mockReturnValue({
               values: jest.fn().mockReturnValue({
                 returning: jest
@@ -311,7 +341,7 @@ describe('CharactersService', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 0 }]),
+            select: mockTxSelectDualCall([], [{ charCount: 0 }]),
             insert: txInsertMock,
           };
           return callback(tx);
@@ -355,7 +385,7 @@ describe('CharactersService', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 1 }]),
+            select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             insert: txInsertMock,
           };
           return callback(tx);
@@ -396,7 +426,7 @@ describe('CharactersService', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 1 }]),
+            select: mockTxSelectDualCall([], [{ charCount: 1 }]),
             update: txUpdateMock,
             insert: jest.fn().mockReturnValue({
               values: jest.fn().mockReturnValue({
@@ -453,7 +483,7 @@ describe('CharactersService', () => {
       mockDb.transaction.mockImplementationOnce(
         (callback: (tx: Record<string, jest.Mock>) => unknown) => {
           const tx = {
-            select: mockTxSelect([{ charCount: 2 }]),
+            select: mockTxSelectDualCall([], [{ charCount: 2 }]),
             update: txUpdateMock,
             insert: txInsertMock,
           };
