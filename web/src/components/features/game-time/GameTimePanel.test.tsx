@@ -202,6 +202,8 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 nextWeekSlots: [],
                 weekStart: '2026-02-08',
                 absences: [],
+                discard: vi.fn(),
+                overrides: [],
             });
 
             renderPanel({ mode: 'profile' });
@@ -233,6 +235,8 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 nextWeekSlots: [],
                 weekStart: '2026-02-08',
                 absences: [],
+                discard: vi.fn(),
+                overrides: [],
             });
 
             renderPanel({ mode: 'profile' });
@@ -260,6 +264,8 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 nextWeekSlots: [],
                 weekStart: '2026-02-08',
                 absences: [],
+                discard: vi.fn(),
+                overrides: [],
             });
 
             renderPanel({ mode: 'profile' });
@@ -290,7 +296,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 overrides: [],
                 absences: [],
             };
-            mockUseGameTimeEditor.mockReturnValue(mockEditor);
+            vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
 
             renderPanel({ mode: 'profile', rolling: true });
 
@@ -317,6 +323,8 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 nextWeekSlots: [],
                 weekStart: '2026-02-08',
                 absences: [],
+                discard: vi.fn(),
+                overrides: [],
             });
 
             renderPanel({ mode: 'modal', rolling: true });

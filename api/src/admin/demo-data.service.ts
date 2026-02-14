@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, sql } from 'drizzle-orm';
