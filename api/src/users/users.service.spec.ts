@@ -149,7 +149,8 @@ describe('UsersService', () => {
     it('should return true when display name is available', async () => {
       mockDb.where.mockResolvedValue([{ count: 0 }]);
 
-      const result = await service.checkDisplayNameAvailability('AvailableName');
+      const result =
+        await service.checkDisplayNameAvailability('AvailableName');
 
       expect(result).toBe(true);
       expect(mockDb.select).toHaveBeenCalled();

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { useCreateCharacter, useUpdateCharacter, useSetMainCharacter } from '../../hooks/use-character-mutations';
+import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
 import { PluginSlot } from '../../plugins';
@@ -62,17 +63,6 @@ export function AddCharacterModal({
     const [form, setForm] = useState<FormState>(() => getInitialFormState(editingCharacter));
     const [error, setError] = useState('');
 
-    // Convert registry games to IgdbGameDto-like objects for initial suggestions
-    const registrySuggestions: IgdbGameDto[] = useMemo(() =>
-        registryGames.map((g, i) => ({
-            id: i,
-            igdbId: 0,
-            name: g.name,
-            slug: g.slug,
-            coverUrl: g.iconUrl,
-        })),
-    [registryGames]);
-
     // Resolve IGDB game → registry game
     const registryGame = useMemo(() => {
         if (!selectedIgdbGame) return undefined;
@@ -96,13 +86,23 @@ export function AddCharacterModal({
 
     const currentSlug = effectiveRegistryGame?.slug ?? selectedIgdbGame?.slug ?? '';
 
+    // Fetch characters scoped to this game for defaulting isMain
+    const { data: gameCharsData } = useMyCharacters(effectiveGameId, !!effectiveGameId);
+    const gameChars = gameCharsData?.data ?? [];
+    const hasMainForGame = gameChars.some((c) => c.isMain);
+
     // Reset all form state synchronously when modal opens (avoids stale-frame flash).
     // This is React's recommended "adjust state during render" pattern:
     // https://react.dev/reference/react/useState#storing-information-from-previous-renders
     if (isOpen && !prevIsOpen) {
         setPrevIsOpen(true);
         setResetKey((k) => k + 1);
-        setForm(getInitialFormState(editingCharacter));
+        const initial = getInitialFormState(editingCharacter);
+        // Default isMain=true when creating and no main exists for this game yet
+        if (!editingCharacter && !hasMainForGame) {
+            initial.isMain = true;
+        }
+        setForm(initial);
         setError('');
         if (!editingCharacter) {
             if (preselectedGameId) {
@@ -235,7 +235,7 @@ export function AddCharacterModal({
                         value={selectedIgdbGame}
                         onChange={(game) => setSelectedIgdbGame(game)}
                         error={error && !selectedIgdbGame && !effectiveGameId ? error : undefined}
-                        initialSuggestions={registrySuggestions}
+
                     />
                 )}
 
@@ -248,6 +248,8 @@ export function AddCharacterModal({
                             gameSlug: currentSlug,
                             activeTab,
                             onTabChange: setActiveTab,
+                            defaultIsMain: !hasMainForGame,
+                            existingCharacters: gameChars,
                         }}
                     />
                 )}
@@ -345,13 +347,16 @@ export function AddCharacterModal({
                                         type="checkbox"
                                         checked={form.isMain}
                                         onChange={(e) => updateField('isMain', e.target.checked)}
-                                        disabled={isEditing && editingCharacter?.isMain}
+                                        disabled={(isEditing && editingCharacter?.isMain) || (!isEditing && !hasMainForGame)}
                                         className="w-4 h-4 rounded border-edge-strong bg-panel text-emerald-500 focus:ring-emerald-500 disabled:opacity-50"
                                     />
-                                    <span className={`text-sm ${isEditing && editingCharacter?.isMain ? 'text-muted' : 'text-secondary'}`}>
+                                    <span className={`text-sm ${(isEditing && editingCharacter?.isMain) || (!isEditing && !hasMainForGame) ? 'text-muted' : 'text-secondary'}`}>
                                         Main character
                                         {isEditing && editingCharacter?.isMain && (
                                             <span className="ml-1 text-xs text-muted">(already main)</span>
+                                        )}
+                                        {!isEditing && !hasMainForGame && (
+                                            <span className="ml-1 text-xs text-muted">(no main set)</span>
                                         )}
                                     </span>
                                 </label>

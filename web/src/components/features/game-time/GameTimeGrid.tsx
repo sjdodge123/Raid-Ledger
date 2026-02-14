@@ -59,6 +59,8 @@ export interface GameTimeGridProps {
     onCellClick?: (dayOfWeek: number, hour: number) => void;
     /** Use full day names ("Sunday" instead of "Sun") — used for weekly template view */
     fullDayNames?: boolean;
+    /** Compact mode — shorter cell height for space-constrained layouts (e.g. onboarding wizard) */
+    compact?: boolean;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -239,6 +241,7 @@ export function GameTimeGrid({
     heatmapOverlay,
     onCellClick,
     fullDayNames,
+    compact,
 }: GameTimeGridProps) {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
     const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
@@ -545,15 +548,14 @@ export function GameTimeGrid({
                     return (
                         <div
                             key={day}
-                            className={`sticky top-0 z-10 text-center text-xs font-medium py-1 ${
-                                isTodaySplit
+                            className={`sticky top-0 z-10 text-center text-xs font-medium py-1 ${isTodaySplit
                                     ? 'text-secondary'
                                     : isToday
-                                      ? 'bg-emerald-500/15 text-emerald-300'
-                                      : isRollingPast
-                                        ? 'bg-panel/80 text-dim'
-                                        : 'bg-surface text-muted'
-                            }`}
+                                        ? 'bg-emerald-500/15 text-emerald-300'
+                                        : isRollingPast
+                                            ? 'bg-panel/80 text-dim'
+                                            : 'bg-surface text-muted'
+                                }`}
                             style={isTodaySplit ? {
                                 background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)',
                             } : undefined}
@@ -673,11 +675,9 @@ export function GameTimeGrid({
                             return (
                                 <div
                                     key={`${dayIndex}-${hour}`}
-                                    className={`h-5 ${rounding} transition-colors ${heatmapBg ? '' : cellClasses} ${
-                                        canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : ''
-                                    } ${past && nextWeekSlotMap && !isHovered ? 'opacity-60' : ''} ${
-                                        isHovered && (isInteractive || clickable) ? 'z-10 relative' : ''
-                                    }`}
+                                    className={`${compact ? 'h-4' : 'h-5'} ${rounding} transition-colors ${heatmapBg ? '' : cellClasses} ${canInteract || clickable ? 'cursor-pointer' : locked ? 'cursor-not-allowed' : ''
+                                        } ${past && nextWeekSlotMap && !isHovered ? 'opacity-60' : ''} ${isHovered && (isInteractive || clickable) ? 'z-10 relative' : ''
+                                        }`}
                                     style={Object.keys(cellStyle).length ? cellStyle : undefined}
                                     data-testid={`cell-${dayIndex}-${hour}`}
                                     data-status={status ?? 'inactive'}

@@ -270,6 +270,16 @@ export class UsersController {
   }
 
   /**
+   * ROK-219: Reset onboarding to allow wizard re-run from settings.
+   */
+  @Post('me/reset-onboarding')
+  @UseGuards(AuthGuard('jwt'))
+  async resetOnboarding(@Request() req: AuthenticatedRequest) {
+    await this.usersService.resetOnboarding(req.user.id);
+    return { success: true };
+  }
+
+  /**
    * Get current user's preferences (ROK-195).
    * Requires JWT authentication.
    */

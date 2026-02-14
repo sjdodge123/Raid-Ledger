@@ -8,7 +8,7 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, count, inArray, isNotNull } from 'drizzle-orm';
+import { eq, and, asc, count, inArray, isNotNull, ne, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -36,7 +36,7 @@ export class CharactersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
-  ) {}
+  ) { }
 
   /**
    * Find a CharacterSyncAdapter that can handle the given game variant.
@@ -137,6 +137,29 @@ export class CharactersService {
     // Use transaction for atomic demotion + insert to prevent race conditions
     try {
       return await this.db.transaction(async (tx) => {
+        // Cross-user duplicate check: prevent claiming a character already owned by another user
+        const realmConditions = dto.realm
+          ? [ilike(schema.characters.name, dto.name), eq(schema.characters.realm, dto.realm)]
+          : [ilike(schema.characters.name, dto.name)];
+
+        const [existingClaim] = await tx
+          .select({ id: schema.characters.id, userId: schema.characters.userId })
+          .from(schema.characters)
+          .where(
+            and(
+              eq(schema.characters.gameId, dto.gameId),
+              ne(schema.characters.userId, userId),
+              ...realmConditions,
+            ),
+          )
+          .limit(1);
+
+        if (existingClaim) {
+          throw new ConflictException(
+            `${dto.name} is already claimed by another player`,
+          );
+        }
+
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx
           .select({ charCount: count() })
@@ -372,6 +395,29 @@ export class CharactersService {
     // Create the character with external data
     try {
       return await this.db.transaction(async (tx) => {
+        // Cross-user duplicate check: prevent claiming a character already owned by another user
+        const importRealmConditions = profile.realm
+          ? [ilike(schema.characters.name, profile.name), eq(schema.characters.realm, profile.realm)]
+          : [ilike(schema.characters.name, profile.name)];
+
+        const [existingImportClaim] = await tx
+          .select({ id: schema.characters.id, userId: schema.characters.userId })
+          .from(schema.characters)
+          .where(
+            and(
+              eq(schema.characters.gameId, game.id),
+              ne(schema.characters.userId, userId),
+              ...importRealmConditions,
+            ),
+          )
+          .limit(1);
+
+        if (existingImportClaim) {
+          throw new ConflictException(
+            `${profile.name} on ${profile.realm} is already claimed by another player`,
+          );
+        }
+
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx
           .select({ charCount: count() })

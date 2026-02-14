@@ -2,17 +2,13 @@ import { useState } from 'react';
 import { API_BASE_URL } from '../../lib/config';
 import { DiscordIcon } from '../icons/DiscordIcon';
 
-interface ConnectStepProps {
-    onNext: () => void;
-    onSkip: () => void;
-}
 
 /**
  * Step 1: Connect Your Account (ROK-219 redesign).
  * Shows available auth providers. Currently Discord only.
  * Only displayed when user has no linked OAuth account.
  */
-export function ConnectStep({ onNext, onSkip }: ConnectStepProps) {
+export function ConnectStep() {
     const [isRedirecting, setIsRedirecting] = useState(false);
 
     const handleDiscordConnect = () => {
@@ -58,23 +54,6 @@ export function ConnectStep({ onNext, onSkip }: ConnectStepProps) {
                 </p>
             </div>
 
-            {/* Navigation */}
-            <div className="flex gap-3 justify-center max-w-sm mx-auto">
-                <button
-                    type="button"
-                    onClick={onSkip}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Skip
-                </button>
-                <button
-                    type="button"
-                    onClick={onNext}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                    Next
-                </button>
-            </div>
         </div>
     );
 }

@@ -1,41 +1,41 @@
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useGameTimeEditor } from '../../hooks/use-game-time-editor';
-
-interface GameTimeStepProps {
-    onNext: () => void;
-    onBack: () => void;
-    onSkip: () => void;
-}
+import { useEffect, useRef } from 'react';
 
 /**
  * Step 4: When Do You Play? (ROK-219).
  * Reuses the GameTimeGrid component for drag-to-paint availability.
- * Renamed from AvailabilityStep for clarity.
+ * Auto-saves when user navigates away via wizard footer.
  */
-export function GameTimeStep({ onNext, onBack, onSkip }: GameTimeStepProps) {
+export function GameTimeStep() {
     const {
         slots,
         isLoading,
         isDirty,
         handleChange,
         save,
-        isSaving,
         tzLabel,
     } = useGameTimeEditor({ enabled: true, rolling: false });
 
-    const handleNext = async () => {
-        if (isDirty) {
-            await save();
-        }
-        onNext();
-    };
+    // Auto-save dirty state when navigating away (unmount)
+    const saveRef = useRef(save);
+    const isDirtyRef = useRef(isDirty);
+    useEffect(() => {
+        saveRef.current = save;
+        isDirtyRef.current = isDirty;
+    });
+    useEffect(() => {
+        return () => {
+            if (isDirtyRef.current) saveRef.current();
+        };
+    }, []);
 
     return (
-        <div className="space-y-5">
-            <div className="text-center">
-                <h2 className="text-2xl font-bold text-foreground">When Do You Play?</h2>
-                <p className="text-muted mt-2">
-                    Paint your typical weekly availability. Click and drag to mark hours you're usually free.
+        <div>
+            <div className="text-center mb-2">
+                <h2 className="text-lg font-bold text-foreground">When Do You Play?</h2>
+                <p className="text-muted text-sm mt-1">
+                    Paint your weekly availability. Click and drag to mark hours you're free.
                 </p>
             </div>
 
@@ -52,35 +52,11 @@ export function GameTimeStep({ onNext, onBack, onSkip }: GameTimeStepProps) {
                         tzLabel={tzLabel}
                         hourRange={[6, 24]}
                         fullDayNames
+                        compact
                     />
                 )}
             </div>
 
-            {/* Navigation */}
-            <div className="flex gap-3 justify-center max-w-sm mx-auto">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Back
-                </button>
-                <button
-                    type="button"
-                    onClick={onSkip}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Skip
-                </button>
-                <button
-                    type="button"
-                    onClick={handleNext}
-                    disabled={isSaving}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                    {isSaving ? 'Saving...' : 'Next'}
-                </button>
-            </div>
         </div>
     );
 }

@@ -1,11 +1,22 @@
 import { useState, useMemo } from 'react';
 import { useGamesDiscover } from '../../hooks/use-games-discover';
 import { useGameSearch } from '../../hooks/use-game-search';
-import { GameCard } from '../games/GameCard';
+import { useWantToPlay } from '../../hooks/use-want-to-play';
+import { useAuth } from '../../hooks/use-auth';
 import type { GameDetailDto } from '@raid-ledger/contract';
 
-/** IGDB genre ID 36 = MMORPG */
-const MMO_GENRE_ID = 36;
+
+
+/** IGDB genre ID → display name (subset for onboarding) */
+const GENRE_MAP: Record<number, string> = {
+    5: 'Shooter',
+    12: 'RPG',
+    13: 'Simulator',
+    15: 'Strategy',
+    31: 'Adventure',
+    32: 'Indie',
+    36: 'MMORPG',
+};
 
 /** Genre filter chips for narrowing discover results */
 const GENRE_CHIPS = [
@@ -18,20 +29,117 @@ const GENRE_CHIPS = [
     { id: 13, label: 'Simulator' },
 ];
 
-interface GamesStepProps {
-    onNext: (hasMMO: boolean, selectedGameIds: number[]) => void;
-    onBack: () => void;
-    onSkip: () => void;
+
+
+// ── Inline OnboardingGameCard ──────────────────────────────────────────
+// Renders a <div> (not <Link>) so clicking anywhere toggles the heart.
+// No rating badge, no info bar — simplified for onboarding.
+
+interface OnboardingGameCardProps {
+    game: GameDetailDto;
 }
 
+function OnboardingGameCard({ game }: OnboardingGameCardProps) {
+    const { isAuthenticated } = useAuth();
+    const { wantToPlay, count, toggle, isToggling } = useWantToPlay(
+        isAuthenticated ? game.id : undefined,
+    );
+
+    const primaryGenre = game.genres[0] ? GENRE_MAP[game.genres[0]] : null;
+
+    const handleClick = () => {
+        if (!isToggling && isAuthenticated) {
+            toggle(!wantToPlay);
+        }
+    };
+
+    return (
+        <div
+            role="button"
+            tabIndex={0}
+            onClick={handleClick}
+            onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleClick();
+                }
+            }}
+            className={`group relative rounded-xl overflow-hidden bg-panel border-2 transition-all cursor-pointer hover:shadow-lg hover:shadow-emerald-900/20 ${wantToPlay
+                ? 'border-emerald-500 shadow-emerald-500/20 shadow-md'
+                : 'border-edge/50 hover:border-emerald-500/50'
+                }`}
+        >
+            {/* Cover Image */}
+            <div className="relative aspect-[3/4] bg-overlay">
+                {game.coverUrl ? (
+                    <img
+                        src={game.coverUrl}
+                        alt={game.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                    />
+                ) : (
+                    <div className="w-full h-full flex items-center justify-center text-dim">
+                        <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                )}
+
+                {/* Bottom gradient overlay */}
+                <div className="absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-black/80 to-transparent" />
+
+                {/* Game name + genre tag */}
+                <div className="absolute bottom-0 left-0 right-0 p-3">
+                    <h3 className="text-sm font-semibold text-white line-clamp-2 leading-tight">
+                        {game.name}
+                    </h3>
+                    {primaryGenre && (
+                        <span className="inline-block mt-1 px-1.5 py-0.5 text-[10px] bg-white/20 text-white/90 rounded">
+                            {primaryGenre}
+                        </span>
+                    )}
+                </div>
+
+                {/* Heart icon + count */}
+                <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-black/50">
+                    <svg
+                        className={`w-4 h-4 transition-colors ${wantToPlay ? 'text-red-400 fill-red-400' : 'text-white/70'
+                            }`}
+                        fill={wantToPlay ? 'currentColor' : 'none'}
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+                    </svg>
+                    {count > 0 && (
+                        <span className="text-[10px] font-bold text-white/90 pr-0.5">{count}</span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── GamesStep ──────────────────────────────────────────────────────────
+
 /**
- * Step 2: What Do You Play? (ROK-219).
+ * Step 2: What Do You Play? (ROK-219 / ROK-312).
  * Genre chips, game search, game grid with heart toggle.
  * Detects if user selected any MMO games for conditional Step 3.
+ *
+ * ROK-312 fixes:
+ * - Removed nested scroll container (wizard handles scroll)
+ * - OnboardingGameCard replaces GameCard (no navigation on click)
+ * - useState snapshot freezes game order on heart toggle
+ * - Grid changed to grid-cols-2 sm:grid-cols-3 (responsive fill)
  */
-export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
+export function GamesStep() {
     const [searchQuery, setSearchQuery] = useState('');
     const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+
+    // Snapshot: freeze the game order so heart toggles don't reshuffle
+    const [snapshot, setSnapshot] = useState<GameDetailDto[] | null>(null);
 
     const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
     const { data: searchData, isLoading: searchLoading } = useGameSearch(
@@ -41,8 +149,9 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
 
     const isSearching = searchQuery.length >= 2;
 
-    // Flatten all games from discover rows for genre filtering
+    // Flatten all games from discover rows (frozen after first load)
     const allGames = useMemo(() => {
+        if (snapshot) return snapshot;
         if (!discoverData?.rows) return [];
         const seen = new Set<number>();
         const games: GameDetailDto[] = [];
@@ -55,7 +164,12 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
             }
         }
         return games;
-    }, [discoverData]);
+    }, [discoverData, snapshot]);
+
+    // Freeze order on first successful load (React "adjust state during render" pattern)
+    if (allGames.length > 0 && !snapshot) {
+        setSnapshot(allGames);
+    }
 
     // Filter by selected genre
     const filteredGames = useMemo(() => {
@@ -88,19 +202,7 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
 
     const displayGames = isSearching ? (searchResults ?? []) : filteredGames;
 
-    // Detect if any displayed MMO game has been hearted
-    // This is approximate - we pass the detection to the parent on Next
-    const hasMMOGames = useMemo(() => {
-        return allGames.some((g) => g.genres.includes(MMO_GENRE_ID));
-    }, [allGames]);
 
-    const handleNext = () => {
-        // Collect IDs of MMO games from discover data
-        const mmoGameIds = allGames
-            .filter((g) => g.genres.includes(MMO_GENRE_ID))
-            .map((g) => g.id);
-        onNext(hasMMOGames, mmoGameIds);
-    };
 
     return (
         <div className="space-y-5">
@@ -133,11 +235,10 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
                 <div className="flex flex-wrap gap-2 justify-center">
                     <button
                         onClick={() => setSelectedGenre(null)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                            selectedGenre === null
-                                ? 'bg-emerald-600 text-white'
-                                : 'bg-panel text-muted hover:bg-overlay'
-                        }`}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === null
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-panel text-muted hover:bg-overlay'
+                            }`}
                     >
                         All
                     </button>
@@ -147,11 +248,10 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
                             onClick={() =>
                                 setSelectedGenre(selectedGenre === genre.id ? null : genre.id)
                             }
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                selectedGenre === genre.id
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-panel text-muted hover:bg-overlay'
-                            }`}
+                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === genre.id
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-panel text-muted hover:bg-overlay'
+                                }`}
                         >
                             {genre.label}
                         </button>
@@ -159,52 +259,26 @@ export function GamesStep({ onNext, onBack, onSkip }: GamesStepProps) {
                 </div>
             )}
 
-            {/* Game grid */}
-            <div className="max-h-[40vh] overflow-y-auto pr-1">
-                {(discoverLoading || searchLoading) && displayGames.length === 0 ? (
-                    <div className="text-center py-8">
-                        <div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-                        <p className="text-dim text-sm">Loading games...</p>
-                    </div>
-                ) : displayGames.length === 0 ? (
-                    <div className="text-center py-8">
-                        <p className="text-dim text-sm">
-                            {isSearching ? 'No games found. Try a different search.' : 'No games available.'}
-                        </p>
-                    </div>
-                ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
-                        {displayGames.slice(0, 24).map((game) => (
-                            <GameCard key={game.id} game={game} compact />
-                        ))}
-                    </div>
-                )}
-            </div>
+            {/* Game grid — no nested scroll, wizard handles overflow */}
+            {(discoverLoading || searchLoading) && displayGames.length === 0 ? (
+                <div className="text-center py-8">
+                    <div className="w-8 h-8 mx-auto mb-2 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                    <p className="text-dim text-sm">Loading games...</p>
+                </div>
+            ) : displayGames.length === 0 ? (
+                <div className="text-center py-8">
+                    <p className="text-dim text-sm">
+                        {isSearching ? 'No games found. Try a different search.' : 'No games available.'}
+                    </p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {displayGames.slice(0, 24).map((game) => (
+                        <OnboardingGameCard key={game.id} game={game} />
+                    ))}
+                </div>
+            )}
 
-            {/* Navigation */}
-            <div className="flex gap-3 justify-center max-w-sm mx-auto">
-                <button
-                    type="button"
-                    onClick={onBack}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Back
-                </button>
-                <button
-                    type="button"
-                    onClick={onSkip}
-                    className="flex-1 px-4 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
-                >
-                    Skip
-                </button>
-                <button
-                    type="button"
-                    onClick={handleNext}
-                    className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg transition-colors text-sm"
-                >
-                    Next
-                </button>
-            </div>
         </div>
     );
 }

@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 
@@ -13,6 +14,8 @@ interface CharacterCreateImportFormProps {
     gameSlug: string;
     activeTab: 'manual' | 'import';
     onTabChange: (tab: 'manual' | 'import') => void;
+    existingCharacters?: CharacterDto[];
+    onRegisterValidator?: (fn: () => boolean) => void;
 }
 
 export function CharacterCreateImportForm({
@@ -20,6 +23,8 @@ export function CharacterCreateImportForm({
     gameSlug,
     activeTab,
     onTabChange,
+    existingCharacters = [],
+    onRegisterValidator,
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
@@ -30,6 +35,14 @@ export function CharacterCreateImportForm({
         }
         return 'retail';
     });
+
+    // Check if any existing character for this variant already has isMain
+    const variantIsMain = useMemo(() => {
+        const hasMainForVariant = existingCharacters.some(
+            (c) => c.isMain && c.gameVariant === wowVariant,
+        );
+        return !hasMainForVariant;
+    }, [existingCharacters, wowVariant]);
 
     // Default to import tab when Blizzard is configured
     useEffect(() => {
@@ -48,22 +61,20 @@ export function CharacterCreateImportForm({
                 <button
                     type="button"
                     onClick={() => onTabChange('manual')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        activeTab === 'manual'
-                            ? 'bg-overlay text-foreground'
-                            : 'text-muted hover:text-secondary'
-                    }`}
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'manual'
+                        ? 'bg-overlay text-foreground'
+                        : 'text-muted hover:text-secondary'
+                        }`}
                 >
                     Manual
                 </button>
                 <button
                     type="button"
                     onClick={() => onTabChange('import')}
-                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                        activeTab === 'import'
-                            ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
-                            : 'text-muted hover:text-secondary'
-                    }`}
+                    className={`flex-1 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${activeTab === 'import'
+                        ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
+                        : 'text-muted hover:text-secondary'
+                        }`}
                 >
                     Import from Armory
                 </button>
@@ -96,7 +107,12 @@ export function CharacterCreateImportForm({
             {/* Import form or config warning */}
             {activeTab === 'import' && (
                 blizzardConfigured ? (
-                    <WowArmoryImportForm onSuccess={onClose} gameVariant={wowVariant} />
+                    <WowArmoryImportForm
+                        onSuccess={onClose}
+                        gameVariant={wowVariant}
+                        isMain={variantIsMain}
+                        onRegisterValidator={onRegisterValidator}
+                    />
                 ) : (
                     <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
                         <p className="text-sm text-amber-400">

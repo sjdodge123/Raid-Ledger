@@ -8,3 +8,20 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
         disconnect() {}
     } as unknown as typeof ResizeObserver;
 }
+
+// Mock matchMedia for tests importing theme-store (jsdom doesn't provide it)
+if (typeof window.matchMedia === 'undefined') {
+    Object.defineProperty(window, 'matchMedia', {
+        writable: true,
+        value: (query: string) => ({
+            matches: query.includes('dark'),
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+        }),
+    });
+}
