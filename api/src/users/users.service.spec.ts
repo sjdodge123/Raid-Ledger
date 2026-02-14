@@ -285,6 +285,55 @@ describe('UsersService', () => {
     });
   });
 
+  describe('resetOnboarding (ROK-312)', () => {
+    it('should set onboardingCompletedAt to null', async () => {
+      const resetUser = {
+        id: 1,
+        username: 'testuser',
+        displayName: 'TestUser',
+        avatar: null,
+        discordId: '123',
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+
+      mockDb.returning.mockResolvedValue([resetUser]);
+
+      const result = await service.resetOnboarding(1);
+
+      expect(result.onboardingCompletedAt).toBeNull();
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalled();
+      expect(mockDb.where).toHaveBeenCalled();
+      expect(mockDb.returning).toHaveBeenCalled();
+    });
+
+    it('should update the updatedAt timestamp', async () => {
+      const now = new Date();
+      const resetUser = {
+        id: 2,
+        username: 'user2',
+        displayName: null,
+        avatar: null,
+        discordId: null,
+        customAvatarUrl: null,
+        role: 'member',
+        onboardingCompletedAt: null,
+        createdAt: new Date('2026-01-01T00:00:00Z'),
+        updatedAt: now,
+      };
+
+      mockDb.returning.mockResolvedValue([resetUser]);
+
+      const result = await service.resetOnboarding(2);
+
+      expect(result.updatedAt).toBeInstanceOf(Date);
+    });
+  });
+
   describe('constants', () => {
     it('should export RECENT_MEMBER_DAYS as 30', () => {
       expect(RECENT_MEMBER_DAYS).toBe(30);
