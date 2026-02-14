@@ -15,12 +15,15 @@ const EyeIcon = (
 );
 
 export function DiscordBotForm() {
-    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot } = useAdminSettings();
+    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions } = useAdminSettings();
 
     const [botToken, setBotToken] = useState('');
-    const [enabled, setEnabled] = useState(true);
+    const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
     const [showToken, setShowToken] = useState(false);
     const [testResult, setTestResult] = useState<{ success: boolean; guildName?: string; message: string } | null>(null);
+    const [permissionsResult, setPermissionsResult] = useState<{ allGranted: boolean; permissions: { name: string; granted: boolean }[] } | null>(null);
+
+    const enabled = enabledOverride ?? discordBotStatus.data?.enabled ?? true;
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -36,6 +39,7 @@ export function DiscordBotForm() {
             if (result.success) {
                 toast.success(result.message);
                 setBotToken('');
+                setEnabledOverride(null);
             } else {
                 toast.error(result.message);
             }
@@ -51,7 +55,6 @@ export function DiscordBotForm() {
             const result = await testDiscordBot.mutateAsync({ botToken: botToken || undefined });
             setTestResult(result);
             if (result.success) toast.success(result.message);
-            else toast.error(result.message);
         } catch {
             toast.error('Failed to test connection');
         }
@@ -66,6 +69,7 @@ export function DiscordBotForm() {
             if (result.success) {
                 toast.success(result.message);
                 setTestResult(null);
+                setPermissionsResult(null);
             } else {
                 toast.error(result.message);
             }
@@ -74,20 +78,47 @@ export function DiscordBotForm() {
         }
     };
 
+    const handleCheckPermissions = async () => {
+        setPermissionsResult(null);
+        try {
+            const result = await checkDiscordBotPermissions.mutateAsync();
+            setPermissionsResult(result);
+            if (result.allGranted) toast.success('All required permissions are granted!');
+            else toast.error('Some required permissions are missing.');
+        } catch {
+            toast.error('Failed to check permissions');
+        }
+    };
+
     return (
         <>
             {/* Setup Instructions */}
             <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4 mb-6">
-                <p className="text-sm text-foreground">
-                    <strong>Setup Instructions:</strong>
+                <p className="text-sm text-foreground font-semibold mb-2">
+                    Setup Instructions
                 </p>
-                <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
-                    <li>Go to <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-100">Discord Developer Portal</a></li>
-                    <li>Create or select an application</li>
-                    <li>Go to Bot &rarr; Copy the bot token</li>
-                    <li>Under Privileged Gateway Intents, enable Server Members Intent</li>
-                    <li>Go to OAuth2 &rarr; URL Generator, select &quot;bot&quot; scope, then invite to your server</li>
-                </ol>
+
+                <p className="text-xs text-secondary font-semibold mt-2 mb-1">1. Create a Bot</p>
+                <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
+                    <li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer" className="underline hover:text-blue-300">Discord Developer Portal</a></li>
+                    <li>Click <strong>New Application</strong>, name it, then go to the <strong>Bot</strong> tab</li>
+                    <li>Click <strong>Reset Token</strong> to generate a bot token and paste it below</li>
+                </ul>
+
+                <p className="text-xs text-secondary font-semibold mt-3 mb-1">2. Enable Privileged Intents</p>
+                <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
+                    <li>On the <strong>Bot</strong> tab, scroll to <strong>Privileged Gateway Intents</strong></li>
+                    <li>Enable all three: <strong>Presence Intent</strong>, <strong>Server Members Intent</strong>, and <strong>Message Content Intent</strong></li>
+                    <li>Click <strong>Save Changes</strong></li>
+                </ul>
+
+                <p className="text-xs text-secondary font-semibold mt-3 mb-1">3. Invite Bot to Your Server</p>
+                <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
+                    <li>Go to the <strong>OAuth2 → URL Generator</strong> tab</li>
+                    <li>Under <strong>Scopes</strong>, check <strong>bot</strong> and <strong>applications.commands</strong></li>
+                    <li>A <strong>Bot Permissions</strong> section will appear — enable: <em>Manage Roles</em>, <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em>, and <em>View Channels</em></li>
+                    <li>Copy the generated URL, open it in your browser, and select your server</li>
+                </ul>
             </div>
 
             {/* Configuration Form */}
@@ -126,15 +157,13 @@ export function DiscordBotForm() {
                         role="switch"
                         id="botEnabled"
                         aria-checked={enabled}
-                        onClick={() => setEnabled(!enabled)}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                            enabled ? 'bg-emerald-500' : 'bg-gray-600'
-                        }`}
+                        onClick={() => setEnabledOverride(!enabled)}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${enabled ? 'bg-emerald-500' : 'bg-gray-600'
+                            }`}
                     >
                         <span
-                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                                enabled ? 'translate-x-6' : 'translate-x-1'
-                            }`}
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${enabled ? 'translate-x-6' : 'translate-x-1'
+                                }`}
                         />
                     </button>
                 </div>
@@ -187,14 +216,19 @@ export function DiscordBotForm() {
             {discordBotStatus.data?.configured && (
                 <div className="mt-6 pt-6 border-t border-edge/50">
                     <div className="flex items-center gap-3 bg-surface/30 rounded-lg p-4">
-                        <div className={`w-3 h-3 rounded-full ${
-                            discordBotStatus.data.connected
+                        <div className={`w-3 h-3 rounded-full ${discordBotStatus.data.connecting
+                            ? 'bg-amber-400 shadow-[0_0_8px_rgba(245,158,11,0.6)] animate-pulse'
+                            : discordBotStatus.data.connected
                                 ? 'bg-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.6)]'
                                 : 'bg-red-400 shadow-[0_0_8px_rgba(239,68,68,0.6)]'
-                        }`} />
+                            }`} />
                         <div className="flex-1">
                             <span className="text-sm font-medium text-foreground">
-                                {discordBotStatus.data.connected ? 'Online' : 'Offline'}
+                                {discordBotStatus.data.connecting
+                                    ? 'Starting...'
+                                    : discordBotStatus.data.connected
+                                        ? 'Online'
+                                        : 'Offline'}
                             </span>
                             {discordBotStatus.data.connected && discordBotStatus.data.guildName && (
                                 <p className="text-xs text-secondary mt-0.5">
@@ -205,7 +239,44 @@ export function DiscordBotForm() {
                                 </p>
                             )}
                         </div>
+                        {discordBotStatus.data.connected && (
+                            <button
+                                type="button"
+                                onClick={handleCheckPermissions}
+                                disabled={checkDiscordBotPermissions.isPending}
+                                className="py-2 px-3 text-xs bg-violet-600 hover:bg-violet-500 disabled:bg-violet-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors"
+                            >
+                                {checkDiscordBotPermissions.isPending ? 'Checking…' : 'Test Permissions'}
+                            </button>
+                        )}
                     </div>
+
+                    {/* Permissions Check Results */}
+                    {permissionsResult && (
+                        <div className={`mt-3 rounded-lg p-4 animate-[fadeIn_0.3s_ease-in] ${permissionsResult.allGranted
+                            ? 'bg-emerald-500/10 border border-emerald-500/30'
+                            : 'bg-amber-500/10 border border-amber-500/30'
+                            }`}>
+                            <p className={`text-xs font-semibold mb-2 ${permissionsResult.allGranted ? 'text-emerald-400' : 'text-amber-400'
+                                }`}>
+                                {permissionsResult.allGranted
+                                    ? '✓ All required permissions granted'
+                                    : '⚠ Some permissions are missing — re-invite the bot with the correct permissions'}
+                            </p>
+                            <div className="space-y-1">
+                                {permissionsResult.permissions.map((p) => (
+                                    <div key={p.name} className="flex items-center gap-2 text-xs">
+                                        <span className={p.granted ? 'text-emerald-400' : 'text-red-400'}>
+                                            {p.granted ? '✓' : '✗'}
+                                        </span>
+                                        <span className={p.granted ? 'text-secondary' : 'text-red-300'}>
+                                            {p.name}
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </>

@@ -53,6 +53,8 @@ interface BlizzardConfigDto {
 interface DiscordBotStatusResponse {
     configured: boolean;
     connected: boolean;
+    enabled?: boolean;
+    connecting?: boolean;
     guildName?: string;
     memberCount?: number;
 }
@@ -66,6 +68,11 @@ interface DiscordBotTestResult {
     success: boolean;
     guildName?: string;
     message: string;
+}
+
+interface DiscordBotPermissionsResult {
+    allGranted: boolean;
+    permissions: { name: string; granted: boolean }[];
 }
 
 interface ApiResponse {
@@ -477,6 +484,7 @@ export function useAdminSettings() {
         },
         enabled: !!getAuthToken(),
         staleTime: 15_000,
+        refetchInterval: (query) => query.state.data?.connecting ? 2000 : false,
     });
 
     const updateDiscordBot = useMutation<ApiResponse, Error, DiscordBotConfigDto>({
@@ -523,6 +531,16 @@ export function useAdminSettings() {
         },
     });
 
+    const checkDiscordBotPermissions = useMutation<DiscordBotPermissionsResult, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/permissions`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to check Discord bot permissions');
+            return response.json();
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -549,5 +567,6 @@ export function useAdminSettings() {
         updateDiscordBot,
         testDiscordBot,
         clearDiscordBot,
+        checkDiscordBotPermissions,
     };
 }

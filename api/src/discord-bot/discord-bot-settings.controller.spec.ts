@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -76,7 +76,7 @@ describe('DiscordBotSettingsController', () => {
       );
       expect(result).toEqual({
         success: true,
-        message: 'Discord bot configuration saved and bot is starting...',
+        message: 'Configuration saved.',
       });
     });
 
@@ -94,7 +94,7 @@ describe('DiscordBotSettingsController', () => {
       );
       expect(result).toEqual({
         success: true,
-        message: 'Discord bot configuration saved. Bot is disabled.',
+        message: 'Configuration saved.',
       });
     });
 
@@ -113,7 +113,7 @@ describe('DiscordBotSettingsController', () => {
     it('should throw validation error when enabled is not boolean', async () => {
       const body = {
         botToken: 'token',
-        enabled: 'true' as any,
+        enabled: 'true' as unknown as boolean,
       };
 
       await expect(controller.updateConfig(body)).rejects.toThrow(
@@ -125,7 +125,7 @@ describe('DiscordBotSettingsController', () => {
     it('should throw validation error when enabled is undefined', async () => {
       const body = {
         botToken: 'token',
-        enabled: undefined as any,
+        enabled: undefined as unknown as boolean,
       };
 
       await expect(controller.updateConfig(body)).rejects.toThrow(
@@ -204,9 +204,11 @@ describe('DiscordBotSettingsController', () => {
     });
 
     it('should throw validation error when body is undefined', async () => {
-      await expect(controller.testConnection(undefined as any)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        controller.testConnection(
+          undefined as unknown as Record<string, string>,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should prefer provided token over stored config', async () => {
@@ -222,7 +224,7 @@ describe('DiscordBotSettingsController', () => {
         .mockResolvedValue(mockConfig);
       jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
-      const result = await controller.testConnection(body);
+      await controller.testConnection(body);
 
       expect(discordBotService.testToken).toHaveBeenCalledWith(
         'provided-token',
@@ -243,7 +245,7 @@ describe('DiscordBotSettingsController', () => {
         .mockResolvedValue(mockConfig);
       jest.spyOn(discordBotService, 'testToken').mockResolvedValue(mockResult);
 
-      const result = await controller.testConnection(body);
+      await controller.testConnection(body);
 
       // Empty string is falsy, so should fall back to stored config
       expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();

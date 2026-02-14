@@ -51,6 +51,14 @@ export class DiscordBotSettingsController {
     return this.discordBotService.getStatus();
   }
 
+  @Get('permissions')
+  checkPermissions(): {
+    allGranted: boolean;
+    permissions: { name: string; granted: boolean }[];
+  } {
+    return this.discordBotService.checkPermissions();
+  }
+
   @Put()
   @HttpCode(HttpStatus.OK)
   async updateConfig(
@@ -68,9 +76,7 @@ export class DiscordBotSettingsController {
 
       return {
         success: true,
-        message: config.enabled
-          ? 'Discord bot configuration saved and bot is starting...'
-          : 'Discord bot configuration saved. Bot is disabled.',
+        message: 'Configuration saved.',
       };
     } catch (error) {
       handleValidationError(error);
