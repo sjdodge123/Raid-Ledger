@@ -30,6 +30,7 @@ function renderWithRouter(
         <QueryClientProvider client={createQueryClient()}>
             <MemoryRouter initialEntries={[route]}>
                 <Routes>
+                    <Route path="/" element={<div>Login Page</div>} />
                     <Route path="/login" element={<div>Login Page</div>} />
                     <Route path="/protected" element={ui} />
                 </Routes>
