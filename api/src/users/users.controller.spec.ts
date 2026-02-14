@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
 import { UsersController } from './users.controller';
@@ -368,7 +369,9 @@ describe('UsersController', () => {
       jest
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
-      jest.spyOn(usersService, 'setDisplayName').mockResolvedValue(updatedUser as never);
+      jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
 
       const result = await controller.updateMyProfile(mockRequest as never, {
         displayName: 'NewName',
@@ -415,7 +418,9 @@ describe('UsersController', () => {
       jest
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
-      jest.spyOn(usersService, 'setDisplayName').mockResolvedValue(updatedUser as never);
+      jest
+        .spyOn(usersService, 'setDisplayName')
+        .mockResolvedValue(updatedUser as never);
 
       const result = await controller.updateMyProfile(mockRequest as never, {
         displayName: 'ValidName',
