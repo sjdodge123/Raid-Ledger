@@ -21,7 +21,7 @@ export class DiscordBotService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly settingsService: SettingsService,
-  ) { }
+  ) {}
 
   /**
    * Auto-connect on startup if configured and enabled.

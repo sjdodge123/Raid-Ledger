@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unused-vars */
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
@@ -356,7 +356,8 @@ describe('DiscordBotService', () => {
       expect(result).toEqual({
         success: true,
         guildName: undefined,
-        message: 'Bot token is valid! Almost done — invite the bot to your Discord server using the OAuth2 URL Generator in the Developer Portal.',
+        message:
+          'Bot token is valid! Almost done — invite the bot to your Discord server using the OAuth2 URL Generator in the Developer Portal.',
       });
     });
 

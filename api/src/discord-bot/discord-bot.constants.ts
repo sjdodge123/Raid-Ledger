@@ -10,13 +10,12 @@ export const DISCORD_BOT_EVENTS = {
  * duplicating intent / token / network error detection.
  */
 export function friendlyDiscordErrorMessage(error: unknown): string {
-  if (!(error instanceof Error))
-    return 'Failed to connect with provided token';
+  if (!(error instanceof Error)) return 'Failed to connect with provided token';
   const raw = error.message;
 
   if (
     /disallowed intent|privileged intent/i.test(raw) ||
-    (error as any)?.code === 4014
+    (error as Error & { code?: number })?.code === 4014
   ) {
     return 'Missing required privileged intent: Server Members. Enable it in the Discord Developer Portal under Bot > Privileged Gateway Intents.';
   }

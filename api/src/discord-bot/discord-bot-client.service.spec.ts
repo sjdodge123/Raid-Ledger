@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method */
+/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await, @typescript-eslint/no-floating-promises, @typescript-eslint/no-require-imports, @typescript-eslint/no-unsafe-call */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DiscordBotClientService } from './discord-bot-client.service';
@@ -110,7 +110,9 @@ describe('DiscordBotClientService', () => {
       mockClient = (service as any).client;
       mockClient.emit(Events.Error, error);
 
-      await expect(connectPromise).rejects.toThrow('Invalid bot token. Please check the token and try again.');
+      await expect(connectPromise).rejects.toThrow(
+        'Invalid bot token. Please check the token and try again.',
+      );
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         DISCORD_BOT_EVENTS.ERROR,
         error,
@@ -175,14 +177,16 @@ describe('DiscordBotClientService', () => {
       setImmediate(() => {
         const loginSpy = mockClient.login as jest.Mock;
         const loginPromise = loginSpy.mock.results[0].value;
-        loginPromise.catch(() => { }); // Prevent unhandled rejection
+        loginPromise.catch(() => {}); // Prevent unhandled rejection
 
         // Simulate login failure by rejecting and clearing the client
         (service as any).client = null;
         mockClient.emit(Events.Error, error);
       });
 
-      await expect(connectPromise).rejects.toThrow('Failed to connect with provided token');
+      await expect(connectPromise).rejects.toThrow(
+        'Failed to connect with provided token',
+      );
     });
 
     it('should handle non-Error login rejection', async () => {
@@ -197,7 +201,9 @@ describe('DiscordBotClientService', () => {
         mockClient.emit(Events.Error, new Error('String error message'));
       });
 
-      await expect(connectPromise).rejects.toThrow('Failed to connect with provided token');
+      await expect(connectPromise).rejects.toThrow(
+        'Failed to connect with provided token',
+      );
     });
   });
 

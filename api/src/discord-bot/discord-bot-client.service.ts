@@ -1,7 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Client, GatewayIntentBits, Events, PermissionsBitField } from 'discord.js';
-import { DISCORD_BOT_EVENTS, friendlyDiscordErrorMessage } from './discord-bot.constants';
+import {
+  Client,
+  GatewayIntentBits,
+  Events,
+  PermissionsBitField,
+} from 'discord.js';
+import {
+  DISCORD_BOT_EVENTS,
+  friendlyDiscordErrorMessage,
+} from './discord-bot.constants';
 
 export interface GuildInfo {
   name: string;
@@ -21,7 +29,10 @@ const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
   { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
   { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
-  { label: 'Read Message History', flag: PermissionsBitField.Flags.ReadMessageHistory },
+  {
+    label: 'Read Message History',
+    flag: PermissionsBitField.Flags.ReadMessageHistory,
+  },
   { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
 ];
 
@@ -31,7 +42,7 @@ export class DiscordBotClientService {
   private client: Client | null = null;
   private connecting = false;
 
-  constructor(private readonly eventEmitter: EventEmitter2) { }
+  constructor(private readonly eventEmitter: EventEmitter2) {}
 
   async connect(token: string): Promise<void> {
     // Disconnect any existing client first
@@ -70,7 +81,7 @@ export class DiscordBotClientService {
         if (guildCount > 1) {
           this.logger.warn(
             `Bot is in ${guildCount} guilds but only the first one is used. ` +
-            `Remove the bot from extra guilds to avoid confusion.`,
+              `Remove the bot from extra guilds to avoid confusion.`,
           );
         }
 
@@ -158,17 +169,26 @@ export class DiscordBotClientService {
    */
   checkPermissions(): PermissionCheckResult[] {
     if (!this.client?.isReady()) {
-      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+      return REQUIRED_PERMISSIONS.map((p) => ({
+        name: p.label,
+        granted: false,
+      }));
     }
 
     const guild = this.client.guilds.cache.first();
     if (!guild) {
-      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+      return REQUIRED_PERMISSIONS.map((p) => ({
+        name: p.label,
+        granted: false,
+      }));
     }
 
     const me = guild.members.me;
     if (!me) {
-      return REQUIRED_PERMISSIONS.map((p) => ({ name: p.label, granted: false }));
+      return REQUIRED_PERMISSIONS.map((p) => ({
+        name: p.label,
+        granted: false,
+      }));
     }
 
     return REQUIRED_PERMISSIONS.map((p) => ({

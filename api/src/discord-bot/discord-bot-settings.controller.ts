@@ -44,7 +44,7 @@ export class DiscordBotSettingsController {
   constructor(
     private readonly discordBotService: DiscordBotService,
     private readonly settingsService: SettingsService,
-  ) { }
+  ) {}
 
   @Get()
   async getStatus(): Promise<DiscordBotStatusResponse> {
