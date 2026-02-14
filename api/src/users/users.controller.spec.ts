@@ -289,7 +289,7 @@ describe('UsersController', () => {
     const mockRequest = { user: { id: 1, role: 'member' } };
 
     it('should return available:true when display name is available', async () => {
-      jest
+      const checkSpy = jest
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
 
@@ -299,10 +299,7 @@ describe('UsersController', () => {
       );
 
       expect(result.available).toBe(true);
-      expect(usersService.checkDisplayNameAvailability).toHaveBeenCalledWith(
-        'AvailableName',
-        1,
-      );
+      expect(checkSpy).toHaveBeenCalledWith('AvailableName', 1);
     });
 
     it('should return available:false when display name is taken', async () => {
@@ -368,7 +365,7 @@ describe('UsersController', () => {
       jest
         .spyOn(usersService, 'checkDisplayNameAvailability')
         .mockResolvedValue(true);
-      jest
+      const setNameSpy = jest
         .spyOn(usersService, 'setDisplayName')
         .mockResolvedValue(updatedUser as never);
 
@@ -377,7 +374,7 @@ describe('UsersController', () => {
       });
 
       expect(result.data.displayName).toBe('NewName');
-      expect(usersService.setDisplayName).toHaveBeenCalledWith(1, 'NewName');
+      expect(setNameSpy).toHaveBeenCalledWith(1, 'NewName');
     });
 
     it('should throw BadRequestException when display name is taken', async () => {
@@ -448,7 +445,7 @@ describe('UsersController', () => {
         updatedAt: new Date(),
       };
 
-      jest
+      const completeSpy = jest
         .spyOn(usersService, 'completeOnboarding')
         .mockResolvedValue(completedUser as never);
 
@@ -456,7 +453,7 @@ describe('UsersController', () => {
 
       expect(result.success).toBe(true);
       expect(result.onboardingCompletedAt).toBe('2026-02-13T12:00:00.000Z');
-      expect(usersService.completeOnboarding).toHaveBeenCalledWith(1);
+      expect(completeSpy).toHaveBeenCalledWith(1);
     });
 
     it('should return success and timestamp', async () => {

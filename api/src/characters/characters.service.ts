@@ -8,7 +8,16 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { eq, and, asc, count, inArray, isNotNull, ne, ilike } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  asc,
+  count,
+  inArray,
+  isNotNull,
+  ne,
+  ilike,
+} from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -36,7 +45,7 @@ export class CharactersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
-  ) { }
+  ) {}
 
   /**
    * Find a CharacterSyncAdapter that can handle the given game variant.
@@ -139,11 +148,17 @@ export class CharactersService {
       return await this.db.transaction(async (tx) => {
         // Cross-user duplicate check: prevent claiming a character already owned by another user
         const realmConditions = dto.realm
-          ? [ilike(schema.characters.name, dto.name), eq(schema.characters.realm, dto.realm)]
+          ? [
+              ilike(schema.characters.name, dto.name),
+              eq(schema.characters.realm, dto.realm),
+            ]
           : [ilike(schema.characters.name, dto.name)];
 
         const [existingClaim] = await tx
-          .select({ id: schema.characters.id, userId: schema.characters.userId })
+          .select({
+            id: schema.characters.id,
+            userId: schema.characters.userId,
+          })
           .from(schema.characters)
           .where(
             and(
@@ -397,11 +412,17 @@ export class CharactersService {
       return await this.db.transaction(async (tx) => {
         // Cross-user duplicate check: prevent claiming a character already owned by another user
         const importRealmConditions = profile.realm
-          ? [ilike(schema.characters.name, profile.name), eq(schema.characters.realm, profile.realm)]
+          ? [
+              ilike(schema.characters.name, profile.name),
+              eq(schema.characters.realm, profile.realm),
+            ]
           : [ilike(schema.characters.name, profile.name)];
 
         const [existingImportClaim] = await tx
-          .select({ id: schema.characters.id, userId: schema.characters.userId })
+          .select({
+            id: schema.characters.id,
+            userId: schema.characters.userId,
+          })
           .from(schema.characters)
           .where(
             and(
