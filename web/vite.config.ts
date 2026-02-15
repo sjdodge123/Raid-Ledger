@@ -21,7 +21,7 @@ export default defineConfig({
       project: process.env.SENTRY_PROJECT ?? 'raid-ledger-web',
       authToken: process.env.SENTRY_AUTH_TOKEN,
       release: { name: rootPkg.version },
-      sourcemaps: { deleteSourcemapsAfterUpload: true },
+      sourcemaps: { filesToDeleteAfterUpload: ['**/*.map'] },
       // Silently skip when SENTRY_AUTH_TOKEN is not set (local dev)
       disable: !process.env.SENTRY_AUTH_TOKEN,
     }),
