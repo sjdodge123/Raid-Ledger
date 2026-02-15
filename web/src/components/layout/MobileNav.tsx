@@ -6,6 +6,7 @@ import { useThemeStore } from '../../stores/theme-store';
 import { API_BASE_URL } from '../../lib/config';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { DiscordIcon } from '../icons/DiscordIcon';
+import { Z_INDEX } from '../../lib/z-index';
 
 interface MobileNavProps {
     isOpen: boolean;
@@ -81,7 +82,8 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
 
     return (
         <div
-            className={`fixed inset-0 z-50 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
+            className={`fixed inset-0 md:hidden ${isOpen ? 'visible' : 'invisible pointer-events-none'}`}
+            style={{ zIndex: Z_INDEX.MODAL }}
             aria-hidden={!isOpen}
         >
             {/* Backdrop */}

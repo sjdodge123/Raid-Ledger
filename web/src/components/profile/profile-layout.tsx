@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
+import { Z_INDEX } from '../../lib/z-index';
 
 import { ProfileSidebar } from './profile-sidebar';
 import { toast } from '../../lib/toast';
@@ -105,7 +106,8 @@ export function ProfileLayout() {
                 </div>
 
                 <div
-                    className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                    className={`fixed inset-0 md:hidden ${mobileOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                    style={{ zIndex: Z_INDEX.MODAL }}
                     aria-hidden={!mobileOpen}
                 >
                     <div
