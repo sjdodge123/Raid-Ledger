@@ -79,7 +79,7 @@ function App() {
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/events" element={<EventsPage />} />
             {/* ROK-213: My Events dashboard */}
-            <Route path="/my-events" element={<MyEventsPage />} />
+            <Route path="/event-metrics" element={<MyEventsPage />} />
             <Route path="/events/new" element={<CreateEventPage />} />
             <Route path="/events/:id" element={<EventDetailPage />} />
             <Route path="/events/:id/edit" element={<EditEventPage />} />
