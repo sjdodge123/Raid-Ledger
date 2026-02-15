@@ -63,7 +63,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
                     </h2>
                     <button
                         onClick={onClose}
-                        className="p-1 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
+                        className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"
                         aria-label="Close modal"
                     >
                         <svg

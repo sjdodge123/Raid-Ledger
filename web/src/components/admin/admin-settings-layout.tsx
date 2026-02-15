@@ -121,7 +121,7 @@ export function AdminSettingsLayout() {
                         <button
                             type="button"
                             onClick={closeMobile}
-                            className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
+                            className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
                             aria-label="Close settings menu"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

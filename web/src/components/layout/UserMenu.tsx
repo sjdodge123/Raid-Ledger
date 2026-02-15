@@ -123,7 +123,7 @@ export function UserMenu() {
         <div className="relative" ref={menuRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="flex items-center gap-2 p-1 rounded-lg hover:bg-panel transition-colors"
+                className="flex items-center gap-2 px-2 min-h-[44px] rounded-lg hover:bg-panel transition-colors"
                 aria-expanded={isOpen}
                 aria-haspopup="true"
             >
@@ -188,102 +188,102 @@ export function UserMenu() {
                         </Link>
 
                         {isAdmin(user) && !isImpersonating && (
-                                <Link
-                                    to="/admin/settings"
-                                    className="flex items-center gap-2 px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
-                                    onClick={() => setIsOpen(false)}
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                    </svg>
-                                    Admin Settings
-                                </Link>
+                            <Link
+                                to="/admin/settings"
+                                className="flex items-center gap-2 px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
+                                onClick={() => setIsOpen(false)}
+                            >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                                Admin Settings
+                            </Link>
                         )}
 
                         {/* Impersonation dropdown (operator+admin) */}
                         {isOperatorOrAdmin(user) && !isImpersonating && (
-                                <div className="border-t border-edge mt-1 pt-1">
-                                    <button
-                                        onClick={() => {
-                                            const next = !showImpersonateMenu;
-                                            setShowImpersonateMenu(next);
-                                            if (!next) setImpersonateSearch('');
-                                            else setTimeout(() => impersonateSearchRef.current?.focus(), 0);
-                                        }}
-                                        className="flex items-center justify-between w-full px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
-                                    >
-                                        <span className="flex items-center gap-2">
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                                            </svg>
-                                            Impersonate
-                                        </span>
-                                        <svg
-                                            className={`w-3 h-3 transition-transform ${showImpersonateMenu ? 'rotate-180' : ''}`}
-                                            fill="none"
-                                            stroke="currentColor"
-                                            viewBox="0 0 24 24"
-                                        >
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                            <div className="border-t border-edge mt-1 pt-1">
+                                <button
+                                    onClick={() => {
+                                        const next = !showImpersonateMenu;
+                                        setShowImpersonateMenu(next);
+                                        if (!next) setImpersonateSearch('');
+                                        else setTimeout(() => impersonateSearchRef.current?.focus(), 0);
+                                    }}
+                                    className="flex items-center justify-between w-full px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                         </svg>
-                                    </button>
+                                        Impersonate
+                                    </span>
+                                    <svg
+                                        className={`w-3 h-3 transition-transform ${showImpersonateMenu ? 'rotate-180' : ''}`}
+                                        fill="none"
+                                        stroke="currentColor"
+                                        viewBox="0 0 24 24"
+                                    >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                    </svg>
+                                </button>
 
-                                    {showImpersonateMenu && (
-                                        <div className="bg-panel/50">
-                                            <div className="px-3 py-1.5">
-                                                <input
-                                                    ref={impersonateSearchRef}
-                                                    type="text"
-                                                    value={impersonateSearch}
-                                                    onChange={(e) => setImpersonateSearch(e.target.value)}
-                                                    placeholder="Search users..."
-                                                    className="w-full px-2.5 py-1 text-xs bg-surface/50 border border-edge rounded text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                />
-                                            </div>
-                                            <div className="max-h-48 overflow-y-auto">
+                                {showImpersonateMenu && (
+                                    <div className="bg-panel/50">
+                                        <div className="px-3 py-1.5">
+                                            <input
+                                                ref={impersonateSearchRef}
+                                                type="text"
+                                                value={impersonateSearch}
+                                                onChange={(e) => setImpersonateSearch(e.target.value)}
+                                                placeholder="Search users..."
+                                                className="w-full px-2.5 py-1 text-xs bg-surface/50 border border-edge rounded text-foreground placeholder:text-dim focus:outline-none focus:ring-1 focus:ring-emerald-500 focus:border-transparent"
+                                                onClick={(e) => e.stopPropagation()}
+                                            />
+                                        </div>
+                                        <div className="max-h-48 overflow-y-auto">
                                             {(() => {
                                                 const filtered = (impersonateUsers ?? []).filter((u) =>
                                                     u.username.toLowerCase().includes(impersonateSearch.toLowerCase())
                                                 );
                                                 return filtered.length > 0 ? (
-                                                filtered.map((u) => {
-                                                    const impAvatar = resolveAvatar(toAvatarUser(u));
-                                                    return (
-                                                        <button
-                                                            key={u.id}
-                                                            onClick={() => handleImpersonate(u.id)}
-                                                            className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
-                                                        >
-                                                            {impAvatar.url ? (
-                                                                <img
-                                                                    src={impAvatar.url}
-                                                                    alt={u.username}
-                                                                    className="w-5 h-5 rounded-full bg-faint object-cover"
-                                                                    onError={(e) => {
-                                                                        e.currentTarget.style.display = 'none';
-                                                                        e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                                                                    }}
-                                                                />
-                                                            ) : null}
-                                                            <div className={`w-5 h-5 rounded-full bg-faint flex items-center justify-center text-[10px] font-semibold text-muted ${impAvatar.url ? 'hidden' : ''}`}>
-                                                                {u.username.charAt(0).toUpperCase()}
-                                                            </div>
-                                                            {u.username}
-                                                        </button>
-                                                    );
-                                                })
-                                            ) : (
-                                                <p className="px-6 py-2 text-xs text-dim">
-                                                    {impersonateSearch ? 'No matches' : 'No users available'}
-                                                </p>
-                                            );
+                                                    filtered.map((u) => {
+                                                        const impAvatar = resolveAvatar(toAvatarUser(u));
+                                                        return (
+                                                            <button
+                                                                key={u.id}
+                                                                onClick={() => handleImpersonate(u.id)}
+                                                                className="flex items-center gap-2 w-full px-6 py-1.5 text-sm text-muted hover:bg-overlay hover:text-foreground transition-colors"
+                                                            >
+                                                                {impAvatar.url ? (
+                                                                    <img
+                                                                        src={impAvatar.url}
+                                                                        alt={u.username}
+                                                                        className="w-5 h-5 rounded-full bg-faint object-cover"
+                                                                        onError={(e) => {
+                                                                            e.currentTarget.style.display = 'none';
+                                                                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                                                                        }}
+                                                                    />
+                                                                ) : null}
+                                                                <div className={`w-5 h-5 rounded-full bg-faint flex items-center justify-center text-[10px] font-semibold text-muted ${impAvatar.url ? 'hidden' : ''}`}>
+                                                                    {u.username.charAt(0).toUpperCase()}
+                                                                </div>
+                                                                {u.username}
+                                                            </button>
+                                                        );
+                                                    })
+                                                ) : (
+                                                    <p className="px-6 py-2 text-xs text-dim">
+                                                        {impersonateSearch ? 'No matches' : 'No users available'}
+                                                    </p>
+                                                );
                                             })()}
-                                            </div>
                                         </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
 
                         <button

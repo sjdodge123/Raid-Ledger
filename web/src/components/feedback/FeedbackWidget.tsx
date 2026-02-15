@@ -212,7 +212,7 @@ export function FeedbackWidget() {
                             </h2>
                             <button
                                 onClick={handleClose}
-                                className="rounded-lg p-1 transition-colors hover:bg-[var(--color-overlay)]"
+                                className="flex items-center justify-center min-w-[44px] min-h-[44px] rounded-lg transition-colors hover:bg-[var(--color-overlay)]"
                                 style={{ color: 'var(--color-muted)' }}
                                 aria-label="Close"
                             >
@@ -285,7 +285,7 @@ export function FeedbackWidget() {
                                                 onClick={() =>
                                                     setCategory(cat.value)
                                                 }
-                                                className="rounded-full px-3 py-1.5 text-sm font-medium transition-all"
+                                                className="rounded-full px-3 py-2.5 text-sm font-medium transition-all"
                                                 style={{
                                                     backgroundColor:
                                                         category === cat.value
