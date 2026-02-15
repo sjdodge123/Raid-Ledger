@@ -10,7 +10,7 @@ import { AdminPluginSection } from '../components/admin/AdminPluginSection';
 import { DiscordOAuthForm } from '../components/admin/DiscordOAuthForm';
 import { IgdbForm } from '../components/admin/IgdbForm';
 import { DemoDataCard } from '../components/admin/DemoDataCard';
-import { RelayHubCard } from '../components/admin/RelayHubCard';
+
 import { RoleManagementCard } from '../components/admin/RoleManagementCard';
 import { NewBadge } from '../components/ui/new-badge';
 import { Modal } from '../components/ui/modal';
@@ -169,8 +169,6 @@ export function AdminSettingsPage() {
                 {/* Demo Data */}
                 <DemoDataCard />
 
-                {/* Relay Hub (ROK-273) */}
-                <RelayHubCard />
 
                 {/* Role Management (ROK-272) */}
                 <RoleManagementCard />

@@ -26,8 +26,7 @@ import { RolesPanel } from './pages/admin/roles-panel';
 import { DemoDataPanel } from './pages/admin/demo-data-panel';
 import { DiscordPanel } from './pages/admin/discord-panel';
 import { IgdbPanel } from './pages/admin/igdb-panel';
-import { RelayPanel } from './pages/admin/relay-panel';
-import { GitHubPanel } from './pages/admin/github-panel';
+
 import { DiscordBotPanel } from './pages/admin/discord-bot-panel';
 import { PluginsPanel } from './pages/admin/plugins-panel';
 import { BrandingPanel } from './pages/admin/branding-panel';
@@ -103,8 +102,7 @@ function App() {
               <Route path="general/data" element={<DemoDataPanel />} />
               <Route path="integrations" element={<DiscordPanel />} />
               <Route path="integrations/igdb" element={<IgdbPanel />} />
-              <Route path="integrations/relay" element={<RelayPanel />} />
-              <Route path="integrations/github" element={<GitHubPanel />} />
+
               <Route path="integrations/discord-bot" element={<DiscordBotPanel />} />
               <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
               <Route path="plugins" element={<PluginsPanel />} />
