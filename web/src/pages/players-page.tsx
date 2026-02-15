@@ -126,7 +126,7 @@ export function PlayersPage() {
                     <button
                         onClick={() => setPage((p) => Math.max(1, p - 1))}
                         disabled={page <= 1}
-                        className="px-3 py-1.5 text-sm bg-panel border border-edge rounded hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed text-foreground transition-colors"
+                        className="px-4 py-2.5 text-sm bg-panel border border-edge rounded hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed text-foreground transition-colors"
                     >
                         Previous
                     </button>
@@ -136,7 +136,7 @@ export function PlayersPage() {
                     <button
                         onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                         disabled={page >= totalPages}
-                        className="px-3 py-1.5 text-sm bg-panel border border-edge rounded hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed text-foreground transition-colors"
+                        className="px-4 py-2.5 text-sm bg-panel border border-edge rounded hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed text-foreground transition-colors"
                     >
                         Next
                     </button>

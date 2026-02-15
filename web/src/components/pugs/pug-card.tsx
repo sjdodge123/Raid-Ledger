@@ -92,7 +92,7 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = f
                             e.stopPropagation();
                             setShowMenu(!showMenu);
                         }}
-                        className="rounded p-1 text-dim hover:bg-panel hover:text-foreground transition-colors"
+                        className="flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-panel hover:text-foreground transition-colors"
                         aria-label="PUG actions"
                     >
                         <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">

@@ -124,7 +124,7 @@ export function PlayerCard({
             {onRemove && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onRemove(); }}
-                    className="shrink-0 rounded p-1 text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                    className="shrink-0 flex items-center justify-center w-11 h-11 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
                     aria-label={`Remove ${player.username} from slot`}
                     title="Remove from slot"
                 >
