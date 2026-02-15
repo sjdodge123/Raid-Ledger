@@ -31,6 +31,7 @@ import { DiscordBotPanel } from './pages/admin/discord-bot-panel';
 import { PluginsPanel } from './pages/admin/plugins-panel';
 import { BrandingPanel } from './pages/admin/branding-panel';
 import { PluginIntegrationPanel } from './pages/admin/plugin-integration-panel';
+import { CronJobsPanel } from './pages/admin/cron-jobs-panel';
 import { GamesPage } from './pages/games-page';
 import { GameDetailPage } from './pages/game-detail-page';
 import { CharacterDetailPage } from './pages/character-detail-page';
@@ -100,6 +101,7 @@ function App() {
               <Route path="general" element={<GeneralPanel />} />
               <Route path="general/roles" element={<RolesPanel />} />
               <Route path="general/data" element={<DemoDataPanel />} />
+              <Route path="general/cron-jobs" element={<CronJobsPanel />} />
               <Route path="integrations" element={<DiscordPanel />} />
               <Route path="integrations/igdb" element={<IgdbPanel />} />
 

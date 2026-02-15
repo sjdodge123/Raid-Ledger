@@ -7,6 +7,7 @@ import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 const DEFAULT_RELAY_URL = 'https://hub.raid-ledger.com';
 const APP_VERSION = '0.0.1';
@@ -38,6 +39,7 @@ export class RelayService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /**
@@ -247,44 +249,49 @@ export class RelayService {
    * Hourly heartbeat cron — sends anonymous usage stats to relay.
    * No-ops when relay is disabled or not registered.
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron(CronExpression.EVERY_HOUR, { name: 'RelayService_handleHeartbeat' })
   async handleHeartbeat(): Promise<void> {
-    if (!(await this.isConnected())) {
-      return;
-    }
+    await this.cronJobService.executeWithTracking(
+      'RelayService_handleHeartbeat',
+      async () => {
+        if (!(await this.isConnected())) {
+          return;
+        }
 
-    const relayUrl = await this.getRelayUrl();
-    const token = await this.settingsService.get(SETTING_KEYS.RELAY_TOKEN);
-    const instanceId = await this.settingsService.get(
-      SETTING_KEYS.RELAY_INSTANCE_ID,
+        const relayUrl = await this.getRelayUrl();
+        const token = await this.settingsService.get(SETTING_KEYS.RELAY_TOKEN);
+        const instanceId = await this.settingsService.get(
+          SETTING_KEYS.RELAY_INSTANCE_ID,
+        );
+
+        try {
+          const stats = await this.gatherStats();
+          const response = await fetch(
+            `${relayUrl}/api/v1/instances/${instanceId}/heartbeat`,
+            {
+              method: 'POST',
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                version: APP_VERSION,
+                ...stats,
+              }),
+              signal: AbortSignal.timeout(10_000),
+            },
+          );
+
+          if (!response.ok) {
+            this.logger.debug(`Heartbeat failed: HTTP ${response.status}`);
+          }
+        } catch (error) {
+          this.logger.debug(
+            `Heartbeat failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      },
     );
-
-    try {
-      const stats = await this.gatherStats();
-      const response = await fetch(
-        `${relayUrl}/api/v1/instances/${instanceId}/heartbeat`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            version: APP_VERSION,
-            ...stats,
-          }),
-          signal: AbortSignal.timeout(10_000),
-        },
-      );
-
-      if (!response.ok) {
-        this.logger.debug(`Heartbeat failed: HTTP ${response.status}`);
-      }
-    } catch (error) {
-      this.logger.debug(
-        `Heartbeat failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
   }
 
   // ─── Private helpers ──────────────────────────────────────────

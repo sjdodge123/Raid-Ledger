@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventReminderService } from './event-reminder.service';
 import { NotificationService } from './notification.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 describe('EventReminderService', () => {
   let service: EventReminderService;
@@ -30,6 +31,7 @@ describe('EventReminderService', () => {
         EventReminderService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
       ],
     }).compile();
 

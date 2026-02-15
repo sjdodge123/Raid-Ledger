@@ -18,6 +18,7 @@ import {
 } from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
 import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {
@@ -123,6 +124,7 @@ export class IgdbService {
     private redis: Redis,
     private readonly settingsService: SettingsService,
     @InjectQueue(IGDB_SYNC_QUEUE) private readonly syncQueue: Queue,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /**
@@ -148,21 +150,24 @@ export class IgdbService {
    * Scheduled sync: refresh game data from IGDB every 6 hours.
    * Only runs when IGDB credentials are configured.
    */
-  @Cron(CronExpression.EVERY_6_HOURS)
+  @Cron(CronExpression.EVERY_6_HOURS, {
+    name: 'IgdbService_handleScheduledSync',
+  })
   async handleScheduledSync() {
-    const configured = await this.settingsService.isIgdbConfigured();
-    if (!configured) {
-      // Also check env vars
-      const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
-      if (!clientId) return;
-    }
+    await this.cronJobService.executeWithTracking(
+      'IgdbService_handleScheduledSync',
+      async () => {
+        const configured = await this.settingsService.isIgdbConfigured();
+        if (!configured) {
+          // Also check env vars
+          const clientId = this.configService.get<string>('IGDB_CLIENT_ID');
+          if (!clientId) return;
+        }
 
-    this.logger.log('Enqueuing scheduled IGDB sync...');
-    try {
-      await this.enqueueSync('scheduled');
-    } catch (err) {
-      this.logger.error(`Failed to enqueue scheduled IGDB sync: ${err}`);
-    }
+        this.logger.log('Enqueuing scheduled IGDB sync...');
+        await this.enqueueSync('scheduled');
+      },
+    );
   }
 
   /**
