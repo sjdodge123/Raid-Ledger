@@ -70,13 +70,13 @@ export function Header() {
                             <>
                                 <span className="w-px h-5 bg-edge" aria-hidden="true" />
                                 <Link
-                                    to="/my-events"
-                                    className={`font-medium transition-colors ${location.pathname === '/my-events'
+                                    to="/event-metrics"
+                                    className={`font-medium transition-colors ${location.pathname === '/event-metrics'
                                         ? 'text-emerald-400'
                                         : 'text-secondary hover:text-foreground'
                                         }`}
                                 >
-                                    My Events
+                                    Event Metrics
                                 </Link>
                             </>
                         )}

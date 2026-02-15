@@ -73,7 +73,7 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
         { to: '/calendar', label: 'Calendar' },
         { to: '/games', label: 'Games' },
         { to: '/events', label: 'Events' },
-        ...(isAuthenticated ? [{ to: '/my-events', label: 'My Events' }] : []),
+        ...(isAuthenticated ? [{ to: '/event-metrics', label: 'Event Metrics' }] : []),
         { to: '/players', label: 'Players' },
     ];
 
