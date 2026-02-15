@@ -1,8 +1,13 @@
+// Sentry instrumentation MUST be imported first — before any other modules.
+// ROK-306: Maintainer telemetry for error tracking.
+import './sentry/instrument';
+
 import { NestFactory } from '@nestjs/core';
 import type { LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import { AppModule } from './app.module';
+import { SentryGlobalFilter } from '@sentry/nestjs/setup';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 
 async function bootstrap() {
@@ -81,7 +86,13 @@ async function bootstrap() {
     maxAge: '1d',
   });
 
-  app.useGlobalFilters(new ThrottlerExceptionFilter());
+  // NestJS applies global filters in reverse order: ThrottlerExceptionFilter runs
+  // first, then SentryGlobalFilter. ThrottlerException is dropped by beforeSend in
+  // instrument.ts so rate-limit responses are never reported to Sentry.
+  app.useGlobalFilters(
+    new SentryGlobalFilter(),
+    new ThrottlerExceptionFilter(),
+  );
 
   await app.listen(process.env.PORT ?? 3000);
 }

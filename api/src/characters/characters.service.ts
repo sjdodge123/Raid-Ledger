@@ -45,7 +45,7 @@ export class CharactersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
-  ) { }
+  ) {}
 
   /**
    * Find a CharacterSyncAdapter that can handle the given game variant.
@@ -184,7 +184,13 @@ export class CharactersService {
     try {
       return await this.db.transaction(async (tx) => {
         // Cross-user duplicate check (realm-only — non-MMO games skip)
-        await this.checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm);
+        await this.checkDuplicateClaim(
+          tx,
+          dto.gameId,
+          userId,
+          dto.name,
+          dto.realm,
+        );
 
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx
@@ -422,7 +428,13 @@ export class CharactersService {
     try {
       return await this.db.transaction(async (tx) => {
         // Cross-user duplicate check (realm-only — non-MMO games skip)
-        await this.checkDuplicateClaim(tx, game.id, userId, profile.name, profile.realm);
+        await this.checkDuplicateClaim(
+          tx,
+          game.id,
+          userId,
+          profile.name,
+          profile.realm,
+        );
 
         // ROK-206: Count existing characters to auto-main the first one
         const [{ charCount }] = await tx

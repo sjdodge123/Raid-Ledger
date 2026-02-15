@@ -16,7 +16,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { RateLimit } from '../throttler/rate-limit.decorator';
-import { GitHubService } from './github.service';
 import {
   CreateFeedbackSchema,
   type FeedbackResponseDto,
@@ -42,7 +41,6 @@ export class FeedbackController {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: NodePgDatabase<typeof schema>,
-    private readonly githubService: GitHubService,
   ) {}
 
   /**
@@ -64,10 +62,9 @@ export class FeedbackController {
     }
 
     const userId = req.user.id;
-    const { category, message, pageUrl, screenshotBase64, clientLogs } =
-      parsed.data;
+    const { category, message, pageUrl } = parsed.data;
 
-    // Insert feedback into local DB first
+    // Insert feedback into local DB
     const [inserted] = await this.db
       .insert(schema.feedback)
       .values({
@@ -82,54 +79,15 @@ export class FeedbackController {
       `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
     );
 
-    // Look up username for GitHub issue body
-    const userRows = await this.db
-      .select({ username: schema.users.username })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    const username = userRows[0]?.username ?? `User #${userId}`;
-
-    // Attempt to create GitHub issue (non-blocking for the user)
-    let githubIssueUrl: string | null = null;
-    try {
-      const result = await this.githubService.createFeedbackIssue({
-        category,
-        message,
-        username,
-        pageUrl: pageUrl ?? null,
-        feedbackId: inserted.id,
-        screenshotBase64: screenshotBase64 ?? null,
-        clientLogs: clientLogs ?? null,
-      });
-
-      if (result.success && result.issueUrl) {
-        githubIssueUrl = result.issueUrl;
-
-        // Update feedback record with GitHub issue URL
-        await this.db
-          .update(schema.feedback)
-          .set({ githubIssueUrl })
-          .where(eq(schema.feedback.id, inserted.id));
-      } else if (!result.success) {
-        this.logger.warn(
-          `GitHub issue not created for feedback #${inserted.id}: ${result.error ?? 'unknown reason'}`,
-        );
-      }
-    } catch (error) {
-      // Log but do not fail the request — local DB save is the fallback
-      this.logger.error(
-        `Failed to create GitHub issue for feedback #${inserted.id}:`,
-        error,
-      );
-    }
+    // Sentry feedback capture is handled client-side via Sentry.captureFeedback().
+    // The local DB save serves as the persistent record.
 
     return {
       id: inserted.id,
       category: inserted.category as FeedbackResponseDto['category'],
       message: inserted.message,
       pageUrl: inserted.pageUrl,
-      githubIssueUrl,
+      githubIssueUrl: null,
       createdAt: inserted.createdAt.toISOString(),
     };
   }
