@@ -102,9 +102,9 @@ function OnboardingGameCard({ game }: OnboardingGameCardProps) {
                 </div>
 
                 {/* Heart icon + count */}
-                <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-1 rounded-full bg-black/50">
+                <div className="absolute top-1 left-1 flex items-center justify-center w-11 h-11 rounded-full bg-black/50">
                     <svg
-                        className={`w-4 h-4 transition-colors ${wantToPlay ? 'text-red-400 fill-red-400' : 'text-white/70'
+                        className={`w-5 h-5 transition-colors ${wantToPlay ? 'text-red-400 fill-red-400' : 'text-white/70'
                             }`}
                         fill={wantToPlay ? 'currentColor' : 'none'}
                         stroke="currentColor"
@@ -113,7 +113,7 @@ function OnboardingGameCard({ game }: OnboardingGameCardProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
                     </svg>
                     {count > 0 && (
-                        <span className="text-[10px] font-bold text-white/90 pr-0.5">{count}</span>
+                        <span className="absolute -bottom-0.5 -right-0.5 text-[10px] font-bold text-white/90 bg-black/70 rounded-full px-1.5 py-0.5">{count}</span>
                     )}
                 </div>
             </div>
@@ -235,7 +235,7 @@ export function GamesStep() {
                 <div className="flex flex-wrap gap-2 justify-center">
                     <button
                         onClick={() => setSelectedGenre(null)}
-                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === null
+                        className={`px-3 py-2.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === null
                             ? 'bg-emerald-600 text-white'
                             : 'bg-panel text-muted hover:bg-overlay'
                             }`}
@@ -248,7 +248,7 @@ export function GamesStep() {
                             onClick={() =>
                                 setSelectedGenre(selectedGenre === genre.id ? null : genre.id)
                             }
-                            className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === genre.id
+                            className={`px-3 py-2.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === genre.id
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-panel text-muted hover:bg-overlay'
                                 }`}

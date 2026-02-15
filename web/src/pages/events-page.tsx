@@ -211,8 +211,8 @@ export function EventsPage() {
                     key={key}
                     onClick={() => setActiveTab(key)}
                     className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${activeTab === key
-                        ? 'bg-surface text-foreground shadow-sm'
-                        : 'text-muted hover:text-foreground'
+                      ? 'bg-surface text-foreground shadow-sm'
+                      : 'text-muted hover:text-foreground'
                       }`}
                   >
                     {label}
@@ -247,7 +247,7 @@ export function EventsPage() {
                     next.delete("gameId");
                     setSearchParams(next);
                   }}
-                  className="relative ml-1 p-0.5 rounded-full hover:bg-violet-500/30 transition-colors before:absolute before:inset-[-10px] before:content-['']"
+                  className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors"
                   aria-label="Clear game filter"
                 >
                   <svg

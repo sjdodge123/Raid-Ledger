@@ -50,7 +50,7 @@ export function AvatarSelectorModal({
                     <h3 className="text-lg font-semibold text-foreground">Choose Avatar</h3>
                     <button
                         onClick={onClose}
-                        className="p-1 text-muted hover:text-foreground transition-colors"
+                        className="flex items-center justify-center min-w-[44px] min-h-[44px] text-muted hover:text-foreground transition-colors"
                         aria-label="Close"
                     >
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
