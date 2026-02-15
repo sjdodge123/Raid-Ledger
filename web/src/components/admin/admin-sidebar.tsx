@@ -7,7 +7,7 @@ import { NewBadge } from '../ui/new-badge';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
 /** Status info for integration sidebar items */
-type IntegrationStatus = 'online' | 'configured' | 'not-configured' | 'loading';
+type IntegrationStatus = 'online' | 'offline' | 'loading';
 
 interface NavItem {
     to: string;
@@ -45,32 +45,31 @@ function buildCoreIntegrationItems(statuses: {
             to: '/admin/settings/integrations',
             label: 'Discord OAuth',
             status: statuses.discord.loading ? 'loading'
-                : statuses.discord.configured ? 'online' : 'not-configured',
+                : statuses.discord.configured ? 'online' : 'offline',
         },
         {
             to: '/admin/settings/integrations/discord-bot',
             label: 'Discord Bot',
             status: statuses.discordBot.loading ? 'loading'
-                : statuses.discordBot.connected ? 'online'
-                    : statuses.discordBot.configured ? 'configured' : 'not-configured',
+                : statuses.discordBot.connected ? 'online' : 'offline',
         },
         {
             to: '/admin/settings/integrations/igdb',
             label: 'IGDB / Twitch',
             status: statuses.igdb.loading ? 'loading'
-                : statuses.igdb.configured ? 'configured' : 'not-configured',
+                : statuses.igdb.configured ? 'online' : 'offline',
         },
         {
             to: '/admin/settings/integrations/relay',
             label: 'Relay Hub',
             status: statuses.relay.loading ? 'loading'
-                : statuses.relay.connected ? 'online' : 'not-configured',
+                : statuses.relay.connected ? 'online' : 'offline',
         },
         {
             to: '/admin/settings/integrations/github',
             label: 'GitHub',
             status: statuses.github.loading ? 'loading'
-                : statuses.github.configured ? 'configured' : 'not-configured',
+                : statuses.github.configured ? 'online' : 'offline',
         },
     ];
 }
@@ -85,7 +84,7 @@ function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[] {
                 to: `/admin/settings/integrations/plugin/${plugin.slug}/${integration.key}`,
                 label: integration.name,
                 newBadgeKey: `integration-nav-seen:${plugin.slug}:${integration.key}`,
-                status: integration.configured ? 'configured' : 'not-configured',
+                status: integration.configured ? 'online' : 'offline',
                 pluginSource: plugin.name,
             });
         }
@@ -128,7 +127,7 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 /**
  * Admin settings sidebar navigation.
  * All sections are always expanded (no accordion collapse).
- * Integration items show at-a-glance status badges (Online, Configured, Not Configured).
+ * Integration items show at-a-glance status badges (Online / Offline).
  * Plugin-installed integrations appear in the Integrations section with "New" badges.
  */
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
@@ -198,8 +197,7 @@ function StatusPill({ status }: { status: IntegrationStatus }) {
 
     const config = {
         online: { label: 'Online', className: 'bg-emerald-500/20 text-emerald-400' },
-        configured: { label: 'Configured', className: 'bg-emerald-500/20 text-emerald-400' },
-        'not-configured': { label: 'Not Configured', className: 'bg-red-500/15 text-red-400' },
+        offline: { label: 'Offline', className: 'bg-red-500/15 text-red-400' },
     } as const;
 
     const { label, className } = config[status];

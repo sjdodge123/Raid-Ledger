@@ -1,8 +1,8 @@
-/* eslint-disable */
+/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
-import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('DiscordBotService', () => {
   let service: DiscordBotService;
@@ -24,6 +24,7 @@ describe('DiscordBotService', () => {
             connect: jest.fn(),
             disconnect: jest.fn(),
             isConnected: jest.fn(),
+            isConnecting: jest.fn(),
             getGuildInfo: jest.fn(),
             sendDirectMessage: jest.fn(),
           },
@@ -186,9 +187,10 @@ describe('DiscordBotService', () => {
   describe('getStatus', () => {
     it('should return status when configured and connected', async () => {
       jest
-        .spyOn(settingsService, 'isDiscordBotConfigured')
-        .mockResolvedValue(true);
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'tok', enabled: true });
       jest.spyOn(clientService, 'isConnected').mockReturnValue(true);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
       jest.spyOn(clientService, 'getGuildInfo').mockReturnValue({
         name: 'Test Guild',
         memberCount: 100,
@@ -199,6 +201,8 @@ describe('DiscordBotService', () => {
       expect(status).toEqual({
         configured: true,
         connected: true,
+        enabled: true,
+        connecting: false,
         guildName: 'Test Guild',
         memberCount: 100,
       });
@@ -206,15 +210,18 @@ describe('DiscordBotService', () => {
 
     it('should return status when configured but not connected', async () => {
       jest
-        .spyOn(settingsService, 'isDiscordBotConfigured')
-        .mockResolvedValue(true);
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'tok', enabled: true });
       jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
 
       const status = await service.getStatus();
 
       expect(status).toEqual({
         configured: true,
         connected: false,
+        enabled: true,
+        connecting: false,
         guildName: undefined,
         memberCount: undefined,
       });
@@ -222,15 +229,18 @@ describe('DiscordBotService', () => {
 
     it('should return status when not configured', async () => {
       jest
-        .spyOn(settingsService, 'isDiscordBotConfigured')
-        .mockResolvedValue(false);
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue(null);
       jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
 
       const status = await service.getStatus();
 
       expect(status).toEqual({
         configured: false,
         connected: false,
+        enabled: undefined,
+        connecting: false,
         guildName: undefined,
         memberCount: undefined,
       });
@@ -238,9 +248,10 @@ describe('DiscordBotService', () => {
 
     it('should handle null guild info', async () => {
       jest
-        .spyOn(settingsService, 'isDiscordBotConfigured')
-        .mockResolvedValue(true);
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'tok', enabled: true });
       jest.spyOn(clientService, 'isConnected').mockReturnValue(true);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
       jest.spyOn(clientService, 'getGuildInfo').mockReturnValue(null);
 
       const status = await service.getStatus();
@@ -248,6 +259,46 @@ describe('DiscordBotService', () => {
       expect(status).toEqual({
         configured: true,
         connected: true,
+        enabled: true,
+        connecting: false,
+        guildName: undefined,
+        memberCount: undefined,
+      });
+    });
+
+    it('should return connecting=true when bot is connecting', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'tok', enabled: true });
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(true);
+
+      const status = await service.getStatus();
+
+      expect(status).toEqual({
+        configured: true,
+        connected: false,
+        enabled: true,
+        connecting: true,
+        guildName: undefined,
+        memberCount: undefined,
+      });
+    });
+
+    it('should return enabled=false when bot is disabled', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'tok', enabled: false });
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
+
+      const status = await service.getStatus();
+
+      expect(status).toEqual({
+        configured: true,
+        connected: false,
+        enabled: false,
+        connecting: false,
         guildName: undefined,
         memberCount: undefined,
       });
@@ -256,16 +307,6 @@ describe('DiscordBotService', () => {
 
   describe('testToken', () => {
     it('should return success when token is valid and bot is in guilds', async () => {
-      // Mock the test client that will be created internally
-      const mockTestClient = {
-        connect: jest.fn().mockResolvedValue(undefined),
-        disconnect: jest.fn().mockResolvedValue(undefined),
-        getGuildInfo: jest.fn().mockReturnValue({
-          name: 'Test Guild',
-          memberCount: 50,
-        }),
-      };
-
       // We need to mock the DiscordBotClientService constructor
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
@@ -305,12 +346,13 @@ describe('DiscordBotService', () => {
       expect(result).toEqual({
         success: true,
         guildName: undefined,
-        message: 'Bot token is valid but not in any guilds',
+        message:
+          'Bot token is valid! Almost done — invite the bot to your Discord server using the OAuth2 URL Generator in the Developer Portal.',
       });
     });
 
-    it('should return failure when token is invalid', async () => {
-      const error = new Error('Invalid token');
+    it('should return friendly message for invalid token', async () => {
+      const error = new Error('TOKEN_INVALID: the token is wrong');
       jest
         .spyOn(DiscordBotClientService.prototype, 'connect')
         .mockRejectedValue(error);
@@ -319,7 +361,7 @@ describe('DiscordBotService', () => {
 
       expect(result).toEqual({
         success: false,
-        message: 'Invalid token',
+        message: 'Invalid bot token. Please check the token and try again.',
       });
     });
 
@@ -329,6 +371,35 @@ describe('DiscordBotService', () => {
         .mockRejectedValue('String error');
 
       const result = await service.testToken('bad-token');
+
+      expect(result).toEqual({
+        success: false,
+        message: 'Failed to connect with provided token',
+      });
+    });
+
+    it('should return friendly message for ECONNREFUSED', async () => {
+      const error = new Error('connect ECONNREFUSED 127.0.0.1:443');
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'connect')
+        .mockRejectedValue(error);
+
+      const result = await service.testToken('refused-token');
+
+      expect(result).toEqual({
+        success: false,
+        message:
+          'Connection to Discord was refused. Try again in a few moments.',
+      });
+    });
+
+    it('should return generic message for unknown errors', async () => {
+      const error = new Error('Something totally unexpected');
+      jest
+        .spyOn(DiscordBotClientService.prototype, 'connect')
+        .mockRejectedValue(error);
+
+      const result = await service.testToken('unknown-error-token');
 
       expect(result).toEqual({
         success: false,

@@ -54,7 +54,7 @@ export function IntegrationCard({
                             : 'bg-red-500/20 text-red-400 shadow-[0_0_12px_rgba(239,68,68,0.4)] animate-pulse'
                         }`}
                 >
-                    {isLoading ? 'Loading...' : isConfigured ? 'Configured' : 'Not Configured'}
+                    {isLoading ? 'Loading...' : isConfigured ? 'Online' : 'Offline'}
                 </div>
             </div>
 

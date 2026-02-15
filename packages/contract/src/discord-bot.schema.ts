@@ -8,6 +8,8 @@ export const DiscordBotConfigSchema = z.object({
 export const DiscordBotStatusSchema = z.object({
     configured: z.boolean(),
     connected: z.boolean(),
+    enabled: z.boolean().optional(),
+    connecting: z.boolean().optional(),
     guildName: z.string().optional(),
     memberCount: z.number().optional(),
 });
