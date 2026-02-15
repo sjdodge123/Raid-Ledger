@@ -1,7 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { useRelaySettings } from '../../hooks/use-relay-settings';
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { NewBadge } from '../ui/new-badge';
 import type { PluginInfoDto } from '@raid-ledger/contract';
@@ -37,8 +36,6 @@ function buildCoreIntegrationItems(statuses: {
     discord: { configured: boolean; loading: boolean };
     discordBot: { connected: boolean; configured: boolean; loading: boolean };
     igdb: { configured: boolean; loading: boolean };
-    relay: { connected: boolean; loading: boolean };
-    github: { configured: boolean; loading: boolean };
 }): NavItem[] {
     return [
         {
@@ -58,18 +55,6 @@ function buildCoreIntegrationItems(statuses: {
             label: 'IGDB / Twitch',
             status: statuses.igdb.loading ? 'loading'
                 : statuses.igdb.configured ? 'online' : 'offline',
-        },
-        {
-            to: '/admin/settings/integrations/relay',
-            label: 'Relay Hub',
-            status: statuses.relay.loading ? 'loading'
-                : statuses.relay.connected ? 'online' : 'offline',
-        },
-        {
-            to: '/admin/settings/integrations/github',
-            label: 'GitHub',
-            status: statuses.github.loading ? 'loading'
-                : statuses.github.configured ? 'online' : 'offline',
         },
     ];
 }
@@ -133,8 +118,7 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { oauthStatus, igdbStatus, githubStatus, discordBotStatus } = useAdminSettings();
-    const { relayStatus } = useRelaySettings();
+    const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
 
     const coreIntegrations = buildCoreIntegrationItems({
         discord: {
@@ -149,14 +133,6 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
             loading: igdbStatus.isLoading,
-        },
-        relay: {
-            connected: relayStatus.data?.connected ?? false,
-            loading: relayStatus.isLoading,
-        },
-        github: {
-            configured: githubStatus.data?.configured ?? false,
-            loading: githubStatus.isLoading,
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);

@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSubmitFeedback } from '../../hooks/use-feedback';
+import { Sentry } from '../../sentry';
 import type {
     FeedbackCategory,
-    FeedbackResponseDto,
     CreateFeedbackDto,
 } from '@raid-ledger/contract';
 
@@ -76,9 +76,6 @@ export function FeedbackWidget() {
     const [message, setMessage] = useState('');
     const [includeClientLogs, setIncludeClientLogs] = useState(true);
     const [showSuccess, setShowSuccess] = useState(false);
-    const [successData, setSuccessData] = useState<FeedbackResponseDto | null>(
-        null,
-    );
 
     // Use ref for submitFeedback.reset to avoid dependency churn in useCallback
     const resetRef = useRef(submitFeedback.reset);
@@ -91,7 +88,6 @@ export function FeedbackWidget() {
         setMessage('');
         setIncludeClientLogs(true);
         setShowSuccess(false);
-        setSuccessData(null);
         resetRef.current();
     }, []);
 
@@ -125,9 +121,35 @@ export function FeedbackWidget() {
             }
         }
 
+        // Dual-send: POST /feedback saves to local DB (persistent record for admin panel),
+        // then Sentry.captureFeedback() forwards to the maintainer's Sentry project
+        // for triaging and automatic GitHub issue creation via Sentry alert rules.
         submitFeedback.mutate(payload, {
             onSuccess: (data) => {
-                setSuccessData(data);
+                // Send feedback to Sentry for maintainer visibility (ROK-306)
+                try {
+                    Sentry.captureFeedback({
+                        message: `[${category.toUpperCase()}] ${message}`,
+                        name: 'User Feedback',
+                    }, {
+                        captureContext: {
+                            tags: {
+                                feedback_category: category,
+                                feedback_id: String(data.id),
+                            },
+                            contexts: {
+                                feedback: {
+                                    pageUrl: window.location.href,
+                                    category,
+                                    feedbackId: data.id,
+                                },
+                            },
+                        },
+                    });
+                } catch {
+                    // Sentry capture is best-effort — don't break the user flow
+                }
+
                 setShowSuccess(true);
             },
         });
@@ -239,43 +261,9 @@ export function FeedbackWidget() {
                                     className="text-sm"
                                     style={{ color: 'var(--color-muted)' }}
                                 >
-                                    We appreciate you helping us improve.
+                                    Your feedback has been recorded and sent to
+                                    the maintainers.
                                 </p>
-                                {successData?.githubIssueUrl && (
-                                    <>
-                                        <a
-                                            href={successData.githubIssueUrl}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="mt-2 inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-                                            style={{
-                                                backgroundColor:
-                                                    'var(--color-overlay)',
-                                                color: 'var(--color-foreground)',
-                                                border: '1px solid var(--color-border)',
-                                            }}
-                                        >
-                                            <svg
-                                                className="h-4 w-4"
-                                                viewBox="0 0 16 16"
-                                                fill="currentColor"
-                                            >
-                                                <path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z" />
-                                            </svg>
-                                            View Issue on GitHub
-                                        </a>
-                                        <p
-                                            className="mt-2 text-center text-xs"
-                                            style={{
-                                                color: 'var(--color-muted)',
-                                            }}
-                                        >
-                                            Have screenshots? Paste them directly
-                                            into the GitHub issue to help
-                                            illustrate the problem.
-                                        </p>
-                                    </>
-                                )}
                             </div>
                         ) : (
                             /* ── Form ── */
@@ -391,14 +379,12 @@ export function FeedbackWidget() {
                                     </label>
                                 )}
 
-                                {/* Screenshot tip */}
+                                {/* Powered by Sentry */}
                                 <p
-                                    className="mb-4 text-xs"
+                                    className="mb-4 flex items-center gap-1 text-xs"
                                     style={{ color: 'var(--color-muted)' }}
                                 >
-                                    Tip: If a GitHub issue is created, you can
-                                    paste screenshots directly into the issue on
-                                    GitHub.
+                                    🛡️ Feedback is tracked via Sentry error monitoring.
                                 </p>
 
                                 {/* Error display */}

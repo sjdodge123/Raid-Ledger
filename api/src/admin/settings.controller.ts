@@ -23,7 +23,6 @@ import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IgdbService } from '../igdb/igdb.service';
 import { DemoDataService } from './demo-data.service';
-import { GitHubService } from '../feedback/github.service';
 import {
   IgdbSyncStatusDto,
   IgdbHealthStatusDto,
@@ -85,12 +84,6 @@ export class IgdbConfigDto {
   clientSecret!: string;
 }
 
-export class GitHubPatDto {
-  @IsString()
-  @IsNotEmpty({ message: 'GitHub Personal Access Token is required' })
-  token!: string;
-}
-
 export interface OAuthTestResponse {
   success: boolean;
   message: string;
@@ -110,7 +103,6 @@ export class AdminSettingsController {
     private readonly settingsService: SettingsService,
     private readonly igdbService: IgdbService,
     private readonly demoDataService: DemoDataService,
-    private readonly githubService: GitHubService,
   ) {}
 
   /**
@@ -695,60 +687,66 @@ export class AdminSettingsController {
 
   // ============================================================
   // ROK-186: GitHub Feedback Integration
+  // @deprecated ROK-306 — Replaced by Sentry error tracking.
+  // These endpoints return deprecation notices; GitHub issue creation
+  // is now handled automatically via Sentry alert rules.
   // ============================================================
 
   /**
-   * GET /admin/settings/github
-   * Returns current GitHub PAT configuration status.
+   * @deprecated ROK-306 — GitHub PAT replaced by Sentry.
    */
   @Get('github')
-  async getGitHubStatus(): Promise<{ configured: boolean }> {
-    const configured = await this.settingsService.isGitHubConfigured();
-    return { configured };
-  }
-
-  /**
-   * PUT /admin/settings/github
-   * Save GitHub Personal Access Token.
-   */
-  @Put('github')
-  @HttpCode(HttpStatus.OK)
-  async updateGitHubConfig(
-    @Body() body: GitHubPatDto,
-  ): Promise<{ success: boolean; message: string }> {
-    await this.settingsService.setGitHubPat(body.token);
-    this.logger.log('GitHub PAT updated via admin UI');
-
+  getGitHubStatus(): {
+    configured: boolean;
+    deprecated: boolean;
+    message: string;
+  } {
     return {
-      success: true,
+      configured: false,
+      deprecated: true,
       message:
-        'GitHub PAT saved. Feedback submissions will now create GitHub issues.',
+        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
     };
   }
 
   /**
-   * POST /admin/settings/github/test
-   * Test GitHub PAT by verifying repo access.
+   * @deprecated ROK-306 — GitHub PAT no longer supported.
    */
-  @Post('github/test')
+  @Put('github')
   @HttpCode(HttpStatus.OK)
-  async testGitHubConfig(): Promise<OAuthTestResponse> {
-    return this.githubService.testConnection();
+  updateGitHubConfig(): { success: boolean; message: string } {
+    return {
+      success: false,
+      message:
+        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306). No configuration needed.',
+    };
   }
 
   /**
-   * POST /admin/settings/github/clear
-   * Remove GitHub PAT configuration.
+   * @deprecated ROK-306 — GitHub PAT test no longer supported.
+   */
+  @Post('github/test')
+  @HttpCode(HttpStatus.OK)
+  testGitHubConfig(): OAuthTestResponse {
+    return {
+      success: false,
+      message:
+        'GitHub PAT integration has been replaced by Sentry error tracking (ROK-306).',
+    };
+  }
+
+  /**
+   * @deprecated ROK-306 — GitHub PAT clear no longer needed.
    */
   @Post('github/clear')
   @HttpCode(HttpStatus.OK)
   async clearGitHubConfig(): Promise<{ success: boolean; message: string }> {
+    // Still clear any existing PAT for cleanup purposes
     await this.settingsService.delete(SETTING_KEYS.GITHUB_PAT);
-    this.logger.log('GitHub PAT cleared via admin UI');
-
     return {
       success: true,
-      message: 'GitHub PAT cleared. Feedback will be stored locally only.',
+      message:
+        'GitHub PAT cleared. Feedback is now handled by Sentry error tracking.',
     };
   }
 }

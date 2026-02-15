@@ -410,66 +410,6 @@ export function useAdminSettings() {
     });
 
     // ============================================================
-    // GitHub Feedback Integration (ROK-186)
-    // ============================================================
-
-    const githubStatus = useQuery<{ configured: boolean }>({
-        queryKey: ['admin', 'settings', 'github'],
-        queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/settings/github`, {
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to fetch GitHub status');
-            return response.json();
-        },
-        enabled: !!getAuthToken(),
-        staleTime: 30_000,
-    });
-
-    const updateGitHub = useMutation<ApiResponse, Error, { token: string }>({
-        mutationFn: async (config) => {
-            const response = await fetch(`${API_BASE_URL}/admin/settings/github`, {
-                method: 'PUT',
-                headers: getHeaders(),
-                body: JSON.stringify(config),
-            });
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: 'Failed to update GitHub configuration' }));
-                throw new Error(error.message || 'Failed to update GitHub configuration');
-            }
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'github'] });
-        },
-    });
-
-    const testGitHub = useMutation<ApiResponse, Error>({
-        mutationFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/settings/github/test`, {
-                method: 'POST',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to test GitHub configuration');
-            return response.json();
-        },
-    });
-
-    const clearGitHub = useMutation<ApiResponse, Error>({
-        mutationFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/settings/github/clear`, {
-                method: 'POST',
-                headers: getHeaders(),
-            });
-            if (!response.ok) throw new Error('Failed to clear GitHub configuration');
-            return response.json();
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'github'] });
-        },
-    });
-
-    // ============================================================
     // Discord Bot (ROK-117)
     // ============================================================
 
@@ -559,10 +499,6 @@ export function useAdminSettings() {
         demoDataStatus,
         installDemoData,
         clearDemoData,
-        githubStatus,
-        updateGitHub,
-        testGitHub,
-        clearGitHub,
         discordBotStatus,
         updateDiscordBot,
         testDiscordBot,

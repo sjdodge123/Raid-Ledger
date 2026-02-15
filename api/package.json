@@ -35,6 +35,7 @@
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/throttler": "^6.5.0",
     "@raid-ledger/contract": "*",
+    "@sentry/nestjs": "^10.38.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^5.68.0",
     "class-transformer": "^0.5.1",

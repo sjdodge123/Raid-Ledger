@@ -26,6 +26,7 @@ import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { VersionModule } from './version/version.module';
 import { DiscordBotModule } from './discord-bot/discord-bot.module';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { CronJobModule } from './cron-jobs/cron-job.module';
 
 @Module({
@@ -54,9 +55,10 @@ import { CronJobModule } from './cron-jobs/cron-job.module';
     FeedbackModule,
     VersionModule,
     DiscordBotModule,
+    SentryModule.forRoot(),
     CronJobModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }
