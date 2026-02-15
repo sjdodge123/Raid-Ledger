@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Outlet, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin as isAdminCheck } from '../../hooks/use-auth';
 import { AdminSidebar } from './admin-sidebar';
+import { Z_INDEX } from '../../lib/z-index';
 
 /**
  * Admin Settings layout — sidebar + content area with nested <Outlet />.
@@ -103,7 +104,8 @@ export function AdminSettingsLayout() {
             </div>
 
             <div
-                className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                className={`fixed inset-0 md:hidden ${mobileOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                style={{ zIndex: Z_INDEX.MODAL }}
                 aria-hidden={!mobileOpen}
             >
                 {/* Backdrop */}

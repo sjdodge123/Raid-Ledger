@@ -7,6 +7,7 @@ import { NotificationBell } from '../notifications';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
+import { Z_INDEX } from '../../lib/z-index';
 
 /**
  * Site header with logo, navigation, and user menu (ROK-271 branding).
@@ -32,7 +33,7 @@ export function Header() {
 
     return (
         <>
-            <header className="sticky top-0 z-40 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle">
+            <header className="sticky top-0 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle" style={{ zIndex: Z_INDEX.HEADER }}>
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                     {/* Logo (ROK-271: custom branding) */}
                     <Link
