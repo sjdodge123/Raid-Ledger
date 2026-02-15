@@ -106,9 +106,8 @@ export function PluginCard({
                     {plugin.integrations.map((integration) => (
                         <div key={integration.key} className="flex items-center gap-1.5">
                             <div
-                                className={`w-2 h-2 rounded-full ${
-                                    integration.configured ? 'bg-emerald-400' : 'bg-red-400'
-                                }`}
+                                className={`w-2 h-2 rounded-full ${integration.configured ? 'bg-emerald-400' : 'bg-red-400'
+                                    }`}
                             />
                             <span className="text-secondary">{integration.name}</span>
                         </div>
@@ -129,7 +128,7 @@ export function PluginCard({
                     <button
                         onClick={() => onInstall(plugin.slug)}
                         disabled={isPending}
-                        className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
+                        className="px-3 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
                     >
                         Install
                     </button>
@@ -138,7 +137,7 @@ export function PluginCard({
                     <button
                         onClick={() => onDeactivate(plugin.slug)}
                         disabled={isPending}
-                        className="px-3 py-1.5 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
+                        className="px-3 py-2.5 text-sm bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
                     >
                         Deactivate
                     </button>
@@ -148,14 +147,14 @@ export function PluginCard({
                         <button
                             onClick={() => onActivate(plugin.slug)}
                             disabled={isPending}
-                            className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
+                            className="px-3 py-2.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors"
                         >
                             Activate
                         </button>
                         <button
                             onClick={() => onUninstall(plugin.slug)}
                             disabled={isPending}
-                            className="px-3 py-1.5 text-sm bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-colors border border-red-600/50"
+                            className="px-3 py-2.5 text-sm bg-red-600/20 hover:bg-red-600/30 text-red-400 font-medium rounded-lg transition-colors border border-red-600/50"
                         >
                             Uninstall
                         </button>
