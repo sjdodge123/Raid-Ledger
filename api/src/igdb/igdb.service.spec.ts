@@ -7,6 +7,7 @@ import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { SettingsService } from '../settings/settings.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 // Mock fetch globally
 const mockFetch = jest.fn();
@@ -103,6 +104,7 @@ describe('IgdbService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
+        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
       ],
     }).compile();
 

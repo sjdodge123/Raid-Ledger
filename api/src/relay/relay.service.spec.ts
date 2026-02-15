@@ -3,6 +3,7 @@ import { RelayService } from './relay.service';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 // Mock global fetch
 const mockFetch = jest.fn();
@@ -30,6 +31,7 @@ describe('RelayService', () => {
         RelayService,
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
       ],
     }).compile();
 

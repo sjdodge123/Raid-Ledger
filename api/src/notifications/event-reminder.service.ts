@@ -5,6 +5,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /** Hour (0-23) at which day-of reminders fire in the user's local timezone */
 const DAY_OF_HOUR = 9;
@@ -32,6 +33,7 @@ export class EventReminderService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /**
@@ -39,38 +41,45 @@ export class EventReminderService {
    * Checks if it's currently the target hour (9am) in each signed-up user's timezone.
    * If so, sends a day-of reminder for every event they're signed up for today.
    */
-  @Cron('0 */15 * * * *')
+  @Cron('0 */15 * * * *', { name: 'EventReminderService_handleDayOfReminders' })
   async handleDayOfReminders() {
-    this.logger.debug('Running day-of reminder check...');
+    await this.cronJobService.executeWithTracking(
+      'EventReminderService_handleDayOfReminders',
+      async () => {
+        this.logger.debug('Running day-of reminder check...');
 
-    const userTimezones = await this.getUserTimezones();
-    if (userTimezones.length === 0) return;
+        const userTimezones = await this.getUserTimezones();
+        if (userTimezones.length === 0) return;
 
-    const now = new Date();
+        const now = new Date();
 
-    // Find users whose local time is currently in the target hour
-    const eligibleUserIds: number[] = [];
-    for (const { userId, timezone } of userTimezones) {
-      if (this.isTargetHour(now, timezone, DAY_OF_HOUR)) {
-        eligibleUserIds.push(userId);
-      }
-    }
+        // Find users whose local time is currently in the target hour
+        const eligibleUserIds: number[] = [];
+        for (const { userId, timezone } of userTimezones) {
+          if (this.isTargetHour(now, timezone, DAY_OF_HOUR)) {
+            eligibleUserIds.push(userId);
+          }
+        }
 
-    if (eligibleUserIds.length === 0) return;
+        if (eligibleUserIds.length === 0) return;
 
-    this.logger.debug(`Day-of: ${eligibleUserIds.length} users at target hour`);
+        this.logger.debug(
+          `Day-of: ${eligibleUserIds.length} users at target hour`,
+        );
 
-    // For each eligible user, find events today in their timezone that they're signed up for
-    for (const { userId, timezone } of userTimezones) {
-      if (!eligibleUserIds.includes(userId)) continue;
+        // For each eligible user, find events today in their timezone that they're signed up for
+        for (const { userId, timezone } of userTimezones) {
+          if (!eligibleUserIds.includes(userId)) continue;
 
-      const todayRange = this.getTodayRange(now, timezone);
-      await this.sendDayOfRemindersForUser(
-        userId,
-        todayRange.start,
-        todayRange.end,
-      );
-    }
+          const todayRange = this.getTodayRange(now, timezone);
+          await this.sendDayOfRemindersForUser(
+            userId,
+            todayRange.start,
+            todayRange.end,
+          );
+        }
+      },
+    );
   }
 
   /**
@@ -81,76 +90,80 @@ export class EventReminderService {
    * proper tsrange→Date conversion) then filters in JS, avoiding timezone
    * mismatches from raw SQL `lower(duration)` strings.
    */
-  @Cron('0 */5 * * * *')
+  @Cron('0 */5 * * * *', {
+    name: 'EventReminderService_handleStartingSoonReminders',
+  })
   async handleStartingSoonReminders() {
-    this.logger.debug('Running starting-soon reminder check...');
+    await this.cronJobService.executeWithTracking(
+      'EventReminderService_handleStartingSoonReminders',
+      async () => {
+        this.logger.debug('Running starting-soon reminder check...');
 
-    const now = new Date();
-    const windowMs = 35 * 60 * 1000; // 35 minutes
+        const now = new Date();
+        const windowMs = 35 * 60 * 1000; // 35 minutes
 
-    // Fetch all events and filter in JS.
-    // The tsrange column uses a custom fromDriver that adjusts timezone interpretation,
-    // so SQL-level timestamp comparisons are unreliable. JS filtering on the
-    // fromDriver-converted Dates is the correct approach for a community-scale app.
-    const candidateEvents = await this.db
-      .select({
-        id: schema.events.id,
-        title: schema.events.title,
-        duration: schema.events.duration,
-      })
-      .from(schema.events);
+        // Fetch all events and filter in JS.
+        const candidateEvents = await this.db
+          .select({
+            id: schema.events.id,
+            title: schema.events.title,
+            duration: schema.events.duration,
+          })
+          .from(schema.events);
 
-    // Filter precisely in JS using fromDriver-converted Dates
-    const upcomingEvents = candidateEvents.filter((event) => {
-      const startTime = event.duration[0];
-      const msUntil = startTime.getTime() - now.getTime();
-      return msUntil >= 0 && msUntil <= windowMs;
-    });
-
-    if (upcomingEvents.length === 0) return;
-
-    this.logger.debug(
-      `Starting-soon: ${upcomingEvents.length} events in window`,
-    );
-
-    const eventIds = upcomingEvents.map((e) => e.id);
-
-    // Get all signups for these events
-    const signups = await this.db
-      .select({
-        eventId: schema.eventSignups.eventId,
-        userId: schema.eventSignups.userId,
-      })
-      .from(schema.eventSignups)
-      .where(inArray(schema.eventSignups.eventId, eventIds));
-
-    // Group signups by event
-    const signupsByEvent = new Map<number, number[]>();
-    for (const signup of signups) {
-      if (!signupsByEvent.has(signup.eventId)) {
-        signupsByEvent.set(signup.eventId, []);
-      }
-      signupsByEvent.get(signup.eventId)!.push(signup.userId);
-    }
-
-    // Send reminders
-    for (const event of upcomingEvents) {
-      const userIds = signupsByEvent.get(event.id) ?? [];
-      const startTime = event.duration[0];
-      const minutesUntil = Math.round(
-        (startTime.getTime() - now.getTime()) / 60000,
-      );
-
-      for (const userId of userIds) {
-        await this.sendReminder({
-          eventId: event.id,
-          userId,
-          reminderType: 'starting_soon',
-          title: `${event.title} starting soon`,
-          message: `${event.title} starts in about ${minutesUntil} minutes.`,
+        // Filter precisely in JS using fromDriver-converted Dates
+        const upcomingEvents = candidateEvents.filter((event) => {
+          const startTime = event.duration[0];
+          const msUntil = startTime.getTime() - now.getTime();
+          return msUntil >= 0 && msUntil <= windowMs;
         });
-      }
-    }
+
+        if (upcomingEvents.length === 0) return;
+
+        this.logger.debug(
+          `Starting-soon: ${upcomingEvents.length} events in window`,
+        );
+
+        const eventIds = upcomingEvents.map((e) => e.id);
+
+        // Get all signups for these events
+        const signups = await this.db
+          .select({
+            eventId: schema.eventSignups.eventId,
+            userId: schema.eventSignups.userId,
+          })
+          .from(schema.eventSignups)
+          .where(inArray(schema.eventSignups.eventId, eventIds));
+
+        // Group signups by event
+        const signupsByEvent = new Map<number, number[]>();
+        for (const signup of signups) {
+          if (!signupsByEvent.has(signup.eventId)) {
+            signupsByEvent.set(signup.eventId, []);
+          }
+          signupsByEvent.get(signup.eventId)!.push(signup.userId);
+        }
+
+        // Send reminders
+        for (const event of upcomingEvents) {
+          const userIds = signupsByEvent.get(event.id) ?? [];
+          const startTime = event.duration[0];
+          const minutesUntil = Math.round(
+            (startTime.getTime() - now.getTime()) / 60000,
+          );
+
+          for (const userId of userIds) {
+            await this.sendReminder({
+              eventId: event.id,
+              userId,
+              reminderType: 'starting_soon',
+              title: `${event.title} starting soon`,
+              message: `${event.title} starts in about ${minutesUntil} minutes.`,
+            });
+          }
+        }
+      },
+    );
   }
 
   /**

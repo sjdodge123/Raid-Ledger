@@ -100,6 +100,7 @@ function buildNavSections(coreIntegrations: NavItem[], pluginIntegrations: NavIt
                 { to: '/admin/settings/general', label: 'Site Settings' },
                 { to: '/admin/settings/general/roles', label: 'Role Management' },
                 { to: '/admin/settings/general/data', label: 'Demo Data' },
+                { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
             ]
         },
         {

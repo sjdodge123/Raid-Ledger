@@ -30,3 +30,36 @@ export const DemoDataResultSchema = z.object({
 });
 
 export type DemoDataResultDto = z.infer<typeof DemoDataResultSchema>;
+
+/**
+ * Cron Job Manager schemas (ROK-310)
+ * Shared types for admin cron job monitoring and management.
+ */
+
+export const CronJobSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  source: z.enum(['core', 'plugin', 'bullmq']),
+  pluginSlug: z.string().nullable(),
+  cronExpression: z.string(),
+  description: z.string().nullable(),
+  paused: z.boolean(),
+  lastRunAt: z.string().nullable(),
+  nextRunAt: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export type CronJobDto = z.infer<typeof CronJobSchema>;
+
+export const CronJobExecutionSchema = z.object({
+  id: z.number(),
+  cronJobId: z.number(),
+  status: z.enum(['completed', 'failed', 'skipped']),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+  durationMs: z.number().nullable(),
+  error: z.string().nullable(),
+});
+
+export type CronJobExecutionDto = z.infer<typeof CronJobExecutionSchema>;

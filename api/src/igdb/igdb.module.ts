@@ -8,6 +8,7 @@ import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { RedisModule } from '../redis/redis.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SettingsModule } from '../settings/settings.module';
     RedisModule,
     SettingsModule,
     BullModule.registerQueue({ name: IGDB_SYNC_QUEUE }),
+    CronJobModule,
   ],
   controllers: [IgdbController],
   providers: [IgdbService, IgdbSyncProcessor],
