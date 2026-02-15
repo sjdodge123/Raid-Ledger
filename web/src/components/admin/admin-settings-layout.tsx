@@ -17,15 +17,20 @@ export function AdminSettingsLayout() {
 
     const closeMobile = useCallback(() => setMobileOpen(false), []);
 
-    // Close mobile drawer on Escape
+    // Close mobile drawer on Escape and lock body scroll
     useEffect(() => {
         if (!mobileOpen) return;
         function handleEscape(e: KeyboardEvent) {
             if (e.key === 'Escape') setMobileOpen(false);
         }
         document.addEventListener('keydown', handleEscape);
-        return () => document.removeEventListener('keydown', handleEscape);
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', handleEscape);
+            document.body.style.overflow = '';
+        };
     }, [mobileOpen]);
+
 
     // Redirect bare /admin/settings to /admin/settings/general
     if (location.pathname === '/admin/settings') {
@@ -69,7 +74,7 @@ export function AdminSettingsLayout() {
             <div className="flex items-center gap-3 mb-6">
                 <button
                     type="button"
-                    className="lg:hidden p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
+                    className="md:hidden p-2 -ml-2 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
                     onClick={() => setMobileOpen(true)}
                     aria-label="Open settings menu"
                 >
@@ -85,7 +90,7 @@ export function AdminSettingsLayout() {
 
             <div className="flex gap-6">
                 {/* Desktop sidebar */}
-                <aside className="hidden lg:block w-56 flex-shrink-0">
+                <aside className="hidden md:block w-56 flex-shrink-0">
                     <div className="sticky top-24">
                         <AdminSidebar />
                     </div>
@@ -97,33 +102,34 @@ export function AdminSettingsLayout() {
                 </main>
             </div>
 
-            {/* Mobile drawer overlay */}
-            {mobileOpen && (
-                <div className="fixed inset-0 z-50 lg:hidden">
-                    {/* Backdrop */}
-                    <div
-                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-                        onClick={closeMobile}
-                    />
-                    {/* Drawer */}
-                    <div className="absolute inset-y-0 left-0 w-72 bg-surface border-r border-edge shadow-2xl">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
-                            <span className="font-semibold text-foreground text-sm">Settings</span>
-                            <button
-                                type="button"
-                                onClick={closeMobile}
-                                className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
-                                aria-label="Close settings menu"
-                            >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
-                            </button>
-                        </div>
-                        <AdminSidebar onNavigate={closeMobile} />
+            <div
+                className={`fixed inset-0 z-50 md:hidden ${mobileOpen ? 'visible' : 'invisible pointer-events-none'}`}
+                aria-hidden={!mobileOpen}
+            >
+                {/* Backdrop */}
+                <div
+                    className={`absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity duration-200 ${mobileOpen ? 'opacity-100' : 'opacity-0'}`}
+                    onClick={closeMobile}
+                    aria-hidden="true"
+                />
+                {/* Drawer */}
+                <div className={`absolute top-0 right-0 w-72 h-full bg-surface border-l border-edge-subtle shadow-2xl transform transition-transform duration-200 ease-out ${mobileOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-edge-subtle">
+                        <span className="font-semibold text-foreground text-sm">Settings</span>
+                        <button
+                            type="button"
+                            onClick={closeMobile}
+                            className="p-1 rounded-lg text-muted hover:text-foreground hover:bg-overlay/30 transition-colors"
+                            aria-label="Close settings menu"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
                     </div>
+                    <AdminSidebar onNavigate={closeMobile} />
                 </div>
-            )}
+            </div>
         </div>
     );
 }
