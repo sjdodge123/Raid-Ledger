@@ -4,6 +4,7 @@ import { useEvents } from "../hooks/use-events";
 import { useAuth } from "../hooks/use-auth";
 import { useGameTime } from "../hooks/use-game-time";
 import { EventCard, EventCardSkeleton } from "../components/events/event-card";
+import { MobileEventCard, MobileEventCardSkeleton } from "../components/events/mobile-event-card";
 import { EventsEmptyState } from "../components/events/events-empty-state";
 import { EventsMobileToolbar, type EventsTab } from "../components/events/events-mobile-toolbar";
 import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
@@ -304,8 +305,8 @@ export function EventsPage() {
             </div>
           )}
 
-          {/* Events Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {/* Events Grid — Desktop (≥md) */}
+          <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {isLoading ? (
               Array.from({ length: 8 }).map((_, i) => (
                 <EventCardSkeleton key={i} />
@@ -329,6 +330,41 @@ export function EventsPage() {
             ) : (
               (displayEvents ?? data?.data)?.map((event) => (
                 <EventCard
+                  key={event.id}
+                  event={event}
+                  signupCount={event.signupCount}
+                  matchesGameTime={overlapSet?.has(event.id)}
+                  onClick={() => navigate(`/events/${event.id}`)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Events List — Mobile (<md) */}
+          <div className="md:hidden space-y-3">
+            {isLoading ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <MobileEventCardSkeleton key={i} />
+              ))
+            ) : (displayEvents ?? data?.data)?.length === 0 ? (
+              filterGameTime ? (
+                <div className="text-center py-12">
+                  <p className="text-muted">
+                    No events match your game time schedule.
+                  </p>
+                  <button
+                    onClick={() => setFilterGameTime(false)}
+                    className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    Clear filter
+                  </button>
+                </div>
+              ) : (
+                <EventsEmptyState />
+              )
+            ) : (
+              (displayEvents ?? data?.data)?.map((event) => (
+                <MobileEventCard
                   key={event.id}
                   event={event}
                   signupCount={event.signupCount}

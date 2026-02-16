@@ -5,6 +5,7 @@ import { useDebouncedValue } from "../hooks/use-debounced-value";
 import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
 import { GameCarousel } from "../components/games/GameCarousel";
 import { GameCard } from "../components/games/GameCard";
+import { MobileGameCard } from "../components/games/mobile-game-card";
 import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import type { GameDetailDto } from "@raid-ledger/contract";
@@ -75,9 +76,9 @@ export function GamesPage() {
   return (
     <div>
       <GamesMobileToolbar
-        activeTab={activeTab === "manage" ? "library" : "discover"}
-        onTabChange={(tab) => setActiveTab(tab === "library" ? "manage" : "discover")}
-        showLibraryTab={canManage}
+        activeTab={activeTab === "manage" ? "manage" : "discover"}
+        onTabChange={(tab) => setActiveTab(tab)}
+        showManageTab={canManage}
       />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -93,7 +94,7 @@ export function GamesPage() {
 
         {/* Admin tab toggle */}
         {canManage && (
-          <div className="flex rounded-lg bg-panel/50 border border-edge p-1 w-fit mb-6">
+          <div className="hidden md:flex rounded-lg bg-panel/50 border border-edge p-1 w-fit mb-6">
             <button
               type="button"
               onClick={() => setActiveTab("discover")}
@@ -204,7 +205,7 @@ export function GamesPage() {
 
             {/* Content */}
             {isSearching ? (
-              // Search results grid
+              // Search results
               <div>
                 {searchLoading ? (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -216,11 +217,20 @@ export function GamesPage() {
                     ))}
                   </div>
                 ) : searchResults && searchResults.length > 0 ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {searchResults.map((game) => (
-                      <GameCard key={game.id} game={game} />
-                    ))}
-                  </div>
+                  <>
+                    {/* Desktop grid */}
+                    <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      {searchResults.map((game) => (
+                        <GameCard key={game.id} game={game} />
+                      ))}
+                    </div>
+                    {/* Mobile grid */}
+                    <div className="md:hidden grid grid-cols-2 gap-3">
+                      {searchResults.map((game) => (
+                        <MobileGameCard key={game.id} game={game} />
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center py-16">
                     <p className="text-muted text-lg">
@@ -250,13 +260,31 @@ export function GamesPage() {
                     </div>
                   ))
                 ) : filteredRows && filteredRows.length > 0 ? (
-                  filteredRows.map((row) => (
-                    <GameCarousel
-                      key={row.slug}
-                      category={row.category}
-                      games={row.games}
-                    />
-                  ))
+                  <>
+                    {/* Desktop: carousels */}
+                    <div className="hidden md:block space-y-8">
+                      {filteredRows.map((row) => (
+                        <GameCarousel
+                          key={row.slug}
+                          category={row.category}
+                          games={row.games}
+                        />
+                      ))}
+                    </div>
+                    {/* Mobile: 2-column grid of all games */}
+                    <div className="md:hidden">
+                      {filteredRows.map((row) => (
+                        <div key={row.slug} className="mb-6">
+                          <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
+                          <div className="grid grid-cols-2 gap-3">
+                            {row.games.map((game) => (
+                              <MobileGameCard key={game.id} game={game} />
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center py-16">
                     <p className="text-muted text-lg">
