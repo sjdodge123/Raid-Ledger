@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useGameTimeEditor } from '../../../hooks/use-game-time-editor';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useCreateAbsence, useDeleteAbsence } from '../../../hooks/use-game-time';
 import { GameTimeGrid } from './GameTimeGrid';
+import { GameTimeMobileEditor } from './GameTimeMobileEditor';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
@@ -33,6 +35,7 @@ export function GameTimePanel({
     // Profile mode never uses rolling week — it's a static weekly template
     const effectiveRolling = mode === 'profile' ? false : rolling;
     const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
+    const isMobile = useMediaQuery('(max-width: 767px)');
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
     const [showAbsenceForm, setShowAbsenceForm] = useState(false);
     const [absenceStartDate, setAbsenceStartDate] = useState('');
@@ -202,24 +205,33 @@ export function GameTimePanel({
                 </div>
             )}
 
-            <GameTimeGrid
-                slots={editor.slots}
-                onChange={isReadOnly ? undefined : editor.handleChange}
-                readOnly={isReadOnly}
-                tzLabel={editor.tzLabel}
-                hourRange={hourRange}
-                fullDayNames={mode === 'profile'}
-                {...(mode !== 'profile' ? {
-                    events: editor.events,
-                    onEventClick: handleEventClick,
-                    previewBlocks,
-                    todayIndex: editor.todayIndex,
-                    currentHour: editor.currentHour,
-                    nextWeekEvents: editor.nextWeekEvents,
-                    nextWeekSlots: editor.nextWeekSlots,
-                    weekStart: editor.weekStart,
-                } : {})}
-            />
+            {isMobile ? (
+                <GameTimeMobileEditor
+                    slots={editor.slots}
+                    onChange={editor.handleChange}
+                    readOnly={isReadOnly}
+                    tzLabel={editor.tzLabel}
+                />
+            ) : (
+                <GameTimeGrid
+                    slots={editor.slots}
+                    onChange={isReadOnly ? undefined : editor.handleChange}
+                    readOnly={isReadOnly}
+                    tzLabel={editor.tzLabel}
+                    hourRange={hourRange}
+                    fullDayNames={mode === 'profile'}
+                    {...(mode !== 'profile' ? {
+                        events: editor.events,
+                        onEventClick: handleEventClick,
+                        previewBlocks,
+                        todayIndex: editor.todayIndex,
+                        currentHour: editor.currentHour,
+                        nextWeekEvents: editor.nextWeekEvents,
+                        nextWeekSlots: editor.nextWeekSlots,
+                        weekStart: editor.weekStart,
+                    } : {})}
+                />
+            )}
 
             {/* Event block popover (not used in profile mode) */}
             {mode !== 'profile' && popoverEvent && (
