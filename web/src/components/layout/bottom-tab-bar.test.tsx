@@ -83,4 +83,10 @@ describe('BottomTabBar', () => {
         const gamesLink = screen.getByText('Games').closest('a')!;
         expect(gamesLink).toHaveAttribute('href', '/games');
     });
+
+    it('has inline transition style for scroll-aware animation', () => {
+        renderWithRouter(<BottomTabBar />);
+        const nav = screen.getByRole('navigation', { name: 'Main navigation' });
+        expect(nav).toHaveStyle({ transition: 'transform 300ms ease-in-out' });
+    });
 });
