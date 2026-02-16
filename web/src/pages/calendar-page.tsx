@@ -96,7 +96,7 @@ export function CalendarPage() {
     };
 
     return (
-        <div>
+        <div className="pb-20 md:pb-0">
             <CalendarMobileToolbar activeView={calendarView} onViewChange={setCalendarView} />
 
             <div className="max-w-7xl mx-auto px-4 py-6">

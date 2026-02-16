@@ -66,8 +66,11 @@ hookConsole();
 /**
  * Floating feedback widget — available to all authenticated users.
  * ROK-186: User Feedback Widget.
+ *
+ * On mobile the floating trigger is hidden; the MobileNav drawer
+ * opens the dialog via the onRegisterOpen callback instead.
  */
-export function FeedbackWidget() {
+export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: () => void) => void }) {
     const { isAuthenticated } = useAuth();
     const submitFeedback = useSubmitFeedback();
 
@@ -97,6 +100,11 @@ export function FeedbackWidget() {
         reset();
         setIsOpen(true);
     }, [reset]);
+
+    // Expose handleOpen to parent so MobileNav can trigger it
+    useEffect(() => {
+        onRegisterOpen?.(handleOpen);
+    }, [handleOpen, onRegisterOpen]);
 
     const handleClose = useCallback(() => {
         setIsOpen(false);
@@ -163,7 +171,7 @@ export function FeedbackWidget() {
             {/* Floating trigger button */}
             <button
                 onClick={handleOpen}
-                className="fixed bottom-6 right-6 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95"
+                className="hidden md:flex fixed bottom-6 right-6 z-40 h-12 w-12 items-center justify-center rounded-full shadow-lg transition-all hover:scale-110 active:scale-95"
                 style={{
                     backgroundColor: 'var(--color-accent)',
                     color: 'white',
@@ -186,7 +194,7 @@ export function FeedbackWidget() {
             {/* Modal overlay */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 z-50 flex items-end justify-end p-4 sm:items-center sm:justify-center"
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4"
                     onClick={(e) => {
                         if (e.target === e.currentTarget) handleClose();
                     }}

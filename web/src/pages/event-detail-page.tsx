@@ -211,7 +211,7 @@ export function EventDetailPage() {
     const pendingSignups = (roster?.signups.filter(s => s.confirmationStatus === 'pending') || []).sort(alphabetical);
 
     return (
-        <div className="event-detail-page">
+        <div className="event-detail-page pb-20 md:pb-0">
             {/* Back button + Edit button row */}
             <div className="event-detail-topbar">
                 <button
@@ -419,39 +419,39 @@ export function EventDetailPage() {
                         <h3><span role="img" aria-hidden="true">✓</span> Confirmed ({confirmedSignups.length})</h3>
                         <div className="space-y-2">
                             {confirmedSignups.map(signup => (
-                                    <div key={signup.id} className="space-y-1">
-                                        <div className="flex items-center gap-2">
-                                            <UserLink
-                                                userId={signup.user.id}
-                                                username={signup.user.username}
-                                                user={toAvatarUser(signup.user)}
-                                                showAvatar
-                                                size="md"
-                                            />
-                                            <PluginSlot
-                                                name="event-detail:signup-warnings"
-                                                context={{
-                                                    characterLevel: signup.character?.level,
-                                                    contentInstances: event.contentInstances ?? [],
-                                                    gameSlug: event.game?.slug,
-                                                }}
-                                            />
-                                        </div>
-                                        {signup.character && (
-                                            <CharacterCardCompact
-                                                id={signup.character.id}
-                                                name={signup.character.name}
-                                                avatarUrl={signup.character.avatarUrl}
-                                                faction={signup.character.faction}
-                                                level={signup.character.level}
-                                                race={signup.character.race}
-                                                className={signup.character.class}
-                                                spec={signup.character.spec}
-                                                role={signup.character.role}
-                                                itemLevel={signup.character.itemLevel}
-                                            />
-                                        )}
+                                <div key={signup.id} className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        <UserLink
+                                            userId={signup.user.id}
+                                            username={signup.user.username}
+                                            user={toAvatarUser(signup.user)}
+                                            showAvatar
+                                            size="md"
+                                        />
+                                        <PluginSlot
+                                            name="event-detail:signup-warnings"
+                                            context={{
+                                                characterLevel: signup.character?.level,
+                                                contentInstances: event.contentInstances ?? [],
+                                                gameSlug: event.game?.slug,
+                                            }}
+                                        />
                                     </div>
+                                    {signup.character && (
+                                        <CharacterCardCompact
+                                            id={signup.character.id}
+                                            name={signup.character.name}
+                                            avatarUrl={signup.character.avatarUrl}
+                                            faction={signup.character.faction}
+                                            level={signup.character.level}
+                                            race={signup.character.race}
+                                            className={signup.character.class}
+                                            spec={signup.character.spec}
+                                            role={signup.character.role}
+                                            itemLevel={signup.character.itemLevel}
+                                        />
+                                    )}
+                                </div>
                             ))}
                         </div>
                     </div>

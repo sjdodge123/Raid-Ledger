@@ -124,18 +124,7 @@ export function CalendarView({
         }, { replace: true });
     }, [currentDate, setSearchParams]);
 
-    // Scroll page to current time indicator when entering week/day view
-    useEffect(() => {
-        if (view !== Views.WEEK && view !== Views.DAY) return;
-        // Wait for RBC to render the time grid
-        const timer = setTimeout(() => {
-            const indicator = document.querySelector('.rbc-current-time-indicator');
-            if (indicator) {
-                indicator.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }
-        }, 100);
-        return () => clearTimeout(timer);
-    }, [view]);
+
 
     // Calculate date range for current view (month, week, or day)
     const { startAfter, endBefore } = useMemo(() => {

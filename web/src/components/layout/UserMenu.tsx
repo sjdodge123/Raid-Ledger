@@ -156,15 +156,29 @@ export function UserMenu() {
 
             {isOpen && (
                 <div className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
-                    <div className="p-3 border-b border-edge">
+                    <Link
+                        to="/profile"
+                        className="block p-3 border-b border-edge hover:bg-panel/50 transition-colors"
+                        onClick={() => setIsOpen(false)}
+                    >
                         <div className="flex items-center gap-2">
-                            <p className="text-foreground font-medium">{user.username}</p>
-                            <RoleBadge role={user.role} />
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <p className="text-foreground font-medium">{user.username}</p>
+                                    <RoleBadge role={user.role} />
+                                </div>
+                                {isImpersonating ? (
+                                    <p className="text-amber-400 text-xs mt-0.5">Impersonating</p>
+                                ) : (
+                                    <p className="text-xs text-muted mt-0.5">View Profile</p>
+                                )}
+                            </div>
+                            <svg className="w-4 h-4 text-muted shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                         </div>
-                        {isImpersonating && (
-                            <p className="text-amber-400 text-xs mt-1">Impersonating</p>
-                        )}
-                    </div>
+                    </Link>
+
                     <div className="py-1">
                         {/* Exit impersonation (shown when impersonating) */}
                         {isImpersonating && (
@@ -178,14 +192,6 @@ export function UserMenu() {
                                 Exit Impersonation
                             </button>
                         )}
-
-                        <Link
-                            to="/profile"
-                            className="block px-4 py-2 text-secondary hover:bg-panel hover:text-foreground transition-colors"
-                            onClick={() => setIsOpen(false)}
-                        >
-                            Profile
-                        </Link>
 
                         {isAdmin(user) && !isImpersonating && (
                             <Link
