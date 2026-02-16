@@ -27,7 +27,7 @@ export const Z_INDEX = {
     /** Bottom sheets (game filter, settings) */
     BOTTOM_SHEET: 45,
 
-    /** Modals, drawers, overlays, MobileNav */
+    /** Modals, drawers, overlays, MoreDrawer */
     MODAL: 50,
 
     /** Toast notifications (highest layer) */

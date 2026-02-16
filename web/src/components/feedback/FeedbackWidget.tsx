@@ -67,7 +67,7 @@ hookConsole();
  * Floating feedback widget — available to all authenticated users.
  * ROK-186: User Feedback Widget.
  *
- * On mobile the floating trigger is hidden; the MobileNav drawer
+ * On mobile the floating trigger is hidden; the MoreDrawer
  * opens the dialog via the onRegisterOpen callback instead.
  */
 export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: () => void) => void }) {
@@ -101,7 +101,7 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
         setIsOpen(true);
     }, [reset]);
 
-    // Expose handleOpen to parent so MobileNav can trigger it
+    // Expose handleOpen to parent so MoreDrawer can trigger it
     useEffect(() => {
         onRegisterOpen?.(handleOpen);
     }, [handleOpen, onRegisterOpen]);
