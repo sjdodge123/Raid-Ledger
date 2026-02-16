@@ -133,12 +133,15 @@ Runs native API (watch mode) + Vite dev server against Docker DB + Redis:
 ```bash
 ./scripts/deploy_dev.sh                  # Start dev environment
 ./scripts/deploy_dev.sh --rebuild        # Rebuild contract package, then start
+./scripts/deploy_dev.sh --branch staging # Switch to staging, rebuild, then start
 ./scripts/deploy_dev.sh --fresh          # Reset DB, new admin password, restart
 ./scripts/deploy_dev.sh --reset-password # Reset admin password (no data loss)
 ./scripts/deploy_dev.sh --down           # Stop everything
 ./scripts/deploy_dev.sh --status         # Show process/container status
 ./scripts/deploy_dev.sh --logs           # Tail API + web logs
 ```
+
+**Branch Safety**: The script warns if deploying from a branch other than `staging` or `main` (gives 5-second cancel window). Use `--branch <name>` to automatically switch branches before deploying. The current branch is displayed in startup and ready headers to prevent confusion.
 
 ### Production Docker stack (`deploy_prod.sh`)
 Runs the full Docker stack (API + Web + DB + Redis) on http://localhost:80:
