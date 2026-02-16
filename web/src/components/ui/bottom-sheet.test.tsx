@@ -332,6 +332,18 @@ describe('BottomSheet', () => {
         expect(container).not.toHaveClass('pointer-events-none');
     });
 
+    it('container has overflow-hidden to prevent layout stretching', () => {
+        render(
+            <BottomSheet isOpen={true} onClose={() => {}}>
+                <p>Content</p>
+            </BottomSheet>
+        );
+
+        const dialog = screen.getByRole('dialog');
+        const container = dialog.parentElement;
+        expect(container).toHaveClass('overflow-hidden');
+    });
+
     it('has rounded-t-2xl top corners', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>

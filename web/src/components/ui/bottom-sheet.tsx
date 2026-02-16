@@ -65,7 +65,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
 
     return createPortal(
         <div
-            className={`fixed inset-0 ${isOpen ? '' : 'pointer-events-none'}`}
+            className={`fixed inset-0 overflow-hidden ${isOpen ? '' : 'pointer-events-none'}`}
             style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}
         >
             <div

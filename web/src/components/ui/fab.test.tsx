@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { FAB } from './fab';
-import { PlusIcon, FunnelIcon } from '@heroicons/react/24/solid';
+import { FunnelIcon } from '@heroicons/react/24/solid';
 
 // Mock useScrollDirection hook
 vi.mock('../../hooks/use-scroll-direction', () => ({
@@ -69,28 +69,25 @@ describe('FAB', () => {
         expect(button).toHaveStyle({ zIndex: 30 });
     });
 
-    it('positions at bottom-[72px] when tab bar visible (scroll direction null)', () => {
+    it('positions at bottom 72px when tab bar visible (scroll direction null)', () => {
         vi.mocked(useScrollDirection).mockReturnValue(null);
         render(<FAB onClick={() => {}} />);
         const button = screen.getByRole('button');
-        expect(button).toHaveClass('bottom-[72px]');
-        expect(button).not.toHaveClass('bottom-4');
+        expect(button).toHaveStyle({ bottom: '72px' });
     });
 
-    it('positions at bottom-[72px] when scrolling up', () => {
+    it('positions at bottom 72px when scrolling up', () => {
         vi.mocked(useScrollDirection).mockReturnValue('up');
         render(<FAB onClick={() => {}} />);
         const button = screen.getByRole('button');
-        expect(button).toHaveClass('bottom-[72px]');
-        expect(button).not.toHaveClass('bottom-4');
+        expect(button).toHaveStyle({ bottom: '72px' });
     });
 
-    it('positions at bottom-4 when tab bar hidden (scroll direction down)', () => {
+    it('positions at bottom 16px when tab bar hidden (scroll direction down)', () => {
         vi.mocked(useScrollDirection).mockReturnValue('down');
         render(<FAB onClick={() => {}} />);
         const button = screen.getByRole('button');
-        expect(button).toHaveClass('bottom-4');
-        expect(button).not.toHaveClass('bottom-[72px]');
+        expect(button).toHaveStyle({ bottom: '16px' });
     });
 
     it('has fixed positioning on the right', () => {
