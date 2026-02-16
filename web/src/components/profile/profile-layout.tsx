@@ -74,7 +74,7 @@ export function ProfileLayout() {
     }
 
     return (
-        <div className="profile-page relative min-h-screen px-4">
+        <div className="profile-page relative md:min-h-screen px-4">
             <div className="profile-page__nebula" />
             <div className="profile-page__stars" />
 
