@@ -1,7 +1,10 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { FunnelIcon } from '@heroicons/react/24/outline';
 import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
+import { FAB } from '../components/ui/fab';
+import { BottomSheet } from '../components/ui/bottom-sheet';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
@@ -24,6 +27,7 @@ export function CalendarPage() {
     const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
     const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
     const [calendarView, setCalendarView] = useState<CalendarViewMode>('month');
+    const [gameFilterOpen, setGameFilterOpen] = useState(false);
 
     // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
     const hasInitialized = useRef(false);
@@ -212,6 +216,85 @@ export function CalendarPage() {
                     </main>
                 </div>
             </div>
+
+            {availableGames.length > 0 && (
+                <FAB
+                    onClick={() => setGameFilterOpen(true)}
+                    icon={FunnelIcon}
+                    label="Filter by Game"
+                />
+            )}
+
+            <BottomSheet
+                isOpen={gameFilterOpen}
+                onClose={() => setGameFilterOpen(false)}
+                title="Filter by Game"
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm text-muted">
+                        {selectedGames.size} of {availableGames.length} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={selectAllGames}
+                            className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                        >
+                            All
+                        </button>
+                        <button
+                            type="button"
+                            onClick={deselectAllGames}
+                            className="text-sm text-muted hover:text-foreground transition-colors"
+                        >
+                            None
+                        </button>
+                    </div>
+                </div>
+                <div className="space-y-1">
+                    {availableGames.map((game) => {
+                        const isSelected = selectedGames.has(game.slug);
+                        const colors = getGameColors(game.slug);
+                        return (
+                            <button
+                                key={game.slug}
+                                onClick={() => toggleGame(game.slug)}
+                                className={`flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors ${isSelected
+                                        ? 'bg-emerald-500/10 text-foreground'
+                                        : 'text-muted hover:bg-panel'
+                                    }`}
+                            >
+                                <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center bg-panel">
+                                    {game.coverUrl ? (
+                                        <img
+                                            src={game.coverUrl}
+                                            alt={game.name}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    ) : (
+                                        <span className="text-sm">{colors.icon}</span>
+                                    )}
+                                </div>
+                                <span className="flex-1 text-left text-sm font-medium min-w-0 truncate">
+                                    {game.name}
+                                </span>
+                                <div
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
+                                            ? 'bg-emerald-500 border-emerald-500'
+                                            : 'border-edge'
+                                        }`}
+                                >
+                                    {isSelected && (
+                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                    )}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </BottomSheet>
         </div>
     );
 }

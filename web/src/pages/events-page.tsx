@@ -7,6 +7,7 @@ import { EventCard, EventCardSkeleton } from "../components/events/event-card";
 import { MobileEventCard, MobileEventCardSkeleton } from "../components/events/mobile-event-card";
 import { EventsEmptyState } from "../components/events/events-empty-state";
 import { EventsMobileToolbar, type EventsTab } from "../components/events/events-mobile-toolbar";
+import { FAB } from "../components/ui/fab";
 import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
 
 /**
@@ -183,7 +184,7 @@ export function EventsPage() {
             {isAuthenticated && (
               <Link
                 to="/events/new"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
+                className="hidden md:inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
               >
                 <svg
                   className="w-5 h-5"
@@ -384,6 +385,10 @@ export function EventsPage() {
           )}
         </div>
       </div>
+
+      {isAuthenticated && (
+        <FAB onClick={() => navigate('/events/new')} label="Create Event" />
+      )}
     </div>
   );
 }
