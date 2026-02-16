@@ -10,6 +10,8 @@ export interface UseGameTimeEditorOptions {
     rolling?: boolean;
 }
 
+export type GameTimePreset = 'morning' | 'afternoon' | 'evening' | 'night';
+
 export interface UseGameTimeEditorReturn {
     slots: GameTimeSlot[];
     events: GameTimeEventBlock[];
@@ -19,6 +21,7 @@ export interface UseGameTimeEditorReturn {
     weekStart: string;
     isDirty: boolean;
     handleChange: (slots: GameTimeSlot[]) => void;
+    applyPreset: (dayOfWeek: number, preset: GameTimePreset) => void;
     save: () => Promise<void>;
     clear: () => void;
     discard: () => void;
@@ -29,6 +32,13 @@ export interface UseGameTimeEditorReturn {
     overrides: Array<{ date: string; hour: number; status: string }>;
     absences: Array<{ id: number; startDate: string; endDate: string; reason: string | null }>;
 }
+
+const PRESET_HOUR_RANGES: Record<GameTimePreset, [number, number]> = {
+    morning: [6, 12],
+    afternoon: [12, 18],
+    evening: [18, 24],
+    night: [0, 6],
+};
 
 /**
  * Compute the ISO date string for next week's Sunday.
@@ -120,6 +130,37 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
         setEditSlots(newSlots);
     }, []);
 
+    const applyPreset = useCallback((dayOfWeek: number, preset: GameTimePreset) => {
+        const [start, end] = PRESET_HOUR_RANGES[preset];
+        const rangeHours = Array.from({ length: end - start }, (_, i) => start + i);
+        const current = editSlots ?? slots;
+
+        const allActive = rangeHours.every((h) =>
+            current.some(
+                (s) => s.dayOfWeek === dayOfWeek && s.hour === h && (s.status === 'available' || !s.status),
+            ),
+        );
+
+        let newSlots: GameTimeSlot[];
+        if (allActive) {
+            newSlots = current.filter(
+                (s) =>
+                    !(s.dayOfWeek === dayOfWeek && rangeHours.includes(s.hour) && (s.status === 'available' || !s.status)),
+            );
+        } else {
+            const existingHours = new Set(
+                current
+                    .filter((s) => s.dayOfWeek === dayOfWeek && (s.status === 'available' || !s.status))
+                    .map((s) => s.hour),
+            );
+            const toAdd = rangeHours
+                .filter((h) => !existingHours.has(h))
+                .map((h) => ({ dayOfWeek, hour: h, status: 'available' as const }));
+            newSlots = [...current, ...toAdd];
+        }
+        setEditSlots(newSlots);
+    }, [editSlots, slots]);
+
     const save = useCallback(async () => {
         // Build the set of user-edited available slots.
         // The backend preserves committed slots server-side, so the frontend
@@ -154,6 +195,7 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
         weekStart: gameTimeData?.weekStart ?? '',
         isDirty,
         handleChange,
+        applyPreset,
         save,
         clear,
         discard,
