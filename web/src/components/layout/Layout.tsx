@@ -38,7 +38,7 @@ export function Layout({ children }: LayoutProps) {
     }, []);
 
     return (
-        <div className="min-h-screen flex flex-col bg-backdrop">
+        <div className="min-h-screen flex flex-col bg-backdrop overflow-x-hidden">
             <SpaceEffects />
             <ImpersonationBanner />
             <Header onMenuClick={openMoreDrawer} />
