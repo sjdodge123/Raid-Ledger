@@ -1,8 +1,10 @@
 import { useState, useMemo } from 'react';
 import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
+import { BottomSheet } from '../ui/bottom-sheet';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-reschedule';
+import { useMediaQuery } from '../../hooks/use-media-query';
 import type { GameTimePreviewBlock, GameTimeEventBlock } from '../features/game-time/GameTimeGrid';
 
 interface RescheduleModalProps {
@@ -83,7 +85,7 @@ export function RescheduleModal({
 }: RescheduleModalProps) {
     const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
     const reschedule = useRescheduleEvent(eventId);
-
+    const isMobile = useMediaQuery('(max-width: 767px)');
     // New start time — null means nothing selected yet
     const [newStartTime, setNewStartTime] = useState<string | null>(null);
     // Track if selection came from grid click (for preview block display)
@@ -216,6 +218,181 @@ export function RescheduleModal({
         ? `${DAYS[parsedStart.getDay()]} at ${formatHour(parsedStart.getHours())}`
         : null;
 
+    const content = (
+        <div className="space-y-3">
+            {/* Legend */}
+            <div className="flex items-center gap-4 text-xs text-muted">
+                {gridSelection && (
+                    <div className="flex items-center gap-1.5">
+                        <div className="w-3 h-3 rounded-sm border-2 border-solid border-amber-400/80" />
+                        <span>New time</span>
+                    </div>
+                )}
+                <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.4)' }} />
+                    <span>Few</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(234, 179, 8, 0.45)' }} />
+                    <span>Some</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.55)' }} />
+                    <span>All available</span>
+                </div>
+            </div>
+
+            {isLoading ? (
+                <div className="flex items-center justify-center py-12 text-muted">
+                    Loading availability data...
+                </div>
+            ) : signupCount === 0 ? (
+                <div className="flex items-center justify-center py-12 text-muted">
+                    No players signed up yet — no availability data to display.
+                </div>
+            ) : (
+                <>
+                    <p className="text-sm text-muted">
+                        Click a cell to select a new time, or enter it manually below.
+                        Green intensity shows player availability ({signupCount} signed up).
+                    </p>
+                    <GameTimeGrid
+                        slots={[]}
+                        readOnly
+                        hourRange={hourRange}
+                        events={currentEventBlocks}
+                        previewBlocks={previewBlocks}
+                        heatmapOverlay={gameTimeData?.cells}
+                        onCellClick={handleCellClick}
+                    />
+                </>
+            )}
+
+            {/* Manual time inputs + confirmation */}
+            <div className="pt-2 border-t border-border space-y-3">
+                <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
+                    <div className="flex-1">
+                        <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">
+                            New start
+                        </label>
+                        <input
+                            id="reschedule-start"
+                            type="datetime-local"
+                            value={newStartTime ?? ''}
+                            onChange={(e) => handleStartChange(e.target.value)}
+                            className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                        />
+                    </div>
+                    <div className="flex-1">
+                        <label className="block text-xs text-muted mb-1">Duration</label>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                            {DURATION_PRESETS.map((p) => (
+                                <button
+                                    key={p.minutes}
+                                    type="button"
+                                    onClick={() => { setDurationMinutes(p.minutes); setCustomDuration(false); }}
+                                    className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${!customDuration && durationMinutes === p.minutes
+                                            ? 'bg-emerald-600 text-white'
+                                            : 'bg-panel border border-edge text-secondary hover:text-foreground'
+                                        }`}
+                                >
+                                    {p.label}
+                                </button>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setCustomDuration(true)}
+                                className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors min-h-[44px] ${customDuration
+                                        ? 'bg-emerald-600 text-white'
+                                        : 'bg-panel border border-edge text-secondary hover:text-foreground'
+                                    }`}
+                            >
+                                Custom
+                            </button>
+                        </div>
+                        {customDuration && (
+                            <div className="flex items-center gap-2 mt-1.5">
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={23}
+                                    value={Math.floor(durationMinutes / 60)}
+                                    onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
+                                    className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <span className="text-xs text-muted">hr</span>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    max={59}
+                                    step={15}
+                                    value={durationMinutes % 60}
+                                    onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
+                                    className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
+                                />
+                                <span className="text-xs text-muted">min</span>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {hasSelection && (
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2">
+                        <p className="text-sm text-foreground">
+                            {isValid ? (
+                                <>
+                                    Move <span className="font-semibold">{eventTitle}</span> to{' '}
+                                    <span className="font-semibold text-emerald-400">
+                                        {selectionSummary}
+                                    </span>
+                                    ?
+                                    {signupCount > 0 && (
+                                        <span className="text-muted">
+                                            {' '}All {signupCount} signed-up member{signupCount !== 1 ? 's' : ''} will be notified.
+                                        </span>
+                                    )}
+                                </>
+                            ) : (
+                                <span className="text-red-400">
+                                    {parsedStart && parsedEnd && parsedStart >= parsedEnd
+                                        ? 'Start time must be before end time'
+                                        : 'Start time must be in the future'}
+                                </span>
+                            )}
+                        </p>
+                        <div className="flex gap-2 shrink-0">
+                            <button
+                                onClick={() => {
+                                    setNewStartTime(null);
+                                    setGridSelection(null);
+                                }}
+                                className="btn btn-secondary btn-sm"
+                            >
+                                Clear
+                            </button>
+                            <button
+                                onClick={handleConfirm}
+                                disabled={reschedule.isPending || !isValid}
+                                className="btn btn-primary btn-sm"
+                            >
+                                {reschedule.isPending ? 'Rescheduling...' : 'Confirm'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+
+    // ROK-335: Use BottomSheet on mobile, Modal on desktop
+    if (isMobile) {
+        return (
+            <BottomSheet isOpen={isOpen} onClose={handleClose} title="Reschedule Event" maxHeight="85vh">
+                {content}
+            </BottomSheet>
+        );
+    }
+
     return (
         <Modal
             isOpen={isOpen}
@@ -224,171 +401,7 @@ export function RescheduleModal({
             maxWidth="max-w-4xl"
             bodyClassName="p-4"
         >
-            <div className="space-y-3">
-                {/* Legend */}
-                <div className="flex items-center gap-4 text-xs text-muted">
-                    {gridSelection && (
-                        <div className="flex items-center gap-1.5">
-                            <div className="w-3 h-3 rounded-sm border-2 border-solid border-amber-400/80" />
-                            <span>New time</span>
-                        </div>
-                    )}
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(239, 68, 68, 0.4)' }} />
-                        <span>Few</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(234, 179, 8, 0.45)' }} />
-                        <span>Some</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: 'rgba(34, 197, 94, 0.55)' }} />
-                        <span>All available</span>
-                    </div>
-                </div>
-
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-12 text-muted">
-                        Loading availability data...
-                    </div>
-                ) : signupCount === 0 ? (
-                    <div className="flex items-center justify-center py-12 text-muted">
-                        No players signed up yet — no availability data to display.
-                    </div>
-                ) : (
-                    <>
-                        <p className="text-sm text-muted">
-                            Click a cell to select a new time, or enter it manually below.
-                            Green intensity shows player availability ({signupCount} signed up).
-                        </p>
-                        <GameTimeGrid
-                            slots={[]}
-                            readOnly
-                            hourRange={hourRange}
-                            events={currentEventBlocks}
-                            previewBlocks={previewBlocks}
-                            heatmapOverlay={gameTimeData?.cells}
-                            onCellClick={handleCellClick}
-                        />
-                    </>
-                )}
-
-                {/* Manual time inputs + confirmation */}
-                <div className="pt-2 border-t border-border space-y-3">
-                    <div className="flex items-end gap-3">
-                        <div className="flex-1">
-                            <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">
-                                New start
-                            </label>
-                            <input
-                                id="reschedule-start"
-                                type="datetime-local"
-                                value={newStartTime ?? ''}
-                                onChange={(e) => handleStartChange(e.target.value)}
-                                className="w-full bg-panel border border-edge rounded-lg px-3 py-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
-                            />
-                        </div>
-                        <div className="flex-1">
-                            <label className="block text-xs text-muted mb-1">Duration</label>
-                            <div className="flex items-center gap-1.5">
-                                {DURATION_PRESETS.map((p) => (
-                                    <button
-                                        key={p.minutes}
-                                        type="button"
-                                        onClick={() => { setDurationMinutes(p.minutes); setCustomDuration(false); }}
-                                        className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${
-                                            !customDuration && durationMinutes === p.minutes
-                                                ? 'bg-emerald-600 text-white'
-                                                : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                                        }`}
-                                    >
-                                        {p.label}
-                                    </button>
-                                ))}
-                                <button
-                                    type="button"
-                                    onClick={() => setCustomDuration(true)}
-                                    className={`px-2.5 py-1 rounded-lg text-sm font-medium transition-colors ${
-                                        customDuration
-                                            ? 'bg-emerald-600 text-white'
-                                            : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                                    }`}
-                                >
-                                    Custom
-                                </button>
-                            </div>
-                            {customDuration && (
-                                <div className="flex items-center gap-2 mt-1.5">
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={23}
-                                        value={Math.floor(durationMinutes / 60)}
-                                        onChange={(e) => setDurationMinutes(Number(e.target.value) * 60 + (durationMinutes % 60))}
-                                        className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
-                                    />
-                                    <span className="text-xs text-muted">hr</span>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={59}
-                                        step={15}
-                                        value={durationMinutes % 60}
-                                        onChange={(e) => setDurationMinutes(Math.floor(durationMinutes / 60) * 60 + Number(e.target.value))}
-                                        className="w-16 bg-panel border border-edge rounded-lg px-2 py-1 text-sm text-foreground text-center focus:outline-none focus:ring-1 focus:ring-primary"
-                                    />
-                                    <span className="text-xs text-muted">min</span>
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {hasSelection && (
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-foreground">
-                                {isValid ? (
-                                    <>
-                                        Move <span className="font-semibold">{eventTitle}</span> to{' '}
-                                        <span className="font-semibold text-emerald-400">
-                                            {selectionSummary}
-                                        </span>
-                                        ?
-                                        {signupCount > 0 && (
-                                            <span className="text-muted">
-                                                {' '}All {signupCount} signed-up member{signupCount !== 1 ? 's' : ''} will be notified.
-                                            </span>
-                                        )}
-                                    </>
-                                ) : (
-                                    <span className="text-red-400">
-                                        {parsedStart && parsedEnd && parsedStart >= parsedEnd
-                                            ? 'Start time must be before end time'
-                                            : 'Start time must be in the future'}
-                                    </span>
-                                )}
-                            </p>
-                            <div className="flex gap-2 shrink-0">
-                                <button
-                                    onClick={() => {
-                                        setNewStartTime(null);
-                                        setGridSelection(null);
-                                    }}
-                                    className="btn btn-secondary btn-sm"
-                                >
-                                    Clear
-                                </button>
-                                <button
-                                    onClick={handleConfirm}
-                                    disabled={reschedule.isPending || !isValid}
-                                    className="btn btn-primary btn-sm"
-                                >
-                                    {reschedule.isPending ? 'Rescheduling...' : 'Confirm'}
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </div>
-            </div>
+            {content}
         </Modal>
     );
 }

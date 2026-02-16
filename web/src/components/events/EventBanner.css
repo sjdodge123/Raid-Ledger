@@ -116,21 +116,34 @@
 /* Responsive: full banner */
 @media (max-width: 640px) {
     .event-banner {
-        padding: 1rem 1.25rem;
+        padding: 0.75rem 1rem;
     }
 
     .event-banner__title {
-        font-size: 1.25rem;
+        font-size: 1.125rem;
+    }
+
+    .event-banner__game {
+        font-size: 0.6875rem;
+        padding: 0.125rem 0.5rem;
     }
 
     .event-banner__meta {
         flex-direction: column;
         align-items: flex-start;
         gap: 0.25rem;
+        font-size: 0.8125rem;
     }
 
     .event-banner__separator {
         display: none;
+    }
+
+    .event-banner__description {
+        font-size: 0.8125rem;
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+        max-height: 1.5rem;
     }
 }
 
@@ -140,8 +153,7 @@
 
 .event-banner--collapsed {
     position: fixed;
-    top: 64px;
-    /* below the app header (h-16 = 64px) */
+    top: 0;
     left: 0;
     right: 0;
     z-index: 30;

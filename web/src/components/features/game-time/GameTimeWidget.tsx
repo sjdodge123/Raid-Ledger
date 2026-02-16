@@ -176,7 +176,7 @@ export function GameTimeWidget({
     return (
         <>
             <div
-                className="flex items-center gap-2 h-full px-3 rounded-lg cursor-pointer transition-colors"
+                className="flex items-center gap-2 h-full min-h-[2.75rem] px-3 rounded-lg cursor-pointer transition-colors"
                 style={{
                     background: 'var(--gt-widget-bg)',
                     backdropFilter: 'blur(8px)',

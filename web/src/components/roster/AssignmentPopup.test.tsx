@@ -1,7 +1,14 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { AssignmentPopup } from './AssignmentPopup';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { ReactElement } from 'react';
+
+/** Wrap component in MemoryRouter for Link context */
+function renderWithRouter(ui: ReactElement) {
+    return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
 
 describe('AssignmentPopup', () => {
     const mockUnassigned: RosterAssignmentResponse[] = [
@@ -66,7 +73,7 @@ describe('AssignmentPopup', () => {
     const mockOnRemove = vi.fn();
 
     it('renders role-sorted list with matching role first', () => {
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={true}
                 onClose={mockOnClose}
@@ -88,7 +95,7 @@ describe('AssignmentPopup', () => {
     });
 
     it('filters by search input', () => {
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={true}
                 onClose={mockOnClose}
@@ -128,7 +135,7 @@ describe('AssignmentPopup', () => {
             },
         };
 
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={true}
                 onClose={mockOnClose}
@@ -146,7 +153,7 @@ describe('AssignmentPopup', () => {
     });
 
     it('calls onAssign when clicking Assign button', () => {
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={true}
                 onClose={mockOnClose}
@@ -164,7 +171,7 @@ describe('AssignmentPopup', () => {
     });
 
     it('shows empty state when no players', () => {
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={true}
                 onClose={mockOnClose}
@@ -179,7 +186,7 @@ describe('AssignmentPopup', () => {
     });
 
     it('does not render when closed', () => {
-        render(
+        renderWithRouter(
             <AssignmentPopup
                 isOpen={false}
                 onClose={mockOnClose}

@@ -5,6 +5,7 @@
     align-items: center;
     gap: 0.75rem;
     padding: 0.5rem 1rem;
+    min-height: 2.75rem;
     border-radius: 0.5rem;
     background: rgba(30, 41, 59, 0.7);
     backdrop-filter: blur(8px);

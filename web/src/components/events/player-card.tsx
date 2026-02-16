@@ -8,6 +8,7 @@
  * Truncated names show full text in title tooltip (AC-6).
  */
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
+import { Link } from 'react-router-dom';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
 import type { AvatarUser } from '../../lib/avatar';
@@ -64,7 +65,7 @@ export function PlayerCard({
 
     const roleBadge = showRole && player.character?.role ? (
         <span
-            className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[player.character.role] ?? ROLE_BADGE_CLASSES.player}`}
+            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[player.character.role] ?? ROLE_BADGE_CLASSES.player}`}
         >
             {ROLE_EMOJI[player.character.role] ?? ''} {formatRole(player.character.role)}
         </span>
@@ -98,12 +99,14 @@ export function PlayerCard({
             {/* Info - AC-6: truncation with title tooltip */}
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                    <span
-                        className="truncate font-medium text-foreground"
+                    <Link
+                        to={`/users/${player.userId}`}
+                        className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
                         title={player.username}
+                        onClick={(e) => e.stopPropagation()}
                     >
                         {player.username}
-                    </span>
+                    </Link>
                     {roleBadge}
                 </div>
                 {player.character && (

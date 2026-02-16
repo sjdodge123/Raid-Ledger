@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MoreDrawer } from './more-drawer';
 
 // Mock hooks
@@ -25,6 +26,7 @@ vi.mock('../../hooks/use-auth', () => ({
         logout: mockLogout,
     }),
     isAdmin: (user: { role?: string } | null) => user?.role === 'admin',
+    isOperatorOrAdmin: (user: { role?: string } | null) => user?.role === 'admin' || user?.role === 'operator',
 }));
 
 vi.mock('../../stores/theme-store', () => ({
@@ -40,12 +42,16 @@ vi.mock('react-router-dom', async () => {
     };
 });
 
+const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
 function renderDrawer(isOpen = true) {
     const onClose = vi.fn();
     render(
-        <MemoryRouter>
-            <MoreDrawer isOpen={isOpen} onClose={onClose} />
-        </MemoryRouter>,
+        <QueryClientProvider client={queryClient}>
+            <MemoryRouter>
+                <MoreDrawer isOpen={isOpen} onClose={onClose} />
+            </MemoryRouter>
+        </QueryClientProvider>,
     );
     return { onClose };
 }
@@ -160,9 +166,11 @@ describe('MoreDrawer', () => {
         const onClose = vi.fn();
         const onFeedbackClick = vi.fn();
         render(
-            <MemoryRouter>
-                <MoreDrawer isOpen={true} onClose={onClose} onFeedbackClick={onFeedbackClick} />
-            </MemoryRouter>,
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <MoreDrawer isOpen={true} onClose={onClose} onFeedbackClick={onFeedbackClick} />
+                </MemoryRouter>
+            </QueryClientProvider>,
         );
         const feedbackBtn = screen.getByTestId('more-drawer-feedback');
         fireEvent.click(feedbackBtn);

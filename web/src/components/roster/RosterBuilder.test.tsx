@@ -1,8 +1,15 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import { RosterBuilder } from './RosterBuilder';
 import { computeAutoFill } from './roster-auto-fill';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { ReactElement } from 'react';
+
+/** Wrap component in MemoryRouter for Link context */
+function renderWithRouter(ui: ReactElement) {
+    return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
 
 // Mock sonner toast
 vi.mock('sonner', () => ({
@@ -59,7 +66,7 @@ describe('RosterBuilder', () => {
     });
 
     it('renders assigned players in slots', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={mockPool}
                 assignments={mockAssignments}
@@ -74,7 +81,7 @@ describe('RosterBuilder', () => {
     });
 
     it('renders correct number of slots', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={[]}
                 assignments={[]}
@@ -94,7 +101,7 @@ describe('RosterBuilder', () => {
     });
 
     it('renders UnassignedBar with pool count', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={mockPool}
                 assignments={[]}
@@ -110,7 +117,7 @@ describe('RosterBuilder', () => {
     });
 
     it('shows "All players assigned ✓" when pool is empty', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={[]}
                 assignments={mockAssignments}
@@ -124,7 +131,7 @@ describe('RosterBuilder', () => {
 
     it('shows "+ Join" for regular users on empty slots', () => {
         const mockSlotClick = vi.fn();
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={[]}
                 assignments={[]}
@@ -141,7 +148,7 @@ describe('RosterBuilder', () => {
     });
 
     it('shows muted "+" for non-interactive empty slots', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={[]}
                 assignments={[]}
@@ -157,7 +164,7 @@ describe('RosterBuilder', () => {
     });
 
     it('opens assignment popup when admin clicks slot', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={mockPool}
                 assignments={[]}
@@ -175,7 +182,7 @@ describe('RosterBuilder', () => {
     });
 
     it('renders generic player slots for non-MMO games', () => {
-        render(
+        renderWithRouter(
             <RosterBuilder
                 pool={[]}
                 assignments={[]}
@@ -213,21 +220,21 @@ describe('RosterBuilder', () => {
         ];
 
         it('shows Auto-Fill button when canEdit is true', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Auto-Fill')).toBeInTheDocument();
         });
 
         it('hides Auto-Fill button when canEdit is false', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={false} />
             );
             expect(screen.queryByText('Auto-Fill')).not.toBeInTheDocument();
         });
 
         it('disables Auto-Fill when pool is empty', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
@@ -244,14 +251,14 @@ describe('RosterBuilder', () => {
                 }
             }
 
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={fullAssignments} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
         });
 
         it('shows confirmation modal with correct counts on Auto-Fill click', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
@@ -267,7 +274,7 @@ describe('RosterBuilder', () => {
             // Pool with no characters → no role matches, but backfill still works for MMO...
             // Use a scenario where all slots are partially filled and the pool has no room
             const tinySlots = { tank: 0, healer: 0, dps: 0, flex: 0, player: 0 };
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[makePlayer(1, null, 'NoRole')]} assignments={[]} slots={tinySlots} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
@@ -276,7 +283,7 @@ describe('RosterBuilder', () => {
         });
 
         it('calls onRosterChange with filled assignments on confirm', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
@@ -292,7 +299,7 @@ describe('RosterBuilder', () => {
 
         it('does not move already-assigned players', () => {
             const existingAssignment = { ...makePlayer(99, 'tank', 'ExistingTank'), slot: 'tank' as RosterRole, position: 1 };
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={mmoPool} assignments={[existingAssignment]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
@@ -461,28 +468,28 @@ describe('RosterBuilder', () => {
         ];
 
         it('shows Clear All button when canEdit is true', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Clear All')).toBeInTheDocument();
         });
 
         it('hides Clear All button when canEdit is false', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={false} />
             );
             expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
         });
 
         it('disables Clear All when no assignments', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
             expect(screen.getByText('Clear All')).toBeDisabled();
         });
 
         it('shows confirmation text on first click, clears on second click', () => {
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
@@ -502,7 +509,7 @@ describe('RosterBuilder', () => {
 
         it('auto-resets confirmation after 3s', () => {
             vi.useFakeTimers();
-            render(
+            renderWithRouter(
                 <RosterBuilder pool={[]} assignments={assigned} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 

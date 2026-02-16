@@ -31,6 +31,8 @@ export function useCancelSignup(eventId: number) {
         onSuccess: () => {
             // Invalidate roster query to refetch updated roster
             queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+            // Also invalidate roster assignments for RosterBuilder
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
         },
     });
 }

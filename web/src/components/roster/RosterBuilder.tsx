@@ -86,6 +86,19 @@ export function RosterBuilder({
     // ROK-208: Browse-all mode (clicking the unassigned bar)
     const [browseAll, setBrowseAll] = React.useState(false);
 
+    // Pending slot state for double-click Join flow.
+    // Stored in RosterBuilder (not RosterSlot) so it survives background
+    // React Query refetches that can remount child slot components.
+    const [pendingSlotKey, setPendingSlotKey] = React.useState<string | null>(null);
+
+    // Auto-reset pending state after 3 seconds
+    React.useEffect(() => {
+        if (pendingSlotKey) {
+            const timeout = setTimeout(() => setPendingSlotKey(null), 3000);
+            return () => clearTimeout(timeout);
+        }
+    }, [pendingSlotKey]);
+
     // ROK-209: Auto-fill and clear-all state
     const [autoFillPreview, setAutoFillPreview] = React.useState<AutoFillResult | null>(null);
     const [clearPending, setClearPending] = React.useState(false);
@@ -220,7 +233,7 @@ export function RosterBuilder({
             if (count === 0) return true;
             return assignments.filter(a => a.slot === role).length >= count;
         }),
-    [roleSlots, assignments, getSlotCount]);
+        [roleSlots, assignments, getSlotCount]);
 
     // ROK-209: Auto-fill click — compute preview
     const handleAutoFillClick = () => {
@@ -289,7 +302,7 @@ export function RosterBuilder({
         <div className="space-y-4">
             {/* ROK-208: Unassigned Bar + optional sticky extra (e.g., GameTimeWidget) */}
             {stickyExtra ? (
-                <div className="flex gap-2 items-stretch" style={{ position: 'sticky', top: '7rem', zIndex: 20 }}>
+                <div className="flex flex-col md:flex-row gap-2 items-stretch" style={{ position: 'sticky', top: '7rem', zIndex: 20 }}>
                     <div className="flex-1 min-w-0">
                         <UnassignedBar
                             pool={pool}
@@ -313,7 +326,7 @@ export function RosterBuilder({
                 <div className="flex items-center gap-2">
                     <button
                         type="button"
-                        className="btn btn-secondary btn-sm"
+                        className="btn btn-secondary btn-sm flex-1 md:flex-none"
                         disabled={pool.length === 0 || allSlotsFilled || isBulkUpdating}
                         onClick={handleAutoFillClick}
                     >
@@ -331,7 +344,7 @@ export function RosterBuilder({
                     </button>
                     <button
                         type="button"
-                        className={`btn btn-danger btn-sm ${clearPending ? 'animate-pulse' : ''}`}
+                        className={`btn btn-danger btn-sm flex-1 md:flex-none ${clearPending ? 'animate-pulse' : ''}`}
                         disabled={assignments.length === 0 || isBulkUpdating}
                         onClick={handleClearAllClick}
                     >
@@ -416,6 +429,8 @@ export function RosterBuilder({
                                             onAdminClick={canEdit ? handleAdminSlotClick : undefined}
                                             onRemove={canEdit ? handleRemoveFromSlot : undefined}
                                             onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && assignedItem?.userId === currentUserId ? onSelfRemove : undefined}
+                                            isPending={pendingSlotKey === `${role}-${position}`}
+                                            onPendingChange={(pending) => setPendingSlotKey(pending ? `${role}-${position}` : null)}
                                         />
                                     );
                                 })}
