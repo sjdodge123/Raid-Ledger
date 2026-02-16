@@ -377,7 +377,7 @@ describe('GameTimeMobileEditor', () => {
         });
 
         it('timezone label uses small font size', () => {
-            const { container } = render(<GameTimeMobileEditor {...defaultProps} tzLabel="PST" />);
+            render(<GameTimeMobileEditor {...defaultProps} tzLabel="PST" />);
             const label = screen.getByText('PST').closest('span');
             expect(label).toHaveClass('text-[10px]');
         });
