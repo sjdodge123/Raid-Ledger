@@ -100,21 +100,21 @@ export function GameTimePanel({
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                                className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors"
+                                className="px-3 py-4 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors"
                             >
                                 {showAbsenceForm ? 'Cancel' : 'Absence'}
                             </button>
                             <button
                                 onClick={editor.clear}
                                 disabled={editor.slots.length === 0}
-                                className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="px-3 py-4 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Clear
                             </button>
                             <button
                                 onClick={editor.save}
                                 disabled={!editor.isDirty || editor.isSaving}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-xs font-medium rounded-lg transition-colors"
+                                className="inline-flex items-center gap-1.5 px-3 py-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-xs font-medium rounded-lg transition-colors"
                             >
                                 {editor.isSaving && (
                                     <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />

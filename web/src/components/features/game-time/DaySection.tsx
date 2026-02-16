@@ -145,7 +145,7 @@ export function DaySection({
                                     type="button"
                                     disabled={readOnly}
                                     onClick={() => onHourToggle(dayIndex, hour)}
-                                    className={`h-11 rounded-lg text-xs font-medium transition-colors ${
+                                    className={`h-12 rounded-lg text-xs font-medium transition-colors ${
                                         isActive
                                             ? 'bg-emerald-600 text-white shadow-sm'
                                             : 'bg-panel text-muted hover:bg-overlay'
