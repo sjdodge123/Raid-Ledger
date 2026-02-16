@@ -100,10 +100,10 @@ export function CalendarPage() {
     };
 
     return (
-        <div className="pb-20 md:pb-0 overflow-x-hidden">
+        <div className="pb-20 md:pb-0">
             <CalendarMobileToolbar activeView={calendarView} onViewChange={setCalendarView} />
 
-            <div className="max-w-7xl mx-auto px-4 py-6 overflow-x-hidden">
+            <div className="max-w-7xl mx-auto px-4 py-6">
                 <div className="mb-6">
                     <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
                     <p className="text-muted mt-1">
@@ -259,11 +259,10 @@ export function CalendarPage() {
                             <button
                                 key={game.slug}
                                 onClick={() => toggleGame(game.slug)}
-                                className={`flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors ${
-                                    isSelected
+                                className={`flex items-center gap-3 w-full px-3 py-3 rounded-lg transition-colors ${isSelected
                                         ? 'bg-emerald-500/10 text-foreground'
                                         : 'text-muted hover:bg-panel'
-                                }`}
+                                    }`}
                             >
                                 <div className="w-8 h-8 rounded-md overflow-hidden flex-shrink-0 flex items-center justify-center bg-panel">
                                     {game.coverUrl ? (
@@ -276,15 +275,14 @@ export function CalendarPage() {
                                         <span className="text-sm">{colors.icon}</span>
                                     )}
                                 </div>
-                                <span className="flex-1 text-left text-sm font-medium">
+                                <span className="flex-1 text-left text-sm font-medium min-w-0 truncate">
                                     {game.name}
                                 </span>
                                 <div
-                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                        isSelected
+                                    className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${isSelected
                                             ? 'bg-emerald-500 border-emerald-500'
                                             : 'border-edge'
-                                    }`}
+                                        }`}
                                 >
                                     {isSelected && (
                                         <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
