@@ -31,7 +31,14 @@ describe('EventReminderService', () => {
         EventReminderService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
-        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
+        {
+          provide: CronJobService,
+          useValue: {
+            executeWithTracking: jest.fn(
+              (_name: string, fn: () => Promise<void>) => fn(),
+            ),
+          },
+        },
       ],
     }).compile();
 

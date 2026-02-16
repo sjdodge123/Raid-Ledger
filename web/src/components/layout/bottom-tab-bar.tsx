@@ -5,7 +5,6 @@ import {
     UserGroupIcon,
     PuzzlePieceIcon,
 } from '@heroicons/react/24/outline';
-import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
 
 const tabs = [
@@ -23,19 +22,15 @@ const tabs = [
  */
 export function BottomTabBar() {
     const location = useLocation();
-    const scrollDirection = useScrollDirection();
-    const isHidden = scrollDirection === 'down';
 
     const isActive = (path: string) => location.pathname.startsWith(path);
 
     return (
         <nav
-            className={`fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle will-change-transform md:will-change-auto ${isHidden ? 'translate-y-full' : 'translate-y-0'
-                }`}
+            className="fixed bottom-0 inset-x-0 md:hidden bg-surface/95 backdrop-blur-sm border-t border-edge-subtle"
             style={{
                 zIndex: Z_INDEX.TAB_BAR,
                 paddingBottom: 'env(safe-area-inset-bottom)',
-                transition: 'transform 300ms ease-in-out',
             }}
             aria-label="Main navigation"
         >

@@ -61,4 +61,4 @@ import { CronJobModule } from './cron-jobs/cron-job.module';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

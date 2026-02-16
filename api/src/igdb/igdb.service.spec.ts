@@ -104,7 +104,14 @@ describe('IgdbService', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: getQueueToken(IGDB_SYNC_QUEUE), useValue: mockSyncQueue },
-        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
+        {
+          provide: CronJobService,
+          useValue: {
+            executeWithTracking: jest.fn(
+              (_name: string, fn: () => Promise<void>) => fn(),
+            ),
+          },
+        },
       ],
     }).compile();
 
