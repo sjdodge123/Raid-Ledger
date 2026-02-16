@@ -15,7 +15,7 @@ describe('BottomSheet', () => {
 
     it('renders dialog off-screen when isOpen is false', () => {
         render(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -27,7 +27,7 @@ describe('BottomSheet', () => {
 
     it('renders dialog when isOpen is true', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -38,7 +38,7 @@ describe('BottomSheet', () => {
 
     it('renders children content', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Test Content</p>
             </BottomSheet>
         );
@@ -48,7 +48,7 @@ describe('BottomSheet', () => {
 
     it('renders title when provided', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }} title="Filter by Game">
+            <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
             </BottomSheet>
         );
@@ -58,7 +58,7 @@ describe('BottomSheet', () => {
 
     it('uses title in aria-label', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }} title="Filter by Game">
+            <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
             </BottomSheet>
         );
@@ -69,7 +69,7 @@ describe('BottomSheet', () => {
 
     it('has default aria-label when title not provided', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -80,7 +80,7 @@ describe('BottomSheet', () => {
 
     it('renders close button when title is provided', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }} title="Filter by Game">
+            <BottomSheet isOpen={true} onClose={() => {}} title="Filter by Game">
                 <p>Content</p>
             </BottomSheet>
         );
@@ -91,7 +91,7 @@ describe('BottomSheet', () => {
 
     it('does not render close button when title is not provided', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -163,7 +163,7 @@ describe('BottomSheet', () => {
 
     it('locks body scroll when open', () => {
         const { rerender } = render(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -171,7 +171,7 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('');
 
         rerender(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -181,7 +181,7 @@ describe('BottomSheet', () => {
 
     it('restores body scroll when closed', () => {
         const { rerender } = render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -189,7 +189,7 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('hidden');
 
         rerender(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -199,7 +199,7 @@ describe('BottomSheet', () => {
 
     it('cleans up body scroll on unmount', () => {
         const { unmount } = render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -213,7 +213,7 @@ describe('BottomSheet', () => {
 
     it('has max-height of 60vh', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -224,7 +224,7 @@ describe('BottomSheet', () => {
 
     it('applies z-index 45 from Z_INDEX.BOTTOM_SHEET', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -236,7 +236,7 @@ describe('BottomSheet', () => {
 
     it('renders drag handle', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -248,7 +248,7 @@ describe('BottomSheet', () => {
 
     it('drag handle has 40x4px dimensions (w-10 h-1)', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -260,7 +260,7 @@ describe('BottomSheet', () => {
 
     it('has translate-y-0 when open', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -271,7 +271,7 @@ describe('BottomSheet', () => {
 
     it('has translate-y-full when closed', () => {
         render(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -286,7 +286,7 @@ describe('BottomSheet', () => {
 
     it('backdrop has opacity-100 when open', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -297,7 +297,7 @@ describe('BottomSheet', () => {
 
     it('backdrop has opacity-0 when closed', () => {
         render(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -311,7 +311,7 @@ describe('BottomSheet', () => {
 
     it('container has pointer-events-none when closed', () => {
         render(
-            <BottomSheet isOpen={false} onClose={() => { }}>
+            <BottomSheet isOpen={false} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -322,7 +322,7 @@ describe('BottomSheet', () => {
 
     it('container does not have pointer-events-none when open', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -334,7 +334,7 @@ describe('BottomSheet', () => {
 
     it('container has overflow-hidden to prevent layout stretching', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -346,7 +346,7 @@ describe('BottomSheet', () => {
 
     it('has rounded-t-2xl top corners', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -357,7 +357,7 @@ describe('BottomSheet', () => {
 
     it('is positioned at the bottom of the screen', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -368,7 +368,7 @@ describe('BottomSheet', () => {
 
     it('has aria-modal="true"', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -379,7 +379,7 @@ describe('BottomSheet', () => {
 
     it('close button has 44x44px min tap target', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }} title="Filter">
+            <BottomSheet isOpen={true} onClose={() => {}} title="Filter">
                 <p>Content</p>
             </BottomSheet>
         );
@@ -390,7 +390,7 @@ describe('BottomSheet', () => {
 
     it('has transition-transform duration-300 ease-out', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -401,7 +401,7 @@ describe('BottomSheet', () => {
 
     it('backdrop has transition-opacity duration-200', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -413,7 +413,7 @@ describe('BottomSheet', () => {
     // Swipe gesture tests
     it('handles touch start', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -430,7 +430,7 @@ describe('BottomSheet', () => {
 
     it('handles touch move downward', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -457,7 +457,7 @@ describe('BottomSheet', () => {
 
     it('does not apply negative transform on upward swipe', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -553,7 +553,7 @@ describe('BottomSheet', () => {
 
     it('resets transform after drag end', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -585,7 +585,7 @@ describe('BottomSheet', () => {
 
     it('content area has overflow-y-auto', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -597,7 +597,7 @@ describe('BottomSheet', () => {
 
     it('content area has max-height constraint', () => {
         render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
+            <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
             </BottomSheet>
         );
@@ -605,28 +605,5 @@ describe('BottomSheet', () => {
         const dialog = screen.getByRole('dialog');
         const contentArea = dialog.querySelector('.overflow-y-auto');
         expect(contentArea).toHaveStyle({ maxHeight: 'calc(60vh - 80px)' });
-    });
-
-    it('content area has overflow-x-hidden to prevent horizontal overflow', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const contentArea = dialog.querySelector('.overflow-y-auto');
-        expect(contentArea).toHaveClass('overflow-x-hidden');
-    });
-
-    it('dialog panel has overflow-hidden to constrain content', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => { }}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('overflow-hidden');
     });
 });

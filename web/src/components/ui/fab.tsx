@@ -16,8 +16,8 @@ export function FAB({ onClick, icon: Icon = PlusIcon, label }: FABProps) {
         <button
             onClick={onClick}
             aria-label={label || 'Create'}
-            className="fixed right-4 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/25 hover:bg-emerald-500 active:scale-95 flex items-center justify-center md:hidden"
-            style={{ zIndex: Z_INDEX.FAB, bottom: tabBarHidden ? 16 : 72, transition: 'all 200ms ease-out' }}
+            className="fixed right-4 w-14 h-14 bg-emerald-600 text-white rounded-full shadow-lg shadow-emerald-500/25 hover:bg-emerald-500 active:scale-95 transition-all duration-200 flex items-center justify-center md:hidden"
+            style={{ zIndex: Z_INDEX.FAB, bottom: tabBarHidden ? 16 : 72 }}
         >
             <Icon className="w-6 h-6" />
         </button>

@@ -10,6 +10,7 @@
 #   ./scripts/deploy_dev.sh --rebuild        # Rebuild contract package, then start
 #   ./scripts/deploy_dev.sh --fresh          # Reset DB, new admin password, restart
 #   ./scripts/deploy_dev.sh --reset-password # Reset admin password (no data loss)
+#   ./scripts/deploy_dev.sh --branch staging # Switch to staging branch, then start
 #   ./scripts/deploy_dev.sh --down           # Stop everything
 #   ./scripts/deploy_dev.sh --status         # Show process/container status
 #   ./scripts/deploy_dev.sh --logs           # Tail API and web logs
@@ -49,6 +50,57 @@ print_warning() {
 
 print_error() {
     echo -e "${RED}✗ $1${NC}"
+}
+
+# Get current git branch
+get_current_branch() {
+    git branch --show-current 2>/dev/null || echo "unknown"
+}
+
+# Check if we're on an expected branch for testing
+check_branch_for_testing() {
+    local current_branch
+    current_branch=$(get_current_branch)
+
+    # Warn if not on staging or main (common testing branches)
+    if [ "$current_branch" != "staging" ] && [ "$current_branch" != "main" ]; then
+        print_warning "⚠️  BRANCH WARNING: Deploying from branch '$current_branch'"
+        print_warning "    For operator testing, you usually want 'staging'"
+        print_warning "    For post-merge verification, you usually want 'main'"
+        echo ""
+        echo -e "  ${YELLOW}Press Ctrl+C to cancel, or wait 5 seconds to continue...${NC}"
+        sleep 5
+    fi
+}
+
+# Switch to a specific branch
+switch_branch() {
+    local target_branch=$1
+    local current_branch
+    current_branch=$(get_current_branch)
+
+    if [ "$current_branch" = "$target_branch" ]; then
+        print_success "Already on branch '$target_branch'"
+        return 0
+    fi
+
+    print_warning "Switching from '$current_branch' to '$target_branch'..."
+
+    # Check for uncommitted changes
+    if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        print_error "Cannot switch branches: you have uncommitted changes"
+        echo "  Commit or stash your changes first, then try again."
+        exit 1
+    fi
+
+    # Switch branch
+    if git checkout "$target_branch" 2>/dev/null; then
+        print_success "Switched to branch '$target_branch'"
+    else
+        print_error "Failed to switch to branch '$target_branch'"
+        echo "  Branch may not exist. Use: git branch -a"
+        exit 1
+    fi
 }
 
 # Source .env file
@@ -183,7 +235,16 @@ start_dev() {
     # Kill any existing dev processes
     kill_dev_processes
 
+    # Check branch before starting
+    check_branch_for_testing
+
     print_header "Starting Dev Environment"
+
+    # Show current branch
+    local current_branch
+    current_branch=$(get_current_branch)
+    echo -e "  ${BLUE}Git Branch:${NC} $current_branch"
+    echo ""
 
     # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
@@ -249,9 +310,13 @@ start_dev() {
 
     # Final status
     print_header "Dev Environment Ready"
+
+    local current_branch
+    current_branch=$(get_current_branch)
     echo -e "  ${GREEN}Web UI:${NC}     http://localhost:5173  (Vite HMR)"
     echo -e "  ${GREEN}API:${NC}        http://localhost:3000  (NestJS watch mode)"
     echo -e "  ${GREEN}API Health:${NC} http://localhost:3000/health"
+    echo -e "  ${BLUE}Git Branch:${NC} $current_branch"
     echo ""
     show_credentials
     echo ""
@@ -269,6 +334,15 @@ case "${1:-}" in
         stop_dev
         ;;
     --rebuild|-r)
+        start_dev true false
+        ;;
+    --branch|-b)
+        if [ -z "${2:-}" ]; then
+            print_error "Missing branch name. Usage: $0 --branch <branch-name>"
+            exit 1
+        fi
+        switch_branch "$2"
+        # Rebuild contract after branch switch to ensure dependencies are current
         start_dev true false
         ;;
     --status|-s)
@@ -289,12 +363,17 @@ case "${1:-}" in
         echo "Options:"
         echo "  (none)            Start dev environment (native API + Vite)"
         echo "  --rebuild         Rebuild contract package, then start"
+        echo "  --branch <name>   Switch to branch, rebuild, then start"
         echo "  --fresh           Reset DB, new admin password, restart"
         echo "  --reset-password  Reset admin password without losing data"
         echo "  --down            Stop native processes + DB/Redis containers"
         echo "  --status          Show process/container status"
         echo "  --logs            Tail API and web logs"
         echo "  --help            Show this help message"
+        echo ""
+        echo "Examples:"
+        echo "  $0 --branch staging    # Switch to staging and deploy"
+        echo "  $0 --rebuild           # Rebuild contract and start"
         ;;
     *)
         start_dev false false

@@ -11,10 +11,10 @@ describe('useMediaQuery', () => {
         mockMatchMedia = vi.fn((query: string) => ({
             matches: false,
             media: query,
-            addEventListener: vi.fn((_event: string, listener: () => void) => {
+            addEventListener: vi.fn((event: string, listener: () => void) => {
                 listeners.push(listener);
             }),
-            removeEventListener: vi.fn((_event: string, listener: () => void) => {
+            removeEventListener: vi.fn((event: string, listener: () => void) => {
                 const index = listeners.indexOf(listener);
                 if (index > -1) {
                     listeners.splice(index, 1);
@@ -63,10 +63,10 @@ describe('useMediaQuery', () => {
         mockMatchMedia.mockImplementation((query: string) => ({
             matches: currentMatches,
             media: query,
-            addEventListener: vi.fn((_event: string, listener: () => void) => {
+            addEventListener: vi.fn((event: string, listener: () => void) => {
                 listeners.push(listener);
             }),
-            removeEventListener: vi.fn((_event: string, listener: () => void) => {
+            removeEventListener: vi.fn((event: string, listener: () => void) => {
                 const index = listeners.indexOf(listener);
                 if (index > -1) {
                     listeners.splice(index, 1);

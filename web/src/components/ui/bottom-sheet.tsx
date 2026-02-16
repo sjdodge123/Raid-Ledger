@@ -69,8 +69,9 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
             style={{ zIndex: Z_INDEX.BOTTOM_SHEET }}
         >
             <div
-                className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${isOpen ? 'opacity-100' : 'opacity-0'
-                    }`}
+                className={`absolute inset-0 bg-black/50 transition-opacity duration-200 ${
+                    isOpen ? 'opacity-100' : 'opacity-0'
+                }`}
                 onClick={onClose}
                 aria-hidden="true"
             />
@@ -80,8 +81,9 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
                 role="dialog"
                 aria-modal="true"
                 aria-label={title || 'Bottom sheet'}
-                className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl overflow-hidden transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
-                    }`}
+                className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${
+                    isOpen ? 'translate-y-0' : 'translate-y-full'
+                }`}
                 style={{ maxHeight: '60vh' }}
                 onTouchStart={handleDragStart}
                 onTouchMove={handleDragMove}
@@ -104,7 +106,7 @@ export function BottomSheet({ isOpen, onClose, title, children }: BottomSheetPro
                     </div>
                 )}
 
-                <div className="overflow-y-auto overflow-x-hidden px-4 py-4 max-w-full" style={{ maxHeight: 'calc(60vh - 80px)' }}>
+                <div className="overflow-y-auto px-4 py-4" style={{ maxHeight: 'calc(60vh - 80px)' }}>
                     {children}
                 </div>
             </div>
