@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GameTimePanel } from './GameTimePanel';
 
@@ -53,6 +53,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             weekStart: '2026-02-08',
             overrides: [],
             absences: [],
+            applyPreset: vi.fn(),
         });
     });
 
@@ -153,31 +154,31 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.getByText('Set your typical weekly availability')).toBeInTheDocument();
         });
 
-        it('renders Save Game Time button', () => {
+        it('renders Save button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Save Game Time')).toBeInTheDocument();
+            expect(screen.getByText('Save')).toBeInTheDocument();
         });
 
-        it('renders Clear All button', () => {
+        it('renders Clear button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Clear All')).toBeInTheDocument();
+            expect(screen.getByText('Clear')).toBeInTheDocument();
         });
 
-        it('renders Set Absence button', () => {
+        it('renders Absence button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Set Absence')).toBeInTheDocument();
+            expect(screen.getByText('Absence')).toBeInTheDocument();
         });
 
         it('modal mode does not render profile UI elements', () => {
             renderPanel({ mode: 'modal' });
 
             expect(screen.queryByText('My Game Time')).not.toBeInTheDocument();
-            expect(screen.queryByText('Save Game Time')).not.toBeInTheDocument();
-            expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
-            expect(screen.queryByText('Set Absence')).not.toBeInTheDocument();
+            expect(screen.queryByText('Save')).not.toBeInTheDocument();
+            expect(screen.queryByText('Clear')).not.toBeInTheDocument();
+            expect(screen.queryByText('Absence')).not.toBeInTheDocument();
         });
     });
 
@@ -204,6 +205,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
+                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -237,6 +239,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
+                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -266,6 +269,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
+                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -295,6 +299,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 weekStart: '2026-02-08',
                 overrides: [],
                 absences: [],
+                applyPreset: vi.fn(),
             };
             vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
 
@@ -325,6 +330,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
+                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'modal', rolling: true });
@@ -333,6 +339,178 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(vi.mocked(mockUseGameTimeEditor)).toHaveBeenCalledWith(
                 expect.objectContaining({ rolling: true }),
             );
+        });
+    });
+
+    describe('Mobile Responsive Behavior (ROK-340)', () => {
+        beforeEach(() => {
+            // Mock window.matchMedia for responsive tests
+            Object.defineProperty(window, 'matchMedia', {
+                writable: true,
+                value: vi.fn().mockImplementation(query => ({
+                    matches: false,
+                    media: query,
+                    addEventListener: vi.fn(),
+                    removeEventListener: vi.fn(),
+                })),
+            });
+        });
+
+        it('renders GameTimeGrid on desktop (>= 768px)', () => {
+            // Mock desktop viewport
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? false : true,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            renderPanel({ mode: 'profile' });
+
+            // GameTimeGrid should be rendered
+            expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+            // GameTimeMobileEditor should not be rendered
+            expect(screen.queryByTestId('game-time-mobile-editor')).not.toBeInTheDocument();
+        });
+
+        it('renders GameTimeMobileEditor on mobile (< 768px)', () => {
+            // Mock mobile viewport
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? true : false,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            renderPanel({ mode: 'profile' });
+
+            // GameTimeMobileEditor should be rendered
+            expect(screen.getByTestId('game-time-mobile-editor')).toBeInTheDocument();
+            // GameTimeGrid should not be rendered
+            expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+        });
+
+        it('mobile editor receives correct props in profile mode', () => {
+            // Mock mobile viewport
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? true : false,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+                slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
+                handleChange: vi.fn(),
+                clear: vi.fn(),
+                discard: vi.fn(),
+                save: vi.fn(),
+                isDirty: false,
+                isSaving: false,
+                isLoading: false,
+                tzLabel: 'PST',
+                events: [],
+                todayIndex: 0,
+                currentHour: 12,
+                nextWeekEvents: [],
+                nextWeekSlots: [],
+                weekStart: '2026-02-08',
+                overrides: [],
+                absences: [],
+                applyPreset: vi.fn(),
+            });
+
+            renderPanel({ mode: 'profile' });
+
+            const mobileEditor = screen.getByTestId('game-time-mobile-editor');
+            expect(mobileEditor).toBeInTheDocument();
+        });
+
+        it('mobile editor is read-only in picker mode', () => {
+            // Mock mobile viewport
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? true : false,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            renderPanel({ mode: 'picker' });
+
+            const mobileEditor = screen.getByTestId('game-time-mobile-editor');
+            expect(mobileEditor).toBeInTheDocument();
+
+            // Expand a day section
+            const sundayHeader = screen.getByText(/Sunday/).closest('button');
+            if (sundayHeader) {
+                fireEvent.click(sundayHeader);
+            }
+
+            // Presets should not be visible in read-only mode
+            expect(screen.queryByText('Morning')).not.toBeInTheDocument();
+        });
+
+        it('mobile editor displays timezone label', () => {
+            // Mock mobile viewport
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? true : false,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            vi.mocked(mockUseGameTimeEditor).mockReturnValue({
+                slots: [],
+                handleChange: vi.fn(),
+                clear: vi.fn(),
+                discard: vi.fn(),
+                save: vi.fn(),
+                isDirty: false,
+                isSaving: false,
+                isLoading: false,
+                tzLabel: 'PST',
+                events: [],
+                todayIndex: 0,
+                currentHour: 12,
+                nextWeekEvents: [],
+                nextWeekSlots: [],
+                weekStart: '2026-02-08',
+                overrides: [],
+                absences: [],
+                applyPreset: vi.fn(),
+            });
+
+            renderPanel({ mode: 'profile' });
+
+            expect(screen.getByText('PST')).toBeInTheDocument();
+        });
+
+        it('breakpoint is exactly 767px (mobile) vs 768px (desktop)', () => {
+            // The breakpoint should use max-width: 767px
+            // This means 767px and below = mobile, 768px and above = desktop
+
+            // Test mobile (767px)
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)',
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            const { unmount } = renderPanel({ mode: 'profile' });
+            expect(screen.queryByTestId('game-time-mobile-editor')).toBeInTheDocument();
+            unmount();
+
+            // Test desktop (768px)
+            window.matchMedia = vi.fn().mockImplementation(query => ({
+                matches: query === '(max-width: 767px)' ? false : true,
+                media: query,
+                addEventListener: vi.fn(),
+                removeEventListener: vi.fn(),
+            }));
+
+            renderPanel({ mode: 'profile' });
+            expect(screen.queryByTestId('game-time-grid')).toBeInTheDocument();
         });
     });
 });

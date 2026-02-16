@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import { useGameTimeEditor } from '../../../hooks/use-game-time-editor';
+import { useMediaQuery } from '../../../hooks/use-media-query';
 import { useCreateAbsence, useDeleteAbsence } from '../../../hooks/use-game-time';
 import { GameTimeGrid } from './GameTimeGrid';
+import { GameTimeMobileEditor } from './GameTimeMobileEditor';
 import type { GameTimePreviewBlock } from './GameTimeGrid';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { EventBlockPopover } from './EventBlockPopover';
@@ -33,6 +35,7 @@ export function GameTimePanel({
     // Profile mode never uses rolling week — it's a static weekly template
     const effectiveRolling = mode === 'profile' ? false : rolling;
     const editor = useGameTimeEditor({ enabled, rolling: effectiveRolling });
+    const isMobile = useMediaQuery('(max-width: 767px)');
     const [popoverEvent, setPopoverEvent] = useState<{ event: GameTimeEventBlock; anchorRect: DOMRect } | null>(null);
     const [showAbsenceForm, setShowAbsenceForm] = useState(false);
     const [absenceStartDate, setAbsenceStartDate] = useState('');
@@ -91,36 +94,42 @@ export function GameTimePanel({
         <div>
             {/* Header with action buttons (profile mode only) */}
             {mode === 'profile' && (
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-3 space-y-2">
                     <div>
-                        <h2 className="text-xl font-semibold text-foreground">My Game Time</h2>
-                        <p className="text-muted text-sm mt-1">
-                            Set your typical weekly availability
-                        </p>
+                        <h2 className="text-lg font-semibold text-foreground">My Game Time</h2>
+                        <p className="text-muted text-xs mt-0.5">Set your typical weekly availability</p>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex items-center gap-2">
                         <button
                             onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                            className="px-3 py-1.5 text-sm text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors"
+                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-panel text-muted hover:bg-overlay"
                         >
-                            {showAbsenceForm ? 'Cancel' : 'Set Absence'}
+                            {showAbsenceForm ? 'Cancel' : 'Absence'}
                         </button>
                         <button
                             onClick={editor.clear}
                             disabled={editor.slots.length === 0}
-                            className="px-3 py-1.5 text-sm text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-panel text-muted hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            Clear All
+                            Clear
                         </button>
+                        {editor.isDirty && (
+                            <button
+                                onClick={editor.discard}
+                                className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                            >
+                                Discard
+                            </button>
+                        )}
                         <button
                             onClick={editor.save}
                             disabled={!editor.isDirty || editor.isSaving}
-                            className="inline-flex items-center gap-2 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors"
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors"
                         >
                             {editor.isSaving && (
                                 <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />
                             )}
-                            Save Game Time
+                            Save
                         </button>
                     </div>
                 </div>
@@ -202,24 +211,33 @@ export function GameTimePanel({
                 </div>
             )}
 
-            <GameTimeGrid
-                slots={editor.slots}
-                onChange={isReadOnly ? undefined : editor.handleChange}
-                readOnly={isReadOnly}
-                tzLabel={editor.tzLabel}
-                hourRange={hourRange}
-                fullDayNames={mode === 'profile'}
-                {...(mode !== 'profile' ? {
-                    events: editor.events,
-                    onEventClick: handleEventClick,
-                    previewBlocks,
-                    todayIndex: editor.todayIndex,
-                    currentHour: editor.currentHour,
-                    nextWeekEvents: editor.nextWeekEvents,
-                    nextWeekSlots: editor.nextWeekSlots,
-                    weekStart: editor.weekStart,
-                } : {})}
-            />
+            {isMobile ? (
+                <GameTimeMobileEditor
+                    slots={editor.slots}
+                    onChange={editor.handleChange}
+                    readOnly={isReadOnly}
+                    tzLabel={editor.tzLabel}
+                />
+            ) : (
+                <GameTimeGrid
+                    slots={editor.slots}
+                    onChange={isReadOnly ? undefined : editor.handleChange}
+                    readOnly={isReadOnly}
+                    tzLabel={editor.tzLabel}
+                    hourRange={hourRange}
+                    fullDayNames={mode === 'profile'}
+                    {...(mode !== 'profile' ? {
+                        events: editor.events,
+                        onEventClick: handleEventClick,
+                        previewBlocks,
+                        todayIndex: editor.todayIndex,
+                        currentHour: editor.currentHour,
+                        nextWeekEvents: editor.nextWeekEvents,
+                        nextWeekSlots: editor.nextWeekSlots,
+                        weekStart: editor.weekStart,
+                    } : {})}
+                />
+            )}
 
             {/* Event block popover (not used in profile mode) */}
             {mode !== 'profile' && popoverEvent && (

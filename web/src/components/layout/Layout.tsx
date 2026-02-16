@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { BottomTabBar } from './bottom-tab-bar';
 import { MoreDrawer } from './more-drawer';
+import { ScrollToTop } from './scroll-to-top';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
@@ -39,6 +40,7 @@ export function Layout({ children }: LayoutProps) {
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop overflow-x-hidden">
+            <ScrollToTop />
             <SpaceEffects />
             <ImpersonationBanner />
             <Header onMenuClick={openMoreDrawer} />

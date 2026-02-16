@@ -112,7 +112,7 @@ function getSnapshot(): ScrollDirection {
  * Internally backed by a singleton store — multiple callers share ONE
  * scroll listener regardless of how many components use the hook.
  *
- * The listener is only attached when >= 1 subscriber exists and is
+ * The listener is only attached when ≥ 1 subscriber exists and is
  * cleaned up when all subscribers unmount.
  */
 export function useScrollDirection(): ScrollDirection {

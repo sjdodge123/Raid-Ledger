@@ -64,4 +64,16 @@ describe('MobilePageToolbar', () => {
         render(<MobilePageToolbar>Test</MobilePageToolbar>);
         expect(screen.getByRole('toolbar')).toBeInTheDocument();
     });
+
+    it('has inline transition style for scroll-aware animation', () => {
+        render(<MobilePageToolbar>Test</MobilePageToolbar>);
+        const toolbar = screen.getByRole('toolbar');
+        expect(toolbar).toHaveStyle({ transition: 'top 300ms ease-in-out' });
+    });
+
+    it('defaults to top-16 when scroll direction is null', () => {
+        render(<MobilePageToolbar>Test</MobilePageToolbar>);
+        const toolbar = screen.getByRole('toolbar');
+        expect(toolbar).toHaveClass('top-16');
+    });
 });
