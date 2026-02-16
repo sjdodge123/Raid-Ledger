@@ -148,7 +148,7 @@ export function EventsPage() {
   }
 
   return (
-    <div>
+    <div className="pb-20 md:pb-0">
       <EventsMobileToolbar
         activeTab={activeTab}
         onTabChange={setActiveTab}

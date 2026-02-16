@@ -11,6 +11,7 @@ import { Z_INDEX } from '../../lib/z-index';
 interface MobileNavProps {
     isOpen: boolean;
     onClose: () => void;
+    onFeedbackClick?: () => void;
 }
 
 /** Returns true if `pathname` matches `to` (exact for /, prefix for others). */
@@ -22,7 +23,7 @@ function isActive(pathname: string, to: string): boolean {
 /**
  * Mobile slide-out navigation drawer.
  */
-export function MobileNav({ isOpen, onClose }: MobileNavProps) {
+export function MobileNav({ isOpen, onClose, onFeedbackClick }: MobileNavProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const { user, isAuthenticated, logout } = useAuth();
@@ -111,9 +112,13 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                     </button>
                 </div>
 
-                {/* User info */}
+                {/* User info — links to Profile */}
                 {isAuthenticated && user && (
-                    <div className="p-4 border-b border-edge-subtle">
+                    <Link
+                        to="/profile"
+                        onClick={onClose}
+                        className={`block p-4 border-b border-edge-subtle transition-colors hover:bg-panel/50 ${isActive(location.pathname, '/profile') ? 'bg-emerald-600/10' : ''}`}
+                    >
                         <div className="flex items-center gap-3">
                             {avatarUrl ? (
                                 <img
@@ -129,9 +134,15 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                                     {user.username.charAt(0).toUpperCase()}
                                 </div>
                             )}
-                            <span className="text-foreground font-medium">{user.username}</span>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-foreground font-medium block truncate">{user.username}</span>
+                                <span className="text-xs text-muted">View Profile</span>
+                            </div>
+                            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
                         </div>
-                    </div>
+                    </Link>
                 )}
 
                 {/* Navigation links */}
@@ -140,24 +151,18 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                         <Link
                             key={to}
                             to={to}
+                            onClick={onClose}
                             className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, to) ? activeLinkClass : inactiveLinkClass}`}
                         >
                             {label}
                         </Link>
                     ))}
 
-                    {isAuthenticated && (
-                        <Link
-                            to="/profile"
-                            className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, '/profile') ? activeLinkClass : inactiveLinkClass}`}
-                        >
-                            Profile
-                        </Link>
-                    )}
 
                     {isAdmin(user) && (
                         <Link
                             to="/admin/settings"
+                            onClick={onClose}
                             className={`block px-4 py-3 rounded-lg font-medium transition-colors ${isActive(location.pathname, '/admin') ? activeLinkClass : inactiveLinkClass}`}
                         >
                             Admin Settings
@@ -184,6 +189,19 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                         )}
                         {themeMode === 'light' ? 'Light mode' : themeMode === 'auto' ? 'Auto (system)' : 'Dark mode'}
                     </button>
+
+                    {/* Send Feedback */}
+                    {isAuthenticated && onFeedbackClick && (
+                        <button
+                            onClick={() => { onClose(); onFeedbackClick(); }}
+                            className="flex items-center gap-3 w-full px-4 py-3 rounded-lg font-medium text-secondary hover:bg-panel hover:text-foreground transition-colors"
+                        >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Send Feedback
+                        </button>
+                    )}
                 </nav>
 
                 {/* Auth action */}

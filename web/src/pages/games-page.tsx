@@ -74,7 +74,7 @@ export function GamesPage() {
   );
 
   return (
-    <div>
+    <div className="pb-20 md:pb-0">
       <GamesMobileToolbar
         activeTab={activeTab === "manage" ? "manage" : "discover"}
         onTabChange={(tab) => setActiveTab(tab)}
