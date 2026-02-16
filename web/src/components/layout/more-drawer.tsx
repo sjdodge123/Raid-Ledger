@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { useThemeStore } from '../../stores/theme-store';
@@ -56,13 +56,11 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
         navigate('/', { replace: true });
     };
 
-    // Avatar resolution
     const avatarResolved = user ? resolveAvatar(toAvatarUser(user)) : null;
     const avatarUrl = avatarResolved?.url;
+    const [avatarError, setAvatarError] = useState(false);
 
     const navLinks = [
-        { to: '/games', icon: '🎮', label: 'Games' },
-        { to: '/profile', icon: '👤', label: 'Profile' },
         ...(isAdmin(user)
             ? [{ to: '/admin/settings', icon: '⚙️', label: 'Admin Settings' }]
             : []),
@@ -106,6 +104,9 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
             <div
                 className={`absolute inset-0 bg-surface transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 data-testid="more-drawer-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-label="More menu"
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-edge-subtle">
@@ -121,46 +122,50 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
                     </button>
                 </div>
 
-                {/* User info */}
+                {/* User info — taps through to Profile */}
                 {isAuthenticated && user && (
-                    <div className="p-4 border-b border-edge-subtle">
-                        <div className="flex items-center gap-3">
-                            {avatarUrl ? (
-                                <img
-                                    src={avatarUrl}
-                                    alt={user.username}
-                                    className="w-12 h-12 rounded-full bg-overlay"
-                                    onError={(e) => {
-                                        e.currentTarget.style.display = 'none';
-                                    }}
-                                />
-                            ) : (
-                                <div className="w-12 h-12 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
-                                    {user.username.charAt(0).toUpperCase()}
-                                </div>
-                            )}
-                            <span className="text-foreground font-medium">{user.username}</span>
-                        </div>
-                    </div>
+                    <Link
+                        to="/profile"
+                        onClick={onClose}
+                        className="flex items-center gap-3 p-4 border-b border-edge-subtle hover:bg-overlay/20 transition-colors"
+                    >
+                        {avatarUrl && !avatarError ? (
+                            <img
+                                src={avatarUrl}
+                                alt={user.username}
+                                className="w-12 h-12 rounded-full bg-overlay"
+                                onError={() => setAvatarError(true)}
+                            />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-overlay flex items-center justify-center text-sm font-semibold text-muted">
+                                {user.username.charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <span className="flex-1 text-foreground font-medium">{user.username}</span>
+                        <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </Link>
                 )}
 
-                {/* Navigation links */}
-                <nav className="py-4" data-testid="more-drawer-nav">
-                    {navLinks.map(({ to, icon, label }) => (
-                        <Link
-                            key={to}
-                            to={to}
-                            onClick={onClose}
-                            className="flex items-center gap-3 px-4 py-3 text-foreground hover:bg-overlay/20 transition-colors"
-                        >
-                            <span className="text-2xl w-8 text-center">{icon}</span>
-                            <span className="flex-1 font-medium">{label}</span>
-                            <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                        </Link>
-                    ))}
-                </nav>
+                {navLinks.length > 0 && (
+                    <nav className="py-4" data-testid="more-drawer-nav">
+                        {navLinks.map(({ to, icon, label }) => (
+                            <Link
+                                key={to}
+                                to={to}
+                                onClick={onClose}
+                                className="flex items-center gap-3 px-4 py-3 text-foreground hover:bg-overlay/20 transition-colors"
+                            >
+                                <span className="text-2xl w-8 text-center">{icon}</span>
+                                <span className="flex-1 font-medium">{label}</span>
+                                <svg className="w-4 h-4 text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                </svg>
+                            </Link>
+                        ))}
+                    </nav>
+                )}
 
                 {/* Controls section */}
                 <div className="px-4 py-4 border-t border-edge-subtle">

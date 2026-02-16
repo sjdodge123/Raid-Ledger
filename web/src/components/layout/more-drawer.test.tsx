@@ -77,10 +77,10 @@ describe('MoreDrawer', () => {
         expect(screen.getByText('T')).toBeInTheDocument();
     });
 
-    it('shows Games and Profile nav links', () => {
+    it('avatar row links to profile', () => {
         renderDrawer();
-        expect(screen.getByText('Games')).toBeInTheDocument();
-        expect(screen.getByText('Profile')).toBeInTheDocument();
+        const avatarLink = screen.getByText('TestUser').closest('a');
+        expect(avatarLink).toHaveAttribute('href', '/profile');
     });
 
     it('hides Admin Settings link for non-admin users', () => {
@@ -154,5 +154,31 @@ describe('MoreDrawer', () => {
         renderDrawer();
         const themeToggle = screen.getByTestId('more-drawer-theme-toggle');
         expect(themeToggle).toBeInTheDocument();
+    });
+
+    it('calls onFeedbackClick and closes drawer when Send Feedback is clicked', () => {
+        const onClose = vi.fn();
+        const onFeedbackClick = vi.fn();
+        render(
+            <MemoryRouter>
+                <MoreDrawer isOpen={true} onClose={onClose} onFeedbackClick={onFeedbackClick} />
+            </MemoryRouter>,
+        );
+        const feedbackBtn = screen.getByTestId('more-drawer-feedback');
+        fireEvent.click(feedbackBtn);
+        expect(onClose).toHaveBeenCalledOnce();
+        expect(onFeedbackClick).toHaveBeenCalledOnce();
+    });
+
+    it('hides Send Feedback button when onFeedbackClick is not provided', () => {
+        renderDrawer();
+        expect(screen.queryByTestId('more-drawer-feedback')).not.toBeInTheDocument();
+    });
+
+    it('has aria dialog role on panel', () => {
+        renderDrawer();
+        const panel = screen.getByTestId('more-drawer-panel');
+        expect(panel).toHaveAttribute('role', 'dialog');
+        expect(panel).toHaveAttribute('aria-modal', 'true');
     });
 });

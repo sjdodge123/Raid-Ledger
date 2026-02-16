@@ -160,8 +160,8 @@ function persistToLocalStorage(
         sub?.scheme === 'space'
             ? 'space'
             : mode === 'auto'
-              ? resolveSystemScheme()
-              : mode;
+                ? resolveSystemScheme()
+                : mode;
     localStorage.setItem(LS_LEGACY_SCHEME_KEY, schemeForFlashScript);
 }
 
@@ -198,7 +198,7 @@ interface ThemeState {
     setLightTheme: (id: string) => void;
     setDarkTheme: (id: string) => void;
 
-    /** @deprecated Use setMode. Kept for ThemeToggle/MobileNav backward compat */
+    /** @deprecated Use setMode. Kept for ThemeToggle backward compat */
     setTheme: (id: string) => void;
     /** Cycle mode: dark -> light -> auto */
     cycleTheme: () => void;
