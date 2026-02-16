@@ -113,6 +113,14 @@ export function GameTimePanel({
                         >
                             Clear
                         </button>
+                        {editor.isDirty && (
+                            <button
+                                onClick={editor.discard}
+                                className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                            >
+                                Discard
+                            </button>
+                        )}
                         <button
                             onClick={editor.save}
                             disabled={!editor.isDirty || editor.isSaving}
