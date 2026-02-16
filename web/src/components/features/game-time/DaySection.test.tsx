@@ -208,10 +208,10 @@ describe('DaySection', () => {
             expect(hourBtn).not.toHaveClass('bg-emerald-600');
         });
 
-        it('has 44px height (meets 44px minimum tap target)', () => {
+        it('has 48px height (meets 48px mobile tap target guideline)', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('h-11'); // h-11 = 2.75rem = 44px
+            expect(hourBtn).toHaveClass('h-12'); // h-12 = 3rem = 48px
         });
 
         it('disables hour buttons in read-only mode', () => {

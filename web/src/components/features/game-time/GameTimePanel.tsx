@@ -94,38 +94,36 @@ export function GameTimePanel({
         <div>
             {/* Header with action buttons (profile mode only) */}
             {mode === 'profile' && (
-                <div className="mb-3">
-                    <div className="flex items-center justify-between">
+                <div className="mb-3 space-y-2">
+                    <div>
                         <h2 className="text-lg font-semibold text-foreground">My Game Time</h2>
-                        <div className="flex items-center gap-2">
-                            <button
-                                onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                                className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors"
-                            >
-                                {showAbsenceForm ? 'Cancel' : 'Absence'}
-                            </button>
-                            <button
-                                onClick={editor.clear}
-                                disabled={editor.slots.length === 0}
-                                className="px-3 py-1.5 text-xs text-muted hover:text-foreground border border-edge hover:border-edge-strong rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Clear
-                            </button>
-                            <button
-                                onClick={editor.save}
-                                disabled={!editor.isDirty || editor.isSaving}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-xs font-medium rounded-lg transition-colors"
-                            >
-                                {editor.isSaving && (
-                                    <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />
-                                )}
-                                Save
-                            </button>
-                        </div>
+                        <p className="text-muted text-xs mt-0.5">Set your typical weekly availability</p>
                     </div>
-                    <p className="text-muted text-xs mt-0.5">
-                        Set your typical weekly availability
-                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowAbsenceForm(!showAbsenceForm)}
+                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-panel text-muted hover:bg-overlay"
+                        >
+                            {showAbsenceForm ? 'Cancel' : 'Absence'}
+                        </button>
+                        <button
+                            onClick={editor.clear}
+                            disabled={editor.slots.length === 0}
+                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-panel text-muted hover:bg-overlay disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Clear
+                        </button>
+                        <button
+                            onClick={editor.save}
+                            disabled={!editor.isDirty || editor.isSaving}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-muted text-foreground text-sm font-medium rounded-lg transition-colors"
+                        >
+                            {editor.isSaving && (
+                                <div className="w-3 h-3 border-2 border-muted border-t-foreground rounded-full animate-spin" />
+                            )}
+                            Save
+                        </button>
+                    </div>
                 </div>
             )}
 
