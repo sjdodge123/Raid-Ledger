@@ -4,3 +4,5 @@ export type { GameTimeEventBlock } from './GameTimeGrid';
 export { EventBlockPopover } from './EventBlockPopover';
 export { GameTimeWidget } from './GameTimeWidget';
 export { GameTimePanel } from './GameTimePanel';
+export { GameTimeMobileEditor } from './GameTimeMobileEditor';
+export { DaySection } from './DaySection';
