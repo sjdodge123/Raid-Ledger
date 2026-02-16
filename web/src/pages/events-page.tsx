@@ -184,7 +184,7 @@ export function EventsPage() {
             {isAuthenticated && (
               <Link
                 to="/events/new"
-                className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
+                className="hidden md:inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
               >
                 <svg
                   className="w-5 h-5"
