@@ -14,7 +14,7 @@ interface HeaderProps {
 
 /**
  * Site header with logo, navigation, and user menu (ROK-271 branding).
- * MobileNav drawer state is owned by Layout — this component just
+ * MoreDrawer state is owned by Layout — this component just
  * fires `onMenuClick` when the hamburger is pressed.
  */
 export function Header({ onMenuClick }: HeaderProps) {
@@ -118,4 +118,3 @@ export function Header({ onMenuClick }: HeaderProps) {
         </header>
     );
 }
-

@@ -2,7 +2,7 @@ import { type ReactNode, useState, useCallback, useRef } from 'react';
 import { Header } from './Header';
 import { Footer } from './Footer';
 import { BottomTabBar } from './bottom-tab-bar';
-import { MobileNav } from './MobileNav';
+import { MoreDrawer } from './more-drawer';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
@@ -14,21 +14,21 @@ interface LayoutProps {
 }
 
 /**
- * Main layout wrapper with Header, Footer, BottomTabBar, and MobileNav.
+ * Main layout wrapper with Header, Footer, BottomTabBar, and MoreDrawer.
  * Applied to all routes for consistent navigation.
  *
- * MobileNav drawer state is owned here so both the Header hamburger
+ * MoreDrawer state is owned here so both the Header hamburger
  * and the drawer's "Send Feedback" button can interact with FeedbackWidget.
  */
 export function Layout({ children }: LayoutProps) {
     useThemeSync();
     usePluginHydration();
 
-    const [mobileNavOpen, setMobileNavOpen] = useState(false);
-    const openMobileNav = useCallback(() => setMobileNavOpen(true), []);
-    const closeMobileNav = useCallback(() => setMobileNavOpen(false), []);
+    const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
+    const openMoreDrawer = useCallback(() => setMoreDrawerOpen(true), []);
+    const closeMoreDrawer = useCallback(() => setMoreDrawerOpen(false), []);
 
-    // FeedbackWidget exposes its open handler via this ref so MobileNav can trigger it
+    // FeedbackWidget exposes its open handler via this ref so MoreDrawer can trigger it
     const feedbackOpenRef = useRef<(() => void) | null>(null);
     const registerFeedbackOpen = useCallback((openFn: () => void) => {
         feedbackOpenRef.current = openFn;
@@ -41,13 +41,13 @@ export function Layout({ children }: LayoutProps) {
         <div className="min-h-screen flex flex-col bg-backdrop">
             <SpaceEffects />
             <ImpersonationBanner />
-            <Header onMenuClick={openMobileNav} />
+            <Header onMenuClick={openMoreDrawer} />
             <main className="flex-1">
                 {children}
             </main>
             <Footer />
             <BottomTabBar />
-            <MobileNav isOpen={mobileNavOpen} onClose={closeMobileNav} onFeedbackClick={handleFeedbackClick} />
+            <MoreDrawer isOpen={moreDrawerOpen} onClose={closeMoreDrawer} onFeedbackClick={handleFeedbackClick} />
             <FeedbackWidget onRegisterOpen={registerFeedbackOpen} />
         </div>
     );
