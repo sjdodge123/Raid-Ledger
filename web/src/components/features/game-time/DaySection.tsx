@@ -86,15 +86,15 @@ export function DaySection({
 
     return (
         <div className="border border-edge rounded-lg overflow-hidden">
-            {/* Day header — always visible */}
+            {/* Day header — always visible, fixed height */}
             <button
                 type="button"
-                className="w-full flex items-center justify-between px-4 py-3 bg-panel/50 hover:bg-panel/80 transition-colors"
+                className="w-full h-11 flex items-center justify-between px-3 bg-panel/50 hover:bg-panel/80 active:bg-panel transition-colors"
                 onClick={onToggle}
             >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                     <svg
-                        className={`w-4 h-4 text-muted transition-transform ${expanded ? 'rotate-90' : ''}`}
+                        className={`w-3.5 h-3.5 text-muted transition-transform ${expanded ? 'rotate-90' : ''}`}
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -103,17 +103,17 @@ export function DaySection({
                     </svg>
                     <span className="text-sm font-medium text-foreground">{dayName}</span>
                 </div>
-                <span className={`text-xs ${activeCount > 0 ? 'text-emerald-400' : 'text-dim'}`}>
+                <span className={`text-xs tabular-nums ${activeCount > 0 ? 'text-emerald-400' : 'text-dim'}`}>
                     {activeCount > 0 ? `${activeCount}h selected` : 'None'}
                 </span>
             </button>
 
             {/* Expanded content */}
             {expanded && (
-                <div className="px-4 py-3 space-y-3 bg-surface/50">
+                <div className="px-3 py-2.5 space-y-2.5 bg-surface/50">
                     {/* Presets */}
                     {!readOnly && (
-                        <div className="grid grid-cols-4 gap-2">
+                        <div className="grid grid-cols-4 gap-1.5">
                             {(Object.keys(PRESET_LABELS) as Preset[]).map((preset) => {
                                 const fullyActive = isPresetFullyActive(preset);
                                 return (
@@ -121,14 +121,14 @@ export function DaySection({
                                         key={preset}
                                         type="button"
                                         onClick={() => handlePreset(preset)}
-                                        className={`flex flex-col items-center py-2 rounded-lg text-xs font-medium transition-colors ${
+                                        className={`flex flex-col items-center py-2 rounded-lg text-xs font-medium transition-colors active:scale-95 ${
                                             fullyActive
-                                                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                : 'bg-overlay/50 text-muted hover:text-foreground border border-edge hover:border-edge-strong'
+                                                ? 'bg-emerald-600 text-white shadow-sm'
+                                                : 'bg-panel text-muted hover:bg-overlay active:bg-overlay'
                                         }`}
                                     >
                                         <span>{PRESET_LABELS[preset]}</span>
-                                        <span className="text-[10px] text-dim mt-0.5">{PRESET_SUBLABELS[preset]}</span>
+                                        <span className={`text-[10px] mt-0.5 ${fullyActive ? 'text-white/70' : 'text-dim'}`}>{PRESET_SUBLABELS[preset]}</span>
                                     </button>
                                 );
                             })}
@@ -145,10 +145,10 @@ export function DaySection({
                                     type="button"
                                     disabled={readOnly}
                                     onClick={() => onHourToggle(dayIndex, hour)}
-                                    className={`h-12 rounded-lg text-xs font-medium transition-colors ${
+                                    className={`h-11 rounded-lg text-xs font-medium transition-colors ${
                                         isActive
-                                            ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                            : 'bg-overlay/30 text-muted border border-edge'
+                                            ? 'bg-emerald-600 text-white shadow-sm'
+                                            : 'bg-panel text-muted hover:bg-overlay'
                                     } ${
                                         readOnly
                                             ? 'cursor-default'

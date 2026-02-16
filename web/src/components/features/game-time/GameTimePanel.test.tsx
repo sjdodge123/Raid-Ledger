@@ -153,31 +153,31 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             expect(screen.getByText('Set your typical weekly availability')).toBeInTheDocument();
         });
 
-        it('renders Save Game Time button', () => {
+        it('renders Save button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Save Game Time')).toBeInTheDocument();
+            expect(screen.getByText('Save')).toBeInTheDocument();
         });
 
-        it('renders Clear All button', () => {
+        it('renders Clear button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Clear All')).toBeInTheDocument();
+            expect(screen.getByText('Clear')).toBeInTheDocument();
         });
 
-        it('renders Set Absence button', () => {
+        it('renders Absence button', () => {
             renderPanel({ mode: 'profile' });
 
-            expect(screen.getByText('Set Absence')).toBeInTheDocument();
+            expect(screen.getByText('Absence')).toBeInTheDocument();
         });
 
         it('modal mode does not render profile UI elements', () => {
             renderPanel({ mode: 'modal' });
 
             expect(screen.queryByText('My Game Time')).not.toBeInTheDocument();
-            expect(screen.queryByText('Save Game Time')).not.toBeInTheDocument();
-            expect(screen.queryByText('Clear All')).not.toBeInTheDocument();
-            expect(screen.queryByText('Set Absence')).not.toBeInTheDocument();
+            expect(screen.queryByText('Save')).not.toBeInTheDocument();
+            expect(screen.queryByText('Clear')).not.toBeInTheDocument();
+            expect(screen.queryByText('Absence')).not.toBeInTheDocument();
         });
     });
 

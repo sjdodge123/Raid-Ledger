@@ -133,7 +133,7 @@ describe('DaySection', () => {
             render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
 
             const morningBtn = screen.getByText('Morning').closest('button');
-            expect(morningBtn).toHaveClass('bg-emerald-500/20');
+            expect(morningBtn).toHaveClass('bg-emerald-600');
         });
 
         it('does not highlight preset when hours are partially active', () => {
@@ -144,7 +144,7 @@ describe('DaySection', () => {
             render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
 
             const morningBtn = screen.getByText('Morning').closest('button');
-            expect(morningBtn).not.toHaveClass('bg-emerald-500/20');
+            expect(morningBtn).not.toHaveClass('bg-emerald-600');
         });
 
         it('hides presets in read-only mode', () => {
@@ -199,19 +199,19 @@ describe('DaySection', () => {
             render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
 
             const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('bg-emerald-500/15');
+            expect(hourBtn).toHaveClass('bg-emerald-600');
         });
 
         it('does not highlight inactive hours', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).not.toHaveClass('bg-emerald-500/15');
+            expect(hourBtn).not.toHaveClass('bg-emerald-600');
         });
 
-        it('has 48px height (meets 44px minimum tap target)', () => {
+        it('has 44px height (meets 44px minimum tap target)', () => {
             render(<DaySection {...defaultProps} expanded={true} />);
             const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('h-12'); // h-12 = 3rem = 48px
+            expect(hourBtn).toHaveClass('h-11'); // h-11 = 2.75rem = 44px
         });
 
         it('disables hour buttons in read-only mode', () => {
