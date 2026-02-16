@@ -31,7 +31,14 @@ describe('RelayService', () => {
         RelayService,
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: CronJobService, useValue: { executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()) } },
+        {
+          provide: CronJobService,
+          useValue: {
+            executeWithTracking: jest.fn(
+              (_name: string, fn: () => Promise<void>) => fn(),
+            ),
+          },
+        },
       ],
     }).compile();
 

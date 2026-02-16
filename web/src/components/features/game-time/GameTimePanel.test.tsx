@@ -38,6 +38,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
         vi.mocked(mockUseGameTimeEditor).mockReturnValue({
             slots: [],
             handleChange: vi.fn(),
+            applyPreset: vi.fn(),
             clear: vi.fn(),
             discard: vi.fn(),
             save: vi.fn(),
@@ -189,6 +190,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                     { dayOfWeek: 1, hour: 19, status: 'available' },
                 ],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 save: vi.fn(),
                 isDirty: false,
@@ -222,6 +224,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                     { dayOfWeek: 2, hour: 20, status: 'committed' },
                 ],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 save: vi.fn(),
                 isDirty: false,
@@ -251,6 +254,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                     { dayOfWeek: 3, hour: 14, status: 'blocked' },
                 ],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 save: vi.fn(),
                 isDirty: false,
@@ -280,6 +284,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             const mockEditor = {
                 slots: [],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 discard: vi.fn(),
                 save: vi.fn(),
@@ -310,6 +315,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 save: vi.fn(),
                 isDirty: false,
@@ -396,6 +402,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [{ dayOfWeek: 0, hour: 6, status: 'available' }],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 discard: vi.fn(),
                 save: vi.fn(),
@@ -455,6 +462,7 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             vi.mocked(mockUseGameTimeEditor).mockReturnValue({
                 slots: [],
                 handleChange: vi.fn(),
+                applyPreset: vi.fn(),
                 clear: vi.fn(),
                 discard: vi.fn(),
                 save: vi.fn(),
