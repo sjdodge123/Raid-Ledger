@@ -26,7 +26,7 @@ export function GameLibraryTable({ showHidden }: GameLibraryTableProps) {
     const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = games;
 
     const handleDelete = async (gameId: number, gameName: string) => {
-        if (!confirm(`Remove "${gameName}" from the game library? This cannot be undone.`)) {
+        if (!confirm(`Ban "${gameName}" from the game library? You can unban it later from the hidden games view.`)) {
             return;
         }
 
