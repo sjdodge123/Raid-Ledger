@@ -1037,15 +1037,16 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                             When a roster slot opens, automatically move the next benched player in
                         </p>
                     </div>
-                    <div
-                        className="event-detail-autosub-toggle shrink-0"
-                        role="switch"
-                        aria-checked={form.autoUnbench}
-                        tabIndex={0}
-                        onClick={() => updateField('autoUnbench', !form.autoUnbench)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('autoUnbench', !form.autoUnbench); } }}
-                    >
-                        <div className="event-detail-autosub-toggle__track">
+                    <div className="event-detail-autosub-toggle shrink-0">
+                        <div
+                            className="event-detail-autosub-toggle__track"
+                            role="switch"
+                            aria-checked={form.autoUnbench}
+                            aria-label="Auto-promote benched players"
+                            tabIndex={0}
+                            onClick={() => updateField('autoUnbench', !form.autoUnbench)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('autoUnbench', !form.autoUnbench); } }}
+                        >
                             <span className={`event-detail-autosub-toggle__option ${form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
                             <span className={`event-detail-autosub-toggle__option ${!form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
                         </div>
