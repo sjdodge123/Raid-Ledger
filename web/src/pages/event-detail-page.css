@@ -1,10 +1,17 @@
 .event-detail-page {
     max-width: 1000px;
     margin: 0 auto;
-    padding: 1.5rem 1rem 3rem;
+    padding: 1.5rem 0.5rem 3rem;
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
+}
+
+@media (min-width: 640px) {
+    .event-detail-page {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
 }
 
 /* ROK-335: Mobile Quick Info bar */
@@ -126,7 +133,13 @@
     background: rgba(30, 30, 40, 0.8);
     border: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 1rem;
-    padding: 1.5rem;
+    padding: 0.75rem;
+}
+
+@media (min-width: 640px) {
+    .event-detail-slots {
+        padding: 1.5rem;
+    }
 }
 
 .event-detail-slots__header {
