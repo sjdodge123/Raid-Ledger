@@ -435,7 +435,10 @@ function EditScheduleModal({
             >
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-edge/50">
-                    <h3 className="text-lg font-semibold text-foreground">Edit Schedule</h3>
+                    <div>
+                        <p className="text-xs font-medium text-muted uppercase tracking-wide">Edit Schedule</p>
+                        <h3 className="text-lg font-semibold text-foreground">{formatJobName(job.name)}</h3>
+                    </div>
                     <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">
                         ✕
                     </button>
@@ -443,6 +446,27 @@ function EditScheduleModal({
 
                 {/* Body */}
                 <div className="p-6 space-y-4">
+                    {/* Description */}
+                    {job.description && (
+                        <p className="text-sm text-muted -mt-1">{job.description}</p>
+                    )}
+
+                    {/* Run timestamps */}
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div>
+                            <span className="block text-xs text-muted mb-0.5">Last Run</span>
+                            <span className="text-foreground">
+                                {formatTimestamp(job.lastRunAt, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                            </span>
+                        </div>
+                        <div>
+                            <span className="block text-xs text-muted mb-0.5">Next Run</span>
+                            <span className="text-foreground">
+                                {formatTimestamp(job.nextRunAt, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                            </span>
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-foreground mb-2">Interval</label>
                         <select
