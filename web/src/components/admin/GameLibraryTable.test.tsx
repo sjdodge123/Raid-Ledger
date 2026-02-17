@@ -115,8 +115,8 @@ describe('GameLibraryTable', () => {
     it('shows "No hidden games" when showHidden=only and no results', async () => {
         render(<GameLibraryTable />);
 
-        const checkbox = screen.getByRole('checkbox');
-        fireEvent.click(checkbox);
+        const toggle = screen.getByRole('switch');
+        fireEvent.click(toggle);
 
         await waitFor(() => {
             expect(screen.getByText(/No hidden games/i)).toBeInTheDocument();
@@ -314,24 +314,25 @@ describe('GameLibraryTable', () => {
         });
     });
 
-    // ---- Show hidden checkbox ----
+    // ---- Show hidden toggle ----
 
-    it('renders "Show hidden" checkbox', () => {
+    it('renders "Show hidden games" toggle switch', () => {
         render(<GameLibraryTable />);
-        expect(screen.getByLabelText(/show hidden/i) ?? screen.getByRole('checkbox')).toBeInTheDocument();
+        expect(screen.getByRole('switch')).toBeInTheDocument();
+        expect(screen.getByText(/show hidden games/i)).toBeInTheDocument();
     });
 
-    it('checkbox is unchecked by default', () => {
+    it('toggle is off by default (aria-checked=false)', () => {
         render(<GameLibraryTable />);
-        const checkbox = screen.getByRole('checkbox');
-        expect(checkbox).not.toBeChecked();
+        const toggle = screen.getByRole('switch');
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
     });
 
-    it('passes showHidden="only" to useAdminGames when checkbox is checked', async () => {
+    it('passes showHidden="only" to useAdminGames when toggle is switched on', async () => {
         render(<GameLibraryTable />);
 
-        const checkbox = screen.getByRole('checkbox');
-        fireEvent.click(checkbox);
+        const toggle = screen.getByRole('switch');
+        fireEvent.click(toggle);
 
         await waitFor(() => {
             const calls = vi.mocked(useAdminGames).mock.calls;
@@ -340,13 +341,13 @@ describe('GameLibraryTable', () => {
         });
     });
 
-    it('passes showHidden=undefined to useAdminGames when checkbox is unchecked', async () => {
+    it('passes showHidden=undefined to useAdminGames when toggle is switched off', async () => {
         render(<GameLibraryTable />);
 
-        const checkbox = screen.getByRole('checkbox');
-        // Click to check then uncheck
-        fireEvent.click(checkbox);
-        fireEvent.click(checkbox);
+        const toggle = screen.getByRole('switch');
+        // Click to turn on then off
+        fireEvent.click(toggle);
+        fireEvent.click(toggle);
 
         await waitFor(() => {
             const calls = vi.mocked(useAdminGames).mock.calls;
