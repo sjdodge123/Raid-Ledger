@@ -67,17 +67,6 @@ export function GameLibraryTable() {
         <div className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">Manage Library</h2>
 
-            {/* Search */}
-            <div className="mb-4">
-                <input
-                    type="text"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search games..."
-                    className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
-                />
-            </div>
-
             {/* Show hidden games toggle */}
             <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-4">
                 <div>
@@ -107,6 +96,17 @@ export function GameLibraryTable() {
                         }`}
                     />
                 </button>
+            </div>
+
+            {/* Search */}
+            <div className="sticky top-16 md:top-0 z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1">
+                <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search games..."
+                    className="w-full px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all"
+                />
             </div>
 
             {/* Loading state */}
@@ -206,7 +206,7 @@ export function GameLibraryTable() {
                                                     <button
                                                         onClick={() => handleUnhide(game.id)}
                                                         disabled={unhideGame.isPending}
-                                                        className="p-1.5 rounded-md text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
+                                                        className="w-11 h-11 md:w-auto md:h-auto md:p-1.5 flex items-center justify-center rounded-md text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 disabled:opacity-50 transition-colors"
                                                         title="Unhide game"
                                                     >
                                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -218,7 +218,7 @@ export function GameLibraryTable() {
                                                     <button
                                                         onClick={() => handleHide(game.id)}
                                                         disabled={hideGame.isPending}
-                                                        className="p-1.5 rounded-md text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 disabled:opacity-50 transition-colors"
+                                                        className="w-11 h-11 md:w-auto md:h-auto md:p-1.5 flex items-center justify-center rounded-md text-yellow-400 hover:text-yellow-300 hover:bg-yellow-500/10 disabled:opacity-50 transition-colors"
                                                         title="Hide game from users"
                                                     >
                                                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -229,7 +229,7 @@ export function GameLibraryTable() {
                                                 <button
                                                     onClick={() => handleDelete(game.id, game.name)}
                                                     disabled={deleteGame.isPending}
-                                                    className="p-1.5 rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
+                                                    className="w-11 h-11 md:w-auto md:h-auto md:p-1.5 flex items-center justify-center rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                                                     title="Remove game"
                                                 >
                                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
