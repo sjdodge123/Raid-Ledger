@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useUserEventSignups } from '../../hooks/use-user-profile';
 import { EventCard, EventCardSkeleton } from '../events/event-card';
+import { MobileEventCard, MobileEventCardSkeleton } from '../events/mobile-event-card';
 
 interface UserEventSignupsProps {
     userId: number;
@@ -18,9 +19,14 @@ export function UserEventSignups({ userId }: UserEventSignupsProps) {
         return (
             <div className="user-profile-section">
                 <h2 className="user-profile-section-title">Upcoming Events</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {Array.from({ length: 3 }).map((_, i) => (
                         <EventCardSkeleton key={i} />
+                    ))}
+                </div>
+                <div className="md:hidden space-y-3">
+                    {Array.from({ length: 3 }).map((_, i) => (
+                        <MobileEventCardSkeleton key={i} />
                     ))}
                 </div>
             </div>
@@ -72,9 +78,21 @@ export function UserEventSignups({ userId }: UserEventSignupsProps) {
                     </button>
                 )}
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
+            {/* Desktop grid (≥md) */}
+            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 gap-4 mt-3">
                 {events.map((event) => (
                     <EventCard
+                        key={event.id}
+                        event={event}
+                        signupCount={event.signupCount}
+                        onClick={() => navigate(`/events/${event.id}`)}
+                    />
+                ))}
+            </div>
+            {/* Mobile list (<md) */}
+            <div className="md:hidden space-y-3 mt-3">
+                {events.map((event) => (
+                    <MobileEventCard
                         key={event.id}
                         event={event}
                         signupCount={event.signupCount}
