@@ -3,6 +3,7 @@ import { useUserManagement } from '../../hooks/use-user-management';
 import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useAuth } from '../../hooks/use-auth';
 import { RoleBadge } from '../ui/role-badge';
+import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 import { toast } from '../../lib/toast';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole } from '@raid-ledger/contract';
@@ -15,13 +16,13 @@ import type { UserRole } from '@raid-ledger/contract';
 export function RoleManagementCard() {
     const { user: currentUser } = useAuth();
     const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
     const debouncedSearch = useDebouncedValue(search, 300);
 
     const { users, updateRole } = useUserManagement({
-        page,
         search: debouncedSearch || undefined,
     });
+
+    const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = users;
 
     const handleRoleChange = async (userId: number, username: string, newRole: Exclude<UserRole, 'admin'>) => {
         try {
@@ -31,8 +32,6 @@ export function RoleManagementCard() {
             toast.error(err instanceof Error ? err.message : 'Failed to update role');
         }
     };
-
-    const totalPages = users.data ? Math.ceil(users.data.meta.total / users.data.meta.limit) : 1;
 
     return (
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-5">
@@ -63,17 +62,14 @@ export function RoleManagementCard() {
                 <input
                     type="text"
                     value={search}
-                    onChange={(e) => {
-                        setSearch(e.target.value);
-                        setPage(1);
-                    }}
+                    onChange={(e) => setSearch(e.target.value)}
                     placeholder="Search users..."
                     className="w-full pl-10 pr-4 py-2 bg-surface/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
                 />
             </div>
 
             {/* Table */}
-            {users.isLoading ? (
+            {isLoading ? (
                 <div className="space-y-2">
                     {Array.from({ length: 5 }).map((_, i) => (
                         <div key={i} className="animate-pulse flex items-center gap-3 py-2">
@@ -83,9 +79,9 @@ export function RoleManagementCard() {
                         </div>
                     ))}
                 </div>
-            ) : users.data && users.data.data.length > 0 ? (
+            ) : items.length > 0 ? (
                 <div className="divide-y divide-edge/30">
-                    {users.data.data.map((u) => {
+                    {items.map((u) => {
                         const isCurrentUser = u.id === currentUser?.id;
                         const isAdmin = u.role === 'admin';
                         const isDisabled = isCurrentUser || isAdmin || updateRole.isPending;
@@ -163,28 +159,15 @@ export function RoleManagementCard() {
                 </p>
             )}
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-edge/30">
-                    <span className="text-xs text-dim">
-                        Page {page} of {totalPages} ({users.data?.meta.total} users)
-                    </span>
-                    <div className="flex gap-2">
-                        <button
-                            onClick={() => setPage((p) => Math.max(1, p - 1))}
-                            disabled={page <= 1}
-                            className="px-3 py-1 text-xs bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed text-foreground rounded-lg transition-colors"
-                        >
-                            Prev
-                        </button>
-                        <button
-                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                            disabled={page >= totalPages}
-                            className="px-3 py-1 text-xs bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed text-foreground rounded-lg transition-colors"
-                        >
-                            Next
-                        </button>
-                    </div>
+            {/* Infinite Scroll Sentinel */}
+            {items.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-edge/30">
+                    <span className="text-xs text-dim">{total} users</span>
+                    <InfiniteScrollSentinel
+                        sentinelRef={sentinelRef}
+                        isFetchingNextPage={isFetchingNextPage}
+                        hasNextPage={hasNextPage}
+                    />
                 </div>
             )}
         </div>

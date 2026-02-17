@@ -1,23 +1,22 @@
 import { useState, useEffect } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminGames } from '../../hooks/use-admin-games';
+import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 
 export function GameLibraryTable() {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [page, setPage] = useState(1);
 
     // 300ms debounce on search
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
-            setPage(1);
         }, 300);
         return () => clearTimeout(timer);
     }, [search]);
 
-    const { games, deleteGame } = useAdminGames(debouncedSearch, page);
-    const data = games.data;
+    const { games, deleteGame } = useAdminGames(debouncedSearch);
+    const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = games;
 
     const handleDelete = async (gameId: number, gameName: string) => {
         if (!confirm(`Remove "${gameName}" from the game library? This cannot be undone.`)) {
@@ -52,20 +51,21 @@ export function GameLibraryTable() {
             </div>
 
             {/* Loading state */}
-            {games.isLoading && (
+            {isLoading && (
                 <div className="text-center py-8 text-muted">Loading games...</div>
             )}
 
             {/* Empty state */}
-            {!games.isLoading && data && data.data.length === 0 && (
+            {!isLoading && items.length === 0 && (
                 <div className="text-center py-8 text-muted">
                     {debouncedSearch ? 'No games match your search.' : 'No games in library yet. Run a sync to populate.'}
                 </div>
             )}
 
             {/* Table */}
-            {data && data.data.length > 0 && (
+            {items.length > 0 && (
                 <>
+                    <div className="text-sm text-muted mb-2">{total} games</div>
                     <div className="bg-panel/50 rounded-xl border border-edge/50 overflow-hidden">
                         <table className="w-full text-sm">
                             <thead>
@@ -77,7 +77,7 @@ export function GameLibraryTable() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.data.map((game) => (
+                                {items.map((game) => (
                                     <tr key={game.id} className="border-b border-edge/30 last:border-0 hover:bg-overlay/20 transition-colors">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
@@ -115,30 +115,12 @@ export function GameLibraryTable() {
                         </table>
                     </div>
 
-                    {/* Pagination */}
-                    {data.meta.totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4 text-sm">
-                            <span className="text-muted">
-                                {data.meta.total} games · Page {data.meta.page} of {data.meta.totalPages}
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    disabled={page <= 1}
-                                    className="px-3 py-1.5 bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    onClick={() => setPage((p) => Math.min(data.meta.totalPages, p + 1))}
-                                    disabled={page >= data.meta.totalPages}
-                                    className="px-3 py-1.5 bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    {/* Infinite Scroll Sentinel */}
+                    <InfiniteScrollSentinel
+                        sentinelRef={sentinelRef}
+                        isFetchingNextPage={isFetchingNextPage}
+                        hasNextPage={hasNextPage}
+                    />
                 </>
             )}
         </div>

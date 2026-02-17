@@ -132,6 +132,7 @@ export const EventListResponseSchema = z.object({
         page: z.number(),
         limit: z.number(),
         totalPages: z.number(),
+        hasMore: z.boolean(),
     }),
 });
 

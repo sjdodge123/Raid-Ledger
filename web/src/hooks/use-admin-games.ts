@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { useInfiniteList } from './use-infinite-list';
 
 interface AdminGame {
     id: number;
@@ -18,10 +19,11 @@ interface AdminGameListResponse {
         page: number;
         limit: number;
         totalPages: number;
+        hasMore: boolean;
     };
 }
 
-export function useAdminGames(search: string, page: number, limit = 20) {
+export function useAdminGames(search: string, limit = 20) {
     const queryClient = useQueryClient();
 
     const getHeaders = () => ({
@@ -29,9 +31,9 @@ export function useAdminGames(search: string, page: number, limit = 20) {
         Authorization: `Bearer ${getAuthToken() || ''}`,
     });
 
-    const games = useQuery<AdminGameListResponse>({
-        queryKey: ['admin', 'games', { search, page, limit }],
-        queryFn: async () => {
+    const games = useInfiniteList<AdminGame>({
+        queryKey: ['admin', 'games', { search, limit }],
+        queryFn: async (page): Promise<AdminGameListResponse> => {
             const params = new URLSearchParams();
             if (search) params.set('search', search);
             params.set('page', String(page));
@@ -46,7 +48,6 @@ export function useAdminGames(search: string, page: number, limit = 20) {
             return response.json();
         },
         enabled: !!getAuthToken(),
-        staleTime: 10_000,
     });
 
     const deleteGame = useMutation<{ success: boolean; message: string }, Error, number>({

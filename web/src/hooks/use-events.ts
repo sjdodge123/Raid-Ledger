@@ -1,6 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { getEvents, getEvent, getEventRoster } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
+import { useInfiniteList } from './use-infinite-list';
+import type { EventResponseDto } from '@raid-ledger/contract';
 
 /**
  * Hook to fetch paginated event list.
@@ -11,6 +13,19 @@ export function useEvents(params?: EventListParams) {
     return useQuery({
         queryKey: ['events', resolvedParams],
         queryFn: () => getEvents(resolvedParams),
+        enabled: params !== undefined,
+    });
+}
+
+/**
+ * Infinite-scroll variant of useEvents (ROK-361).
+ * Loads pages automatically as the user scrolls down.
+ */
+export function useInfiniteEvents(params?: EventListParams) {
+    const resolvedParams = params ?? { upcoming: true };
+    return useInfiniteList<EventResponseDto>({
+        queryKey: ['events', 'infinite', resolvedParams],
+        queryFn: (page) => getEvents({ ...resolvedParams, page }),
         enabled: params !== undefined,
     });
 }
