@@ -14,6 +14,7 @@ import { useGameRegistry, useEventTypes } from '../../hooks/use-game-registry';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { PluginSlot } from '../../plugins';
 import { getWowVariant, getContentType } from '../../plugins/wow/utils';
+import '../../pages/event-detail-page.css';
 
 // Duration presets in minutes
 const DURATION_PRESETS = [
@@ -1028,21 +1029,28 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     )}
                 </div>
 
-                {/* Auto-Unbench Toggle */}
-                <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={form.autoUnbench}
-                        onChange={(e) => updateField('autoUnbench', e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded border-edge bg-panel text-emerald-600 focus:ring-emerald-500"
-                    />
+                {/* Auto-Unbench Toggle — segmented pill style (matches event detail page) */}
+                <div className="flex items-center justify-between gap-3">
                     <div>
                         <span className="text-sm font-medium text-secondary">Auto-promote benched players</span>
                         <p className="text-xs text-dim mt-0.5">
                             When a roster slot opens, automatically move the next benched player in
                         </p>
                     </div>
-                </label>
+                    <div
+                        className="event-detail-autosub-toggle shrink-0"
+                        role="switch"
+                        aria-checked={form.autoUnbench}
+                        tabIndex={0}
+                        onClick={() => updateField('autoUnbench', !form.autoUnbench)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('autoUnbench', !form.autoUnbench); } }}
+                    >
+                        <div className="event-detail-autosub-toggle__track">
+                            <span className={`event-detail-autosub-toggle__option ${form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                            <span className={`event-detail-autosub-toggle__option ${!form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                        </div>
+                    </div>
+                </div>
             </FormSection>
 
             {/* Divider */}
