@@ -102,7 +102,7 @@ export function SidebarNavItem({
             onClick={onNavigate}
             onMouseEnter={item.newBadgeKey ? markSeen : undefined}
             title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${item.pluginSource ? 'border-l-2 border-indigo-400/60 ' : ''
+            className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${item.pluginSource ? 'border-l-2 border-indigo-400/60 ' : ''
                 }${isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'

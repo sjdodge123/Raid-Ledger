@@ -423,7 +423,7 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
                                 key={child.to}
                                 to={child.to}
                                 onClick={onClose}
-                                className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${pathname === child.to
+                                className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${pathname === child.to
                                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
                                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
                                     }`}
@@ -440,7 +440,7 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
                 <button
                     onClick={handleRerunWizard}
                     disabled={resetOnboarding.isPending}
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-muted hover:text-foreground hover:bg-overlay/20 transition-colors w-full"
+                    className="flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm text-muted hover:text-foreground hover:bg-overlay/20 transition-colors w-full"
                 >
                     <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
