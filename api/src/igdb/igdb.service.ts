@@ -4,7 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { eq, ilike, sql } from 'drizzle-orm';
+import { and, eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -17,8 +17,12 @@ import {
   IgdbHealthStatusDto,
 } from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
+import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { IGDB_SYNC_QUEUE, IgdbSyncJobData } from './igdb-sync.constants';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+
+/** IGDB Theme IDs for adult content filtering */
+const ADULT_THEME_IDS = [42, 39]; // 42 = Erotic, 39 = Sexual Content
 
 /** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {
@@ -207,10 +211,17 @@ export class IgdbService {
     let refreshed = 0;
     let discovered = 0;
 
-    // Phase 1: Refresh existing games in batches of 10 by IGDB ID
+    // Check adult content filter setting
+    const adultFilterEnabled = await this.isAdultFilterEnabled();
+    const adultThemeFilter = adultFilterEnabled
+      ? ` & themes != (${ADULT_THEME_IDS.join(',')})`
+      : '';
+
+    // Phase 1: Refresh existing non-hidden games in batches of 10 by IGDB ID
     const existingGames = await this.db
       .select({ igdbId: schema.games.igdbId })
-      .from(schema.games);
+      .from(schema.games)
+      .where(eq(schema.games.hidden, false));
 
     if (existingGames.length > 0) {
       const batchSize = 10;
@@ -220,7 +231,7 @@ export class IgdbService {
 
         try {
           const apiGames = await this.queryIgdb(
-            `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids}); limit ${batchSize};`,
+            `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = (${ids})${adultThemeFilter}; limit ${batchSize};`,
           );
           await this.upsertGamesFromApi(apiGames);
           refreshed += apiGames.length;
@@ -239,7 +250,7 @@ export class IgdbService {
     try {
       const popular = await this.queryIgdb(
         `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; ` +
-          `where game_modes = (2,3,5) & rating_count > 10; ` +
+          `where game_modes = (2,3,5) & rating_count > 10${adultThemeFilter}; ` +
           `sort total_rating desc; limit 100;`,
       );
       await this.upsertGamesFromApi(popular);
@@ -521,12 +532,23 @@ export class IgdbService {
       // Continue to next layer if Redis fails
     }
 
-    // Layer 2: Check local database
+    // Layer 2: Check local database (exclude hidden games + adult filter)
     const escapedQuery = this.escapeLikePattern(normalizedQuery);
+    const adultFilterEnabled = await this.isAdultFilterEnabled();
+    const dbFilters = [
+      ilike(schema.games.name, `%${escapedQuery}%`),
+      eq(schema.games.hidden, false),
+    ];
+    if (adultFilterEnabled) {
+      dbFilters.push(
+        sql`NOT (${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}])`,
+      );
+    }
+
     const cachedGames = await this.db
       .select()
       .from(schema.games)
-      .where(ilike(schema.games.name, `%${escapedQuery}%`))
+      .where(and(...dbFilters))
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
     if (cachedGames.length > 0) {
@@ -558,11 +580,11 @@ export class IgdbService {
         await this.upsertGamesFromApi(igdbGames);
       }
 
-      // Return freshly cached games
+      // Return freshly cached games (exclude hidden + adult filter)
       const freshGames = await this.db
         .select()
         .from(schema.games)
-        .where(ilike(schema.games.name, `%${escapedQuery}%`))
+        .where(and(...dbFilters))
         .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
       const games = freshGames.map((g) => ({
@@ -620,7 +642,12 @@ export class IgdbService {
     const localGames = await this.db
       .select()
       .from(schema.games)
-      .where(ilike(schema.games.name, `%${escapedQuery}%`))
+      .where(
+        and(
+          ilike(schema.games.name, `%${escapedQuery}%`),
+          eq(schema.games.hidden, false),
+        ),
+      )
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
     this.logger.debug(`Local search found ${localGames.length} games`);
@@ -689,6 +716,12 @@ export class IgdbService {
     // Escape quotes in query to prevent APICALYPSE injection
     const sanitizedQuery = query.replace(/"/g, '\\"');
 
+    // Apply adult content filter if enabled
+    const adultFilterEnabled = await this.isAdultFilterEnabled();
+    const adultWhereClause = adultFilterEnabled
+      ? ` where themes != (${ADULT_THEME_IDS.join(',')});`
+      : '';
+
     const response = await fetch('https://api.igdb.com/v4/games', {
       method: 'POST',
       headers: {
@@ -696,7 +729,7 @@ export class IgdbService {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'text/plain',
       },
-      body: `search "${sanitizedQuery}"; fields ${IGDB_CONFIG.EXPANDED_FIELDS}; limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
+      body: `search "${sanitizedQuery}"; fields ${IGDB_CONFIG.EXPANDED_FIELDS};${adultWhereClause} limit ${IGDB_CONFIG.SEARCH_LIMIT};`,
     });
 
     if (!response.ok) {
@@ -883,5 +916,107 @@ export class IgdbService {
   /** Expose DB for controller queries */
   get database() {
     return this.db;
+  }
+
+  // ============================================================
+  // ROK-231: Game hide/ban + adult content filter
+  // ============================================================
+
+  /**
+   * Check if the adult content filter setting is enabled.
+   */
+  async isAdultFilterEnabled(): Promise<boolean> {
+    const value = await this.settingsService.get(
+      SETTING_KEYS.IGDB_FILTER_ADULT,
+    );
+    return value === 'true';
+  }
+
+  /**
+   * Hide a game by ID. Hidden games are excluded from user-facing search/discovery
+   * and are not re-imported during IGDB sync.
+   */
+  async hideGame(
+    id: number,
+  ): Promise<{ success: boolean; message: string; name: string }> {
+    const existing = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: 'Game not found', name: '' };
+    }
+
+    await this.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(eq(schema.games.id, id));
+
+    this.logger.log(
+      `Game "${existing[0].name}" (id=${id}) hidden via admin UI`,
+    );
+
+    return {
+      success: true,
+      message: `Game "${existing[0].name}" hidden from users.`,
+      name: existing[0].name,
+    };
+  }
+
+  /**
+   * Unhide a previously hidden game.
+   */
+  async unhideGame(
+    id: number,
+  ): Promise<{ success: boolean; message: string; name: string }> {
+    const existing = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: 'Game not found', name: '' };
+    }
+
+    await this.db
+      .update(schema.games)
+      .set({ hidden: false })
+      .where(eq(schema.games.id, id));
+
+    this.logger.log(
+      `Game "${existing[0].name}" (id=${id}) unhidden via admin UI`,
+    );
+
+    return {
+      success: true,
+      message: `Game "${existing[0].name}" is now visible to users.`,
+      name: existing[0].name,
+    };
+  }
+
+  /**
+   * Auto-hide games with adult themes (one-time sweep).
+   * Called when the adult content filter is first enabled.
+   */
+  async hideAdultGames(): Promise<number> {
+    const result = await this.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(
+        and(
+          eq(schema.games.hidden, false),
+          sql`${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}]`,
+        ),
+      )
+      .returning({ id: schema.games.id });
+
+    if (result.length > 0) {
+      this.logger.log(`Auto-hidden ${result.length} games with adult themes`);
+    }
+
+    return result.length;
   }
 }

@@ -46,4 +46,6 @@ export const games = pgTable('games', {
   twitchGameId: text('twitch_game_id'),
   /** Whether the game supports cross-platform play (inferred from IGDB or manual) */
   crossplay: boolean('crossplay'),
+  /** ROK-231: Hidden games are excluded from user-facing search/discovery */
+  hidden: boolean('hidden').notNull().default(false),
 });

@@ -158,7 +158,12 @@ export class IgdbController {
           const games = await db
             .select()
             .from(schema.games)
-            .where(inArray(schema.games.id, gameIds));
+            .where(
+              and(
+                inArray(schema.games.id, gameIds),
+                eq(schema.games.hidden, false),
+              ),
+            );
 
           // Maintain interest-count order
           const gameMap = new Map(games.map((g) => [g.id, g]));
@@ -190,25 +195,30 @@ export class IgdbController {
           // Redis miss — continue
         }
 
-        const query = db.select().from(schema.games).limit(20);
+        const hiddenFilter = eq(schema.games.hidden, false);
 
-        // Apply filter if present
+        // Apply filter if present, always exclude hidden games
         let results;
         if (cat.filter && cat.orderBy) {
           results = await db
             .select()
             .from(schema.games)
-            .where(cat.filter)
+            .where(and(cat.filter, hiddenFilter))
             .orderBy(cat.orderBy)
             .limit(20);
         } else if (cat.orderBy) {
           results = await db
             .select()
             .from(schema.games)
+            .where(hiddenFilter)
             .orderBy(cat.orderBy)
             .limit(20);
         } else {
-          results = await query;
+          results = await db
+            .select()
+            .from(schema.games)
+            .where(hiddenFilter)
+            .limit(20);
         }
 
         const games = results.map((g) => this.igdbService.mapDbRowToDetail(g));
