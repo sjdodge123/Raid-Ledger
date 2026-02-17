@@ -24,6 +24,8 @@ import { getGameColors, getCalendarEventStyle } from '../../constants/game-color
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
 import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { Z_INDEX } from '../../lib/z-index';
 import { TZDate } from '@date-fns/tz';
 import { DayEventCard } from './DayEventCard';
 import { WeekEventCard } from './WeekEventCard';
@@ -99,6 +101,10 @@ export function CalendarView({
     // Use controlled date if provided, otherwise internal state
     const currentDate = controlledDate ?? internalDate;
     const setCurrentDate = onDateChange ?? setInternalDate;
+
+    // Scroll direction for sticky calendar toolbar on mobile (ROK-360)
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
 
     // View state from Zustand store, with URL param override
     const viewPref = useCalendarViewStore((s) => s.viewPref);
@@ -373,8 +379,15 @@ export function CalendarView({
 
     return (
         <div className={`calendar-container calendar-view-${view} ${className}`}>
-            {/* Custom Toolbar */}
-            <div className="calendar-toolbar">
+            {/* Custom Toolbar — sticky on mobile below CalendarMobileToolbar (ROK-360) */}
+            <div
+                className="calendar-toolbar sticky md:static"
+                style={{
+                    top: isHeaderHidden ? '4.25rem' : '8.25rem',
+                    zIndex: Z_INDEX.TOOLBAR,
+                    transition: 'top 300ms ease-in-out',
+                }}
+            >
                 <div className="toolbar-nav">
                     <button
                         onClick={handlePrev}
@@ -433,7 +446,7 @@ export function CalendarView({
                             : format(currentDate, 'MMMM yyyy')
                     }
                 </h2>
-                <div className="toolbar-views" role="group" aria-label="Calendar view">
+                <div className="toolbar-views hidden md:flex" role="group" aria-label="Calendar view">
                     <span className="toolbar-btn text-xs text-muted pointer-events-none" aria-label={`Times shown in ${tzAbbr}`}>
                         {tzAbbr}
                     </span>
