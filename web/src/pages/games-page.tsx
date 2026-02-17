@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { FunnelIcon, CheckIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
 import { useDebouncedValue } from "../hooks/use-debounced-value";
@@ -8,6 +9,7 @@ import { GameCard } from "../components/games/GameCard";
 import { MobileGameCard } from "../components/games/mobile-game-card";
 import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
+import { BottomSheet } from "../components/ui/bottom-sheet";
 import type { GameDetailDto } from "@raid-ledger/contract";
 
 /** Common IGDB genre IDs for filter pills */
@@ -32,6 +34,7 @@ export function GamesPage() {
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+  const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
@@ -169,10 +172,28 @@ export function GamesPage() {
               )}
             </div>
 
-            {/* Genre Filter Pills */}
+            {/* Mobile Genre Filter Button */}
+            {!isSearching && (
+              <div className="md:hidden mb-6">
+                <button
+                  onClick={() => setGenreSheetOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-panel border border-edge rounded-xl text-sm font-medium text-secondary hover:bg-overlay transition-colors"
+                >
+                  <FunnelIcon className="w-4 h-4" />
+                  <span>Genre Filter</span>
+                  {selectedGenre !== null && (
+                    <span className="ml-1 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-xs font-bold">
+                      1
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {/* Desktop Genre Filter Pills */}
             {!isSearching && (
               <div
-                className="flex gap-2 mb-8 overflow-x-auto pb-2"
+                className="hidden md:flex gap-2 mb-8 overflow-x-auto pb-2"
                 style={{ scrollbarWidth: "none" }}
               >
                 <button
@@ -302,6 +323,63 @@ export function GamesPage() {
           </>
         )}
       </div>
+
+      {/* Genre Filter Bottom Sheet (Mobile) */}
+      <BottomSheet
+        isOpen={genreSheetOpen}
+        onClose={() => setGenreSheetOpen(false)}
+        title="Genre Filter"
+      >
+        <div className="flex flex-col">
+          <button
+            onClick={() => {
+              setSelectedGenre(null);
+              setGenreSheetOpen(false);
+            }}
+            className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${
+              selectedGenre === null
+                ? "bg-emerald-600/10 text-emerald-400"
+                : "text-secondary hover:bg-overlay"
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {selectedGenre === null ? (
+                <CheckIcon className="w-5 h-5 text-emerald-400" />
+              ) : (
+                <span className="w-5" />
+              )}
+              <span className="text-sm font-medium">All</span>
+            </div>
+            <ChevronRightIcon className="w-4 h-4 text-dim" />
+          </button>
+          {GENRE_FILTERS.map((genre) => (
+            <button
+              key={genre.id}
+              onClick={() => {
+                setSelectedGenre(
+                  selectedGenre === genre.id ? null : genre.id,
+                );
+                setGenreSheetOpen(false);
+              }}
+              className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${
+                selectedGenre === genre.id
+                  ? "bg-emerald-600/10 text-emerald-400"
+                  : "text-secondary hover:bg-overlay"
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                {selectedGenre === genre.id ? (
+                  <CheckIcon className="w-5 h-5 text-emerald-400" />
+                ) : (
+                  <span className="w-5" />
+                )}
+                <span className="text-sm font-medium">{genre.label}</span>
+              </div>
+              <ChevronRightIcon className="w-4 h-4 text-dim" />
+            </button>
+          ))}
+        </div>
+      </BottomSheet>
     </div>
   );
 }
