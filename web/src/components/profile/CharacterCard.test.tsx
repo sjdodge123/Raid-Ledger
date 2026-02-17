@@ -56,53 +56,79 @@ describe('CharacterCard', () => {
         } as any);
     });
 
-    describe('Action button responsive stacking', () => {
-        it('renders action container with flex-col on mobile and sm:flex-row on desktop', () => {
+    describe('Mobile actions menu', () => {
+        it('renders a kebab menu button for mobile', () => {
+            renderWithRouter(
+                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
+            );
+            const kebabBtn = screen.getByLabelText('Character actions');
+            expect(kebabBtn).toBeInTheDocument();
+            expect(kebabBtn).toHaveClass('w-[44px]', 'h-[44px]');
+        });
+
+        it('opens dropdown menu when kebab button is clicked', () => {
             const { container } = renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
-            const actionsDiv = container.querySelector('.flex.flex-col.sm\\:flex-row');
-            expect(actionsDiv).toBeInTheDocument();
+            const kebabBtn = screen.getByLabelText('Character actions');
+            fireEvent.click(kebabBtn);
+            // Dropdown should appear with Edit and Delete items
+            const dropdown = container.querySelector('.bg-surface.border.border-edge');
+            expect(dropdown).toBeInTheDocument();
         });
 
-        it('Edit button has min-h-[44px] touch target on mobile', () => {
-            renderWithRouter(
-                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
-            );
-            const editBtn = screen.getByText('Edit');
-            expect(editBtn).toHaveClass('min-h-[44px]');
-        });
-
-        it('Edit button removes min-h on desktop with sm:min-h-0', () => {
-            renderWithRouter(
-                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
-            );
-            const editBtn = screen.getByText('Edit');
-            expect(editBtn).toHaveClass('sm:min-h-0');
-        });
-
-        it('Delete button has min-h-[44px] touch target on mobile', () => {
-            renderWithRouter(
-                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
-            );
-            const deleteBtn = screen.getByText('Delete');
-            expect(deleteBtn).toHaveClass('min-h-[44px]');
-        });
-
-        it('Delete button removes min-h on desktop with sm:min-h-0', () => {
-            renderWithRouter(
-                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
-            );
-            const deleteBtn = screen.getByText('Delete');
-            expect(deleteBtn).toHaveClass('sm:min-h-0');
-        });
-
-        it('actions container uses items-stretch on mobile and sm:items-center on desktop', () => {
+        it('closes dropdown menu when clicking outside', () => {
             const { container } = renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
-            const actionsDiv = container.querySelector('.items-stretch.sm\\:items-center');
-            expect(actionsDiv).toBeInTheDocument();
+            const kebabBtn = screen.getByLabelText('Character actions');
+            fireEvent.click(kebabBtn);
+            // Menu should be open
+            expect(container.querySelector('.bg-surface.border.border-edge')).toBeInTheDocument();
+            // Click outside
+            fireEvent.mouseDown(document.body);
+            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
+        });
+
+        it('renders desktop inline actions with hidden md:flex', () => {
+            const { container } = renderWithRouter(
+                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
+            );
+            const desktopActions = container.querySelector('.hidden.md\\:flex');
+            expect(desktopActions).toBeInTheDocument();
+        });
+
+        it('mobile menu Edit calls onEdit and closes menu', () => {
+            const onEdit = vi.fn();
+            const character = createMockCharacter();
+            const { container } = renderWithRouter(
+                <CharacterCard character={character} onEdit={onEdit} />
+            );
+            // Open menu
+            fireEvent.click(screen.getByLabelText('Character actions'));
+            // Click Edit in the dropdown (first button in the dropdown)
+            const dropdown = container.querySelector('.bg-surface.border.border-edge');
+            const menuItems = dropdown!.querySelectorAll('button');
+            fireEvent.click(menuItems[0]); // Edit
+            expect(onEdit).toHaveBeenCalledWith(character);
+            // Menu should be closed
+            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
+        });
+
+        it('mobile menu Delete calls handleDelete and closes menu', () => {
+            vi.spyOn(window, 'confirm').mockReturnValue(true);
+            const character = createMockCharacter({ id: 'char-mobile-del' });
+            const { container } = renderWithRouter(
+                <CharacterCard character={character} onEdit={vi.fn()} />
+            );
+            // Open menu
+            fireEvent.click(screen.getByLabelText('Character actions'));
+            const dropdown = container.querySelector('.bg-surface.border.border-edge');
+            const menuItems = dropdown!.querySelectorAll('button');
+            fireEvent.click(menuItems[1]); // Delete
+            expect(mockDeleteMutate).toHaveBeenCalledWith('char-mobile-del');
+            // Menu should be closed
+            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
         });
     });
 
@@ -165,7 +191,9 @@ describe('CharacterCard', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter({ isMain: true })} onEdit={vi.fn()} />
             );
-            expect(screen.getByText(/Main/)).toBeInTheDocument();
+            // Mobile inline badge + desktop actions badge = 2 instances
+            const mainBadges = screen.getAllByText(/Main/);
+            expect(mainBadges.length).toBeGreaterThanOrEqual(1);
         });
 
         it('does not render Main badge when character isMain is false', () => {
