@@ -56,7 +56,7 @@ describe('CharacterCard', () => {
         } as any);
     });
 
-    describe('Mobile actions menu', () => {
+    describe('Mobile actions panel', () => {
         it('renders a kebab menu button for mobile', () => {
             renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
@@ -66,28 +66,28 @@ describe('CharacterCard', () => {
             expect(kebabBtn).toHaveClass('w-[44px]', 'h-[44px]');
         });
 
-        it('opens dropdown menu when kebab button is clicked', () => {
-            const { container } = renderWithRouter(
+        it('opens accordion actions panel when kebab button is clicked', () => {
+            renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
             const kebabBtn = screen.getByLabelText('Character actions');
             fireEvent.click(kebabBtn);
-            // Dropdown should appear with Edit and Delete items
-            const dropdown = container.querySelector('.bg-surface.border.border-edge');
-            expect(dropdown).toBeInTheDocument();
+            // Accordion panel should appear with Edit and Delete actions
+            const panel = screen.getByTestId('mobile-actions-panel');
+            expect(panel).toBeInTheDocument();
         });
 
-        it('closes dropdown menu when clicking outside', () => {
-            const { container } = renderWithRouter(
+        it('closes accordion panel when kebab button is toggled again', () => {
+            renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );
             const kebabBtn = screen.getByLabelText('Character actions');
             fireEvent.click(kebabBtn);
-            // Menu should be open
-            expect(container.querySelector('.bg-surface.border.border-edge')).toBeInTheDocument();
-            // Click outside
-            fireEvent.mouseDown(document.body);
-            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
+            // Panel should be open
+            expect(screen.getByTestId('mobile-actions-panel')).toBeInTheDocument();
+            // Toggle closed
+            fireEvent.click(kebabBtn);
+            expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
 
         it('renders desktop inline actions with hidden md:flex', () => {
@@ -98,37 +98,36 @@ describe('CharacterCard', () => {
             expect(desktopActions).toBeInTheDocument();
         });
 
-        it('mobile menu Edit calls onEdit and closes menu', () => {
+        it('mobile panel Edit calls onEdit and closes panel', () => {
             const onEdit = vi.fn();
             const character = createMockCharacter();
-            const { container } = renderWithRouter(
+            renderWithRouter(
                 <CharacterCard character={character} onEdit={onEdit} />
             );
-            // Open menu
+            // Open panel
             fireEvent.click(screen.getByLabelText('Character actions'));
-            // Click Edit in the dropdown (first button in the dropdown)
-            const dropdown = container.querySelector('.bg-surface.border.border-edge');
-            const menuItems = dropdown!.querySelectorAll('button');
+            const panel = screen.getByTestId('mobile-actions-panel');
+            const menuItems = panel.querySelectorAll('button');
             fireEvent.click(menuItems[0]); // Edit
             expect(onEdit).toHaveBeenCalledWith(character);
-            // Menu should be closed
-            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
+            // Panel should be closed
+            expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
 
-        it('mobile menu Delete calls handleDelete and closes menu', () => {
+        it('mobile panel Delete calls handleDelete and closes panel', () => {
             vi.spyOn(window, 'confirm').mockReturnValue(true);
             const character = createMockCharacter({ id: 'char-mobile-del' });
-            const { container } = renderWithRouter(
+            renderWithRouter(
                 <CharacterCard character={character} onEdit={vi.fn()} />
             );
-            // Open menu
+            // Open panel
             fireEvent.click(screen.getByLabelText('Character actions'));
-            const dropdown = container.querySelector('.bg-surface.border.border-edge');
-            const menuItems = dropdown!.querySelectorAll('button');
+            const panel = screen.getByTestId('mobile-actions-panel');
+            const menuItems = panel.querySelectorAll('button');
             fireEvent.click(menuItems[1]); // Delete
             expect(mockDeleteMutate).toHaveBeenCalledWith('char-mobile-del');
-            // Menu should be closed
-            expect(container.querySelector('.bg-surface.border.border-edge')).not.toBeInTheDocument();
+            // Panel should be closed
+            expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
         });
     });
 
