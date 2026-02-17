@@ -4,6 +4,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { NotificationBell } from '../notifications';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { API_BASE_URL } from '../../lib/config';
 import { Z_INDEX } from '../../lib/z-index';
 
@@ -16,11 +17,16 @@ interface HeaderProps {
  * Site header with logo, navigation, and user menu (ROK-271 branding).
  * MoreDrawer state is owned by Layout — this component just
  * fires `onMenuClick` when the hamburger is pressed.
+ *
+ * On mobile, hides on scroll-down and reappears on scroll-up
+ * (same pattern as the bottom tab bar).
  */
 export function Header({ onMenuClick }: HeaderProps) {
     const location = useLocation();
     const { user } = useAuth();
     const { data: systemStatus } = useSystemStatus();
+    const scrollDirection = useScrollDirection();
+    const isHidden = scrollDirection === 'down';
 
     const communityName = systemStatus?.communityName || 'Raid Ledger';
     const communityLogoUrl = systemStatus?.communityLogoUrl
@@ -35,7 +41,11 @@ export function Header({ onMenuClick }: HeaderProps) {
     ];
 
     return (
-        <header className="sticky top-0 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle" style={{ zIndex: Z_INDEX.HEADER }}>
+        <header
+            className={`sticky top-0 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle will-change-transform md:will-change-auto md:translate-y-0 ${isHidden ? '-translate-y-full' : 'translate-y-0'
+                }`}
+            style={{ zIndex: Z_INDEX.HEADER, transition: 'transform 300ms ease-in-out' }}
+        >
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 {/* Logo (ROK-271: custom branding) */}
                 <Link

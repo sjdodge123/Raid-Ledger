@@ -13,9 +13,15 @@
     cursor: pointer;
     transition: background-color 0.2s, border-color 0.2s;
     z-index: 20;
-    position: sticky;
-    top: 7rem;
-    /* below header (4rem) + collapsed banner (~3rem) */
+}
+
+/* Sticky only on desktop — on mobile, avoid stacking sticky bars */
+@media (min-width: 768px) {
+    .unassigned-bar {
+        position: sticky;
+        top: 7rem;
+        /* below header (4rem) + collapsed banner (~3rem) */
+    }
 }
 
 .unassigned-bar:hover {

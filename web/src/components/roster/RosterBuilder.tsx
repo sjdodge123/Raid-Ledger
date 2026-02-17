@@ -302,7 +302,7 @@ export function RosterBuilder({
         <div className="space-y-4">
             {/* ROK-208: Unassigned Bar + optional sticky extra (e.g., GameTimeWidget) */}
             {stickyExtra ? (
-                <div className="flex flex-col md:flex-row gap-2 items-stretch" style={{ position: 'sticky', top: '7rem', zIndex: 20 }}>
+                <div className="flex flex-col md:flex-row gap-2 items-stretch md:sticky md:top-28" style={{ zIndex: 20 }}>
                     <div className="flex-1 min-w-0">
                         <UnassignedBar
                             pool={pool}

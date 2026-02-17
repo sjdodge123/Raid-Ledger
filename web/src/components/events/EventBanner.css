@@ -117,6 +117,11 @@
 @media (max-width: 640px) {
     .event-banner {
         padding: 0.75rem 1rem;
+        /* ROK-335 AC-4: Scale banner proportionally at 375px */
+        aspect-ratio: 16 / 9;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
     }
 
     .event-banner__title {
@@ -153,19 +158,24 @@
 
 .event-banner--collapsed {
     position: fixed;
-    top: 0;
+    top: 64px;
+    /* below the app header (h-16 = 64px) */
     left: 0;
     right: 0;
     z-index: 30;
     height: 44px;
     padding: 0 1rem;
     display: flex;
+    flex-direction: row;
     align-items: center;
+    justify-content: flex-start;
     gap: 0.75rem;
-    background: rgba(15, 23, 42, 0.95);
+    aspect-ratio: auto;
+    background: rgb(15, 23, 42);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     animation: banner-slide-down 0.2s ease-out;
+    transition: top 300ms ease-in-out;
     /* Reset full-banner styles */
     border-radius: 0;
     border-top: none;
@@ -254,6 +264,10 @@
     .event-banner--collapsed__title {
         flex: 1;
     }
+
+    .event-banner--collapsed--header-hidden {
+        top: 0;
+    }
 }
 
 /* Tablet: add date */
@@ -308,7 +322,7 @@
 }
 
 [data-scheme="light"] .event-banner--collapsed {
-    background: rgba(255, 255, 255, 0.95);
+    background: rgb(255, 255, 255);
     border-bottom-color: rgba(203, 213, 225, 0.5);
 }
 

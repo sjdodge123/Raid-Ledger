@@ -3,6 +3,7 @@ import { UserLink } from '../common/UserLink';
 import { toAvatarUser } from '../../lib/avatar';
 import { formatDuration } from '../../utils/game-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import './EventBanner.css';
 
 interface EventBannerProps {
@@ -41,6 +42,8 @@ export function EventBanner({
     isCollapsed = false,
 }: EventBannerProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
     const startDate = new Date(startTime);
     const endDate = new Date(endTime);
 
@@ -65,7 +68,7 @@ export function EventBanner({
 
     if (isCollapsed) {
         return (
-            <div className="event-banner event-banner--collapsed" role="banner">
+            <div className={`event-banner event-banner--collapsed${isHeaderHidden ? ' event-banner--collapsed--header-hidden' : ''}`} role="banner">
                 {/* Game icon */}
                 {game && (
                     <span className="event-banner--collapsed__game" aria-label={game.name}>
