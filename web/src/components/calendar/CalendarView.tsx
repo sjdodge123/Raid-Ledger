@@ -135,9 +135,9 @@ export function CalendarView({
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => {
         if (isScheduleView) {
-            // Schedule view uses week range like week view
-            const start = startOfWeek(currentDate, { weekStartsOn: 0 });
-            const end = endOfWeek(currentDate, { weekStartsOn: 0 });
+            // Schedule view shows continuous scrollable agenda
+            const start = startOfMonth(currentDate);
+            const end = endOfMonth(addMonths(currentDate, 2));
             return {
                 startAfter: start.toISOString(),
                 endBefore: end.toISOString(),
