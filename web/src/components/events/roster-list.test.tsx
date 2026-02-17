@@ -161,4 +161,129 @@ describe('RosterList', () => {
         expect(signups[0].user.username).toBe(originalOrder[0]);
         expect(signups[1].user.username).toBe(originalOrder[1]);
     });
+
+    // Mobile layout tests (ROK-358)
+
+    it('uses items-start on roster item container for mobile stacked layout', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const itemContainer = container.querySelector('.flex.items-start');
+        expect(itemContainer).toBeInTheDocument();
+    });
+
+    it('uses sm:items-center on roster item container for desktop inline layout', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const itemContainer = container.querySelector('.sm\\:items-center');
+        expect(itemContainer).toBeInTheDocument();
+    });
+
+    it('renders mobile secondary line with sm:hidden class for class/spec/iLevel', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const mobileSecondaryLine = container.querySelector('.flex.sm\\:hidden');
+        expect(mobileSecondaryLine).toBeInTheDocument();
+    });
+
+    it('renders desktop inline details with hidden sm:flex class', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const desktopInlineSpan = container.querySelector('.hidden.sm\\:flex');
+        expect(desktopInlineSpan).toBeInTheDocument();
+    });
+
+    it('renders class and spec on mobile secondary line', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        // Mobile secondary line: flex sm:hidden
+        const mobileSecondaryLines = container.querySelectorAll('.flex.sm\\:hidden');
+        // First sm:hidden div should contain class and spec
+        const secondaryLine = mobileSecondaryLines[0];
+        expect(secondaryLine).toBeInTheDocument();
+        expect(secondaryLine.textContent).toContain('Mage');
+        expect(secondaryLine.textContent).toContain('Arcane');
+    });
+
+    it('renders iLevel with "iLvl" suffix on mobile secondary line', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const mobileSecondaryLines = container.querySelectorAll('.flex.sm\\:hidden');
+        const secondaryLine = mobileSecondaryLines[0];
+        expect(secondaryLine.textContent).toContain('485 iLvl');
+    });
+
+    it('renders @username on mobile tertiary line', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const mobileLines = container.querySelectorAll('.flex.sm\\:hidden');
+        // Tertiary line is the last sm:hidden flex div containing @username
+        const tertiaryLine = mobileLines[mobileLines.length - 1];
+        expect(tertiaryLine.textContent).toContain('@Player2');
+    });
+
+    it('renders main character badge on mobile tertiary line', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const mobileLines = container.querySelectorAll('.flex.sm\\:hidden');
+        const tertiaryLine = mobileLines[mobileLines.length - 1];
+        expect(tertiaryLine.textContent).toContain('⭐');
+    });
+
+    it('renders desktop main badge with hidden sm:inline class', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const desktopMainBadge = container.querySelector('.hidden.sm\\:inline');
+        expect(desktopMainBadge).toBeInTheDocument();
+        expect(desktopMainBadge?.textContent).toContain('⭐');
+    });
+
+    it('applies 44px tap target classes to confirmation status indicator on mobile', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const tapTarget = container.querySelector('.min-w-\\[44px\\].min-h-\\[44px\\]');
+        expect(tapTarget).toBeInTheDocument();
+    });
+
+    it('removes tap target size on desktop (sm:min-w-0 sm:min-h-0)', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const tapTarget = container.querySelector('.sm\\:min-w-0.sm\\:min-h-0');
+        expect(tapTarget).toBeInTheDocument();
+    });
+
+    it('does not render mobile secondary line when character has no class, spec, or iLevel', () => {
+        const minimalSignup = {
+            id: 3,
+            user: { id: 789, discordId: '111', username: 'Player3', avatar: null },
+            signedUpAt: new Date(Date.now() - 60 * 1000).toISOString(),
+            characterId: 'char-uuid-2',
+            character: {
+                id: 'char-uuid-2',
+                name: 'Plainwalker',
+                class: null,
+                spec: null,
+                role: 'tank' as const,
+                isMain: false,
+                itemLevel: null,
+                avatarUrl: null,
+            },
+            confirmationStatus: 'confirmed' as const,
+        };
+        const { container } = render(<RosterList signups={[minimalSignup]} />);
+        // The secondary line (class/spec/iLevel) should not render when all are null
+        const mobileLines = container.querySelectorAll('.flex.sm\\:hidden');
+        // Only the tertiary line (@username) should be present
+        expect(mobileLines).toHaveLength(1);
+        expect(mobileLines[0].textContent).toContain('@Player3');
+    });
+
+    it('username is shown in desktop inline details span for confirmed characters', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const desktopDetails = container.querySelector('.hidden.sm\\:flex');
+        expect(desktopDetails?.textContent).toContain('Player2');
+    });
+
+    it('class and spec appear in desktop inline details span', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const desktopDetails = container.querySelector('.hidden.sm\\:flex');
+        expect(desktopDetails?.textContent).toContain('Mage');
+        expect(desktopDetails?.textContent).toContain('Arcane');
+    });
+
+    it('iLevel appears in desktop inline details span without iLvl suffix', () => {
+        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
+        const desktopDetails = container.querySelector('.hidden.sm\\:flex');
+        // Desktop shows raw item level number without "iLvl" label
+        expect(desktopDetails?.textContent).toContain('485');
+        expect(desktopDetails?.textContent).not.toContain('iLvl');
+    });
 });
