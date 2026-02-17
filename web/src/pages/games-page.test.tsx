@@ -20,6 +20,10 @@ vi.mock('../hooks/use-debounced-value', () => ({
     useDebouncedValue: (value: string) => value,
 }));
 
+vi.mock('../hooks/use-scroll-direction', () => ({
+    useScrollDirection: () => 'up',
+}));
+
 // Prevent rendering complex child components
 vi.mock('../components/games/GameCarousel', () => ({
     GameCarousel: ({ category }: { category: string }) => <div data-testid="game-carousel">{category}</div>,
@@ -109,18 +113,17 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             expect(filterBtn).toBeInTheDocument();
-            // The wrapping div should have md:hidden to hide on desktop
-            const wrapper = filterBtn.closest('.md\\:hidden');
-            expect(wrapper).toBeInTheDocument();
+            // FAB button itself has md:hidden to hide on desktop
+            expect(filterBtn).toHaveClass('md:hidden');
         });
 
-        it('renders Genre Filter label text on the button', () => {
+        it('renders Genre Filter aria-label on the FAB', () => {
             renderPage();
             expect(screen.getByRole('button', { name: /genre filter/i })).toBeInTheDocument();
         });
 
         it('renders funnel icon inside the filter button', () => {
-            const { container } = renderPage();
+            renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             // FunnelIcon renders as an svg inside the button
             const svg = filterBtn.querySelector('svg');
@@ -315,29 +318,20 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
 
             // Select RPG
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            let dialog = screen.getByRole('dialog');
+            const dialog = screen.getByRole('dialog');
             const rpgBtn1 = Array.from(dialog.querySelectorAll('button')).find(
                 (b) => b.textContent?.includes('RPG'),
             );
             fireEvent.click(rpgBtn1!);
 
-            // Badge should show
-            expect(
-                screen.getByRole('button', { name: /genre filter/i }).querySelector('span.rounded-full'),
-            ).toBeInTheDocument();
+            // RPG should be active (emerald styling)
+            expect(rpgBtn1).toHaveClass('bg-emerald-600/10');
 
-            // Deselect RPG
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            dialog = screen.getByRole('dialog');
-            const rpgBtn2 = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn2!);
+            // Deselect RPG by clicking again
+            fireEvent.click(rpgBtn1!);
 
-            // Badge should be gone
-            expect(
-                screen.getByRole('button', { name: /genre filter/i }).querySelector('span.rounded-full'),
-            ).not.toBeInTheDocument();
+            // RPG should no longer be active
+            expect(rpgBtn1).not.toHaveClass('bg-emerald-600/10');
         });
 
         it('"All" option clears the selected genre', () => {
@@ -345,29 +339,25 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
 
             // Select RPG
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            let dialog = screen.getByRole('dialog');
+            const dialog = screen.getByRole('dialog');
             const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
                 (b) => b.textContent?.includes('RPG'),
             );
             fireEvent.click(rpgBtn!);
 
-            // Badge should show
-            expect(
-                screen.getByRole('button', { name: /genre filter/i }).querySelector('span.rounded-full'),
-            ).toBeInTheDocument();
+            // RPG should be active
+            expect(rpgBtn).toHaveClass('bg-emerald-600/10');
 
-            // Open sheet and tap "All"
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            dialog = screen.getByRole('dialog');
+            // Tap "All" to clear
             const allBtn = Array.from(dialog.querySelectorAll('button')).find(
                 (b) => b.textContent?.includes('All'),
             );
             fireEvent.click(allBtn!);
 
-            // Badge should be gone
-            expect(
-                screen.getByRole('button', { name: /genre filter/i }).querySelector('span.rounded-full'),
-            ).not.toBeInTheDocument();
+            // RPG should no longer be active
+            expect(rpgBtn).not.toHaveClass('bg-emerald-600/10');
+            // "All" should now show checkmark (selected state)
+            expect(allBtn).toHaveClass('bg-emerald-600/10');
         });
 
         it('"All" option shows checkmark when no genre is selected (default state)', () => {
@@ -407,9 +397,24 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
         });
     });
 
-    describe('Badge visibility', () => {
-        it('shows badge with "1" when a genre is selected', () => {
+    describe('FAB filter button', () => {
+        it('renders FAB with FunnelIcon when genres are available', () => {
             renderPage();
+            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
+            expect(filterBtn).toBeInTheDocument();
+            // FAB renders an SVG icon (FunnelIcon)
+            expect(filterBtn.querySelector('svg')).toBeInTheDocument();
+        });
+
+        it('FAB has emerald background styling', () => {
+            renderPage();
+            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
+            expect(filterBtn).toHaveClass('bg-emerald-600');
+        });
+
+        it('selected genre is reflected inside bottom sheet, not on FAB badge', () => {
+            renderPage();
+            // Select a genre
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
             const dialog = screen.getByRole('dialog');
             const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
@@ -417,28 +422,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             );
             fireEvent.click(rpgBtn!);
 
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            const badge = filterBtn.querySelector('span.rounded-full');
-            expect(badge).toBeInTheDocument();
-            expect(badge?.textContent).toBe('1');
-        });
-
-        it('badge has emerald background styling', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            const badge = filterBtn.querySelector('span.rounded-full');
-            expect(badge).toHaveClass('bg-emerald-600');
-        });
-
-        it('no badge when no genre selected', () => {
-            renderPage();
+            // FAB should NOT contain a badge (no inline badge on FAB)
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             expect(filterBtn.querySelector('span.rounded-full')).not.toBeInTheDocument();
         });
