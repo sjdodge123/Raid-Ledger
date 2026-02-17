@@ -17,7 +17,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
     };
 
     return (
-        <div className="absolute right-0 top-full mt-2 w-96 bg-surface border border-edge rounded-lg shadow-2xl overflow-hidden z-50">
+        <div className="absolute right-0 top-full mt-2 w-[calc(100vw-2rem)] sm:w-96 max-w-[calc(100vw-1rem)] bg-surface border border-edge rounded-lg shadow-2xl overflow-hidden z-50">
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-edge">
                 <h3 className="text-lg font-semibold text-foreground">Notifications</h3>
@@ -32,7 +32,7 @@ export function NotificationDropdown({ onClose }: NotificationDropdownProps) {
             </div>
 
             {/* Notification List */}
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="max-h-[70vh] sm:max-h-[400px] overflow-y-auto">
                 {isLoading ? (
                     <div className="flex items-center justify-center py-8">
                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-400" />
