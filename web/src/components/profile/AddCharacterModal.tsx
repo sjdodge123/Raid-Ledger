@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import type { CharacterRole, CharacterDto, IgdbGameDto } from '@raid-ledger/contract';
+import { LockClosedIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import { Modal } from '../ui/modal';
 import { useCreateCharacter, useUpdateCharacter, useSetMainCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
@@ -51,6 +52,7 @@ export function AddCharacterModal({
     const setMainMutation = useSetMainCharacter();
     const { games: registryGames } = useGameRegistry();
     const isEditing = !!editingCharacter;
+    const isArmorySynced = !!editingCharacter?.lastSyncedAt;
 
     // IGDB game selection state
     const [selectedIgdbGame, setSelectedIgdbGame] = useState<IgdbGameDto | null>(null);
@@ -259,10 +261,19 @@ export function AddCharacterModal({
                         {/* Only show manual form fields when a game is selected */}
                         {(selectedIgdbGame || isEditing) && (
                             <>
+                                {/* Armory sync info banner */}
+                                {isArmorySynced && (
+                                    <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-blue-300 text-sm">
+                                        <InformationCircleIcon className="w-4 h-4 flex-shrink-0" />
+                                        <span>This character is synced from the Blizzard Armory. Some fields are read-only.</span>
+                                    </div>
+                                )}
+
                                 {/* Character Name */}
                                 <div>
                                     <label className="block text-sm font-medium text-secondary mb-1">
                                         Name <span className="text-red-400">*</span>
+                                        {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
                                     </label>
                                     <input
                                         type="text"
@@ -270,7 +281,9 @@ export function AddCharacterModal({
                                         onChange={(e) => updateField('name', e.target.value)}
                                         placeholder="Character name"
                                         maxLength={100}
-                                        className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                        disabled={isArmorySynced}
+                                        title={isArmorySynced ? 'This field is synced from the Blizzard Armory' : undefined}
+                                        className={`w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`}
                                     />
                                 </div>
 
@@ -282,6 +295,7 @@ export function AddCharacterModal({
                                             <div>
                                                 <label className="block text-sm font-medium text-secondary mb-1">
                                                     Class
+                                                    {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
                                                 </label>
                                                 <input
                                                     type="text"
@@ -289,12 +303,15 @@ export function AddCharacterModal({
                                                     onChange={(e) => updateField('class', e.target.value)}
                                                     placeholder="e.g. Warrior"
                                                     maxLength={50}
-                                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    disabled={isArmorySynced}
+                                                    title={isArmorySynced ? 'This field is synced from the Blizzard Armory' : undefined}
+                                                    className={`w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                 />
                                             </div>
                                             <div>
                                                 <label className="block text-sm font-medium text-secondary mb-1">
                                                     Spec
+                                                    {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
                                                 </label>
                                                 <input
                                                     type="text"
@@ -302,7 +319,9 @@ export function AddCharacterModal({
                                                     onChange={(e) => updateField('spec', e.target.value)}
                                                     placeholder="e.g. Arms"
                                                     maxLength={50}
-                                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                    disabled={isArmorySynced}
+                                                    title={isArmorySynced ? 'This field is synced from the Blizzard Armory' : undefined}
+                                                    className={`w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`}
                                                 />
                                             </div>
                                         </div>
@@ -328,6 +347,7 @@ export function AddCharacterModal({
                                         <div>
                                             <label className="block text-sm font-medium text-secondary mb-1">
                                                 Realm/Server
+                                                {isArmorySynced && <LockClosedIcon className="w-3.5 h-3.5 inline ml-1 text-muted" />}
                                             </label>
                                             <input
                                                 type="text"
@@ -335,7 +355,9 @@ export function AddCharacterModal({
                                                 onChange={(e) => updateField('realm', e.target.value)}
                                                 placeholder="e.g. Illidan"
                                                 maxLength={100}
-                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                                disabled={isArmorySynced}
+                                                title={isArmorySynced ? 'This field is synced from the Blizzard Armory' : undefined}
+                                                className={`w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 ${isArmorySynced ? 'opacity-60 cursor-not-allowed' : ''}`}
                                             />
                                         </div>
                                     </>
