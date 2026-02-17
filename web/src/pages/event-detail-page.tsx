@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
@@ -7,7 +7,6 @@ import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
-import { SignupConfirmationModal } from '../components/events/signup-confirmation-modal';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
 import { toAvatarUser } from '../lib/avatar';
@@ -17,10 +16,13 @@ import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
-import { RescheduleModal } from '../components/events/RescheduleModal';
 import { PugSection } from '../components/pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
+
+// ROK-343: Lazy load modals — only fetched when user triggers them
+const SignupConfirmationModal = lazy(() => import('../components/events/signup-confirmation-modal').then(m => ({ default: m.SignupConfirmationModal })));
+const RescheduleModal = lazy(() => import('../components/events/RescheduleModal').then(m => ({ default: m.RescheduleModal })));
 
 /**
  * Event Detail Page - ROK-184 Redesign
@@ -546,37 +548,41 @@ export function EventDetailPage() {
 
             {/* Character Confirmation Modal */}
             {pendingSignupId && (
-                <SignupConfirmationModal
-                    isOpen={showConfirmModal}
-                    onClose={() => {
-                        setShowConfirmModal(false);
-                        setPendingSignupId(null);
-                    }}
-                    eventId={eventId}
-                    signupId={pendingSignupId}
-                    gameId={gameRegistryEntry?.id ?? event.game?.registryId ?? undefined}
-                    gameName={event.game?.name ?? undefined}
-                    hasRoles={gameRegistryEntry?.hasRoles ?? true}
-                    gameSlug={event.game?.slug ?? undefined}
-                />
+                <Suspense fallback={null}>
+                    <SignupConfirmationModal
+                        isOpen={showConfirmModal}
+                        onClose={() => {
+                            setShowConfirmModal(false);
+                            setPendingSignupId(null);
+                        }}
+                        eventId={eventId}
+                        signupId={pendingSignupId}
+                        gameId={gameRegistryEntry?.id ?? event.game?.registryId ?? undefined}
+                        gameName={event.game?.name ?? undefined}
+                        hasRoles={gameRegistryEntry?.hasRoles ?? true}
+                        gameSlug={event.game?.slug ?? undefined}
+                    />
+                </Suspense>
             )}
 
             {/* ROK-223: Reschedule Modal */}
             {showRescheduleModal && event && (
-                <RescheduleModal
-                    isOpen={showRescheduleModal}
-                    onClose={() => setShowRescheduleModal(false)}
-                    eventId={eventId}
-                    currentStartTime={event.startTime}
-                    currentEndTime={event.endTime}
-                    eventTitle={event.title}
-                    gameSlug={event.game?.slug}
-                    gameName={event.game?.name}
-                    coverUrl={event.game?.coverUrl}
-                    description={event.description}
-                    creatorUsername={event.creator?.username}
-                    signupCount={event.signupCount}
-                />
+                <Suspense fallback={null}>
+                    <RescheduleModal
+                        isOpen={showRescheduleModal}
+                        onClose={() => setShowRescheduleModal(false)}
+                        eventId={eventId}
+                        currentStartTime={event.startTime}
+                        currentEndTime={event.endTime}
+                        eventTitle={event.title}
+                        gameSlug={event.game?.slug}
+                        gameName={event.game?.name}
+                        coverUrl={event.game?.coverUrl}
+                        description={event.description}
+                        creatorUsername={event.creator?.username}
+                        signupCount={event.signupCount}
+                    />
+                </Suspense>
             )}
         </div>
     );
