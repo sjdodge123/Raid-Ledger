@@ -616,6 +616,59 @@ describe('PluginRegistryService', () => {
     });
   });
 
+  describe('refreshActiveCache() — missing plugins table (ROK-363)', () => {
+    it('should start with empty activeSlugs when plugins table does not exist', async () => {
+      // Create a fresh service where onModuleInit hits a "table missing" error
+      const pgError = new Error(
+        'relation "plugins" does not exist',
+      ) as Error & { code: string };
+      pgError.code = '42P01'; // PostgreSQL "undefined_table" error code
+
+      const failDb = {
+        ...mockDb,
+        select: jest.fn().mockImplementation(() => ({
+          from: jest.fn().mockImplementation(() => ({
+            where: jest.fn().mockRejectedValue(pgError),
+          })),
+        })),
+      };
+
+      const failModule: TestingModule = await Test.createTestingModule({
+        providers: [
+          PluginRegistryService,
+          { provide: DrizzleAsyncProvider, useValue: failDb },
+          { provide: EventEmitter2, useValue: mockEventEmitter },
+        ],
+      }).compile();
+
+      const failService = failModule.get<PluginRegistryService>(
+        PluginRegistryService,
+      );
+
+      // Service should have started without throwing
+      expect(failService.isActive('anything')).toBe(false);
+      expect(failService.getActiveSlugsSync().size).toBe(0);
+    });
+
+    it('should re-throw non-table-missing database errors', async () => {
+      const otherError = new Error('connection refused') as Error & {
+        code: string;
+      };
+      otherError.code = '08006'; // PostgreSQL "connection_failure" code
+
+      // Override the mock DB to throw on the next select call
+      mockDb.select.mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockRejectedValue(otherError),
+        })),
+      }));
+
+      await expect(service.onModuleInit()).rejects.toThrow(
+        'connection refused',
+      );
+    });
+  });
+
   describe('manifest without gameSlugs (ROK-265)', () => {
     it('should register manifest without gameSlugs', () => {
       service.registerManifest(noGameManifest);

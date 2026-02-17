@@ -285,12 +285,28 @@ export class PluginRegistryService implements OnModuleInit {
   }
 
   private async refreshActiveCache(): Promise<void> {
-    const activeRecords = await this.db
-      .select({ slug: plugins.slug })
-      .from(plugins)
-      .where(eq(plugins.active, true));
+    try {
+      const activeRecords = await this.db
+        .select({ slug: plugins.slug })
+        .from(plugins)
+        .where(eq(plugins.active, true));
 
-    this.activeSlugs = new Set(activeRecords.map((r) => r.slug));
+      this.activeSlugs = new Set(activeRecords.map((r) => r.slug));
+    } catch (error: unknown) {
+      const isTableMissing =
+        error instanceof Error &&
+        'code' in error &&
+        (error as Error & { code: string }).code === '42P01';
+
+      if (isTableMissing) {
+        this.logger.warn(
+          'plugins table not found — plugin system disabled until migration is applied',
+        );
+        this.activeSlugs = new Set<string>();
+      } else {
+        throw error;
+      }
+    }
   }
 
   private async resolveIntegrationInfo(
