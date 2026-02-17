@@ -117,8 +117,9 @@ describe('UserEventSignups', () => {
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
-        expect(screen.getByText('Raid 1')).toBeInTheDocument();
-        expect(screen.getByText('Raid 2')).toBeInTheDocument();
+        // Each title appears twice (desktop EventCard + mobile MobileEventCard)
+        expect(screen.getAllByText('Raid 1')).toHaveLength(2);
+        expect(screen.getAllByText('Raid 2')).toHaveLength(2);
     });
 
     it('shows count badge with total events', () => {
