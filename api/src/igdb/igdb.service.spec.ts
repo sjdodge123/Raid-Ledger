@@ -87,6 +87,7 @@ describe('IgdbService', () => {
     };
 
     const mockSettingsService = {
+      get: jest.fn().mockResolvedValue(null),
       getIgdbConfig: jest.fn().mockResolvedValue(null), // Fall through to env vars
       isIgdbConfigured: jest.fn().mockResolvedValue(false),
     };

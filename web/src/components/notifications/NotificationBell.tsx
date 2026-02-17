@@ -14,11 +14,14 @@ export function NotificationBell() {
     const dropdownRef = useRef<HTMLDivElement>(null);
 
     // Close dropdown when header auto-hides on scroll down
-    useEffect(() => {
+    // Uses "adjust state during render" pattern to avoid setState in effect
+    const [prevDirection, setPrevDirection] = useState(scrollDirection);
+    if (scrollDirection !== prevDirection) {
+        setPrevDirection(scrollDirection);
         if (scrollDirection === 'down' && isOpen) {
             setIsOpen(false);
         }
-    }, [scrollDirection, isOpen]);
+    }
 
     // Close dropdown when clicking outside
     useEffect(() => {
