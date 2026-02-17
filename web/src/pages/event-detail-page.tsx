@@ -12,6 +12,7 @@ import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
 import { toAvatarUser } from '../lib/avatar';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
+import { AttendeeAvatars } from '../components/calendar/AttendeeAvatars';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -159,7 +160,7 @@ export function EventDetailPage() {
 
     // ROK-183/184: Handle slot click to join directly
     const handleSlotClick = async (role: RosterRole, position: number) => {
-        if (!isAuthenticated || isSignedUp) return;
+        if (!isAuthenticated || signup.isPending) return;
         try {
             const result = await signup.mutateAsync({ slotRole: role, slotPosition: position });
             if (isMMOGame) {
@@ -263,6 +264,47 @@ export function EventDetailPage() {
                 />
             </div>
 
+            {/* ROK-335: Mobile Quick Info bar — key event info at a glance */}
+            <div className="md:hidden event-detail-quick-info">
+                <div className="flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                        <p className="text-xs text-muted">
+                            {new Intl.DateTimeFormat('en-US', {
+                                weekday: 'short', month: 'short', day: 'numeric',
+                                hour: 'numeric', minute: '2-digit',
+                            }).format(new Date(event.startTime))}
+                        </p>
+                        <div
+                            className="flex items-center gap-2 mt-0.5 cursor-pointer group"
+                            onClick={() => document.getElementById('event-roster-section')?.scrollIntoView({ behavior: 'smooth' })}
+                        >
+                            <span className="text-sm font-semibold text-foreground group-hover:text-indigo-400 transition-colors">
+                                {roster?.count ?? 0} signed up
+                            </span>
+                            {(roster?.signups?.length ?? 0) > 0 && (
+                                <AttendeeAvatars
+                                    signups={roster!.signups.slice(0, 5).map(s => ({
+                                        id: s.id,
+                                        username: s.user.username,
+                                        avatar: s.user.avatar ?? null,
+                                        gameId: '',
+                                        avatarUrl: null,
+                                    }))}
+                                    totalCount={roster!.count}
+                                    maxVisible={5}
+                                    size="md"
+                                />
+                            )}
+                        </div>
+                    </div>
+                    {isSignedUp && (
+                        <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded-full whitespace-nowrap shrink-0">
+                            ✓ Signed up
+                        </span>
+                    )}
+                </div>
+            </div>
+
             {/* Plugin: content instance details (e.g. WoW dungeon/raid chips) */}
             <PluginSlot
                 name="event-detail:content-sections"
@@ -283,59 +325,66 @@ export function EventDetailPage() {
 
             {/* AC-2: Slot Grid - Primary Focus (Full Width) */}
             {rosterAssignments && (
-                <div className="event-detail-slots">
+                <div className="event-detail-slots" id="event-roster-section">
                     <div className="event-detail-slots__header">
                         <h2>
-                            <span role="img" aria-hidden="true">🎯</span> Roster Slots
+                            Roster Slots
                             {canManageRoster && (
-                                <span className="badge badge--indigo">Click slot to assign</span>
+                                <span className="badge badge--indigo hidden md:inline-flex">Click slot to assign</span>
                             )}
                             {canJoinSlot && (
-                                <span className="badge badge--green">Click to Join</span>
+                                <span className="badge badge--green hidden md:inline-flex">Click to Join</span>
                             )}
                         </h2>
-                        {!isAuthenticated && (
-                            <Link
-                                to="/login"
-                                className="btn btn-primary btn-sm"
-                            >
-                                Login to Join
-                            </Link>
-                        )}
-                        {isSignedUp && !needsConfirmation && (
-                            <button
-                                onClick={handleCancel}
-                                disabled={cancelSignup.isPending}
-                                className="btn btn-danger btn-sm"
-                            >
-                                {cancelSignup.isPending ? 'Leaving...' : 'Leave Event'}
-                            </button>
-                        )}
-                        {needsConfirmation && userSignup && (
-                            <button
-                                onClick={() => {
-                                    setPendingSignupId(userSignup.id);
-                                    setShowConfirmModal(true);
-                                }}
-                                className="btn btn-warning btn-sm"
-                            >
-                                ❓ Confirm Character
-                            </button>
-                        )}
+                        <div className="flex items-center gap-2">
+                            {/* ROK-229: Auto-sub bench toggle — segmented pill style */}
+                            {canManageRoster && !isMMOGame && (
+                                <div className={`event-detail-autosub-toggle ${updateAutoUnbench.isPending ? 'opacity-50 pointer-events-none' : ''}`}>
+                                    <span className="text-xs text-gray-400 mr-2 whitespace-nowrap">Auto-sub</span>
+                                    <div
+                                        className="event-detail-autosub-toggle__track"
+                                        role="switch"
+                                        aria-checked={event.autoUnbench ?? true}
+                                        tabIndex={0}
+                                        onClick={() => !updateAutoUnbench.isPending && updateAutoUnbench.mutate(!(event.autoUnbench ?? true))}
+                                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateAutoUnbench.mutate(!(event.autoUnbench ?? true)); } }}
+                                    >
+                                        <span className={`event-detail-autosub-toggle__option ${(event.autoUnbench ?? true) ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                                        <span className={`event-detail-autosub-toggle__option ${!(event.autoUnbench ?? true) ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                                    </div>
+                                </div>
+                            )}
+                            {!isAuthenticated && (
+                                <Link
+                                    to="/login"
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    Login to Join
+                                </Link>
+                            )}
+                            {isSignedUp && (
+                                <button
+                                    onClick={handleCancel}
+                                    disabled={cancelSignup.isPending}
+                                    className="btn btn-danger btn-sm"
+                                >
+                                    {cancelSignup.isPending ? 'Leaving...' : 'Leave Event'}
+                                </button>
+                            )}
+                        </div>
                     </div>
 
-                    {/* ROK-229: Auto-sub bench toggle (generic events only) */}
-                    {canManageRoster && !isMMOGame && (
-                        <label className="flex items-center gap-2 text-sm text-gray-400 mb-3 cursor-pointer select-none">
-                            <input
-                                type="checkbox"
-                                checked={event.autoUnbench ?? true}
-                                onChange={(e) => updateAutoUnbench.mutate(e.target.checked)}
-                                disabled={updateAutoUnbench.isPending}
-                                className="rounded border-gray-600 bg-gray-700 text-indigo-500 focus:ring-indigo-500"
-                            />
-                            Auto-sub bench players when a slot opens
-                        </label>
+                    {/* Confirm Character — full width below header */}
+                    {needsConfirmation && userSignup && (
+                        <button
+                            onClick={() => {
+                                setPendingSignupId(userSignup.id);
+                                setShowConfirmModal(true);
+                            }}
+                            className="btn btn-warning btn-sm w-full mb-3"
+                        >
+                            ❓ Confirm Character
+                        </button>
                     )}
 
                     <RosterBuilder

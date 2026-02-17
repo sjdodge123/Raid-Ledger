@@ -17,19 +17,23 @@ export function ImpersonationBanner() {
     };
 
     return (
-        <div className="impersonation-banner">
-            <div className="impersonation-banner__content">
-                <span className="impersonation-banner__icon">⚠️</span>
-                <span className="impersonation-banner__text">
-                    Viewing as <strong>{user.username}</strong>
-                </span>
-                <button
-                    onClick={handleExit}
-                    className="impersonation-banner__exit"
-                >
-                    Exit Impersonation
-                </button>
+        <>
+            <div className="impersonation-banner">
+                <div className="impersonation-banner__content">
+                    <span className="impersonation-banner__icon">⚠️</span>
+                    <span className="impersonation-banner__text">
+                        Viewing as <strong>{user.username}</strong>
+                    </span>
+                    <button
+                        onClick={handleExit}
+                        className="impersonation-banner__exit"
+                    >
+                        Exit Impersonation
+                    </button>
+                </div>
             </div>
-        </div>
+            {/* Spacer to offset fixed banner height */}
+            <div className="impersonation-banner__spacer" />
+        </>
     );
 }

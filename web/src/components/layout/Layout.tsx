@@ -38,7 +38,7 @@ export function Layout({ children }: LayoutProps) {
     }, []);
 
     return (
-        <div className="min-h-screen flex flex-col bg-backdrop overflow-x-hidden">
+        <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
             <SpaceEffects />
             <ImpersonationBanner />
             <Header onMenuClick={openMoreDrawer} />

@@ -1,9 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
+import { BottomSheet } from '../ui/bottom-sheet';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useConfirmSignup } from '../../hooks/use-signups';
 import { InlineCharacterForm } from '../characters/inline-character-form';
+import { useMediaQuery } from '../../hooks/use-media-query';
 import { toast } from '../../lib/toast';
 
 interface SignupConfirmationModalProps {
@@ -54,6 +56,7 @@ export function SignupConfirmationModal({
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
     const confirmMutation = useConfirmSignup(eventId);
+    const isMobile = useMediaQuery('(max-width: 767px)');
     const characters = charactersData?.data ?? [];
     const mainCharacter = characters.find((c) => c.isMain);
     const altCharacters = characters.filter((c) => !c.isMain);
@@ -115,156 +118,169 @@ export function SignupConfirmationModal({
         // Characters list will refresh via query invalidation
     };
 
-    return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Confirm Your Character">
-            <div className="space-y-4">
-                {/* Loading state */}
-                {isLoadingCharacters && (
-                    <div className="space-y-3">
-                        {[1, 2, 3].map((i) => (
-                            <div
-                                key={i}
-                                className="h-16 bg-panel rounded-lg animate-pulse"
+    const content = (
+        <div className="space-y-4">
+            {/* Loading state */}
+            {isLoadingCharacters && (
+                <div className="space-y-3">
+                    {[1, 2, 3].map((i) => (
+                        <div
+                            key={i}
+                            className="h-16 bg-panel rounded-lg animate-pulse"
+                        />
+                    ))}
+                </div>
+            )}
+
+            {/* Error state */}
+            {isError && (
+                <div className="text-center py-8 text-red-400">
+                    <p className="mb-2">Failed to load characters</p>
+                    <p className="text-sm text-muted">
+                        {error instanceof Error ? error.message : 'Please try again.'}
+                    </p>
+                </div>
+            )}
+
+            {/* No characters state — inline creation (ROK-234) */}
+            {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
+                <div className="text-center py-6 text-muted">
+                    <p className="mb-3">
+                        No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
+                    </p>
+                    <button
+                        onClick={() => setShowCreateForm(true)}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors"
+                    >
+                        Create Character
+                    </button>
+                </div>
+            )}
+
+            {/* Inline character creation form (ROK-234) */}
+            {showCreateForm && gameId && (
+                <div>
+                    <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                        Create a Character
+                    </h3>
+                    <InlineCharacterForm
+                        gameId={gameId}
+                        hasRoles={hasRoles}
+                        gameSlug={gameSlug}
+                        onCharacterCreated={handleCharacterCreated}
+                        onCancel={() => setShowCreateForm(false)}
+                    />
+                </div>
+            )}
+
+            {/* Main character section (AC-3) */}
+            {mainCharacter && (
+                <div>
+                    <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                        Main Character
+                    </h3>
+                    <CharacterCard
+                        character={mainCharacter}
+                        isSelected={selectedCharacterId === mainCharacter.id}
+                        onSelect={() => handleSelectCharacter(mainCharacter.id)}
+                        isMain
+                    />
+                </div>
+            )}
+
+            {/* Alt characters section (AC-4) */}
+            {altCharacters.length > 0 && (
+                <div>
+                    <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                        Alt Characters
+                    </h3>
+                    <div className="space-y-2">
+                        {altCharacters.map((character) => (
+                            <CharacterCard
+                                key={character.id}
+                                character={character}
+                                isSelected={selectedCharacterId === character.id}
+                                onSelect={() => handleSelectCharacter(character.id)}
                             />
                         ))}
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* Error state */}
-                {isError && (
-                    <div className="text-center py-8 text-red-400">
-                        <p className="mb-2">Failed to load characters</p>
-                        <p className="text-sm text-muted">
-                            {error instanceof Error ? error.message : 'Please try again.'}
+            {/* Add another character link (ROK-234) */}
+            {characters.length > 0 && !showCreateForm && gameId && (
+                <button
+                    onClick={() => setShowCreateForm(true)}
+                    className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                >
+                    + Add another character
+                </button>
+            )}
+
+            {/* Inline create form when characters already exist */}
+            {characters.length > 0 && showCreateForm && gameId && (
+                <div>
+                    <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                        Add Character
+                    </h3>
+                    <InlineCharacterForm
+                        gameId={gameId}
+                        hasRoles={hasRoles}
+                        gameSlug={gameSlug}
+                        onCharacterCreated={handleCharacterCreated}
+                        onCancel={() => setShowCreateForm(false)}
+                    />
+                </div>
+            )}
+
+            {/* Role mismatch warning (AC-5) */}
+            {hasRoleMismatch && (
+                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
+                    <span className="text-lg">⚠️</span>
+                    <div className="text-sm">
+                        <p className="font-medium">Role Mismatch</p>
+                        <p className="text-amber-400/80">
+                            This character's role ({selectedCharacter?.effectiveRole}) differs from
+                            the expected role ({expectedRole}). This may affect raid
+                            composition.
                         </p>
                     </div>
-                )}
+                </div>
+            )}
 
-                {/* No characters state — inline creation (ROK-234) */}
-                {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
-                    <div className="text-center py-6 text-muted">
-                        <p className="mb-3">
-                            No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
-                        </p>
-                        <button
-                            onClick={() => setShowCreateForm(true)}
-                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors"
-                        >
-                            Create Character
-                        </button>
-                    </div>
-                )}
-
-                {/* Inline character creation form (ROK-234) */}
-                {showCreateForm && gameId && (
-                    <div>
-                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
-                            Create a Character
-                        </h3>
-                        <InlineCharacterForm
-                            gameId={gameId}
-                            hasRoles={hasRoles}
-                            gameSlug={gameSlug}
-                            onCharacterCreated={handleCharacterCreated}
-                            onCancel={() => setShowCreateForm(false)}
-                        />
-                    </div>
-                )}
-
-                {/* Main character section (AC-3) */}
-                {mainCharacter && (
-                    <div>
-                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
-                            Main Character
-                        </h3>
-                        <CharacterCard
-                            character={mainCharacter}
-                            isSelected={selectedCharacterId === mainCharacter.id}
-                            onSelect={() => handleSelectCharacter(mainCharacter.id)}
-                            isMain
-                        />
-                    </div>
-                )}
-
-                {/* Alt characters section (AC-4) */}
-                {altCharacters.length > 0 && (
-                    <div>
-                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
-                            Alt Characters
-                        </h3>
-                        <div className="space-y-2">
-                            {altCharacters.map((character) => (
-                                <CharacterCard
-                                    key={character.id}
-                                    character={character}
-                                    isSelected={selectedCharacterId === character.id}
-                                    onSelect={() => handleSelectCharacter(character.id)}
-                                />
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                {/* Add another character link (ROK-234) */}
-                {characters.length > 0 && !showCreateForm && gameId && (
+            {/* Actions — only shown when characters exist and form is not active */}
+            {characters.length > 0 && !showCreateForm && (
+                <div className="flex gap-3 pt-2">
                     <button
-                        onClick={() => setShowCreateForm(true)}
-                        className="text-sm text-emerald-400 hover:text-emerald-300 transition-colors"
+                        onClick={onClose}
+                        className="flex-1 px-4 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors"
                     >
-                        + Add another character
+                        Cancel
                     </button>
-                )}
+                    <button
+                        onClick={handleConfirm}
+                        disabled={!selectedCharacterId || confirmMutation.isPending}
+                        className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
+                    >
+                        {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
 
-                {/* Inline create form when characters already exist */}
-                {characters.length > 0 && showCreateForm && gameId && (
-                    <div>
-                        <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
-                            Add Character
-                        </h3>
-                        <InlineCharacterForm
-                            gameId={gameId}
-                            hasRoles={hasRoles}
-                            gameSlug={gameSlug}
-                            onCharacterCreated={handleCharacterCreated}
-                            onCancel={() => setShowCreateForm(false)}
-                        />
-                    </div>
-                )}
+    // ROK-335: Use BottomSheet on mobile, Modal on desktop
+    if (isMobile) {
+        return (
+            <BottomSheet isOpen={isOpen} onClose={onClose} title="Confirm Your Character">
+                {content}
+            </BottomSheet>
+        );
+    }
 
-                {/* Role mismatch warning (AC-5) */}
-                {hasRoleMismatch && (
-                    <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
-                        <span className="text-lg">⚠️</span>
-                        <div className="text-sm">
-                            <p className="font-medium">Role Mismatch</p>
-                            <p className="text-amber-400/80">
-                                This character's role ({selectedCharacter?.effectiveRole}) differs from
-                                the expected role ({expectedRole}). This may affect raid
-                                composition.
-                            </p>
-                        </div>
-                    </div>
-                )}
-
-                {/* Actions — only shown when characters exist and form is not active */}
-                {characters.length > 0 && !showCreateForm && (
-                    <div className="flex gap-3 pt-2">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 px-4 py-2 bg-panel hover:bg-overlay text-foreground rounded-lg transition-colors"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleConfirm}
-                            disabled={!selectedCharacterId || confirmMutation.isPending}
-                            className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
-                        >
-                            {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
-                        </button>
-                    </div>
-                )}
-            </div>
+    return (
+        <Modal isOpen={isOpen} onClose={onClose} title="Confirm Your Character">
+            {content}
         </Modal>
     );
 }
@@ -315,9 +331,8 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                         </span>
                     )}
                     {character.faction && (
-                        <span className={`px-1 py-0.5 rounded text-xs ${
-                            character.faction === 'horde' ? 'text-red-400' : 'text-blue-400'
-                        }`}>
+                        <span className={`px-1 py-0.5 rounded text-xs ${character.faction === 'horde' ? 'text-red-400' : 'text-blue-400'
+                            }`}>
                             {character.faction === 'horde' ? 'H' : 'A'}
                         </span>
                     )}

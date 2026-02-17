@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import { useRef, useEffect } from 'react';
 import { RosterCard } from './RosterCard';
 
 interface RosterSlotProps {
@@ -17,6 +17,10 @@ interface RosterSlotProps {
     onRemove?: (signupId: number) => void;
     /** ROK-226: Current user can self-unassign from their own slot */
     onSelfRemove?: () => void;
+    /** Whether this slot is in the "Join?" confirmation state (controlled by parent) */
+    isPending?: boolean;
+    /** Called to toggle the pending confirmation state */
+    onPendingChange?: (pending: boolean) => void;
 }
 
 /**
@@ -26,18 +30,22 @@ interface RosterSlotProps {
  * First click: shows "Join?" confirmation state
  * Second click: triggers the join action
  * ROK-184: Glow effect for current user's slot
+ *
+ * The "pending" (Join?) state is controlled by the parent to survive
+ * background React Query refetches that would otherwise remount this component.
  */
-export function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove }: RosterSlotProps) {
-    // ROK-183: Double-click confirmation state
-    const [isPending, setIsPending] = useState(false);
+export function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove, isPending = false, onPendingChange }: RosterSlotProps) {
+    // Capture the onJoinClick callback so that a React Query refetch
+    // that briefly sets onJoinClick=undefined doesn't prevent the
+    // confirmation click from firing.
+    const savedJoinClickRef = useRef(onJoinClick);
 
-    // Auto-reset pending state after 3 seconds
+    // Keep the ref in sync when the prop is defined
     useEffect(() => {
-        if (isPending) {
-            const timeout = setTimeout(() => setIsPending(false), 3000);
-            return () => clearTimeout(timeout);
+        if (onJoinClick) {
+            savedJoinClickRef.current = onJoinClick;
         }
-    }, [isPending]);
+    }, [onJoinClick]);
 
     const handleClick = () => {
         // Admin click: open assignment popup
@@ -46,19 +54,21 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
             return;
         }
         // Regular user: double-click join on empty slots
-        if (!item && onJoinClick) {
+        const joinFn = onJoinClick ?? savedJoinClickRef.current;
+        if (!item && joinFn) {
             if (isPending) {
                 // Second click - confirm the join
-                onJoinClick(role, position);
-                setIsPending(false);
+                joinFn(role, position);
+                onPendingChange?.(false);
             } else {
                 // First click - show confirmation state
-                setIsPending(true);
+                savedJoinClickRef.current = joinFn;
+                onPendingChange?.(true);
             }
         }
     };
 
-    const isClickable = onAdminClick || (!item && !!onJoinClick);
+    const isClickable = onAdminClick || (!item && !!(onJoinClick || isPending));
 
     // ROK-184: Glow effect classes for current user's slot
     const glowClass = isCurrentUser
@@ -101,8 +111,8 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
                         item={item}
                         onRemove={
                             onRemove ? () => onRemove(item.signupId)
-                            : (isCurrentUser && onSelfRemove) ? onSelfRemove
-                            : undefined
+                                : (isCurrentUser && onSelfRemove) ? onSelfRemove
+                                    : undefined
                         }
                     />
                 </div>
