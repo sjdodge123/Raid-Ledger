@@ -49,7 +49,7 @@ describe('EventsController', () => {
       create: jest.fn().mockResolvedValue(mockEvent),
       findAll: jest.fn().mockResolvedValue({
         data: [mockEvent],
-        meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 20, totalPages: 1, hasMore: false },
       }),
       findOne: jest.fn().mockResolvedValue(mockEvent),
       update: jest.fn().mockResolvedValue(mockEvent),

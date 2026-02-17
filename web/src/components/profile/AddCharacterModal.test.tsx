@@ -240,7 +240,7 @@ describe('AddCharacterModal — armory-synced character', () => {
     });
 
     it('shows LockClosedIcon on Name label for synced characters', () => {
-        const { container } = renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
         // The Name label contains a lock icon SVG
         const nameLabel = screen.getByText(/^Name/).closest('label');
         expect(nameLabel).toBeInTheDocument();
@@ -249,7 +249,7 @@ describe('AddCharacterModal — armory-synced character', () => {
     });
 
     it('shows LockClosedIcon on Class label for synced characters', () => {
-        const { container } = renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const classLabel = screen.getByText(/^Class/).closest('label');
         expect(classLabel).toBeInTheDocument();
         const svgInLabel = classLabel?.querySelector('svg');
@@ -257,7 +257,7 @@ describe('AddCharacterModal — armory-synced character', () => {
     });
 
     it('shows LockClosedIcon on Spec label for synced characters', () => {
-        const { container } = renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const specLabel = screen.getByText(/^Spec/).closest('label');
         expect(specLabel).toBeInTheDocument();
         const svgInLabel = specLabel?.querySelector('svg');
@@ -265,7 +265,7 @@ describe('AddCharacterModal — armory-synced character', () => {
     });
 
     it('shows LockClosedIcon on Realm label for synced characters', () => {
-        const { container } = renderModal({ editingCharacter: createArmorySyncedCharacter() });
+        renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const realmLabel = screen.getByText(/^Realm\/Server/).closest('label');
         expect(realmLabel).toBeInTheDocument();
         const svgInLabel = realmLabel?.querySelector('svg');

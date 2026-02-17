@@ -95,7 +95,12 @@ export class UsersController {
     );
     return {
       data: result.data,
-      meta: { total: result.total, page, limit },
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        hasMore: page * limit < result.total,
+      },
     };
   }
 
@@ -541,7 +546,12 @@ export class UsersController {
         ...u,
         createdAt: u.createdAt.toISOString(),
       })),
-      meta: { total: result.total, page, limit },
+      meta: {
+        total: result.total,
+        page,
+        limit,
+        hasMore: page * limit < result.total,
+      },
     };
   }
 

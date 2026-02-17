@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminGames } from '../../hooks/use-admin-games';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 
 export function GameLibraryTable() {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [page, setPage] = useState(1);
     const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
@@ -15,13 +15,12 @@ export function GameLibraryTable() {
     useEffect(() => {
         const timer = setTimeout(() => {
             setDebouncedSearch(search);
-            setPage(1);
         }, 300);
         return () => clearTimeout(timer);
     }, [search]);
 
-    const { games, deleteGame, hideGame, unhideGame } = useAdminGames(debouncedSearch, page, 20, showHidden);
-    const data = games.data;
+    const { games, deleteGame, hideGame, unhideGame } = useAdminGames(debouncedSearch, 20, showHidden);
+    const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = games;
 
     const handleDelete = async (gameId: number, gameName: string) => {
         if (!confirm(`Remove "${gameName}" from the game library? This cannot be undone.`)) {
@@ -83,10 +82,7 @@ export function GameLibraryTable() {
                     role="switch"
                     aria-checked={showHidden === 'only'}
                     aria-label="Show hidden games"
-                    onClick={() => {
-                        setShowHidden(showHidden === 'only' ? undefined : 'only');
-                        setPage(1);
-                    }}
+                    onClick={() => setShowHidden(showHidden === 'only' ? undefined : 'only')}
                     className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-panel cursor-pointer ${
                         showHidden === 'only'
                             ? 'bg-purple-600'
@@ -119,12 +115,12 @@ export function GameLibraryTable() {
             </div>
 
             {/* Loading state */}
-            {games.isLoading && (
+            {isLoading && (
                 <div className="text-center py-8 text-muted">Loading games...</div>
             )}
 
             {/* Empty state */}
-            {!games.isLoading && data && data.data.length === 0 && (
+            {!isLoading && items.length === 0 && (
                 <div className="text-center py-8 text-muted">
                     {showHidden === 'only'
                         ? 'No hidden games.'
@@ -135,11 +131,13 @@ export function GameLibraryTable() {
             )}
 
             {/* Game List */}
-            {data && data.data.length > 0 && (
+            {items.length > 0 && (
                 <>
+                    <div className="text-sm text-muted mb-2">{total} games</div>
+
                     {/* Mobile Card Layout (<768px) */}
                     <div className="md:hidden space-y-2">
-                        {data.data.map((game) => (
+                        {items.map((game) => (
                             <div key={game.id} className="bg-panel/50 rounded-xl border border-edge/50 p-3 flex items-center gap-3">
                                 {game.coverUrl ? (
                                     <img
@@ -182,7 +180,7 @@ export function GameLibraryTable() {
                                 </tr>
                             </thead>
                             <tbody>
-                                {data.data.map((game) => (
+                                {items.map((game) => (
                                     <tr key={game.id} className={`border-b border-edge/30 last:border-0 hover:bg-overlay/20 transition-colors ${game.hidden ? 'opacity-60' : ''}`}>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
@@ -253,30 +251,12 @@ export function GameLibraryTable() {
                         </table>
                     </div>
 
-                    {/* Pagination */}
-                    {data.meta.totalPages > 1 && (
-                        <div className="flex items-center justify-between mt-4 text-sm">
-                            <span className="text-muted">
-                                {data.meta.total} games · Page {data.meta.page} of {data.meta.totalPages}
-                            </span>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                                    disabled={page <= 1}
-                                    className="px-3 py-2.5 min-h-[44px] bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
-                                >
-                                    Previous
-                                </button>
-                                <button
-                                    onClick={() => setPage((p) => Math.min(data.meta.totalPages, p + 1))}
-                                    disabled={page >= data.meta.totalPages}
-                                    className="px-3 py-2.5 min-h-[44px] bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
-                                >
-                                    Next
-                                </button>
-                            </div>
-                        </div>
-                    )}
+                    {/* Infinite Scroll Sentinel */}
+                    <InfiniteScrollSentinel
+                        sentinelRef={sentinelRef}
+                        isFetchingNextPage={isFetchingNextPage}
+                        hasNextPage={hasNextPage}
+                    />
                 </>
             )}
         </div>

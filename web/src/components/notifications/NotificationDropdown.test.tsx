@@ -19,7 +19,7 @@ const mockUseNotifications = vi.fn(() => ({
 }));
 
 vi.mock('../../hooks/use-notifications', () => ({
-    useNotifications: (...args: unknown[]) => mockUseNotifications(...args),
+    useNotifications: () => mockUseNotifications(),
 }));
 
 const createMockNotification = (overrides: Partial<Notification> = {}): Notification => ({

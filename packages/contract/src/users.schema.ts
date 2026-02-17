@@ -97,6 +97,7 @@ export const PlayersListResponseSchema = z.object({
         total: z.number().int(),
         page: z.number().int(),
         limit: z.number().int(),
+        hasMore: z.boolean(),
     }),
 });
 
@@ -137,6 +138,7 @@ export const UserManagementListResponseSchema = z.object({
         total: z.number().int(),
         page: z.number().int(),
         limit: z.number().int(),
+        hasMore: z.boolean(),
     }),
 });
 

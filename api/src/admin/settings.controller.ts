@@ -630,6 +630,7 @@ export class AdminSettingsController {
         page: safePage,
         limit: safeLimit,
         totalPages: Math.ceil(total / safeLimit),
+        hasMore: safePage * safeLimit < total,
       },
     };
   }

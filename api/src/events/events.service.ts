@@ -316,6 +316,7 @@ export class EventsService {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
       },
     };
   }

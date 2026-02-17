@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { useInfiniteList } from './use-infinite-list';
 
 interface AdminGame {
     id: number;
@@ -19,10 +20,11 @@ interface AdminGameListResponse {
         page: number;
         limit: number;
         totalPages: number;
+        hasMore: boolean;
     };
 }
 
-export function useAdminGames(search: string, page: number, limit = 20, showHidden?: 'only' | 'true') {
+export function useAdminGames(search: string, limit = 20, showHidden?: 'only' | 'true') {
     const queryClient = useQueryClient();
 
     const getHeaders = () => ({
@@ -30,9 +32,9 @@ export function useAdminGames(search: string, page: number, limit = 20, showHidd
         Authorization: `Bearer ${getAuthToken() || ''}`,
     });
 
-    const games = useQuery<AdminGameListResponse>({
-        queryKey: ['admin', 'games', { search, page, limit, showHidden }],
-        queryFn: async () => {
+    const games = useInfiniteList<AdminGame>({
+        queryKey: ['admin', 'games', { search, limit, showHidden }],
+        queryFn: async (page): Promise<AdminGameListResponse> => {
             const params = new URLSearchParams();
             if (search) params.set('search', search);
             if (showHidden) params.set('showHidden', showHidden);
@@ -48,7 +50,6 @@ export function useAdminGames(search: string, page: number, limit = 20, showHidd
             return response.json();
         },
         enabled: !!getAuthToken(),
-        staleTime: 10_000,
     });
 
     const deleteGame = useMutation<{ success: boolean; message: string }, Error, number>({
