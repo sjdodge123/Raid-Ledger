@@ -57,10 +57,10 @@ describe('NotificationDropdown — responsive CSS classes', () => {
         });
     });
 
-    it('applies mobile width class w-[calc(100vw-2rem)] on the container', () => {
+    it('applies mobile fixed positioning with inset-x-4 on the container', () => {
         const { container } = renderDropdown();
         const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('w-[calc(100vw-2rem)]');
+        expect(dropdown).toHaveClass('fixed', 'inset-x-4');
     });
 
     it('applies desktop width class sm:w-96 on the container', () => {
@@ -69,10 +69,10 @@ describe('NotificationDropdown — responsive CSS classes', () => {
         expect(dropdown).toHaveClass('sm:w-96');
     });
 
-    it('applies overflow safety class max-w-[calc(100vw-1rem)] on the container', () => {
+    it('applies top-16 mobile positioning on the container', () => {
         const { container } = renderDropdown();
         const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('max-w-[calc(100vw-1rem)]');
+        expect(dropdown).toHaveClass('top-16');
     });
 
     it('applies mobile scroll height class max-h-[70vh] on the notification list', () => {
@@ -195,9 +195,9 @@ describe('NotificationDropdown — header', () => {
         expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
 
-    it('positions as absolute with z-50', () => {
+    it('positions as fixed with z-50 (sm:absolute for desktop)', () => {
         const { container } = renderDropdown();
         const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('absolute', 'z-50');
+        expect(dropdown).toHaveClass('fixed', 'z-50');
     });
 });

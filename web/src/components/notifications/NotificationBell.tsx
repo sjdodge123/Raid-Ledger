@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNotifications } from '../../hooks/use-notifications';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { NotificationDropdown } from './NotificationDropdown';
 
 /**
@@ -9,7 +10,15 @@ import { NotificationDropdown } from './NotificationDropdown';
 export function NotificationBell() {
     const [isOpen, setIsOpen] = useState(false);
     const { unreadCount } = useNotifications();
+    const scrollDirection = useScrollDirection();
     const dropdownRef = useRef<HTMLDivElement>(null);
+
+    // Close dropdown when header auto-hides on scroll down
+    useEffect(() => {
+        if (scrollDirection === 'down' && isOpen) {
+            setIsOpen(false);
+        }
+    }, [scrollDirection, isOpen]);
 
     // Close dropdown when clicking outside
     useEffect(() => {
