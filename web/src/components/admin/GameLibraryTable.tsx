@@ -106,16 +106,49 @@ export function GameLibraryTable() {
                 </div>
             )}
 
-            {/* Table */}
+            {/* Game List */}
             {data && data.data.length > 0 && (
                 <>
-                    <div className="bg-panel/50 rounded-xl border border-edge/50 overflow-hidden">
+                    {/* Mobile Card Layout (<768px) */}
+                    <div className="md:hidden space-y-2">
+                        {data.data.map((game) => (
+                            <div key={game.id} className="bg-panel/50 rounded-xl border border-edge/50 p-3 flex items-center gap-3">
+                                {game.coverUrl ? (
+                                    <img
+                                        src={game.coverUrl}
+                                        alt=""
+                                        className="w-12 h-16 rounded object-cover flex-shrink-0"
+                                    />
+                                ) : (
+                                    <div className="w-12 h-16 rounded bg-overlay flex-shrink-0" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-foreground font-medium truncate">{game.name}</div>
+                                    <div className="text-xs text-muted mt-0.5">IGDB ID: {game.igdbId}</div>
+                                    <div className="text-xs text-muted">Cached: {new Date(game.cachedAt).toLocaleDateString()}</div>
+                                </div>
+                                <button
+                                    onClick={() => handleDelete(game.id, game.name)}
+                                    disabled={deleteGame.isPending}
+                                    className="w-11 h-11 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 rounded-lg transition-colors flex-shrink-0"
+                                    title="Remove game"
+                                >
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    {/* Desktop Table Layout (>=768px) */}
+                    <div className="hidden md:block bg-panel/50 rounded-xl border border-edge/50 overflow-hidden">
                         <table className="w-full text-sm">
                             <thead>
                                 <tr className="border-b border-edge/50">
                                     <th className="text-left px-4 py-3 text-muted font-medium">Game</th>
-                                    <th className="text-left px-4 py-3 text-muted font-medium hidden sm:table-cell">IGDB ID</th>
-                                    <th className="text-left px-4 py-3 text-muted font-medium hidden md:table-cell">Cached</th>
+                                    <th className="text-left px-4 py-3 text-muted font-medium">IGDB ID</th>
+                                    <th className="text-left px-4 py-3 text-muted font-medium">Cached</th>
                                     <th className="px-4 py-3 text-muted font-medium w-24"></th>
                                 </tr>
                             </thead>
@@ -143,8 +176,8 @@ export function GameLibraryTable() {
                                                 </div>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 text-muted hidden sm:table-cell">{game.igdbId}</td>
-                                        <td className="px-4 py-3 text-muted hidden md:table-cell">
+                                        <td className="px-4 py-3 text-muted">{game.igdbId}</td>
+                                        <td className="px-4 py-3 text-muted">
                                             {new Date(game.cachedAt).toLocaleDateString()}
                                         </td>
                                         <td className="px-4 py-3 text-right">
@@ -201,14 +234,14 @@ export function GameLibraryTable() {
                                 <button
                                     onClick={() => setPage((p) => Math.max(1, p - 1))}
                                     disabled={page <= 1}
-                                    className="px-3 py-1.5 bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
+                                    className="px-3 py-2.5 min-h-[44px] bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
                                 >
                                     Previous
                                 </button>
                                 <button
                                     onClick={() => setPage((p) => Math.min(data.meta.totalPages, p + 1))}
                                     disabled={page >= data.meta.totalPages}
-                                    className="px-3 py-1.5 bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
+                                    className="px-3 py-2.5 min-h-[44px] bg-overlay hover:bg-faint disabled:opacity-50 disabled:cursor-not-allowed rounded-lg text-foreground transition-colors"
                                 >
                                     Next
                                 </button>

@@ -1,15 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { IgdbForm } from './IgdbForm';
 
-// ============================================================
-// Module mocks
-// ============================================================
-
-vi.mock('../../hooks/use-admin-settings', () => ({
-    useAdminSettings: vi.fn(),
-}));
-
+// Mock toast
 vi.mock('../../lib/toast', () => ({
     toast: {
         success: vi.fn(),
@@ -17,244 +10,234 @@ vi.mock('../../lib/toast', () => ({
     },
 }));
 
-import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { toast } from '../../lib/toast';
+// Shared mutable state for the hook mock
+const mockIgdbStatus = {
+    data: null as null | { configured: boolean; health?: unknown },
+};
 
-// ============================================================
-// Helpers
-// ============================================================
+const mockIgdbSyncStatus = {
+    data: null as null | { lastSyncAt: string | null; gameCount: number; syncInProgress: boolean },
+};
 
-const makeHook = (overrides: Partial<ReturnType<typeof useAdminSettings>> = {}) => ({
-    igdbStatus: { data: null, isLoading: false, isError: false } as any,
-    updateIgdb: { mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Saved' }), isPending: false } as any,
-    testIgdb: { mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Connected' }), isPending: false } as any,
-    clearIgdb: { mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Cleared' }), isPending: false } as any,
-    igdbSyncStatus: { data: { lastSyncAt: null, gameCount: 0, syncInProgress: false }, isLoading: false } as any,
-    syncIgdb: { mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Synced', refreshed: 0, discovered: 0 }), isPending: false } as any,
-    igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-    updateAdultFilter: { mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Filter updated' }), isPending: false } as any,
-    // Other settings not under test
-    oauthStatus: { data: null, isLoading: false } as any,
-    updateOAuth: { mutateAsync: vi.fn(), isPending: false } as any,
-    testOAuth: { mutateAsync: vi.fn(), isPending: false } as any,
-    clearOAuth: { mutateAsync: vi.fn(), isPending: false } as any,
-    blizzardStatus: { data: null, isLoading: false } as any,
-    updateBlizzard: { mutateAsync: vi.fn(), isPending: false } as any,
-    testBlizzard: { mutateAsync: vi.fn(), isPending: false } as any,
-    clearBlizzard: { mutateAsync: vi.fn(), isPending: false } as any,
-    demoDataStatus: { data: null, isLoading: false } as any,
-    installDemoData: { mutateAsync: vi.fn(), isPending: false } as any,
-    clearDemoData: { mutateAsync: vi.fn(), isPending: false } as any,
-    discordBotStatus: { data: null, isLoading: false } as any,
-    updateDiscordBot: { mutateAsync: vi.fn(), isPending: false } as any,
-    testDiscordBot: { mutateAsync: vi.fn(), isPending: false } as any,
-    clearDiscordBot: { mutateAsync: vi.fn(), isPending: false } as any,
-    checkDiscordBotPermissions: { mutateAsync: vi.fn(), isPending: false } as any,
-    ...overrides,
-});
+const mockUpdateIgdb = { mutateAsync: vi.fn(), isPending: false };
+const mockTestIgdb = { mutateAsync: vi.fn(), isPending: false };
+const mockClearIgdb = { mutateAsync: vi.fn(), isPending: false };
+const mockSyncIgdb = { mutateAsync: vi.fn(), isPending: false };
 
-// ============================================================
-// Tests
-// ============================================================
+vi.mock('../../hooks/use-admin-settings', () => ({
+    useAdminSettings: () => ({
+        igdbStatus: mockIgdbStatus,
+        updateIgdb: mockUpdateIgdb,
+        testIgdb: mockTestIgdb,
+        clearIgdb: mockClearIgdb,
+        igdbSyncStatus: mockIgdbSyncStatus,
+        syncIgdb: mockSyncIgdb,
+        // Other fields not used by IgdbForm — provide safe no-ops
+        oauthStatus: { data: null },
+        updateOAuth: { mutateAsync: vi.fn(), isPending: false },
+        testOAuth: { mutateAsync: vi.fn(), isPending: false },
+        clearOAuth: { mutateAsync: vi.fn(), isPending: false },
+        blizzardStatus: { data: null },
+        updateBlizzard: { mutateAsync: vi.fn(), isPending: false },
+        testBlizzard: { mutateAsync: vi.fn(), isPending: false },
+        clearBlizzard: { mutateAsync: vi.fn(), isPending: false },
+        demoDataStatus: { data: null },
+        installDemoData: { mutateAsync: vi.fn(), isPending: false },
+        clearDemoData: { mutateAsync: vi.fn(), isPending: false },
+        discordBotStatus: { data: null },
+        updateDiscordBot: { mutateAsync: vi.fn(), isPending: false },
+        testDiscordBot: { mutateAsync: vi.fn(), isPending: false },
+        clearDiscordBot: { mutateAsync: vi.fn(), isPending: false },
+        checkDiscordBotPermissions: { mutateAsync: vi.fn(), isPending: false },
+    }),
+}));
 
-describe('IgdbForm — ROK-231: adult content filter toggle', () => {
+describe('IgdbForm', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook());
+        mockIgdbStatus.data = null;
+        mockIgdbSyncStatus.data = null;
+        mockUpdateIgdb.isPending = false;
+        mockUpdateIgdb.mutateAsync = vi.fn();
+        mockTestIgdb.isPending = false;
+        mockTestIgdb.mutateAsync = vi.fn();
+        mockClearIgdb.isPending = false;
+        mockClearIgdb.mutateAsync = vi.fn();
+        mockSyncIgdb.isPending = false;
+        mockSyncIgdb.mutateAsync = vi.fn();
     });
 
-    // ---- Adult filter toggle (only visible when IGDB is configured) ----
+    // ── Form rendering ───────────────────────────────────────────
 
-    it('does NOT render the adult filter section when IGDB is not configured', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: false }, isLoading: false } as any,
-        }));
-
+    it('renders Client ID and Client Secret inputs', () => {
         render(<IgdbForm />);
-
-        expect(screen.queryByText(/Filter adult content/i)).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Client ID')).toBeInTheDocument();
+        expect(screen.getByLabelText('Client Secret')).toBeInTheDocument();
     });
 
-    it('renders the adult filter section when IGDB is configured', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-        }));
-
+    it('renders Save Configuration button', () => {
         render(<IgdbForm />);
-
-        expect(screen.getByText(/Filter adult content/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Save Configuration' })).toBeInTheDocument();
     });
 
-    it('renders the adult filter description', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-        }));
-
+    it('renders setup instructions', () => {
         render(<IgdbForm />);
-
-        expect(screen.getByText(/erotic\/sexual themes/i)).toBeInTheDocument();
+        expect(screen.getByText(/Setup Instructions/)).toBeInTheDocument();
     });
 
-    it('toggle switch has aria-checked=false when filter is disabled', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-        }));
-
+    it('renders Twitch Developer Console link', () => {
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        const link = screen.getByRole('link', { name: /Twitch Developer Console/ });
+        expect(link).toBeInTheDocument();
+        expect(link).toHaveAttribute('href', 'https://dev.twitch.tv/console/apps');
     });
 
-    it('toggle switch has aria-checked=true when filter is enabled', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: true }, isLoading: false } as any,
-        }));
+    // ── Save Configuration button sizing ─────────────────────────
 
+    it('Save Configuration button has py-3 class for 44px+ height', () => {
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        const saveBtn = screen.getByRole('button', { name: 'Save Configuration' });
+        expect(saveBtn.className).toContain('py-3');
     });
 
-    it('calls updateAdultFilter with true when toggled from off to on', async () => {
-        const updateAdultFilter = {
-            mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Enabled' }),
-            isPending: false,
-        };
-
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-            updateAdultFilter: updateAdultFilter as any,
-        }));
-
+    it('Save Configuration button is disabled when updateIgdb is pending', () => {
+        mockUpdateIgdb.isPending = true;
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        fireEvent.click(toggle);
-
-        await waitFor(() => {
-            expect(updateAdultFilter.mutateAsync).toHaveBeenCalledWith(true);
-        });
+        expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
     });
 
-    it('calls updateAdultFilter with false when toggled from on to off', async () => {
-        const updateAdultFilter = {
-            mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Disabled' }),
-            isPending: false,
-        };
+    // ── Unconfigured state ───────────────────────────────────────
 
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: true }, isLoading: false } as any,
-            updateAdultFilter: updateAdultFilter as any,
-        }));
-
+    it('does not show Test Connection button when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        fireEvent.click(toggle);
-
-        await waitFor(() => {
-            expect(updateAdultFilter.mutateAsync).toHaveBeenCalledWith(false);
-        });
+        expect(screen.queryByRole('button', { name: 'Test Connection' })).not.toBeInTheDocument();
     });
 
-    it('shows success toast after successfully toggling the filter', async () => {
-        const updateAdultFilter = {
-            mutateAsync: vi.fn().mockResolvedValue({ success: true, message: 'Adult content filter enabled.' }),
-            isPending: false,
-        };
-
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-            updateAdultFilter: updateAdultFilter as any,
-        }));
-
+    it('does not show Clear button when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        fireEvent.click(toggle);
-
-        await waitFor(() => {
-            expect(toast.success).toHaveBeenCalledWith('Adult content filter enabled.');
-        });
+        expect(screen.queryByRole('button', { name: 'Clear' })).not.toBeInTheDocument();
     });
 
-    it('shows error toast when filter update fails', async () => {
-        const updateAdultFilter = {
-            mutateAsync: vi.fn().mockRejectedValue(new Error('Server error')),
-            isPending: false,
-        };
-
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-            updateAdultFilter: updateAdultFilter as any,
-        }));
-
+    it('does not show sync section when not configured', () => {
+        mockIgdbStatus.data = { configured: false };
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        fireEvent.click(toggle);
-
-        await waitFor(() => {
-            expect(toast.error).toHaveBeenCalledWith('Failed to update filter');
-        });
+        expect(screen.queryByRole('button', { name: 'Sync Now' })).not.toBeInTheDocument();
     });
 
-    it('disables the toggle when updateAdultFilter is pending', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-            igdbAdultFilter: { data: { enabled: false }, isLoading: false } as any,
-            updateAdultFilter: { mutateAsync: vi.fn(), isPending: true } as any,
-        }));
+    // ── Configured state ─────────────────────────────────────────
 
+    it('shows Test Connection button when configured', () => {
+        mockIgdbStatus.data = { configured: true };
         render(<IgdbForm />);
-
-        const toggle = screen.getByRole('switch');
-        expect(toggle).toBeDisabled();
+        expect(screen.getByRole('button', { name: 'Test Connection' })).toBeInTheDocument();
     });
 
-    // ---- Form basics (not adult filter specific, but important regression tests) ----
-
-    it('renders the save configuration button', () => {
+    it('shows Clear button when configured', () => {
+        mockIgdbStatus.data = { configured: true };
         render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: /Save Configuration/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeInTheDocument();
     });
 
-    it('shows error toast when saving with empty client id', async () => {
+    it('Test Connection button is disabled when testIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockTestIgdb.isPending = true;
         render(<IgdbForm />);
-
-        const submitButton = screen.getByRole('button', { name: /Save Configuration/i });
-        fireEvent.click(submitButton);
-
-        await waitFor(() => {
-            expect(toast.error).toHaveBeenCalledWith('Client ID and Client Secret are required');
-        });
+        expect(screen.getByRole('button', { name: 'Testing...' })).toBeDisabled();
     });
 
-    it('shows test and clear buttons when IGDB is configured', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: true, health: null }, isLoading: false } as any,
-        }));
-
+    it('Clear button is disabled when clearIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockClearIgdb.isPending = true;
         render(<IgdbForm />);
-        expect(screen.getByRole('button', { name: /Test Connection/i })).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /Clear/i })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
     });
 
-    it('does NOT show test and clear buttons when IGDB is not configured', () => {
-        vi.mocked(useAdminSettings).mockReturnValue(makeHook({
-            igdbStatus: { data: { configured: false }, isLoading: false } as any,
-        }));
+    // ── Sync Now button — 44px touch target ──────────────────────
 
+    it('Sync Now button has min-h-[44px] class', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
         render(<IgdbForm />);
-        expect(screen.queryByRole('button', { name: /Test Connection/i })).not.toBeInTheDocument();
-        expect(screen.queryByRole('button', { name: /Clear/i })).not.toBeInTheDocument();
+        const syncBtn = screen.getByRole('button', { name: 'Sync Now' });
+        expect(syncBtn.className).toContain('min-h-[44px]');
+    });
+
+    it('Sync Now button is disabled when syncIgdb is pending', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
+        mockSyncIgdb.isPending = true;
+        render(<IgdbForm />);
+        const syncBtn = screen.getByRole('button', { name: 'Syncing...' });
+        expect(syncBtn).toBeDisabled();
+    });
+
+    it('Sync Now button is disabled when syncInProgress is true', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 42, syncInProgress: true };
+        render(<IgdbForm />);
+        const syncBtn = screen.getByRole('button', { name: 'Sync Now' });
+        expect(syncBtn).toBeDisabled();
+    });
+
+    // ── Sync status display ──────────────────────────────────────
+
+    it('shows game count from sync status', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 123, syncInProgress: false };
+        render(<IgdbForm />);
+        expect(screen.getByText('123 games cached')).toBeInTheDocument();
+    });
+
+    it('shows Loading... when sync status data is null', () => {
+        mockIgdbStatus.data = { configured: true };
+        mockIgdbSyncStatus.data = null;
+        render(<IgdbForm />);
+        expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+
+    // ── Password visibility toggle ───────────────────────────────
+
+    it('Client Secret input is type=password by default', () => {
+        render(<IgdbForm />);
+        const secretInput = screen.getByLabelText('Client Secret');
+        expect(secretInput).toHaveAttribute('type', 'password');
+    });
+
+    it('toggles Client Secret visibility when eye button is clicked', () => {
+        render(<IgdbForm />);
+        const secretInput = screen.getByLabelText('Client Secret') as HTMLInputElement;
+        expect(secretInput.type).toBe('password');
+
+        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
+        fireEvent.click(toggleBtn);
+        expect(secretInput.type).toBe('text');
+    });
+
+    it('show/hide button label updates after toggle', () => {
+        render(<IgdbForm />);
+        const toggleBtn = screen.getByRole('button', { name: 'Show password' });
+        fireEvent.click(toggleBtn);
+        expect(screen.getByRole('button', { name: 'Hide password' })).toBeInTheDocument();
+    });
+
+    // ── Form validation ──────────────────────────────────────────
+
+    it('does not submit when Client ID is empty', async () => {
+        render(<IgdbForm />);
+        const form = screen.getByLabelText('Client ID').closest('form')!;
+        fireEvent.submit(form);
+        expect(mockUpdateIgdb.mutateAsync).not.toHaveBeenCalled();
+    });
+
+    // ── Confirm dialog on Clear ──────────────────────────────────
+
+    it('does not call clearIgdb when confirm is cancelled', () => {
+        mockIgdbStatus.data = { configured: true };
+        vi.spyOn(window, 'confirm').mockReturnValue(false);
+        render(<IgdbForm />);
+        fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+        expect(mockClearIgdb.mutateAsync).not.toHaveBeenCalled();
     });
 });

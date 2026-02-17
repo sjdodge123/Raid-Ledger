@@ -292,7 +292,7 @@ export function IgdbForm() {
                                 }).catch(() => toast.error('Sync failed'));
                             }}
                             disabled={syncIgdb.isPending || igdbSyncStatus.data?.syncInProgress}
-                            className="px-3 py-1.5 text-sm bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors flex items-center gap-2"
+                            className="px-4 py-2.5 min-h-[44px] text-sm bg-purple-600 hover:bg-purple-500 disabled:bg-purple-800 disabled:cursor-not-allowed text-foreground font-medium rounded-lg transition-colors flex items-center gap-2"
                         >
                             {(syncIgdb.isPending || igdbSyncStatus.data?.syncInProgress) && (
                                 <svg className="w-3.5 h-3.5 animate-spin" viewBox="0 0 24 24" fill="none">
