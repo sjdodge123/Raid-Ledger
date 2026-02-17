@@ -480,6 +480,7 @@ function EditScheduleModal({
     onClose: () => void;
 }) {
     const { updateSchedule } = useCronJobs();
+    const tz = useTimezoneStore((s) => s.resolved);
     const normalizedExpression = normalizeCron(job.cronExpression);
     const [selectedExpression, setSelectedExpression] = useState(
         INTERVAL_PRESETS.some(p => p.value === normalizedExpression) ? normalizedExpression : job.cronExpression,
@@ -508,7 +509,7 @@ function EditScheduleModal({
                         <p className="text-xs font-medium text-muted uppercase tracking-wide">Edit Schedule</p>
                         <h3 className="text-lg font-semibold text-foreground">{formatJobName(job.name)}</h3>
                     </div>
-                    <button onClick={onClose} className="text-muted hover:text-foreground transition-colors text-xl">
+                    <button onClick={onClose} aria-label="Close" className="text-muted hover:text-foreground transition-colors text-xl">
                         ✕
                     </button>
                 </div>
@@ -525,13 +526,13 @@ function EditScheduleModal({
                         <div>
                             <span className="block text-xs text-muted mb-0.5">Last Run</span>
                             <span className="text-foreground">
-                                {formatTimestamp(job.lastRunAt, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                                {formatTimestamp(job.lastRunAt, tz)}
                             </span>
                         </div>
                         <div>
                             <span className="block text-xs text-muted mb-0.5">Next Run</span>
                             <span className="text-foreground">
-                                {formatTimestamp(job.nextRunAt, Intl.DateTimeFormat().resolvedOptions().timeZone)}
+                                {formatTimestamp(job.nextRunAt, tz)}
                             </span>
                         </div>
                     </div>
