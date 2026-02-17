@@ -2,13 +2,14 @@ import { create } from 'zustand';
 import { updatePreference } from '../lib/api-client';
 import { getAuthToken } from '../hooks/use-auth';
 
-export type CalendarViewPref = 'week' | 'month' | 'day';
+export type CalendarViewPref = 'schedule' | 'week' | 'month' | 'day';
 
-const DEFAULT_VIEW: CalendarViewPref = 'week';
+const DEFAULT_VIEW: CalendarViewPref =
+    typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'week';
 const LS_KEY = 'raid_ledger_calendar_view';
 const LEGACY_KEY = 'calendar-view';
 
-const VALID: Set<string> = new Set(['week', 'month', 'day']);
+const VALID: Set<string> = new Set(['schedule', 'week', 'month', 'day']);
 
 function syncToServer(view: CalendarViewPref) {
     if (getAuthToken()) {
