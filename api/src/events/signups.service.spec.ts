@@ -90,9 +90,12 @@ describe('SignupsService', () => {
     };
     mockDb.select.mockReturnValue(selectEventChain);
 
-    // Default insert chain
+    // Default insert chain (with onConflictDoNothing for ROK-364)
     const insertChain = {
       values: jest.fn().mockReturnValue({
+        onConflictDoNothing: jest.fn().mockReturnValue({
+          returning: jest.fn().mockResolvedValue([mockSignup]),
+        }),
         returning: jest.fn().mockResolvedValue([mockSignup]),
       }),
     };
@@ -185,10 +188,7 @@ describe('SignupsService', () => {
       await expect(service.signup(999, 1)).rejects.toThrow(NotFoundException);
     });
 
-    it('should return existing signup if unique constraint violated (idempotent)', async () => {
-      // Mock: event exists, insert throws unique constraint error
-      const uniqueError = new Error('unique_event_user constraint violation');
-
+    it('should return existing signup on duplicate (onConflictDoNothing returns empty)', async () => {
       mockDb.select
         // 1. Check event exists
         .mockReturnValueOnce({
@@ -198,7 +198,7 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 2. Pre-fetch user (before insert)
+        // 2. Pre-fetch user (before transaction)
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -206,7 +206,7 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 3. After constraint error, fetch existing signup
+        // 3. Inside transaction: fetch existing signup after empty returning
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -215,17 +215,65 @@ describe('SignupsService', () => {
           }),
         });
 
-      // Insert throws unique constraint error
+      // Insert with onConflictDoNothing returns empty array (duplicate)
       mockDb.insert.mockReturnValueOnce({
         values: jest.fn().mockReturnValue({
-          returning: jest.fn().mockRejectedValue(uniqueError),
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
         }),
       });
 
       const result = await service.signup(1, 1);
 
       expect(result.id).toBe(mockSignup.id);
+      expect(result.eventId).toBe(1);
       expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it('should handle concurrent duplicate signup attempts without crashing', async () => {
+      // Simulates two concurrent requests for the same user+event.
+      // Both pass application-level checks; the second hits onConflictDoNothing.
+      mockDb.select
+        // 1. Check event exists
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockEvent]),
+            }),
+          }),
+        })
+        // 2. Pre-fetch user
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockUser]),
+            }),
+          }),
+        })
+        // 3. Inside transaction: fetch existing signup after conflict
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        });
+
+      // onConflictDoNothing returns empty (conflict detected, no error thrown)
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      // Should not throw — returns existing signup gracefully
+      const result = await service.signup(1, 1);
+
+      expect(result.id).toBe(mockSignup.id);
+      expect(result.confirmationStatus).toBe('pending');
     });
   });
 
