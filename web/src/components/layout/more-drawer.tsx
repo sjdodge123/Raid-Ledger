@@ -190,6 +190,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
                                 className="flex items-center gap-3 p-4 w-full hover:bg-overlay/20 transition-colors"
                                 data-testid="more-drawer-profile-toggle"
                                 aria-expanded={profileExpanded}
+                                aria-controls="more-drawer-profile-panel"
                             >
                                 {avatarUrl && !avatarError ? (
                                     <img
@@ -229,6 +230,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
                                 className="flex items-center gap-3 px-4 py-3 w-full text-foreground hover:bg-overlay/20 transition-colors"
                                 data-testid="more-drawer-admin-toggle"
                                 aria-expanded={adminExpanded}
+                                aria-controls="more-drawer-admin-panel"
                             >
                                 <span className="text-2xl w-8 text-center">⚙️</span>
                                 <span className="flex-1 text-left font-medium">Admin Settings</span>
@@ -402,13 +404,14 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
             onSuccess: () => {
+                onClose();
                 navigate('/onboarding?rerun=1');
             },
         });
     };
 
     return (
-        <div className="px-4 pb-3 space-y-3" data-testid="profile-submenu">
+        <div id="more-drawer-profile-panel" className="px-4 pb-3 space-y-3" data-testid="profile-submenu">
             {PROFILE_SECTIONS.map((section) => (
                 <div key={section.id}>
                     <div className="flex items-center gap-2 px-3 py-1.5 text-secondary">
@@ -481,7 +484,7 @@ function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose:
     const sections = buildNavSections(coreIntegrations, pluginIntegrations);
 
     return (
-        <div className="px-4 pb-3 space-y-3" data-testid="admin-submenu">
+        <div id="more-drawer-admin-panel" className="px-4 pb-3 space-y-3" data-testid="admin-submenu">
             {sections.map((section) => (
                 <div key={section.id}>
                     <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
