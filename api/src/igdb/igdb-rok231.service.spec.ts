@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 /**
  * ROK-231: Unit tests for game hide/ban and adult content filter methods on IgdbService.
  */
@@ -340,7 +340,7 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
           json: () => Promise.resolve([]),
         });
 
-      const result = await service.searchGames('adult-game');
+      await service.searchGames('adult-game');
 
       // The IGDB query body should include the adult theme filter
       const igdbCallBody = mockFetch.mock.calls[1][1]?.body as string;

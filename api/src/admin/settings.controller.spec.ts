@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * ROK-231: Unit tests for AdminSettingsController — hide/unhide games and adult filter endpoints.
  */
@@ -331,14 +332,6 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
   // GET /admin/settings/games — listGames with showHidden filter
   // ============================================================
   describe('listGames — showHidden filter', () => {
-    const makeDbMock = (rows: unknown[], total: number) => ({
-      select: jest.fn().mockReturnValue({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue([{ count: total }]),
-        }),
-      }),
-    });
-
     it('returns visible games only when showHidden is undefined', async () => {
       const rows = [
         {
