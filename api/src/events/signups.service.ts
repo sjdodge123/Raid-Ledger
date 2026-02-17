@@ -75,95 +75,47 @@ export class SignupsService {
 
     // Wrap capacity check + insert + roster assignment in a transaction to
     // prevent TOCTOU races where two concurrent signups both read count < max.
-    try {
-      const signup = await this.db.transaction(async (tx) => {
-        // When event is at capacity, auto-bench the signup instead of rejecting.
-        // If the user explicitly targets a bench slot, allow it regardless.
-        // Count only non-bench signups to accurately reflect player capacity.
-        let autoBench = false;
-        if (event[0].maxAttendees && dto?.slotRole !== 'bench') {
-          const [{ count }] = await tx
-            .select({ count: sql<number>`count(*)` })
-            .from(schema.eventSignups)
-            .innerJoin(
-              schema.rosterAssignments,
-              eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-            )
-            .where(
-              and(
-                eq(schema.eventSignups.eventId, eventId),
-                sql`${schema.rosterAssignments.role} != 'bench'`,
-              ),
-            );
-          if (Number(count) >= event[0].maxAttendees) {
-            autoBench = true;
-          }
-        }
-
-        const [inserted] = await tx
-          .insert(schema.eventSignups)
-          .values({
-            eventId,
-            userId,
-            note: dto?.note ?? null,
-            confirmationStatus: 'pending', // ROK-131 AC-1
-          })
-          .returning();
-
-        this.logger.log(`User ${userId} signed up for event ${eventId}`);
-
-        // ROK-183: Create roster assignment — explicit slot or auto-bench
-        const slotRole = autoBench ? 'bench' : dto?.slotRole;
-        if (slotRole) {
-          // Determine position: use provided or find next available
-          let position = dto?.slotPosition ?? 0;
-          if (autoBench || !position) {
-            const existing = await tx
-              .select({ position: schema.rosterAssignments.position })
-              .from(schema.rosterAssignments)
-              .where(
-                and(
-                  eq(schema.rosterAssignments.eventId, eventId),
-                  eq(schema.rosterAssignments.role, slotRole),
-                ),
-              );
-            position =
-              existing.reduce((max, r) => Math.max(max, r.position), 0) + 1;
-          }
-
-          await tx.insert(schema.rosterAssignments).values({
-            eventId,
-            signupId: inserted.id,
-            role: slotRole,
-            position,
-            isOverride: 0,
-          });
-          this.logger.log(
-            `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
+    // Uses onConflictDoNothing to handle duplicate signups gracefully (ROK-364).
+    const result = await this.db.transaction(async (tx) => {
+      // When event is at capacity, auto-bench the signup instead of rejecting.
+      // If the user explicitly targets a bench slot, allow it regardless.
+      // Count only non-bench signups to accurately reflect player capacity.
+      let autoBench = false;
+      if (event[0].maxAttendees && dto?.slotRole !== 'bench') {
+        const [{ count }] = await tx
+          .select({ count: sql<number>`count(*)` })
+          .from(schema.eventSignups)
+          .innerJoin(
+            schema.rosterAssignments,
+            eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+          )
+          .where(
+            and(
+              eq(schema.eventSignups.eventId, eventId),
+              sql`${schema.rosterAssignments.role} != 'bench'`,
+            ),
           );
-
-          // ROK-229: Cancel any pending bench promotion for this slot
-          if (slotRole !== 'bench') {
-            await this.benchPromotionService.cancelPromotion(
-              eventId,
-              slotRole,
-              position,
-            );
-          }
+        if (Number(count) >= event[0].maxAttendees) {
+          autoBench = true;
         }
+      }
 
-        return inserted;
-      });
+      const rows = await tx
+        .insert(schema.eventSignups)
+        .values({
+          eventId,
+          userId,
+          note: dto?.note ?? null,
+          confirmationStatus: 'pending', // ROK-131 AC-1
+        })
+        .onConflictDoNothing({
+          target: [schema.eventSignups.eventId, schema.eventSignups.userId],
+        })
+        .returning();
 
-      return this.buildSignupResponse(signup, user, null);
-    } catch (error: unknown) {
-      // Handle unique constraint violation (concurrent signup or already signed up)
-      if (
-        error instanceof Error &&
-        error.message.includes('unique_event_user')
-      ) {
-        // Return existing signup (idempotent behavior - AC-4)
-        const existing = await this.db
+      // If the insert was a no-op (duplicate), return the existing signup
+      if (rows.length === 0) {
+        const [existing] = await tx
           .select()
           .from(schema.eventSignups)
           .where(
@@ -174,16 +126,66 @@ export class SignupsService {
           )
           .limit(1);
 
-        if (existing.length > 0) {
-          // Fetch character if exists
-          const character = existing[0].characterId
-            ? await this.getCharacterById(existing[0].characterId)
-            : null;
-          return this.buildSignupResponse(existing[0], user, character);
+        const character = existing.characterId
+          ? await this.getCharacterById(existing.characterId)
+          : null;
+        return {
+          isDuplicate: true as const,
+          response: this.buildSignupResponse(existing, user, character),
+        };
+      }
+
+      const [inserted] = rows;
+      this.logger.log(`User ${userId} signed up for event ${eventId}`);
+
+      // ROK-183: Create roster assignment — explicit slot or auto-bench
+      const slotRole = autoBench ? 'bench' : dto?.slotRole;
+      if (slotRole) {
+        // Determine position: use provided or find next available
+        let position = dto?.slotPosition ?? 0;
+        if (autoBench || !position) {
+          const existing = await tx
+            .select({ position: schema.rosterAssignments.position })
+            .from(schema.rosterAssignments)
+            .where(
+              and(
+                eq(schema.rosterAssignments.eventId, eventId),
+                eq(schema.rosterAssignments.role, slotRole),
+              ),
+            );
+          position =
+            existing.reduce((max, r) => Math.max(max, r.position), 0) + 1;
+        }
+
+        await tx.insert(schema.rosterAssignments).values({
+          eventId,
+          signupId: inserted.id,
+          role: slotRole,
+          position,
+          isOverride: 0,
+        });
+        this.logger.log(
+          `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
+        );
+
+        // ROK-229: Cancel any pending bench promotion for this slot
+        if (slotRole !== 'bench') {
+          await this.benchPromotionService.cancelPromotion(
+            eventId,
+            slotRole,
+            position,
+          );
         }
       }
-      throw error;
+
+      return { isDuplicate: false as const, signup: inserted };
+    });
+
+    if (result.isDuplicate) {
+      return result.response;
     }
+
+    return this.buildSignupResponse(result.signup, user, null);
   }
 
   /**
