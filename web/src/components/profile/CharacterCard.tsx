@@ -73,14 +73,14 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                 )}
 
                 <div className="min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap overflow-hidden">
                         <span className="font-medium text-foreground truncate">
                             {character.name}
                         </span>
                         {/* Main badge — mobile only (desktop shows in actions area) */}
                         {character.isMain && (
                             <span
-                                className="md:hidden text-yellow-400 text-xs font-semibold inline-flex items-center gap-0.5"
+                                className="md:hidden text-yellow-400 text-xs font-semibold inline-flex items-center gap-0.5 flex-shrink-0"
                                 title="Main character"
                             >
                                 ⭐ Main
@@ -89,7 +89,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                         {/* Faction badge (ROK-234) */}
                         {character.faction && (
                             <span
-                                className={`px-1.5 py-0.5 rounded text-xs font-medium border ${
+                                className={`px-1.5 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${
                                     FACTION_STYLES[character.faction] ?? 'bg-faint text-muted'
                                 }`}
                             >
@@ -97,7 +97,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                             </span>
                         )}
                     </div>
-                    <div className="flex items-center gap-2 text-sm text-muted">
+                    <div className="flex items-center gap-2 text-sm text-muted flex-wrap overflow-hidden">
                         {/* Level (ROK-234) */}
                         {character.level && (
                             <>
