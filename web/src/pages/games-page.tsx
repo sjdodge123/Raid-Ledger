@@ -14,18 +14,25 @@ import { toast } from "../lib/toast";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import type { GameDetailDto } from "@raid-ledger/contract";
 
-/** Common IGDB genre IDs for filter pills */
-const GENRE_FILTERS = [
-  { id: 12, label: "RPG" },
-  { id: 5, label: "Shooter" },
-  { id: 31, label: "Adventure" },
-  { id: 15, label: "Strategy" },
-  { id: 13, label: "Simulator" },
-  { id: 14, label: "Sport" },
-  { id: 10, label: "Racing" },
-  { id: 4, label: "Fighting" },
-  { id: 32, label: "Indie" },
-  { id: 36, label: "Online/MOBA" },
+/** Compound genre filter — supports multi-genre matching (e.g. MMORPG = RPG + Online) */
+interface GenreFilterDef {
+  key: string;
+  label: string;
+  match: (genres: number[]) => boolean;
+}
+
+const GENRE_FILTERS: GenreFilterDef[] = [
+  { key: 'rpg', label: "RPG", match: (g) => g.includes(12) },
+  { key: 'shooter', label: "Shooter", match: (g) => g.includes(5) },
+  { key: 'adventure', label: "Adventure", match: (g) => g.includes(31) },
+  { key: 'strategy', label: "Strategy", match: (g) => g.includes(15) },
+  { key: 'simulator', label: "Simulator", match: (g) => g.includes(13) },
+  { key: 'sport', label: "Sport", match: (g) => g.includes(14) },
+  { key: 'racing', label: "Racing", match: (g) => g.includes(10) },
+  { key: 'fighting', label: "Fighting", match: (g) => g.includes(4) },
+  { key: 'indie', label: "Indie", match: (g) => g.includes(32) },
+  { key: 'mmorpg', label: "MMORPG", match: (g) => g.includes(12) && g.includes(36) },
+  { key: 'moba', label: "MOBA", match: (g) => g.includes(36) && !g.includes(12) },
 ];
 
 type GamesTab = "discover" | "manage";
@@ -35,7 +42,7 @@ export function GamesPage() {
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenres, setSelectedGenres] = useState<Set<number>>(new Set());
+  const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
@@ -52,7 +59,10 @@ export function GamesPage() {
     ?.map((row) => ({
       ...row,
       games: selectedGenres.size > 0
-        ? row.games.filter((g) => g.genres.some(gid => selectedGenres.has(gid)))
+        ? row.games.filter((g) => {
+            const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
+            return activeFilters.some(f => f.match(g.genres));
+          })
         : row.games,
     }))
     .filter((row) => row.games.length > 0);
@@ -213,17 +223,17 @@ export function GamesPage() {
                   All
                 </button>
                 {GENRE_FILTERS.map((genre) => {
-                  const isActive = selectedGenres.has(genre.id);
+                  const isActive = selectedGenres.has(genre.key);
                   return (
                     <button
-                      key={genre.id}
+                      key={genre.key}
                       onClick={() => {
                         setSelectedGenres(prev => {
                           const next = new Set(prev);
-                          if (next.has(genre.id)) {
-                            next.delete(genre.id);
+                          if (next.has(genre.key)) {
+                            next.delete(genre.key);
                           } else {
-                            next.add(genre.id);
+                            next.add(genre.key);
                           }
                           return next;
                         });
@@ -365,17 +375,17 @@ export function GamesPage() {
             </div>
           </button>
           {GENRE_FILTERS.map((genre) => {
-            const isActive = selectedGenres.has(genre.id);
+            const isActive = selectedGenres.has(genre.key);
             return (
               <button
-                key={genre.id}
+                key={genre.key}
                 onClick={() => {
                   setSelectedGenres(prev => {
                     const next = new Set(prev);
-                    if (next.has(genre.id)) {
-                      next.delete(genre.id);
+                    if (next.has(genre.key)) {
+                      next.delete(genre.key);
                     } else {
-                      next.add(genre.id);
+                      next.add(genre.key);
                     }
                     return next;
                   });
