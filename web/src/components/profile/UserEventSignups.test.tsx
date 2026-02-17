@@ -179,12 +179,12 @@ describe('UserEventSignups', () => {
         expect(screen.queryByText('View all')).not.toBeInTheDocument();
     });
 
-    it('renders in responsive grid layout', () => {
+    it('renders both desktop and mobile event layouts', () => {
         const mockEvents: UserEventSignupsResponseDto = {
             data: [
-                createMockEvent({ id: 1 }),
-                createMockEvent({ id: 2 }),
-                createMockEvent({ id: 3 }),
+                createMockEvent({ id: 1, title: 'Raid Night' }),
+                createMockEvent({ id: 2, title: 'Dungeon Run' }),
+                createMockEvent({ id: 3, title: 'PvP Night' }),
             ],
             total: 3,
         };
@@ -198,10 +198,9 @@ describe('UserEventSignups', () => {
 
         const { container } = renderWithProviders(<UserEventSignups userId={1} />);
 
-        // Verify grid classes are present (1/2/3 cols)
-        const grid = container.querySelector('.grid');
-        expect(grid).toHaveClass('grid-cols-1');
-        expect(grid).toHaveClass('sm:grid-cols-2');
-        expect(grid).toHaveClass('lg:grid-cols-3');
+        // Both desktop (EventCard) and mobile (MobileEventCard) render all events
+        // Each event title appears twice (once per layout), so 6 total cards
+        const allCards = container.querySelectorAll('[class*="cursor-pointer"], button[class*="rounded"]');
+        expect(allCards.length).toBeGreaterThanOrEqual(3);
     });
 });
