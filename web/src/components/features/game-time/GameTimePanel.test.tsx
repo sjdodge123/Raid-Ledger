@@ -54,7 +54,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
             weekStart: '2026-02-08',
             overrides: [],
             absences: [],
-            applyPreset: vi.fn(),
         });
     });
 
@@ -207,7 +206,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -242,7 +240,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -273,7 +270,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -304,7 +300,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 weekStart: '2026-02-08',
                 overrides: [],
                 absences: [],
-                applyPreset: vi.fn(),
             };
             vi.mocked(mockUseGameTimeEditor).mockReturnValue(mockEditor);
 
@@ -336,7 +331,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 absences: [],
                 discard: vi.fn(),
                 overrides: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'modal', rolling: true });
@@ -424,7 +418,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 weekStart: '2026-02-08',
                 overrides: [],
                 absences: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
@@ -485,7 +478,6 @@ describe('GameTimePanel - Profile Mode (ROK-301)', () => {
                 weekStart: '2026-02-08',
                 overrides: [],
                 absences: [],
-                applyPreset: vi.fn(),
             });
 
             renderPanel({ mode: 'profile' });
