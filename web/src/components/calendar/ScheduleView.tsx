@@ -1,6 +1,6 @@
 import { useMemo, useRef, useCallback } from 'react';
 import { format, startOfDay, isSameDay } from 'date-fns';
-import { MobileEventCard } from '../events/mobile-event-card';
+import { getGameColors } from '../../constants/game-colors';
 import type { CalendarEvent } from './CalendarView';
 
 interface ScheduleViewProps {
@@ -18,15 +18,14 @@ interface DayGroup {
 }
 
 /**
- * Mobile schedule view — vertical agenda list grouped by day.
- * Uses MobileEventCard for each event entry.
+ * Mobile schedule view — Google Calendar-style agenda grouped by day.
+ * Day headers on the left, colored event blocks on the right.
  */
 export function ScheduleView({
     events,
     currentDate,
     onDateChange,
     onSelectEvent,
-    eventOverlapsGameTime,
 }: ScheduleViewProps) {
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
@@ -101,33 +100,51 @@ export function ScheduleView({
 
     return (
         <div
-            className="schedule-view space-y-4"
+            className="schedule-view"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
-            {dayGroups.map((group) => (
-                <div key={group.label} className="schedule-day-group">
-                    {/* Sticky day header */}
-                    <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm py-2 px-1">
-                        <h3 className="text-sm font-semibold text-muted uppercase tracking-wide">
-                            {group.label}
-                        </h3>
-                    </div>
+            {dayGroups.map((group) => {
+                const isToday = isSameDay(group.date, new Date());
+                return (
+                    <div key={group.label} className="flex gap-4 py-4 border-b border-edge/30 last:border-b-0">
+                        {/* Day label column — fixed width left side */}
+                        <div className="w-14 flex-shrink-0 text-center pt-1">
+                            <div className={`text-xs font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}>
+                                {format(group.date, 'EEE')}
+                            </div>
+                            <div className={`text-2xl font-bold mt-0.5 ${isToday ? 'w-10 h-10 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center' : 'text-foreground'}`}>
+                                {format(group.date, 'd')}
+                            </div>
+                        </div>
 
-                    {/* Event cards for this day */}
-                    <div className="space-y-2 px-1">
-                        {group.events.map((event) => (
-                            <MobileEventCard
-                                key={event.id}
-                                event={event.resource}
-                                signupCount={event.resource.signupsPreview?.length ?? 0}
-                                onClick={() => onSelectEvent(event)}
-                                matchesGameTime={eventOverlapsGameTime(event.start, event.end)}
-                            />
-                        ))}
+                        {/* Events column */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                            {group.events.map((event) => {
+                                const gameSlug = event.resource.game?.slug;
+                                const colors = getGameColors(gameSlug);
+                                return (
+                                    <button
+                                        key={event.id}
+                                        type="button"
+                                        onClick={() => onSelectEvent(event)}
+                                        className="w-full text-left rounded-lg px-4 py-3 transition-opacity hover:opacity-80"
+                                        style={{ backgroundColor: colors.bg, borderLeft: `4px solid ${colors.border}` }}
+                                    >
+                                        <div className="font-semibold text-sm" style={{ color: colors.text }}>
+                                            {event.title}
+                                        </div>
+                                        <div className="text-xs mt-0.5 opacity-80" style={{ color: colors.text }}>
+                                            {format(event.start, 'h:mm a')} - {format(event.end, 'h:mm a')}
+                                            {event.resource.game && ` · ${event.resource.game.name}`}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }
