@@ -311,6 +311,13 @@
     .calendar-toolbar {
         flex-direction: column;
         align-items: stretch;
+        background: var(--color-surface, rgba(15, 23, 42, 0.95));
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--color-edge, rgba(148, 163, 184, 0.1));
+        margin-left: -0.75rem;
+        margin-right: -0.75rem;
+        padding: 0.75rem;
+        margin-bottom: 0.75rem;
     }
 
     .toolbar-title {
@@ -319,8 +326,7 @@
         font-size: 1.125rem;
     }
 
-    .toolbar-nav,
-    .toolbar-views {
+    .toolbar-nav {
         justify-content: center;
     }
 
