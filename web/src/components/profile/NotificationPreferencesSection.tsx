@@ -223,7 +223,7 @@ export function NotificationPreferencesSection() {
                                                 <button
                                                     type="button"
                                                     onClick={() => handleToggle(type, channel)}
-                                                    className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${
+                                                    className={`w-10 h-10 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all ${
                                                         active
                                                             ? 'text-emerald-400 bg-emerald-500/15 hover:bg-emerald-500/25'
                                                             : 'text-muted hover:text-secondary hover:bg-panel'

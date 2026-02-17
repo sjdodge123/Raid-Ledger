@@ -93,7 +93,7 @@ export function AvatarPanel() {
                 {options.length > 0 && (
                     <div className="mb-6">
                         <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
-                        <div className="flex flex-wrap gap-3">
+                        <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
                             {options.map((opt, idx) => (
                                 <button
                                     key={opt.url}
@@ -107,7 +107,7 @@ export function AvatarPanel() {
                                     <img
                                         src={opt.url}
                                         alt={opt.label}
-                                        className="w-14 h-14 rounded-full object-cover"
+                                        className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover"
                                         onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
                                     />
                                     <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">
