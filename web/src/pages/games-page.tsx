@@ -12,6 +12,7 @@ import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { toast } from "../lib/toast";
 import { BottomSheet } from "../components/ui/bottom-sheet";
+import { FAB } from "../components/ui/fab";
 import type { GameDetailDto } from "@raid-ledger/contract";
 
 /** Compound genre filter — supports multi-genre matching (e.g. MMORPG = RPG + Online) */
@@ -187,24 +188,6 @@ export function GamesPage() {
               )}
             </div>
 
-            {/* Mobile Genre Filter Button */}
-            {!isSearching && (
-              <div className="md:hidden mb-6">
-                <button
-                  onClick={() => setGenreSheetOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2.5 bg-panel border border-edge rounded-xl text-sm font-medium text-secondary hover:bg-overlay transition-colors"
-                >
-                  <FunnelIcon className="w-4 h-4" />
-                  <span>Genre Filter</span>
-                  {selectedGenres.size > 0 && (
-                    <span className="ml-1 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-xs font-bold">
-                      {selectedGenres.size}
-                    </span>
-                  )}
-                </button>
-              </div>
-            )}
-
             {/* Desktop Genre Filter Pills */}
             {!isSearching && (
               <div
@@ -347,6 +330,15 @@ export function GamesPage() {
           </>
         )}
       </div>
+
+      {/* Mobile Genre Filter FAB */}
+      {activeTab === "discover" && !isSearching && (
+        <FAB
+          onClick={() => setGenreSheetOpen(true)}
+          icon={FunnelIcon}
+          label="Genre Filter"
+        />
+      )}
 
       {/* Genre Filter Bottom Sheet (Mobile) */}
       <BottomSheet
