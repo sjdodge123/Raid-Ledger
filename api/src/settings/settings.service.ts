@@ -42,9 +42,21 @@ export const SETTINGS_EVENTS = {
   DISCORD_BOT_UPDATED: 'settings.discord-bot.updated',
 } as const;
 
+/** How long the in-memory cache is considered fresh (ms). */
+const CACHE_TTL_MS = 60_000;
+
 @Injectable()
 export class SettingsService {
   private readonly logger = new Logger(SettingsService.name);
+
+  /** In-memory cache: setting key -> decrypted value. */
+  private cache = new Map<string, string>();
+
+  /** Timestamp (epoch ms) when the cache was last loaded from DB. */
+  private cacheLoadedAt = 0;
+
+  /** Prevents concurrent cache loads from racing. */
+  private cacheLoadPromise: Promise<void> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -53,29 +65,53 @@ export class SettingsService {
   ) {}
 
   /**
-   * Get a setting value by key (decrypted)
+   * Load all settings into the in-memory cache if stale or empty.
+   * Coalesces concurrent callers so only one DB round-trip occurs.
    */
-  async get(key: SettingKey): Promise<string | null> {
-    const result = await this.db
-      .select()
-      .from(appSettings)
-      .where(eq(appSettings.key, key))
-      .limit(1);
+  private async ensureCache(): Promise<void> {
+    if (Date.now() - this.cacheLoadedAt < CACHE_TTL_MS) return;
 
-    if (result.length === 0) {
-      return null;
+    if (!this.cacheLoadPromise) {
+      this.cacheLoadPromise = this.loadCache();
     }
+    await this.cacheLoadPromise;
+  }
 
+  private async loadCache(): Promise<void> {
     try {
-      return decrypt(result[0].encryptedValue);
-    } catch (error) {
-      this.logger.error(`Failed to decrypt setting ${key}:`, error);
-      return null;
+      const rows = await this.db.select().from(appSettings);
+      const fresh = new Map<string, string>();
+
+      for (const row of rows) {
+        try {
+          fresh.set(row.key, decrypt(row.encryptedValue));
+        } catch {
+          this.logger.error(
+            `Failed to decrypt setting ${row.key} during cache load`,
+          );
+        }
+      }
+
+      this.cache = fresh;
+      this.cacheLoadedAt = Date.now();
+      this.logger.debug(`Settings cache loaded (${fresh.size} entries)`);
+    } finally {
+      this.cacheLoadPromise = null;
     }
   }
 
   /**
-   * Set a setting value (encrypted)
+   * Get a setting value by key (decrypted).
+   * Served from in-memory cache; falls back to DB only on cache miss after load.
+   */
+  async get(key: SettingKey): Promise<string | null> {
+    await this.ensureCache();
+    return this.cache.get(key) ?? null;
+  }
+
+  /**
+   * Set a setting value (encrypted).
+   * Writes through to DB and updates the in-memory cache immediately.
    */
   async set(key: SettingKey, value: string): Promise<void> {
     const encryptedValue = encrypt(value);
@@ -95,28 +131,27 @@ export class SettingsService {
         },
       });
 
+    this.cache.set(key, value);
     this.logger.debug(`Setting ${key} updated`);
   }
 
   /**
-   * Delete a setting
+   * Delete a setting.
+   * Removes from both DB and the in-memory cache.
    */
   async delete(key: SettingKey): Promise<void> {
     await this.db.delete(appSettings).where(eq(appSettings.key, key));
+    this.cache.delete(key);
     this.logger.debug(`Setting ${key} deleted`);
   }
 
   /**
-   * Check if a setting exists
+   * Check if a setting exists.
+   * Served from in-memory cache.
    */
   async exists(key: SettingKey): Promise<boolean> {
-    const result = await this.db
-      .select({ id: appSettings.id })
-      .from(appSettings)
-      .where(eq(appSettings.key, key))
-      .limit(1);
-
-    return result.length > 0;
+    await this.ensureCache();
+    return this.cache.has(key);
   }
 
   /**
