@@ -1,16 +1,17 @@
-import { useMemo, useRef, useCallback } from 'react';
+import { Fragment, useMemo, useRef, useCallback, useEffect } from 'react';
 import {
     format,
     startOfDay,
-    startOfMonth,
-    endOfMonth,
-    addDays,
-    addMonths,
     isSameDay,
+    startOfWeek,
+    endOfWeek,
+    isSameWeek,
+    isSameMonth,
 } from 'date-fns';
 import { getGameColors } from '../../constants/game-colors';
-import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { useTimezoneStore } from '../../stores/timezone-store';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { AttendeeAvatars } from './AttendeeAvatars';
 import type { CalendarEvent } from './CalendarView';
 
 interface ScheduleViewProps {
@@ -19,6 +20,27 @@ interface ScheduleViewProps {
     onDateChange: (date: Date) => void;
     onSelectEvent: (event: CalendarEvent) => void;
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
+}
+
+/** Horizontal line with dot indicating current time, rendered among today's events. */
+function NowLine() {
+    return (
+        <div className="now-line flex items-center gap-0 my-1" aria-label="Current time">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0 -ml-1" />
+            <div className="flex-1 h-[2px] bg-emerald-500/50" />
+        </div>
+    );
+}
+
+/** Format a week range label like "Feb 15 – 21" or "Feb 28 – Mar 6". */
+function formatWeekRange(date: Date): string {
+    const weekStart = startOfWeek(date, { weekStartsOn: 0 });
+    const weekEnd = endOfWeek(date, { weekStartsOn: 0 });
+
+    if (isSameMonth(weekStart, weekEnd)) {
+        return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'd')}`;
+    }
+    return `${format(weekStart, 'MMM d')} – ${format(weekEnd, 'MMM d')}`;
 }
 
 /**
@@ -36,8 +58,7 @@ function ScheduleEventCard({
     const colors = getGameColors(event.resource.game?.slug);
     const coverUrl = event.resource.game?.coverUrl;
     const signups = event.resource.signupsPreview ?? [];
-    const avatars = signups.slice(0, 3).map((s) => resolveAvatar(toAvatarUser(s)));
-    const totalSignups = signups.length;
+    const signupCount = event.resource.signupCount ?? signups.length;
 
     const formatTime = (iso: string) =>
         new Intl.DateTimeFormat('en-US', {
@@ -50,7 +71,7 @@ function ScheduleEventCard({
         <button
             type="button"
             onClick={() => onSelect(event)}
-            className="w-full flex items-center gap-3 bg-surface border border-edge rounded-lg p-3 min-h-[72px] hover:border-dim transition-colors text-left"
+            className="w-full flex items-center gap-3 bg-surface border border-edge rounded-lg p-3 min-h-[72px] hover:border-dim transition-colors text-left overflow-hidden"
             style={{ borderLeftWidth: '4px', borderLeftColor: colors.border }}
         >
             {/* Game cover */}
@@ -85,33 +106,16 @@ function ScheduleEventCard({
             </div>
 
             {/* Avatar stack */}
-            {totalSignups > 0 && (
-                <div className="flex items-center gap-1 flex-shrink-0">
-                    <div className="flex -space-x-1.5">
-                        {avatars.map((avatar, i) => (
-                            <div
-                                key={i}
-                                className="w-5 h-5 rounded-full border border-surface bg-overlay overflow-hidden"
-                            >
-                                {avatar.url ? (
-                                    <img
-                                        src={avatar.url}
-                                        alt=""
-                                        className="w-full h-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-[8px] text-muted font-medium">
-                                        ?
-                                    </div>
-                                )}
-                            </div>
-                        ))}
-                    </div>
-                    {totalSignups > 3 && (
-                        <span className="text-[10px] text-emerald-400 font-medium">
-                            +{totalSignups - 3}
-                        </span>
-                    )}
+            {signups.length > 0 && (
+                <div className="flex-shrink-0">
+                    <AttendeeAvatars
+                        signups={signups}
+                        totalCount={signupCount}
+                        size="sm"
+                        maxVisible={3}
+                        accentColor={colors.border}
+                        gameId={event.resource.game?.id?.toString()}
+                    />
                 </div>
             )}
         </button>
@@ -119,8 +123,8 @@ function ScheduleEventCard({
 }
 
 /**
- * Mobile schedule view — continuous scrollable agenda with all days visible.
- * Sticky day headers on the left, rich event cards on the right.
+ * Mobile schedule view — continuous scrollable agenda showing only days with events.
+ * Features: sticky day headers, week range separators, now-line, auto-scroll to today.
  */
 export function ScheduleView({
     events,
@@ -130,19 +134,11 @@ export function ScheduleView({
 }: ScheduleViewProps) {
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
+    const todayRef = useRef<HTMLDivElement>(null);
 
-    // Generate all days from start of current month to end of month+2
-    const allDays = useMemo(() => {
-        const start = startOfMonth(currentDate);
-        const end = endOfMonth(addMonths(currentDate, 2));
-        const days: Date[] = [];
-        let day = start;
-        while (day <= end) {
-            days.push(day);
-            day = addDays(day, 1);
-        }
-        return days;
-    }, [currentDate]);
+    // Scroll direction for sticky header offset (matches CalendarView toolbar pattern)
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
 
     // Build event lookup by date
     const eventsByDate = useMemo(() => {
@@ -158,6 +154,19 @@ export function ScheduleView({
         }
         return map;
     }, [events]);
+
+    // Only show days that have events, always include today
+    const daysWithEvents = useMemo(() => {
+        const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
+        const keys = new Set(eventsByDate.keys());
+        keys.add(todayKey);
+
+        const sorted = [...keys].sort();
+        return sorted.map((k) => {
+            const [y, m, d] = k.split('-').map(Number);
+            return new Date(y, m - 1, d);
+        });
+    }, [eventsByDate]);
 
     // Horizontal swipe to change day
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -180,6 +189,14 @@ export function ScheduleView({
         },
         [currentDate, onDateChange],
     );
+
+    // Auto-scroll to today on mount
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 100);
+        return () => clearTimeout(timer);
+    }, []);
 
     if (events.length === 0) {
         return (
@@ -204,57 +221,89 @@ export function ScheduleView({
         );
     }
 
+    const now = new Date();
+    const stickyTop = isHeaderHidden ? '4.25rem' : '8.25rem';
+
     return (
         <div
-            className="schedule-view"
+            className="schedule-view min-w-0"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
         >
-            {allDays.map((day) => {
+            {daysWithEvents.map((day, idx) => {
                 const key = format(day, 'yyyy-MM-dd');
                 const dayEvents = eventsByDate.get(key) || [];
-                const isToday = isSameDay(day, new Date());
+                const isToday = isSameDay(day, now);
+                const prevDay = idx > 0 ? daysWithEvents[idx - 1] : null;
+                const isNewWeek = !prevDay || !isSameWeek(day, prevDay, { weekStartsOn: 0 });
+
+                // Compute now-line position for today
+                let nowLineIndex = -1;
+                if (isToday) {
+                    nowLineIndex = dayEvents.findIndex((e) => e.end > now);
+                    if (nowLineIndex === -1) nowLineIndex = dayEvents.length;
+                }
 
                 return (
-                    <div
-                        key={key}
-                        className="flex gap-3 border-b border-edge/20 min-h-[48px]"
-                    >
-                        {/* Sticky day label column */}
-                        <div className="w-14 flex-shrink-0 sticky top-0 z-10 bg-background pt-3 pb-2 text-center self-start">
-                            <div
-                                className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}
-                            >
-                                {format(day, 'EEE')}
+                    <Fragment key={key}>
+                        {/* Week range separator */}
+                        {isNewWeek && (
+                            <div className="week-separator pl-1 pr-2 py-2 text-xs font-medium text-muted tracking-wide">
+                                {formatWeekRange(day)}
                             </div>
-                            <div
-                                className={
-                                    isToday
-                                        ? 'w-9 h-9 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center text-lg font-bold'
-                                        : 'text-xl font-bold text-foreground mt-0.5'
-                                }
-                            >
-                                {format(day, 'd')}
-                            </div>
-                        </div>
+                        )}
 
-                        {/* Events column */}
-                        <div className="flex-1 min-w-0 py-2 space-y-2">
-                            {dayEvents.length === 0 ? (
-                                <div className="py-2 text-xs text-dim">
-                                    No events
+                        <div
+                            ref={isToday ? todayRef : undefined}
+                            className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isToday ? 'scroll-mt-36' : ''}`}
+                        >
+                            {/* Day label column — stretches to full row height so inner sticky works */}
+                            <div className="w-11 flex-shrink-0">
+                                <div
+                                    className="sticky z-10 bg-background pt-3 pb-2 text-center transition-[top] duration-300"
+                                    style={{ top: stickyTop }}
+                                >
+                                    <div
+                                        className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}
+                                    >
+                                        {format(day, 'EEE')}
+                                    </div>
+                                    <div
+                                        className={
+                                            isToday
+                                                ? 'w-8 h-8 mx-auto rounded-full bg-emerald-500 text-white flex items-center justify-center text-base font-bold'
+                                                : 'text-lg font-bold text-foreground mt-0.5'
+                                        }
+                                    >
+                                        {format(day, 'd')}
+                                    </div>
                                 </div>
-                            ) : (
-                                dayEvents.map((event) => (
-                                    <ScheduleEventCard
-                                        key={event.id}
-                                        event={event}
-                                        onSelect={onSelectEvent}
-                                    />
-                                ))
-                            )}
+                            </div>
+
+                            {/* Events column */}
+                            <div className="flex-1 min-w-0 py-2 pr-2 space-y-2">
+                                {isToday && dayEvents.length === 0 ? (
+                                    <NowLine />
+                                ) : (
+                                    dayEvents.map((event, eventIdx) => (
+                                        <Fragment key={event.id}>
+                                            {isToday && eventIdx === nowLineIndex && (
+                                                <NowLine />
+                                            )}
+                                            <ScheduleEventCard
+                                                event={event}
+                                                onSelect={onSelectEvent}
+                                            />
+                                        </Fragment>
+                                    ))
+                                )}
+                                {/* Now line after all events if all are past */}
+                                {isToday && dayEvents.length > 0 && nowLineIndex === dayEvents.length && (
+                                    <NowLine />
+                                )}
+                            </div>
                         </div>
-                    </div>
+                    </Fragment>
                 );
             })}
         </div>

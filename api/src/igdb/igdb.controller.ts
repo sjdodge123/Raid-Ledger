@@ -162,6 +162,7 @@ export class IgdbController {
               and(
                 inArray(schema.games.id, gameIds),
                 eq(schema.games.hidden, false),
+                eq(schema.games.banned, false),
               ),
             );
 
@@ -195,29 +196,32 @@ export class IgdbController {
           // Redis miss — continue
         }
 
-        const hiddenFilter = eq(schema.games.hidden, false);
+        const visibilityFilter = and(
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        );
 
-        // Apply filter if present, always exclude hidden games
+        // Apply filter if present, always exclude hidden/banned games
         let results;
         if (cat.filter && cat.orderBy) {
           results = await db
             .select()
             .from(schema.games)
-            .where(and(cat.filter, hiddenFilter))
+            .where(and(cat.filter, visibilityFilter))
             .orderBy(cat.orderBy)
             .limit(20);
         } else if (cat.orderBy) {
           results = await db
             .select()
             .from(schema.games)
-            .where(hiddenFilter)
+            .where(visibilityFilter)
             .orderBy(cat.orderBy)
             .limit(20);
         } else {
           results = await db
             .select()
             .from(schema.games)
-            .where(hiddenFilter)
+            .where(visibilityFilter)
             .limit(20);
         }
 
@@ -240,6 +244,69 @@ export class IgdbController {
 
     // Filter out empty rows
     return { rows: rows.filter((r) => r.games.length > 0) };
+  }
+
+  /**
+   * GET /games/interest/batch?ids=1,2,3
+   * Batch check want-to-play status for multiple games at once.
+   * Returns a map of gameId -> { wantToPlay, count }.
+   */
+  @Get('interest/batch')
+  @UseGuards(AuthGuard('jwt'))
+  async batchInterestCheck(
+    @Query('ids') idsParam: string,
+    @Req() req: AuthRequest,
+  ): Promise<{ data: Record<string, { wantToPlay: boolean; count: number }> }> {
+    if (!idsParam) {
+      return { data: {} };
+    }
+
+    const gameIds = idsParam
+      .split(',')
+      .map((s) => parseInt(s.trim(), 10))
+      .filter((n) => !isNaN(n) && n > 0)
+      .slice(0, 100); // Cap at 100 IDs
+
+    if (gameIds.length === 0) {
+      return { data: {} };
+    }
+
+    const db = this.igdbService.database;
+    const userId = req.user.id;
+
+    // Get counts for all requested games in one query
+    const counts = await db
+      .select({
+        gameId: schema.gameInterests.gameId,
+        count: sql<number>`count(*)::int`.as('count'),
+      })
+      .from(schema.gameInterests)
+      .where(inArray(schema.gameInterests.gameId, gameIds))
+      .groupBy(schema.gameInterests.gameId);
+
+    // Get user's interests for all requested games in one query
+    const userInterests = await db
+      .select({ gameId: schema.gameInterests.gameId })
+      .from(schema.gameInterests)
+      .where(
+        and(
+          inArray(schema.gameInterests.gameId, gameIds),
+          eq(schema.gameInterests.userId, userId),
+        ),
+      );
+
+    const countMap = new Map(counts.map((c) => [c.gameId, c.count]));
+    const userSet = new Set(userInterests.map((i) => i.gameId));
+
+    const data: Record<string, { wantToPlay: boolean; count: number }> = {};
+    for (const id of gameIds) {
+      data[String(id)] = {
+        wantToPlay: userSet.has(id),
+        count: countMap.get(id) ?? 0,
+      };
+    }
+
+    return { data };
   }
 
   /**

@@ -168,9 +168,9 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
     it('hides an existing visible game', async () => {
       mockDb.select.mockImplementation(() => ({
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue(
-            thenableResult([{ id: 42, name: 'Adult Game' }]),
-          ),
+          where: jest
+            .fn()
+            .mockReturnValue(thenableResult([{ id: 42, name: 'Adult Game' }])),
         }),
       }));
 

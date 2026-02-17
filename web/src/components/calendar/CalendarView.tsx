@@ -137,6 +137,15 @@ export function CalendarView({
 
 
 
+    // Sync mobile toolbar view mode to internal react-big-calendar view
+    useEffect(() => {
+        if (!calendarView || calendarView === 'schedule') return;
+        const mapped = VIEW_MAP[calendarView];
+        if (mapped && mapped !== view) {
+            setView(mapped);
+        }
+    }, [calendarView]); // eslint-disable-line react-hooks/exhaustive-deps
+
     // Calculate date range for current view (month, week, day, or schedule)
     const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => {
@@ -181,6 +190,7 @@ export function CalendarView({
         endBefore,
         upcoming: false, // Get all events in range, not just upcoming
         includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
+        limit: 100, // Override default page size (20) to fetch full date range
     });
 
     // Extract unique games from events
@@ -354,12 +364,12 @@ export function CalendarView({
         [eventOverlapsGameTime],
     );
 
-    // Schedule view — mobile agenda list
+    // Schedule view — mobile agenda list (no calendar-container wrapper to avoid inherited padding/border)
     if (isScheduleView) {
         return (
-            <div className={`calendar-container ${className}`}>
+            <div className={`min-w-0 ${className}`}>
                 {isLoading && (
-                    <div className="calendar-loading">
+                    <div className="flex items-center justify-center py-16 gap-2 text-muted">
                         <div className="loading-spinner" />
                         <span>Loading events...</span>
                     </div>
@@ -379,9 +389,9 @@ export function CalendarView({
 
     return (
         <div className={`calendar-container calendar-view-${view} ${className}`}>
-            {/* Custom Toolbar — sticky on mobile below CalendarMobileToolbar (ROK-360) */}
+            {/* Custom Toolbar — hidden on mobile where CalendarMobileToolbar provides navigation */}
             <div
-                className="calendar-toolbar sticky md:static"
+                className={`calendar-toolbar ${calendarView ? 'calendar-toolbar-desktop-only' : 'sticky md:static'}`}
                 style={{
                     top: isHeaderHidden ? '4.25rem' : '8.25rem',
                     zIndex: Z_INDEX.TOOLBAR,

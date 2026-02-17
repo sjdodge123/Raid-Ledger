@@ -48,4 +48,6 @@ export const games = pgTable('games', {
   crossplay: boolean('crossplay'),
   /** ROK-231: Hidden games are excluded from user-facing search/discovery */
   hidden: boolean('hidden').notNull().default(false),
+  /** ROK-231: Banned games are tombstoned — excluded from sync, search, and discovery */
+  banned: boolean('banned').notNull().default(false),
 });

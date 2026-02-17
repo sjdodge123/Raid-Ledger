@@ -3,7 +3,6 @@ import {
   Get,
   Put,
   Post,
-  Delete,
   Body,
   Param,
   Query,
@@ -585,13 +584,16 @@ export class AdminSettingsController {
         ilike(schema.games.name, `%${search.replace(/[%_\\]/g, '\\$&')}%`),
       );
     }
-    // When showHidden is 'only', show only hidden games
-    // When showHidden is 'true', show all games (no hidden filter)
-    // Otherwise, show only visible games
+    // When showHidden is 'only', show hidden and banned games
+    // When showHidden is 'true', show all games (no hidden/banned filter)
+    // Otherwise, show only visible, non-banned games
     if (showHidden === 'only') {
-      conditions.push(eq(schema.games.hidden, true));
+      conditions.push(
+        sql`(${schema.games.hidden} = true OR ${schema.games.banned} = true)`,
+      );
     } else if (showHidden !== 'true') {
       conditions.push(eq(schema.games.hidden, false));
+      conditions.push(eq(schema.games.banned, false));
     }
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -610,6 +612,7 @@ export class AdminSettingsController {
           coverUrl: schema.games.coverUrl,
           cachedAt: schema.games.cachedAt,
           hidden: schema.games.hidden,
+          banned: schema.games.banned,
         })
         .from(schema.games)
         .where(whereClause)
@@ -636,36 +639,35 @@ export class AdminSettingsController {
   }
 
   /**
-   * DELETE /admin/settings/games/:id
-   * Remove a game from the local cache.
+   * POST /admin/settings/games/:id/ban
+   * Ban a game — tombstones it so IGDB sync won't re-import it.
    */
-  @Delete('games/:id')
+  @Post('games/:id/ban')
   @HttpCode(HttpStatus.OK)
-  async deleteGame(
+  async banGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
-    const db = this.igdbService.database;
-
-    const existing = await db
-      .select({ id: schema.games.id, name: schema.games.name })
-      .from(schema.games)
-      .where(eq(schema.games.id, id))
-      .limit(1);
-
-    if (existing.length === 0) {
-      throw new BadRequestException('Game not found');
+    const result = await this.igdbService.banGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
     }
+    return { success: result.success, message: result.message };
+  }
 
-    await db.delete(schema.games).where(eq(schema.games.id, id));
-
-    this.logger.log(
-      `Game "${existing[0].name}" (id=${id}) deleted via admin UI`,
-    );
-
-    return {
-      success: true,
-      message: `Game "${existing[0].name}" removed from library.`,
-    };
+  /**
+   * POST /admin/settings/games/:id/unban
+   * Unban a game and trigger a fresh IGDB import to restore it.
+   */
+  @Post('games/:id/unban')
+  @HttpCode(HttpStatus.OK)
+  async unbanGame(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const result = await this.igdbService.unbanGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { success: result.success, message: result.message };
   }
 
   /**

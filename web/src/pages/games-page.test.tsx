@@ -45,6 +45,10 @@ vi.mock('../components/games/games-mobile-toolbar', () => ({
     GamesMobileToolbar: () => <div data-testid="games-mobile-toolbar" />,
 }));
 
+vi.mock('../hooks/use-want-to-play-batch', () => ({
+    WantToPlayProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 const mockGame = {
     id: 1,
     igdbId: 100,

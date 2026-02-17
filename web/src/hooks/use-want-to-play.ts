@@ -1,7 +1,9 @@
+import { useContext } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { WantToPlayContext, NO_PROVIDER } from './want-to-play-context';
 
 const getHeaders = () => ({
     'Content-Type': 'application/json',
@@ -10,8 +12,38 @@ const getHeaders = () => ({
 
 /**
  * Hook for want-to-play toggle with optimistic updates.
+ *
+ * ROK-362: When inside a WantToPlayProvider, reads from batch context
+ * instead of making individual requests. Falls back to individual
+ * queries when no provider is present (e.g., game detail page).
  */
 export function useWantToPlay(gameId: number | undefined) {
+    const ctx = useContext(WantToPlayContext);
+    const inBatch = ctx !== NO_PROVIDER;
+
+    // Always call the individual hook (React rules), but disable it when in batch mode
+    const individual = useWantToPlayIndividual(gameId, !inBatch);
+
+    if (inBatch && gameId) {
+        const interest = ctx.getInterest(gameId);
+        return {
+            wantToPlay: interest.wantToPlay,
+            count: interest.count,
+            players: [],
+            isLoading: false,
+            toggle: (wantToPlay: boolean) => ctx.toggle(gameId, wantToPlay),
+            isToggling: ctx.isToggling,
+        };
+    }
+
+    return individual;
+}
+
+/**
+ * Individual (non-batch) want-to-play hook. Always called to satisfy
+ * React hook rules, but disabled when `enabled` is false.
+ */
+function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
     const queryClient = useQueryClient();
     const queryKey = ['games', 'interest', gameId];
 
@@ -25,7 +57,7 @@ export function useWantToPlay(gameId: number | undefined) {
             if (!response.ok) throw new Error('Failed to fetch interest');
             return response.json();
         },
-        enabled: !!gameId && !!getAuthToken(),
+        enabled: enabled && !!gameId && !!getAuthToken(),
         staleTime: 1000 * 60 * 5,
     });
 
@@ -40,7 +72,6 @@ export function useWantToPlay(gameId: number | undefined) {
             return response.json();
         },
         onMutate: async (wantToPlay) => {
-            // Optimistic update
             await queryClient.cancelQueries({ queryKey });
             const previous =
                 queryClient.getQueryData<GameInterestResponseDto>(queryKey);
@@ -53,7 +84,6 @@ export function useWantToPlay(gameId: number | undefined) {
             return { previous };
         },
         onError: (_err, _vars, context) => {
-            // Rollback on error
             if ((context as { previous?: GameInterestResponseDto })?.previous) {
                 queryClient.setQueryData(
                     queryKey,
@@ -63,11 +93,9 @@ export function useWantToPlay(gameId: number | undefined) {
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey });
-            // Also invalidate discover so community row updates
             queryClient.invalidateQueries({
                 queryKey: ['games', 'discover'],
             });
-            // Invalidate hearted games so wizard character steps update in real-time
             queryClient.invalidateQueries({
                 queryKey: ['userHeartedGames'],
             });

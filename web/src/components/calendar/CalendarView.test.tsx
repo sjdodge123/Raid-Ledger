@@ -139,7 +139,7 @@ describe('CalendarView', () => {
         it('renders ScheduleView (empty state) when calendarView="schedule"', () => {
             renderWithProviders(<CalendarView calendarView="schedule" />);
             // ScheduleView empty state text
-            expect(screen.getByText('No events this week')).toBeInTheDocument();
+            expect(screen.getByText('No events scheduled')).toBeInTheDocument();
         });
 
         it('does not render the week/month/day toolbar when calendarView="schedule"', () => {
@@ -168,10 +168,9 @@ describe('CalendarView', () => {
                 }),
             }));
             // Re-render with calendarView=schedule; loading spinner should appear
-            // (The component renders a .calendar-loading div when isLoading=true)
             renderWithProviders(<CalendarView calendarView="schedule" />);
-            // At minimum the container renders without crashing
-            expect(document.querySelector('.calendar-container')).toBeInTheDocument();
+            // Schedule view uses a min-w-0 wrapper (no calendar-container class)
+            expect(document.querySelector('.min-w-0')).toBeInTheDocument();
         });
     });
 });

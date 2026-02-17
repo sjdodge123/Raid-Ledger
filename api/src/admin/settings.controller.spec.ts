@@ -38,7 +38,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         lastApiCallAt: null,
         lastApiCallSuccess: null,
       }),
-      syncAllGames: jest.fn().mockResolvedValue({ refreshed: 0, discovered: 0 }),
+      syncAllGames: jest
+        .fn()
+        .mockResolvedValue({ refreshed: 0, discovered: 0 }),
       database: {
         select: jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
@@ -104,7 +106,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         name: '',
       });
 
-      await expect(controller.hideGame(999)).rejects.toThrow(BadRequestException);
+      await expect(controller.hideGame(999)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('calls igdbService.hideGame with the correct id', async () => {
@@ -124,7 +128,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         fail('Expected BadRequestException');
       } catch (err) {
         expect(err).toBeInstanceOf(BadRequestException);
-        const response = (err as BadRequestException).getResponse() as { message: string };
+        const response = (err as BadRequestException).getResponse() as {
+          message: string;
+        };
         expect(response.message).toBe('Game not found');
       }
     });
@@ -149,7 +155,9 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         name: '',
       });
 
-      await expect(controller.unhideGame(999)).rejects.toThrow(BadRequestException);
+      await expect(controller.unhideGame(999)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('calls igdbService.unhideGame with the correct id', async () => {
@@ -163,13 +171,17 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
   // ============================================================
   describe('getAdultFilter', () => {
     it('returns enabled: false when filter is off', async () => {
-      (mockIgdbService.isAdultFilterEnabled as jest.Mock).mockResolvedValue(false);
+      (mockIgdbService.isAdultFilterEnabled as jest.Mock).mockResolvedValue(
+        false,
+      );
       const result = await controller.getAdultFilter();
       expect(result).toEqual({ enabled: false });
     });
 
     it('returns enabled: true when filter is on', async () => {
-      (mockIgdbService.isAdultFilterEnabled as jest.Mock).mockResolvedValue(true);
+      (mockIgdbService.isAdultFilterEnabled as jest.Mock).mockResolvedValue(
+        true,
+      );
       const result = await controller.getAdultFilter();
       expect(result).toEqual({ enabled: true });
     });
@@ -259,7 +271,15 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
 
     it('returns visible games only when showHidden is undefined', async () => {
       const rows = [
-        { id: 1, igdbId: 111, name: 'Visible Game', slug: 'visible-game', coverUrl: null, cachedAt: new Date(), hidden: false },
+        {
+          id: 1,
+          igdbId: 111,
+          name: 'Visible Game',
+          slug: 'visible-game',
+          coverUrl: null,
+          cachedAt: new Date(),
+          hidden: false,
+        },
       ];
 
       // Provide a DB mock that returns rows for both count and data queries
@@ -291,7 +311,15 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
 
     it('returns only hidden games when showHidden is "only"', async () => {
       let callCount = 0;
-      const hiddenRow = { id: 2, igdbId: 222, name: 'Hidden Game', slug: 'hidden-game', coverUrl: null, cachedAt: new Date(), hidden: true };
+      const hiddenRow = {
+        id: 2,
+        igdbId: 222,
+        name: 'Hidden Game',
+        slug: 'hidden-game',
+        coverUrl: null,
+        cachedAt: new Date(),
+        hidden: true,
+      };
 
       (mockIgdbService.database as any) = {
         select: jest.fn().mockImplementation(() => ({
@@ -319,8 +347,24 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
 
     it('includes hidden field in response data', async () => {
       const rows = [
-        { id: 1, igdbId: 111, name: 'Visible Game', slug: 'visible-game', coverUrl: null, cachedAt: new Date(), hidden: false },
-        { id: 2, igdbId: 222, name: 'Hidden Game', slug: 'hidden-game', coverUrl: null, cachedAt: new Date(), hidden: true },
+        {
+          id: 1,
+          igdbId: 111,
+          name: 'Visible Game',
+          slug: 'visible-game',
+          coverUrl: null,
+          cachedAt: new Date(),
+          hidden: false,
+        },
+        {
+          id: 2,
+          igdbId: 222,
+          name: 'Hidden Game',
+          slug: 'hidden-game',
+          coverUrl: null,
+          cachedAt: new Date(),
+          hidden: true,
+        },
       ];
 
       let callCount = 0;

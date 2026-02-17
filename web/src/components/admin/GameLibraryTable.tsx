@@ -4,10 +4,13 @@ import { useAdminGames } from '../../hooks/use-admin-games';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
 
-export function GameLibraryTable() {
+interface GameLibraryTableProps {
+    showHidden?: 'only' | undefined;
+}
+
+export function GameLibraryTable({ showHidden }: GameLibraryTableProps) {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
-    const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
 
@@ -19,7 +22,7 @@ export function GameLibraryTable() {
         return () => clearTimeout(timer);
     }, [search]);
 
-    const { games, deleteGame, hideGame, unhideGame } = useAdminGames(debouncedSearch, 20, showHidden);
+    const { games, banGame, hideGame, unhideGame } = useAdminGames(debouncedSearch, 20, showHidden);
     const { items, isLoading, total, isFetchingNextPage, hasNextPage, sentinelRef } = games;
 
     const handleDelete = async (gameId: number, gameName: string) => {
@@ -28,7 +31,7 @@ export function GameLibraryTable() {
         }
 
         try {
-            const result = await deleteGame.mutateAsync(gameId);
+            const result = await banGame.mutateAsync(gameId);
             if (result.success) {
                 toast.success(result.message);
             } else {
@@ -68,34 +71,6 @@ export function GameLibraryTable() {
     return (
         <div className="mb-8">
             <h2 className="text-xl font-semibold text-foreground mb-4">Manage Library</h2>
-
-            {/* Show hidden games toggle */}
-            <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-4">
-                <div>
-                    <span className="text-sm font-medium text-foreground">Show hidden games</span>
-                    <p className="text-dim text-xs mt-0.5">
-                        View banned/hidden games and restore them to the library
-                    </p>
-                </div>
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked={showHidden === 'only'}
-                    aria-label="Show hidden games"
-                    onClick={() => setShowHidden(showHidden === 'only' ? undefined : 'only')}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-panel cursor-pointer ${
-                        showHidden === 'only'
-                            ? 'bg-purple-600'
-                            : 'bg-overlay'
-                    }`}
-                >
-                    <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            showHidden === 'only' ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                    />
-                </button>
-            </div>
 
             {/* Search */}
             <div
@@ -155,7 +130,7 @@ export function GameLibraryTable() {
                                 </div>
                                 <button
                                     onClick={() => handleDelete(game.id, game.name)}
-                                    disabled={deleteGame.isPending}
+                                    disabled={banGame.isPending}
                                     className="w-11 h-11 flex items-center justify-center text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 rounded-lg transition-colors flex-shrink-0"
                                     title="Remove game"
                                     aria-label="Remove game"
@@ -235,7 +210,7 @@ export function GameLibraryTable() {
                                                 )}
                                                 <button
                                                     onClick={() => handleDelete(game.id, game.name)}
-                                                    disabled={deleteGame.isPending}
+                                                    disabled={banGame.isPending}
                                                     className="w-11 h-11 md:w-auto md:h-auto md:p-1.5 flex items-center justify-center rounded-md text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-50 transition-colors"
                                                     title="Remove game"
                                                 >

@@ -63,7 +63,7 @@ describe('ScheduleView', () => {
     describe('Empty state', () => {
         it('renders empty state when no events', () => {
             render(<ScheduleView {...defaultProps} events={[]} />);
-            expect(screen.getByText('No events this week')).toBeInTheDocument();
+            expect(screen.getByText('No events scheduled')).toBeInTheDocument();
         });
 
         it('does not render schedule-view container when empty', () => {
@@ -136,6 +136,36 @@ describe('ScheduleView', () => {
             expect(buttons[0]).toHaveTextContent('Earlier Event');
             expect(buttons[1]).toHaveTextContent('Later Event');
         });
+
+        it('does not render days without events', () => {
+            // Events on Feb 12 and Feb 14 — Feb 13 should be hidden
+            const events = [
+                makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+                makeCalendarEvent(2, 'Event B', new Date('2026-02-14T10:00:00'), new Date('2026-02-14T12:00:00')),
+            ];
+
+            render(<ScheduleView {...defaultProps} events={events} />);
+
+            // Feb 12 (Thu) and Feb 14 (Sat) should be present
+            expect(screen.getByText('12')).toBeInTheDocument();
+            expect(screen.getByText('14')).toBeInTheDocument();
+
+            // Feb 13 (Fri) should NOT be present (no events, not today)
+            expect(screen.queryByText('13')).not.toBeInTheDocument();
+        });
+
+        it('always shows today even without events', () => {
+            // MOCK_NOW is Feb 10. Event only on Feb 12.
+            const events = [
+                makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+            ];
+
+            render(<ScheduleView {...defaultProps} events={events} />);
+
+            // Today (Feb 10, Tue) should appear even without events
+            expect(screen.getByText('10')).toBeInTheDocument();
+            expect(screen.getByText('Tue')).toBeInTheDocument();
+        });
     });
 
     describe('Google Calendar-style day headers', () => {
@@ -179,6 +209,48 @@ describe('ScheduleView', () => {
             const dateNum = screen.getByText('11');
             expect(dateNum).toHaveClass('text-foreground');
             expect(dateNum).not.toHaveClass('bg-emerald-500');
+        });
+    });
+
+    describe('Week separators', () => {
+        it('renders week separator before first day of each new week', () => {
+            // Feb 10 (Tue, week of Feb 8-14) and Feb 16 (Mon, week of Feb 15-21)
+            const events = [
+                makeCalendarEvent(1, 'Event A', new Date('2026-02-10T10:00:00'), new Date('2026-02-10T12:00:00')),
+                makeCalendarEvent(2, 'Event B', new Date('2026-02-16T10:00:00'), new Date('2026-02-16T12:00:00')),
+            ];
+
+            const { container } = render(<ScheduleView {...defaultProps} events={events} />);
+
+            const separators = container.querySelectorAll('.week-separator');
+            expect(separators.length).toBeGreaterThanOrEqual(2);
+        });
+    });
+
+    describe('Now line', () => {
+        it('renders now-line on today\'s date group', () => {
+            // MOCK_NOW is Feb 10 12:00 UTC. Event ends at 20:00 (future).
+            const events = [
+                makeCalendarEvent(1, 'Today Raid', new Date('2026-02-10T18:00:00'), new Date('2026-02-10T20:00:00')),
+            ];
+
+            const { container } = render(<ScheduleView {...defaultProps} events={events} />);
+
+            const nowLines = container.querySelectorAll('.now-line');
+            expect(nowLines).toHaveLength(1);
+        });
+
+        it('renders now-line alone when today has no events', () => {
+            // Event only on Feb 12, not today (Feb 10)
+            const events = [
+                makeCalendarEvent(1, 'Event A', new Date('2026-02-12T10:00:00'), new Date('2026-02-12T12:00:00')),
+            ];
+
+            const { container } = render(<ScheduleView {...defaultProps} events={events} />);
+
+            // Today is shown (always included) with the now line
+            const nowLines = container.querySelectorAll('.now-line');
+            expect(nowLines).toHaveLength(1);
         });
     });
 

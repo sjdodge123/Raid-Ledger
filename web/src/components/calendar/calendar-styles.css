@@ -305,7 +305,7 @@
 @media (max-width: 768px) {
     .calendar-container {
         padding: 0.75rem;
-        overflow-x: hidden;
+        overflow-x: clip;
     }
 
     .calendar-toolbar {
@@ -318,6 +318,11 @@
         margin-right: -0.75rem;
         padding: 0.75rem;
         margin-bottom: 0.75rem;
+    }
+
+    /* Hide custom toolbar on mobile when CalendarMobileToolbar is active */
+    .calendar-toolbar.calendar-toolbar-desktop-only {
+        display: none;
     }
 
     .toolbar-title {

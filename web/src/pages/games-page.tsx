@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { FunnelIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
 import { useDebouncedValue } from "../hooks/use-debounced-value";
 import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
 import { useAdminSettings } from "../hooks/use-admin-settings";
+import { useScrollDirection } from "../hooks/use-scroll-direction";
+import { WantToPlayProvider } from "../hooks/use-want-to-play-batch";
 import { GameCarousel } from "../components/games/GameCarousel";
 import { GameCard } from "../components/games/GameCard";
 import { MobileGameCard } from "../components/games/mobile-game-card";
@@ -45,7 +47,10 @@ export function GamesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedGenres, setSelectedGenres] = useState<Set<string>>(new Set());
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
+  const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
+  const scrollDirection = useScrollDirection();
+  const isHeaderHidden = scrollDirection === 'down';
 
   const { data: discoverData, isLoading: discoverLoading } = useGamesDiscover();
   const { data: searchData, isLoading: searchLoading } = useGameSearch(
@@ -87,6 +92,24 @@ export function GamesPage() {
     }),
   );
 
+  // ROK-362: Collect all visible game IDs for batch interest check
+  const allGameIds = useMemo(() => {
+    const ids: number[] = [];
+    if (filteredRows) {
+      for (const row of filteredRows) {
+        for (const game of row.games) {
+          ids.push(game.id);
+        }
+      }
+    }
+    if (searchResults) {
+      for (const game of searchResults) {
+        ids.push(game.id);
+      }
+    }
+    return ids;
+  }, [filteredRows, searchResults]);
+
   return (
     <div className="pb-20 md:pb-0">
       <GamesMobileToolbar
@@ -96,8 +119,8 @@ export function GamesPage() {
       />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Header */}
-        <div className="mb-6">
+        {/* Header — hidden on mobile */}
+        <div className="hidden md:block mb-6">
           <h1 className="text-3xl font-bold text-foreground">Game Library</h1>
           <p className="text-muted mt-1">
             {activeTab === "manage"
@@ -136,56 +159,68 @@ export function GamesPage() {
         {activeTab === "manage" && canManage && (
           <>
             <AdultContentFilterToggle />
-            <GameLibraryTable />
+            <ShowHiddenGamesToggle
+              showHidden={showHidden}
+              onToggle={() => setShowHidden(showHidden === 'only' ? undefined : 'only')}
+            />
+            <GameLibraryTable key={showHidden ?? 'default'} showHidden={showHidden} />
           </>
         )}
 
         {/* Discover tab */}
         {activeTab === "discover" && (
-          <>
-            {/* Search Bar */}
-            <div className="relative mb-6">
-              <svg
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dim"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search games..."
-                className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-dim hover:text-foreground transition-colors"
-                  aria-label="Clear search"
+          <WantToPlayProvider gameIds={allGameIds}>
+            {/* Sticky Search Bar */}
+            <div
+              className="sticky z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1 md:relative md:z-auto md:bg-transparent md:backdrop-blur-none md:pb-0 md:mx-0 md:px-0 mb-6"
+              style={{
+                top: isHeaderHidden ? 75 : 140,
+                transition: 'top 300ms ease-in-out',
+              }}
+            >
+              <div className="relative">
+                <svg
+                  className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-dim"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
                 >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search games..."
+                  className="w-full pl-12 pr-4 py-3 bg-surface/50 border border-edge rounded-xl text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-dim hover:text-foreground transition-colors"
+                    aria-label="Clear search"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              )}
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M6 18L18 6M6 6l12 12"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Desktop Genre Filter Pills */}
@@ -299,14 +334,19 @@ export function GamesPage() {
                         />
                       ))}
                     </div>
-                    {/* Mobile: 2-column grid of all games */}
-                    <div className="md:hidden">
+                    {/* Mobile: horizontal scroll carousels per category */}
+                    <div className="md:hidden space-y-6">
                       {filteredRows.map((row) => (
-                        <div key={row.slug} className="mb-6">
+                        <div key={row.slug}>
                           <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div
+                            className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2"
+                            style={{ scrollbarWidth: 'none' }}
+                          >
                             {row.games.map((game) => (
-                              <MobileGameCard key={game.id} game={game} />
+                              <div key={game.id} className="w-[140px] flex-shrink-0 snap-start">
+                                <MobileGameCard game={game} />
+                              </div>
                             ))}
                           </div>
                         </div>
@@ -327,7 +367,7 @@ export function GamesPage() {
                 )}
               </div>
             )}
-          </>
+          </WantToPlayProvider>
         )}
       </div>
 
@@ -411,7 +451,7 @@ function AdultContentFilterToggle() {
   const { igdbAdultFilter, updateAdultFilter } = useAdminSettings();
 
   return (
-    <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-6">
+    <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-4">
       <div>
         <span className="text-sm font-medium text-foreground">Filter adult content</span>
         <p className="text-dim text-xs mt-0.5">
@@ -442,6 +482,43 @@ function AdultContentFilterToggle() {
         <span
           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
             igdbAdultFilter.data?.enabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
+function ShowHiddenGamesToggle({
+  showHidden,
+  onToggle,
+}: {
+  showHidden: 'only' | undefined;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-6">
+      <div>
+        <span className="text-sm font-medium text-foreground">Show hidden/banned games</span>
+        <p className="text-dim text-xs mt-0.5">
+          View banned and hidden games to restore or unban them
+        </p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={showHidden === 'only'}
+        aria-label="Show hidden games"
+        onClick={onToggle}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-panel cursor-pointer ${
+          showHidden === 'only'
+            ? 'bg-purple-600'
+            : 'bg-overlay'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            showHidden === 'only' ? 'translate-x-6' : 'translate-x-1'
           }`}
         />
       </button>

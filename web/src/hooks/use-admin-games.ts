@@ -11,6 +11,7 @@ interface AdminGame {
     coverUrl: string | null;
     cachedAt: string;
     hidden: boolean;
+    banned: boolean;
 }
 
 interface AdminGameListResponse {
@@ -52,19 +53,19 @@ export function useAdminGames(search: string, limit = 20, showHidden?: 'only' | 
         enabled: !!getAuthToken(),
     });
 
-    const deleteGame = useMutation<{ success: boolean; message: string }, Error, number>({
+    const banGame = useMutation<{ success: boolean; message: string }, Error, number>({
         mutationFn: async (gameId) => {
             const response = await fetch(
-                `${API_BASE_URL}/admin/settings/games/${gameId}`,
+                `${API_BASE_URL}/admin/settings/games/${gameId}/ban`,
                 {
-                    method: 'DELETE',
+                    method: 'POST',
                     headers: getHeaders(),
                 },
             );
 
             if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: 'Failed to delete game' }));
-                throw new Error(error.message || 'Failed to delete game');
+                const error = await response.json().catch(() => ({ message: 'Failed to ban game' }));
+                throw new Error(error.message || 'Failed to ban game');
             }
 
             return response.json();
@@ -72,6 +73,28 @@ export function useAdminGames(search: string, limit = 20, showHidden?: 'only' | 
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
             queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb', 'sync-status'] });
+        },
+    });
+
+    const unbanGame = useMutation<{ success: boolean; message: string }, Error, number>({
+        mutationFn: async (gameId) => {
+            const response = await fetch(
+                `${API_BASE_URL}/admin/settings/games/${gameId}/unban`,
+                {
+                    method: 'POST',
+                    headers: getHeaders(),
+                },
+            );
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to unban game' }));
+                throw new Error(error.message || 'Failed to unban game');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
         },
     });
 
@@ -119,5 +142,5 @@ export function useAdminGames(search: string, limit = 20, showHidden?: 'only' | 
         },
     });
 
-    return { games, deleteGame, hideGame, unhideGame };
+    return { games, banGame, unbanGame, hideGame, unhideGame };
 }

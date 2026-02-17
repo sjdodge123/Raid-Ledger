@@ -50,7 +50,7 @@ const mockGames = {
 vi.mock('../../hooks/use-admin-games', () => ({
     useAdminGames: () => ({
         games: mockGames,
-        deleteGame: mockDeleteGame,
+        banGame: mockDeleteGame,
         hideGame: mockHideGame,
         unhideGame: mockUnhideGame,
     }),

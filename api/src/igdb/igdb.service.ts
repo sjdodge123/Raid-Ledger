@@ -217,11 +217,13 @@ export class IgdbService {
       ? ` & themes != (${ADULT_THEME_IDS.join(',')})`
       : '';
 
-    // Phase 1: Refresh existing non-hidden games in batches of 10 by IGDB ID
+    // Phase 1: Refresh existing non-hidden, non-banned games in batches of 10 by IGDB ID
     const existingGames = await this.db
       .select({ igdbId: schema.games.igdbId })
       .from(schema.games)
-      .where(eq(schema.games.hidden, false));
+      .where(
+        and(eq(schema.games.hidden, false), eq(schema.games.banned, false)),
+      );
 
     if (existingGames.length > 0) {
       const batchSize = 10;
@@ -532,12 +534,13 @@ export class IgdbService {
       // Continue to next layer if Redis fails
     }
 
-    // Layer 2: Check local database (exclude hidden games + adult filter)
+    // Layer 2: Check local database (exclude hidden/banned games + adult filter)
     const escapedQuery = this.escapeLikePattern(normalizedQuery);
     const adultFilterEnabled = await this.isAdultFilterEnabled();
     const dbFilters = [
       ilike(schema.games.name, `%${escapedQuery}%`),
       eq(schema.games.hidden, false),
+      eq(schema.games.banned, false),
     ];
     if (adultFilterEnabled) {
       dbFilters.push(
@@ -646,6 +649,7 @@ export class IgdbService {
         and(
           ilike(schema.games.name, `%${escapedQuery}%`),
           eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
         ),
       )
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
@@ -822,12 +826,29 @@ export class IgdbService {
 
   /**
    * Upsert games from IGDB API responses into the local database.
+   * Skips games whose igdbId is banned (tombstoned).
    * Returns the inserted/existing game rows as detail DTOs.
    */
   async upsertGamesFromApi(apiGames: IgdbApiGame[]): Promise<GameDetailDto[]> {
     if (apiGames.length === 0) return [];
 
-    const rows = apiGames.map((g) => this.mapApiGameToDbRow(g));
+    // Look up banned igdbIds to skip them during discovery
+    const incomingIgdbIds = apiGames.map((g) => g.id);
+    const bannedRows = await this.db
+      .select({ igdbId: schema.games.igdbId })
+      .from(schema.games)
+      .where(
+        and(
+          sql`${schema.games.igdbId} = ANY(${incomingIgdbIds})`,
+          eq(schema.games.banned, true),
+        ),
+      );
+    const bannedIgdbIds = new Set(bannedRows.map((r) => r.igdbId));
+
+    const filteredGames = apiGames.filter((g) => !bannedIgdbIds.has(g.id));
+    if (filteredGames.length === 0) return [];
+
+    const rows = filteredGames.map((g) => this.mapApiGameToDbRow(g));
 
     // Use onConflictDoUpdate to refresh expanded data
     for (const row of rows) {
@@ -995,6 +1016,121 @@ export class IgdbService {
       message: `Game "${existing[0].name}" is now visible to users.`,
       name: existing[0].name,
     };
+  }
+
+  /**
+   * Ban a game by ID. Banned games are tombstoned — excluded from sync,
+   * search, and discovery, and will not be re-imported by IGDB sync.
+   */
+  async banGame(
+    id: number,
+  ): Promise<{ success: boolean; message: string; name: string }> {
+    const existing = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: 'Game not found', name: '' };
+    }
+
+    await this.db
+      .update(schema.games)
+      .set({ banned: true, hidden: true })
+      .where(eq(schema.games.id, id));
+
+    this.logger.log(
+      `Game "${existing[0].name}" (id=${id}) banned via admin UI`,
+    );
+
+    return {
+      success: true,
+      message: `Game "${existing[0].name}" has been banned.`,
+      name: existing[0].name,
+    };
+  }
+
+  /**
+   * Unban a previously banned game, then force a fresh IGDB import
+   * to restore its data.
+   */
+  async unbanGame(
+    id: number,
+  ): Promise<{ success: boolean; message: string; name: string }> {
+    const existing = await this.db
+      .select({
+        id: schema.games.id,
+        name: schema.games.name,
+        igdbId: schema.games.igdbId,
+      })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (existing.length === 0) {
+      return { success: false, message: 'Game not found', name: '' };
+    }
+
+    await this.db
+      .update(schema.games)
+      .set({ banned: false, hidden: false })
+      .where(eq(schema.games.id, id));
+
+    // Force a fresh IGDB import to restore full data
+    try {
+      await this.fetchAndUpsertSingleGame(existing[0].igdbId);
+    } catch (err) {
+      this.logger.warn(`Failed to refresh game data after unban: ${err}`);
+    }
+
+    this.logger.log(
+      `Game "${existing[0].name}" (id=${id}) unbanned via admin UI`,
+    );
+
+    return {
+      success: true,
+      message: `Game "${existing[0].name}" has been unbanned and restored.`,
+      name: existing[0].name,
+    };
+  }
+
+  /**
+   * Fetch a single game from IGDB by its IGDB ID and upsert it.
+   * Used to restore data after unbanning.
+   */
+  async fetchAndUpsertSingleGame(igdbId: number): Promise<void> {
+    const apiGames = await this.queryIgdb(
+      `fields ${IGDB_CONFIG.EXPANDED_FIELDS}; where id = ${igdbId}; limit 1;`,
+    );
+    if (apiGames.length > 0) {
+      const row = this.mapApiGameToDbRow(apiGames[0]);
+      await this.db
+        .insert(schema.games)
+        .values(row)
+        .onConflictDoUpdate({
+          target: schema.games.igdbId,
+          set: {
+            name: row.name,
+            slug: row.slug,
+            coverUrl: row.coverUrl,
+            genres: row.genres,
+            summary: row.summary,
+            rating: row.rating,
+            aggregatedRating: row.aggregatedRating,
+            popularity: row.popularity,
+            gameModes: row.gameModes,
+            themes: row.themes,
+            platforms: row.platforms,
+            screenshots: row.screenshots,
+            videos: row.videos,
+            firstReleaseDate: row.firstReleaseDate,
+            playerCount: row.playerCount,
+            twitchGameId: row.twitchGameId,
+            cachedAt: new Date(),
+          },
+        });
+    }
   }
 
   /**

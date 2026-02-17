@@ -150,6 +150,7 @@ export const AdminGameListResponseSchema = z.object({
         coverUrl: z.string().nullable(),
         cachedAt: z.string(),
         hidden: z.boolean(),
+        banned: z.boolean(),
     })),
     meta: z.object({
         total: z.number(),
@@ -182,6 +183,16 @@ export const GameInterestResponseSchema = z.object({
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;
+
+/** ROK-362: Batch interest check response — map of gameId to interest status */
+export const BatchInterestResponseSchema = z.object({
+    data: z.record(z.string(), z.object({
+        wantToPlay: z.boolean(),
+        count: z.number(),
+    })),
+});
+
+export type BatchInterestResponseDto = z.infer<typeof BatchInterestResponseSchema>;
 
 /** A game the user has hearted, with basic info for display (ROK-282) */
 export const UserHeartedGameSchema = z.object({
