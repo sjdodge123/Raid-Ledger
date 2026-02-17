@@ -105,10 +105,10 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
             </Link>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 flex-shrink-0">
                 {/* Main badge */}
                 {character.isMain && (
-                    <span className="text-yellow-400 text-sm font-semibold inline-flex items-center gap-1" title="Main character">
+                    <span className="text-yellow-400 text-sm font-semibold inline-flex items-center justify-center gap-1" title="Main character">
                         ⭐ Main
                     </span>
                 )}
@@ -125,14 +125,14 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                 />
                 <button
                     onClick={() => onEdit(character)}
-                    className="px-3 py-1.5 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
+                    className="px-3 py-1.5 min-h-[44px] sm:min-h-0 text-sm text-secondary hover:text-foreground hover:bg-overlay rounded transition-colors"
                 >
                     Edit
                 </button>
                 <button
                     onClick={handleDelete}
                     disabled={deleteMutation.isPending}
-                    className="px-3 py-1.5 text-sm text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded transition-colors"
+                    className="px-3 py-1.5 min-h-[44px] sm:min-h-0 text-sm text-red-400 hover:text-red-300 hover:bg-red-950/50 rounded transition-colors"
                 >
                     Delete
                 </button>

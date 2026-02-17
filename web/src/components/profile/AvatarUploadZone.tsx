@@ -93,15 +93,15 @@ export function AvatarUploadZone({
                 />
 
                 {/* Preview / placeholder */}
-                <div className="relative w-20 h-20">
+                <div className="relative w-16 h-16 sm:w-20 sm:h-20">
                     {displayUrl ? (
                         <img
                             src={displayUrl}
                             alt="Avatar preview"
-                            className="w-20 h-20 rounded-full object-cover border-2 border-edge"
+                            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-edge"
                         />
                     ) : (
-                        <div className="w-20 h-20 rounded-full bg-panel border-2 border-edge flex items-center justify-center">
+                        <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-panel border-2 border-edge flex items-center justify-center">
                             <svg
                                 className="w-8 h-8 text-dim"
                                 fill="none"
@@ -121,7 +121,7 @@ export function AvatarUploadZone({
                     {/* Progress overlay */}
                     {isUploading && (
                         <div className="absolute inset-0 flex items-center justify-center">
-                            <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
+                            <svg className="w-16 h-16 sm:w-20 sm:h-20 -rotate-90" viewBox="0 0 80 80">
                                 <circle
                                     cx="40"
                                     cy="40"
