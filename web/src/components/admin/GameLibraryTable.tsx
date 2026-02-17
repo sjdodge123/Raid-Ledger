@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { toast } from '../../lib/toast';
 import { useAdminGames } from '../../hooks/use-admin-games';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
 
 export function GameLibraryTable() {
     const [search, setSearch] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [page, setPage] = useState(1);
     const [showHidden, setShowHidden] = useState<'only' | undefined>(undefined);
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
 
     // 300ms debounce on search
     useEffect(() => {
@@ -99,7 +102,13 @@ export function GameLibraryTable() {
             </div>
 
             {/* Search */}
-            <div className="sticky top-16 md:top-0 z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1">
+            <div
+                className="sticky md:top-0 z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1"
+                style={{
+                    top: isHeaderHidden ? 52 : 116,
+                    transition: 'top 300ms ease-in-out',
+                }}
+            >
                 <input
                     type="text"
                     value={search}
