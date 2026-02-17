@@ -21,6 +21,11 @@ const mockHideGame = {
     isPending: false,
 };
 
+const mockUnbanGame = {
+    mutateAsync: vi.fn(),
+    isPending: false,
+};
+
 const mockUnhideGame = {
     mutateAsync: vi.fn(),
     isPending: false,
@@ -37,6 +42,7 @@ const mockGames = {
         coverUrl: string | null;
         cachedAt: string;
         hidden?: boolean;
+    banned?: boolean;
     }>,
     total: 0,
     isLoading: false,
@@ -51,6 +57,7 @@ vi.mock('../../hooks/use-admin-games', () => ({
     useAdminGames: () => ({
         games: mockGames,
         banGame: mockDeleteGame,
+        unbanGame: mockUnbanGame,
         hideGame: mockHideGame,
         unhideGame: mockUnhideGame,
     }),
@@ -84,6 +91,8 @@ describe('GameLibraryTable', () => {
         mockGames.error = null;
         mockDeleteGame.isPending = false;
         mockDeleteGame.mutateAsync = vi.fn();
+        mockUnbanGame.isPending = false;
+        mockUnbanGame.mutateAsync = vi.fn();
         mockHideGame.isPending = false;
         mockHideGame.mutateAsync = vi.fn();
         mockUnhideGame.isPending = false;
