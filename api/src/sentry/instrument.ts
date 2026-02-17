@@ -25,6 +25,10 @@ if (!telemetryDisabled) {
       }
       return event;
     },
+    // Filter out pg_catalog type introspection queries from the Postgres driver.
+    // These are normal driver behavior (OID-to-JS type mapping) and trigger
+    // false-positive N+1 detections in Sentry.
+    ignoreSpans: [/pg_catalog/],
     initialScope: {
       tags: {
         deployment: os.hostname(),
