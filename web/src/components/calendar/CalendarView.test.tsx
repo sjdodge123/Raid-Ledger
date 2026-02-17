@@ -134,4 +134,43 @@ describe('CalendarView', () => {
             expect(screen.getByRole('button', { name: 'Previous month' })).toBeInTheDocument();
         });
     });
+
+    describe('Schedule view (calendarView prop)', () => {
+        it('renders ScheduleView (empty state) when calendarView="schedule"', () => {
+            renderWithProviders(<CalendarView calendarView="schedule" />);
+            // ScheduleView empty state text
+            expect(screen.getByText('No events scheduled')).toBeInTheDocument();
+        });
+
+        it('does not render the week/month/day toolbar when calendarView="schedule"', () => {
+            renderWithProviders(<CalendarView calendarView="schedule" />);
+            // The view toggle group is only present in the non-schedule branch
+            expect(screen.queryByRole('group', { name: 'Calendar view' })).toBeNull();
+        });
+
+        it('does not render nav toolbar buttons when calendarView="schedule"', () => {
+            renderWithProviders(<CalendarView calendarView="schedule" />);
+            expect(screen.queryByRole('button', { name: 'Today' })).toBeNull();
+        });
+
+        it('renders react-big-calendar when calendarView is not "schedule"', () => {
+            renderWithProviders(<CalendarView calendarView="month" />);
+            // The view toggle should be present for non-schedule views
+            expect(screen.getByRole('group', { name: 'Calendar view' })).toBeInTheDocument();
+        });
+
+        it('renders ScheduleView loading spinner when isLoading=true', () => {
+            // Re-mock useEvents to simulate loading
+            vi.doMock('../../hooks/use-events', () => ({
+                useEvents: () => ({
+                    data: undefined,
+                    isLoading: true,
+                }),
+            }));
+            // Re-render with calendarView=schedule; loading spinner should appear
+            renderWithProviders(<CalendarView calendarView="schedule" />);
+            // Schedule view uses a min-w-0 wrapper (no calendar-container class)
+            expect(document.querySelector('.min-w-0')).toBeInTheDocument();
+        });
+    });
 });

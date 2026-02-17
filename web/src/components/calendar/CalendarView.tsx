@@ -24,9 +24,13 @@ import { getGameColors, getCalendarEventStyle } from '../../constants/game-color
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
 import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { Z_INDEX } from '../../lib/z-index';
 import { TZDate } from '@date-fns/tz';
 import { DayEventCard } from './DayEventCard';
 import { WeekEventCard } from './WeekEventCard';
+import { ScheduleView } from './ScheduleView';
+import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
@@ -68,6 +72,8 @@ interface CalendarViewProps {
     onGamesAvailable?: (games: GameInfo[]) => void;
     /** Game time template slots for overlap indicator (Set of "dayOfWeek:hour") */
     gameTimeSlots?: Set<string>;
+    /** Mobile calendar view mode (schedule/month/day) — when 'schedule', renders ScheduleView */
+    calendarView?: CalendarViewMode;
 }
 
 export function CalendarView({
@@ -77,6 +83,7 @@ export function CalendarView({
     selectedGames,
     onGamesAvailable,
     gameTimeSlots,
+    calendarView,
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -94,6 +101,10 @@ export function CalendarView({
     // Use controlled date if provided, otherwise internal state
     const currentDate = controlledDate ?? internalDate;
     const setCurrentDate = onDateChange ?? setInternalDate;
+
+    // Scroll direction for sticky calendar toolbar on mobile (ROK-360)
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
 
     // View state from Zustand store, with URL param override
     const viewPref = useCalendarViewStore((s) => s.viewPref);
@@ -126,8 +137,27 @@ export function CalendarView({
 
 
 
-    // Calculate date range for current view (month, week, or day)
+    // Sync mobile toolbar view mode to internal react-big-calendar view
+    useEffect(() => {
+        if (!calendarView || calendarView === 'schedule') return;
+        const mapped = VIEW_MAP[calendarView];
+        if (mapped && mapped !== view) {
+            setView(mapped);
+        }
+    }, [calendarView]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    // Calculate date range for current view (month, week, day, or schedule)
+    const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => {
+        if (isScheduleView) {
+            // Schedule view shows continuous scrollable agenda
+            const start = startOfMonth(currentDate);
+            const end = endOfMonth(addMonths(currentDate, 2));
+            return {
+                startAfter: start.toISOString(),
+                endBefore: end.toISOString(),
+            };
+        }
         if (view === Views.DAY) {
             const start = startOfDay(currentDate);
             const end = endOfDay(currentDate);
@@ -151,7 +181,7 @@ export function CalendarView({
             startAfter: start.toISOString(),
             endBefore: end.toISOString(),
         };
-    }, [currentDate, view]);
+    }, [currentDate, view, isScheduleView]);
 
     // Fetch events for the current month
     // ROK-177: Include signups preview for week/day views to show attendee avatars
@@ -159,7 +189,8 @@ export function CalendarView({
         startAfter,
         endBefore,
         upcoming: false, // Get all events in range, not just upcoming
-        includeSignups: view === Views.WEEK || view === Views.DAY,
+        includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
+        limit: 100, // Override default page size (20) to fetch full date range
     });
 
     // Extract unique games from events
@@ -239,13 +270,15 @@ export function CalendarView({
     // Event click handler — pass calendar context so event detail page can navigate back
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
-            const viewStr = view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
+            const viewStr = isScheduleView
+                ? 'schedule'
+                : view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
             const dateStr = format(currentDate, 'yyyy-MM-dd');
             navigate(`/events/${event.id}`, {
                 state: { fromCalendar: true, calendarDate: dateStr, calendarView: viewStr },
             });
         },
-        [navigate, view, currentDate]
+        [navigate, view, currentDate, isScheduleView]
     );
 
     // Style events based on their game (using shared constants)
@@ -331,10 +364,40 @@ export function CalendarView({
         [eventOverlapsGameTime],
     );
 
+    // Schedule view — mobile agenda list (no calendar-container wrapper to avoid inherited padding/border)
+    if (isScheduleView) {
+        return (
+            <div className={`min-w-0 ${className}`}>
+                {isLoading && (
+                    <div className="flex items-center justify-center py-16 gap-2 text-muted">
+                        <div className="loading-spinner" />
+                        <span>Loading events...</span>
+                    </div>
+                )}
+                {!isLoading && (
+                    <ScheduleView
+                        events={calendarEvents}
+                        currentDate={currentDate}
+                        onDateChange={setCurrentDate}
+                        onSelectEvent={handleSelectEvent}
+                        eventOverlapsGameTime={eventOverlapsGameTime}
+                    />
+                )}
+            </div>
+        );
+    }
+
     return (
         <div className={`calendar-container calendar-view-${view} ${className}`}>
-            {/* Custom Toolbar */}
-            <div className="calendar-toolbar">
+            {/* Custom Toolbar — hidden on mobile where CalendarMobileToolbar provides navigation */}
+            <div
+                className={`calendar-toolbar ${calendarView ? 'calendar-toolbar-desktop-only' : 'sticky md:static'}`}
+                style={{
+                    top: isHeaderHidden ? '4.25rem' : '8.25rem',
+                    zIndex: Z_INDEX.TOOLBAR,
+                    transition: 'top 300ms ease-in-out',
+                }}
+            >
                 <div className="toolbar-nav">
                     <button
                         onClick={handlePrev}
@@ -393,7 +456,7 @@ export function CalendarView({
                             : format(currentDate, 'MMMM yyyy')
                     }
                 </h2>
-                <div className="toolbar-views" role="group" aria-label="Calendar view">
+                <div className="toolbar-views hidden md:flex" role="group" aria-label="Calendar view">
                     <span className="toolbar-btn text-xs text-muted pointer-events-none" aria-label={`Times shown in ${tzAbbr}`}>
                         {tzAbbr}
                     </span>

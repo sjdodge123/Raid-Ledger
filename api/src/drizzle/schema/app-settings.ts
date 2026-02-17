@@ -41,6 +41,7 @@ export const SETTING_KEYS = {
   UPDATE_AVAILABLE: 'update_available',
   DISCORD_BOT_TOKEN: 'discord_bot_token',
   DISCORD_BOT_ENABLED: 'discord_bot_enabled',
+  IGDB_FILTER_ADULT: 'igdb_filter_adult',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

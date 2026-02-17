@@ -1,6 +1,7 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { useInfiniteList } from './use-infinite-list';
 
 interface AdminGame {
     id: number;
@@ -9,6 +10,8 @@ interface AdminGame {
     slug: string;
     coverUrl: string | null;
     cachedAt: string;
+    hidden: boolean;
+    banned: boolean;
 }
 
 interface AdminGameListResponse {
@@ -18,10 +21,11 @@ interface AdminGameListResponse {
         page: number;
         limit: number;
         totalPages: number;
+        hasMore: boolean;
     };
 }
 
-export function useAdminGames(search: string, page: number, limit = 20) {
+export function useAdminGames(search: string, limit = 20, showHidden?: 'only' | 'true') {
     const queryClient = useQueryClient();
 
     const getHeaders = () => ({
@@ -29,11 +33,12 @@ export function useAdminGames(search: string, page: number, limit = 20) {
         Authorization: `Bearer ${getAuthToken() || ''}`,
     });
 
-    const games = useQuery<AdminGameListResponse>({
-        queryKey: ['admin', 'games', { search, page, limit }],
-        queryFn: async () => {
+    const games = useInfiniteList<AdminGame>({
+        queryKey: ['admin', 'games', { search, limit, showHidden }],
+        queryFn: async (page): Promise<AdminGameListResponse> => {
             const params = new URLSearchParams();
             if (search) params.set('search', search);
+            if (showHidden) params.set('showHidden', showHidden);
             params.set('page', String(page));
             params.set('limit', String(limit));
 
@@ -46,22 +51,21 @@ export function useAdminGames(search: string, page: number, limit = 20) {
             return response.json();
         },
         enabled: !!getAuthToken(),
-        staleTime: 10_000,
     });
 
-    const deleteGame = useMutation<{ success: boolean; message: string }, Error, number>({
+    const banGame = useMutation<{ success: boolean; message: string }, Error, number>({
         mutationFn: async (gameId) => {
             const response = await fetch(
-                `${API_BASE_URL}/admin/settings/games/${gameId}`,
+                `${API_BASE_URL}/admin/settings/games/${gameId}/ban`,
                 {
-                    method: 'DELETE',
+                    method: 'POST',
                     headers: getHeaders(),
                 },
             );
 
             if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: 'Failed to delete game' }));
-                throw new Error(error.message || 'Failed to delete game');
+                const error = await response.json().catch(() => ({ message: 'Failed to ban game' }));
+                throw new Error(error.message || 'Failed to ban game');
             }
 
             return response.json();
@@ -72,5 +76,71 @@ export function useAdminGames(search: string, page: number, limit = 20) {
         },
     });
 
-    return { games, deleteGame };
+    const unbanGame = useMutation<{ success: boolean; message: string }, Error, number>({
+        mutationFn: async (gameId) => {
+            const response = await fetch(
+                `${API_BASE_URL}/admin/settings/games/${gameId}/unban`,
+                {
+                    method: 'POST',
+                    headers: getHeaders(),
+                },
+            );
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to unban game' }));
+                throw new Error(error.message || 'Failed to unban game');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
+        },
+    });
+
+    const hideGame = useMutation<{ success: boolean; message: string }, Error, number>({
+        mutationFn: async (gameId) => {
+            const response = await fetch(
+                `${API_BASE_URL}/admin/settings/games/${gameId}/hide`,
+                {
+                    method: 'POST',
+                    headers: getHeaders(),
+                },
+            );
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to hide game' }));
+                throw new Error(error.message || 'Failed to hide game');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
+        },
+    });
+
+    const unhideGame = useMutation<{ success: boolean; message: string }, Error, number>({
+        mutationFn: async (gameId) => {
+            const response = await fetch(
+                `${API_BASE_URL}/admin/settings/games/${gameId}/unhide`,
+                {
+                    method: 'POST',
+                    headers: getHeaders(),
+                },
+            );
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to unhide game' }));
+                throw new Error(error.message || 'Failed to unhide game');
+            }
+
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
+        },
+    });
+
+    return { games, banGame, unbanGame, hideGame, unhideGame };
 }

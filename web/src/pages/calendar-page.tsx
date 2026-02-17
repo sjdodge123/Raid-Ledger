@@ -100,11 +100,11 @@ export function CalendarPage() {
     };
 
     return (
-        <div className="pb-20 md:pb-0 overflow-x-hidden">
+        <div className="pb-20 md:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={calendarView} onViewChange={setCalendarView} />
 
-            <div className="max-w-7xl mx-auto px-4 py-6 overflow-x-hidden">
-                <div className="mb-6">
+            <div className={`max-w-7xl mx-auto ${calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-4 py-6'}`} style={{ overflowX: 'clip' }}>
+                <div className={`mb-6 hidden md:block ${calendarView === 'schedule' ? 'px-4' : ''}`}>
                     <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
                     <p className="text-muted mt-1">
                         View upcoming events and plan your schedule
@@ -205,13 +205,14 @@ export function CalendarPage() {
                     </aside>
 
                     {/* Main Calendar */}
-                    <main>
+                    <main className="min-w-0">
                         <CalendarView
                             currentDate={currentDate}
                             onDateChange={setCurrentDate}
                             selectedGames={selectedGames}
                             onGamesAvailable={handleGamesAvailable}
                             gameTimeSlots={gameTimeSlots}
+                            calendarView={calendarView}
                         />
                     </main>
                 </div>

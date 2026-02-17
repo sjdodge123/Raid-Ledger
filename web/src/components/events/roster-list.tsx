@@ -103,7 +103,7 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
 
     return (
         <div
-            className={`flex items-center gap-3 p-3 bg-panel/50 rounded-lg hover:bg-panel transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'
+            className={`flex items-start sm:items-center gap-3 p-3 bg-panel/50 rounded-lg hover:bg-panel transition-colors border-l-4 ${roleBorderClass || 'border-l-transparent'
                 }`}
         >
             {/* Avatar */}
@@ -138,40 +138,72 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
                 {/* Character name shown when confirmed (AC-6) */}
                 {isConfirmed && character ? (
                     <>
+                        {/* Primary line: Character name + role */}
                         <div className="flex items-center gap-2">
                             <p className="font-medium text-foreground truncate">
                                 {character.name}
                             </p>
-                            {character.isMain && (
-                                <span className="text-yellow-400 text-xs" title="Main Character">
-                                    &#11088;
-                                </span>
-                            )}
                             {character.role && (
                                 <span className="text-xs" title={character.role}>
                                     {ROLE_EMOJI[character.role]}
                                 </span>
                             )}
+                            {/* Desktop: inline main badge + details */}
+                            {character.isMain && (
+                                <span className="hidden sm:inline text-yellow-400 text-xs" title="Main Character">
+                                    &#11088;
+                                </span>
+                            )}
+                            <span className="hidden sm:flex items-center gap-2 text-sm text-dim">
+                                <span className="text-faint">&#183;</span>
+                                <span className="truncate text-dim">{user.username}</span>
+                                {character.class && (
+                                    <>
+                                        <span className="text-faint">&#183;</span>
+                                        <span className="text-muted">{character.class}</span>
+                                    </>
+                                )}
+                                {character.spec && (
+                                    <>
+                                        <span className="text-faint">/</span>
+                                        <span className="text-muted">{character.spec}</span>
+                                    </>
+                                )}
+                                {character.itemLevel && (
+                                    <>
+                                        <span className="text-faint">&#183;</span>
+                                        <span className="text-purple-400">{character.itemLevel}</span>
+                                    </>
+                                )}
+                            </span>
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-dim">
-                            <span className="truncate">{user.username}</span>
-                            {character.class && (
-                                <>
-                                    <span>&#183;</span>
-                                    <span className="text-muted">{character.class}</span>
-                                </>
-                            )}
-                            {character.spec && (
-                                <>
-                                    <span className="text-faint">/</span>
-                                    <span className="text-muted">{character.spec}</span>
-                                </>
-                            )}
-                            {character.itemLevel && (
-                                <>
-                                    <span>&#183;</span>
-                                    <span className="text-purple-400">{character.itemLevel}</span>
-                                </>
+                        {/* Mobile secondary line: Class / Spec / iLevel */}
+                        {(character.class || character.spec || character.itemLevel) && (
+                            <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted">
+                                {character.class && (
+                                    <span>{character.class}</span>
+                                )}
+                                {character.spec && (
+                                    <>
+                                        <span className="text-faint">/</span>
+                                        <span>{character.spec}</span>
+                                    </>
+                                )}
+                                {character.itemLevel && (
+                                    <>
+                                        <span className="text-faint">&#183;</span>
+                                        <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                                    </>
+                                )}
+                            </div>
+                        )}
+                        {/* Mobile tertiary line: @Username + Main badge */}
+                        <div className="flex sm:hidden items-center gap-2 text-xs text-dim">
+                            <span>@{user.username}</span>
+                            {character.isMain && (
+                                <span className="text-yellow-400" title="Main Character">
+                                    &#11088;
+                                </span>
                             )}
                         </div>
                     </>
@@ -195,7 +227,7 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
             {/* Confirmation status indicator */}
             {isConfirmed && (
                 <span
-                    className="text-green-500 text-xs font-medium"
+                    className="text-green-500 text-xs font-medium flex items-center justify-center min-w-[44px] min-h-[44px] sm:min-w-0 sm:min-h-0"
                     title={confirmationStatus === 'changed' ? 'Changed selection' : 'Confirmed'}
                 >
                     {confirmationStatus === 'changed' ? '\u{1F504}' : '\u2713'}

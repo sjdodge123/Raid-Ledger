@@ -2,6 +2,7 @@ import { Fragment, useCallback, useEffect, useRef, useState, useMemo } from 'rea
 import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import { getGameTimeBlockStyle, getGameColors } from '../../../constants/game-colors';
 import { AttendeeAvatars } from '../../calendar/AttendeeAvatars';
+import { useScrollDirection } from '../../../hooks/use-scroll-direction';
 
 export type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 
@@ -277,6 +278,9 @@ export function GameTimeGrid({
         return map;
     }, [heatmapOverlay]);
 
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
+
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const dragging = useRef(false);
     const paintMode = useRef<'paint' | 'erase'>('paint');
@@ -533,7 +537,10 @@ export function GameTimeGrid({
                 data-testid="game-time-grid"
             >
                 {/* Header row: timezone label corner + day labels */}
-                <div className="sticky top-0 z-10 bg-surface flex items-center justify-center">
+                <div
+                    className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
+                    style={{ transition: 'top 300ms ease-in-out' }}
+                >
                     {tzLabel && (
                         <span className="text-[10px] text-dim font-medium">{tzLabel}</span>
                     )}
@@ -548,7 +555,7 @@ export function GameTimeGrid({
                     return (
                         <div
                             key={day}
-                            className={`sticky top-0 z-10 text-center text-xs font-medium py-1 ${isTodaySplit
+                            className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${isTodaySplit
                                     ? 'text-secondary'
                                     : isToday
                                         ? 'bg-emerald-500/15 text-emerald-300'
@@ -556,9 +563,12 @@ export function GameTimeGrid({
                                             ? 'bg-panel/80 text-dim'
                                             : 'bg-surface text-muted'
                                 }`}
-                            style={isTodaySplit ? {
-                                background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)',
-                            } : undefined}
+                            style={{
+                                transition: 'top 300ms ease-in-out',
+                                ...(isTodaySplit ? {
+                                    background: 'linear-gradient(to right, var(--gt-split-bg) 50%, rgba(16, 185, 129, 0.15) 50%)',
+                                } : {}),
+                            }}
                             data-testid={`day-header-${i}`}
                         >
                             {isRollingPast && nextDateLabel ? (

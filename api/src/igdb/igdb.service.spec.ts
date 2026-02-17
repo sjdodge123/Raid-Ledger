@@ -87,6 +87,7 @@ describe('IgdbService', () => {
     };
 
     const mockSettingsService = {
+      get: jest.fn().mockResolvedValue(null),
       getIgdbConfig: jest.fn().mockResolvedValue(null), // Fall through to env vars
       isIgdbConfigured: jest.fn().mockResolvedValue(false),
     };
@@ -330,7 +331,8 @@ describe('IgdbService', () => {
         from: jest.fn().mockImplementation(() => ({
           where: jest.fn().mockImplementation(() => {
             callCount++;
-            const data = callCount === 1 ? [] : mockGames;
+            // call 1: search cache miss, call 2: banned-games check (none banned)
+            const data = callCount <= 2 ? [] : mockGames;
             return thenableResult(data);
           }),
         })),
@@ -358,7 +360,7 @@ describe('IgdbService', () => {
 
       await service.searchGames('valheim');
 
-      // upsertGamesFromApi inserts each game individually
+      // upsertGamesFromApi inserts each game individually (2 games, neither banned)
       expect(mockDb.insert).toHaveBeenCalledTimes(2);
     });
   });

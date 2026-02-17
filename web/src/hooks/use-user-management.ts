@@ -1,22 +1,22 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUsersForManagement, updateUserRole } from '../lib/api-client';
-import type { UserRole } from '@raid-ledger/contract';
+import type { UserRole, UserManagementDto } from '@raid-ledger/contract';
+import { useInfiniteList } from './use-infinite-list';
 
 /**
  * Hook for the admin Role Management Panel (ROK-272).
- * Fetches paginated user list and provides role update mutation.
+ * Fetches infinite-scroll user list and provides role update mutation.
  */
 export function useUserManagement(params?: {
-    page?: number;
     search?: string;
 }) {
     const queryClient = useQueryClient();
 
-    const users = useQuery({
-        queryKey: ['user-management', params?.page ?? 1, params?.search ?? ''],
-        queryFn: () =>
+    const users = useInfiniteList<UserManagementDto>({
+        queryKey: ['user-management', params?.search ?? ''],
+        queryFn: (page) =>
             getUsersForManagement({
-                page: params?.page ?? 1,
+                page,
                 limit: 20,
                 search: params?.search || undefined,
             }),

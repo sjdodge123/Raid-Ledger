@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { getPlayers, getRecentPlayers } from '../lib/api-client';
+import { useInfiniteList } from './use-infinite-list';
+import type { UserPreviewDto } from '@raid-ledger/contract';
 
 /**
  * Query hook for fetching paginated player list.
@@ -9,6 +11,21 @@ export function usePlayers(page: number, search: string, gameId?: number) {
     return useQuery({
         queryKey: ['players', page, search, gameId],
         queryFn: () =>
+            getPlayers({
+                page,
+                search: search || undefined,
+                gameId,
+            }),
+    });
+}
+
+/**
+ * Infinite-scroll variant of usePlayers (ROK-361).
+ */
+export function useInfinitePlayers(search: string, gameId?: number) {
+    return useInfiniteList<UserPreviewDto>({
+        queryKey: ['players', 'infinite', search, gameId],
+        queryFn: (page) =>
             getPlayers({
                 page,
                 search: search || undefined,

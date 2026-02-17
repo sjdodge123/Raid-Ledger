@@ -113,7 +113,12 @@ export function Header({ onMenuClick }: HeaderProps) {
                         )}
                     </div>
 
-                    {/* Mobile hamburger button */}
+                    {/* Mobile: notification bell + hamburger */}
+                    {user && (
+                        <div className="md:hidden">
+                            <NotificationBell />
+                        </div>
+                    )}
                     <button
                         onClick={onMenuClick}
                         className="md:hidden p-2 text-muted hover:text-foreground transition-colors rounded-lg hover:bg-panel"

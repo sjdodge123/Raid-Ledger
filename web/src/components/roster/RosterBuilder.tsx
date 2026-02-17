@@ -398,7 +398,7 @@ export function RosterBuilder({
             </Modal>
 
             {/* Role Slots */}
-            <div className="space-y-4">
+            <div className="space-y-2 sm:space-y-4">
                 {roleSlots.map(({ role, label, color }) => {
                     const count = getSlotCount(role);
                     const assigned = assignments.filter((a) => a.slot === role);
@@ -406,13 +406,13 @@ export function RosterBuilder({
                     if (count === 0) return null;
 
                     return (
-                        <div key={role} className="rounded-lg border border-edge bg-surface/50 p-4">
-                            <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
+                        <div key={role} className="rounded-lg border border-edge bg-surface/50 p-2 sm:p-4">
+                            <h4 className="mb-2 sm:mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
                                 <span className={`inline-block h-3 w-3 rounded ${color}`} />
                                 {/* ROK-183: For generic games show "Players" instead of just "Player" */}
                                 {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})
                             </h4>
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                                 {Array.from({ length: count }, (_, i) => {
                                     const position = i + 1;
                                     const assignedItem = assigned.find((a) => a.position === position);

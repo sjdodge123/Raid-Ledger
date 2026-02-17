@@ -3,7 +3,6 @@ import {
   Get,
   Put,
   Post,
-  Delete,
   Body,
   Param,
   Query,
@@ -30,7 +29,7 @@ import {
   DemoDataStatusDto,
   DemoDataResultDto,
 } from '@raid-ledger/contract';
-import { eq, ilike, sql } from 'drizzle-orm';
+import { and, eq, ilike, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
 export interface OAuthStatusResponse {
@@ -569,6 +568,7 @@ export class AdminSettingsController {
   @Get('games')
   async listGames(
     @Query('search') search?: string,
+    @Query('showHidden') showHidden?: string,
     @Query('page', new ParseIntPipe({ optional: true })) page = 1,
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
   ): Promise<AdminGameListResponseDto> {
@@ -578,9 +578,25 @@ export class AdminSettingsController {
     const safeLimit = Math.min(100, Math.max(1, limit));
     const offset = (safePage - 1) * safeLimit;
 
-    const whereClause = search
-      ? ilike(schema.games.name, `%${search.replace(/[%_\\]/g, '\\$&')}%`)
-      : undefined;
+    const conditions = [];
+    if (search) {
+      conditions.push(
+        ilike(schema.games.name, `%${search.replace(/[%_\\]/g, '\\$&')}%`),
+      );
+    }
+    // When showHidden is 'only', show hidden and banned games
+    // When showHidden is 'true', show all games (no hidden/banned filter)
+    // Otherwise, show only visible, non-banned games
+    if (showHidden === 'only') {
+      conditions.push(
+        sql`(${schema.games.hidden} = true OR ${schema.games.banned} = true)`,
+      );
+    } else if (showHidden !== 'true') {
+      conditions.push(eq(schema.games.hidden, false));
+      conditions.push(eq(schema.games.banned, false));
+    }
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
     const [countResult, rows] = await Promise.all([
       db
@@ -595,6 +611,8 @@ export class AdminSettingsController {
           slug: schema.games.slug,
           coverUrl: schema.games.coverUrl,
           cachedAt: schema.games.cachedAt,
+          hidden: schema.games.hidden,
+          banned: schema.games.banned,
         })
         .from(schema.games)
         .where(whereClause)
@@ -615,40 +633,119 @@ export class AdminSettingsController {
         page: safePage,
         limit: safeLimit,
         totalPages: Math.ceil(total / safeLimit),
+        hasMore: safePage * safeLimit < total,
       },
     };
   }
 
   /**
-   * DELETE /admin/settings/games/:id
-   * Remove a game from the local cache.
+   * POST /admin/settings/games/:id/ban
+   * Ban a game — tombstones it so IGDB sync won't re-import it.
    */
-  @Delete('games/:id')
+  @Post('games/:id/ban')
   @HttpCode(HttpStatus.OK)
-  async deleteGame(
+  async banGame(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<{ success: boolean; message: string }> {
-    const db = this.igdbService.database;
+    const result = await this.igdbService.banGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { success: result.success, message: result.message };
+  }
 
-    const existing = await db
-      .select({ id: schema.games.id, name: schema.games.name })
-      .from(schema.games)
-      .where(eq(schema.games.id, id))
-      .limit(1);
+  /**
+   * POST /admin/settings/games/:id/unban
+   * Unban a game and trigger a fresh IGDB import to restore it.
+   */
+  @Post('games/:id/unban')
+  @HttpCode(HttpStatus.OK)
+  async unbanGame(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const result = await this.igdbService.unbanGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { success: result.success, message: result.message };
+  }
 
-    if (existing.length === 0) {
-      throw new BadRequestException('Game not found');
+  /**
+   * POST /admin/settings/games/:id/hide
+   * Hide a game from user-facing search/discovery.
+   */
+  @Post('games/:id/hide')
+  @HttpCode(HttpStatus.OK)
+  async hideGame(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const result = await this.igdbService.hideGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { success: result.success, message: result.message };
+  }
+
+  /**
+   * POST /admin/settings/games/:id/unhide
+   * Unhide a previously hidden game.
+   */
+  @Post('games/:id/unhide')
+  @HttpCode(HttpStatus.OK)
+  async unhideGame(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ success: boolean; message: string }> {
+    const result = await this.igdbService.unhideGame(id);
+    if (!result.success) {
+      throw new BadRequestException(result.message);
+    }
+    return { success: result.success, message: result.message };
+  }
+
+  /**
+   * GET /admin/settings/igdb/adult-filter
+   * Get the current adult content filter status.
+   */
+  @Get('igdb/adult-filter')
+  async getAdultFilter(): Promise<{ enabled: boolean }> {
+    const enabled = await this.igdbService.isAdultFilterEnabled();
+    return { enabled };
+  }
+
+  /**
+   * PUT /admin/settings/igdb/adult-filter
+   * Toggle the adult content filter.
+   * When enabled, auto-hides existing games with adult themes.
+   */
+  @Put('igdb/adult-filter')
+  @HttpCode(HttpStatus.OK)
+  async setAdultFilter(
+    @Body() body: { enabled: boolean },
+  ): Promise<{ success: boolean; message: string; hiddenCount?: number }> {
+    const enabled = body.enabled === true;
+
+    await this.settingsService.set(
+      SETTING_KEYS.IGDB_FILTER_ADULT,
+      String(enabled),
+    );
+
+    let hiddenCount = 0;
+    if (enabled) {
+      // Auto-hide existing games with adult themes
+      hiddenCount = await this.igdbService.hideAdultGames();
     }
 
-    await db.delete(schema.games).where(eq(schema.games.id, id));
-
     this.logger.log(
-      `Game "${existing[0].name}" (id=${id}) deleted via admin UI`,
+      `Adult content filter ${enabled ? 'enabled' : 'disabled'} via admin UI` +
+        (hiddenCount > 0 ? ` (${hiddenCount} games auto-hidden)` : ''),
     );
 
     return {
       success: true,
-      message: `Game "${existing[0].name}" removed from library.`,
+      message: enabled
+        ? `Adult content filter enabled.${hiddenCount > 0 ? ` ${hiddenCount} games with adult themes were hidden.` : ''}`
+        : 'Adult content filter disabled.',
+      hiddenCount: enabled ? hiddenCount : undefined,
     };
   }
 

@@ -133,6 +133,7 @@ export type IgdbHealthStatusDto = z.infer<typeof IgdbHealthStatusSchema>;
 /** Admin game list query parameters */
 export const AdminGameListQuerySchema = z.object({
     search: z.string().optional(),
+    showHidden: z.enum(['only', 'true']).optional(),
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(20),
 });
@@ -148,12 +149,15 @@ export const AdminGameListResponseSchema = z.object({
         slug: z.string(),
         coverUrl: z.string().nullable(),
         cachedAt: z.string(),
+        hidden: z.boolean(),
+        banned: z.boolean(),
     })),
     meta: z.object({
         total: z.number(),
         page: z.number(),
         limit: z.number(),
         totalPages: z.number(),
+        hasMore: z.boolean(),
     }),
 });
 
@@ -179,6 +183,16 @@ export const GameInterestResponseSchema = z.object({
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;
+
+/** ROK-362: Batch interest check response — map of gameId to interest status */
+export const BatchInterestResponseSchema = z.object({
+    data: z.record(z.string(), z.object({
+        wantToPlay: z.boolean(),
+        count: z.number(),
+    })),
+});
+
+export type BatchInterestResponseDto = z.infer<typeof BatchInterestResponseSchema>;
 
 /** A game the user has hearted, with basic info for display (ROK-282) */
 export const UserHeartedGameSchema = z.object({

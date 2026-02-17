@@ -8,7 +8,7 @@ export function Footer() {
     const { data: versionInfo } = useVersionInfo();
 
     return (
-        <footer className="bg-surface border-t border-edge-subtle py-6 px-4">
+        <footer className="hidden md:block bg-surface border-t border-edge-subtle py-6 px-4">
             <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
                 <p className="text-dim text-sm">
                     &copy; {currentYear} Raid Ledger. All rights reserved.

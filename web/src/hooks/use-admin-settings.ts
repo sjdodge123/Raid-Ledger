@@ -332,6 +332,37 @@ export function useAdminSettings() {
     // IGDB Sync Status (ROK-173)
     // ============================================================
 
+    // Get IGDB adult content filter status
+    const igdbAdultFilter = useQuery<{ enabled: boolean }>({
+        queryKey: ['admin', 'settings', 'igdb', 'adult-filter'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/adult-filter`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch adult filter status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    // Toggle IGDB adult content filter
+    const updateAdultFilter = useMutation<ApiResponse & { hiddenCount?: number }, Error, boolean>({
+        mutationFn: async (enabled) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/igdb/adult-filter`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify({ enabled }),
+            });
+            if (!response.ok) throw new Error('Failed to update adult filter');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'igdb', 'adult-filter'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'games'] });
+        },
+    });
+
     const igdbSyncStatus = useQuery<IgdbSyncStatus>({
         queryKey: ['admin', 'settings', 'igdb', 'sync-status'],
         queryFn: async () => {
@@ -494,6 +525,8 @@ export function useAdminSettings() {
         updateBlizzard,
         testBlizzard,
         clearBlizzard,
+        igdbAdultFilter,
+        updateAdultFilter,
         igdbSyncStatus,
         syncIgdb,
         demoDataStatus,

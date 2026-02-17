@@ -14,6 +14,7 @@ import { useGameRegistry, useEventTypes } from '../../hooks/use-game-registry';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { PluginSlot } from '../../plugins';
 import { getWowVariant, getContentType } from '../../plugins/wow/utils';
+import '../../pages/event-detail-page.css';
 
 // Duration presets in minutes
 const DURATION_PRESETS = [
@@ -123,7 +124,7 @@ function SlotStepper({ label, value, onChange, color, min = 0, max = 99 }: {
     max?: number;
 }) {
     return (
-        <div className="flex items-center justify-between gap-3 py-2">
+        <div className="flex items-center justify-between gap-3 py-2 min-h-[44px] sm:min-h-0">
             <div className="flex items-center gap-2">
                 <div className={`w-3 h-3 rounded-full ${color}`} />
                 <span className="text-sm text-secondary font-medium">{label}</span>
@@ -133,7 +134,7 @@ function SlotStepper({ label, value, onChange, color, min = 0, max = 99 }: {
                     type="button"
                     onClick={() => onChange(Math.max(min, value - 1))}
                     disabled={value <= min}
-                    className="w-8 h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
+                    className="w-11 h-11 sm:w-8 sm:h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
                 >
                     -
                 </button>
@@ -146,13 +147,13 @@ function SlotStepper({ label, value, onChange, color, min = 0, max = 99 }: {
                         const v = parseInt(e.target.value);
                         if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
                     }}
-                    className="w-12 h-8 bg-panel border border-edge rounded-md text-foreground text-center text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    className="w-14 h-11 sm:w-12 sm:h-8 bg-panel border border-edge rounded-md text-foreground text-center text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
                 <button
                     type="button"
                     onClick={() => onChange(Math.min(max, value + 1))}
                     disabled={value >= max}
-                    className="w-8 h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
+                    className="w-11 h-11 sm:w-8 sm:h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
                 >
                     +
                 </button>
@@ -615,7 +616,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     }
 
     return (
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
             {/* ═══════════ Templates Bar ═══════════ */}
             {templates.length > 0 && (
                 <div className="flex items-center gap-3 -mb-2">
@@ -845,7 +846,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     </div>
 
                     {form.customDuration && (
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center">
                             <div className="flex items-center gap-2">
                                 <input
                                     type="number"
@@ -858,9 +859,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                                         updateField('durationMinutes', h * 60 + m);
                                         setErrors((prev) => ({ ...prev, duration: undefined }));
                                     }}
-                                    className="w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full sm:w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
-                                <span className="text-sm text-muted">hr</span>
+                                <span className="text-sm text-muted shrink-0">hr</span>
                             </div>
                             <div className="flex items-center gap-2">
                                 <input
@@ -875,9 +876,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                                         updateField('durationMinutes', h * 60 + m);
                                         setErrors((prev) => ({ ...prev, duration: undefined }));
                                     }}
-                                    className="w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                    className="w-full sm:w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
                                 />
-                                <span className="text-sm text-muted">min</span>
+                                <span className="text-sm text-muted shrink-0">min</span>
                             </div>
                         </div>
                     )}
@@ -1028,21 +1029,29 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     )}
                 </div>
 
-                {/* Auto-Unbench Toggle */}
-                <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                        type="checkbox"
-                        checked={form.autoUnbench}
-                        onChange={(e) => updateField('autoUnbench', e.target.checked)}
-                        className="mt-0.5 w-4 h-4 rounded border-edge bg-panel text-emerald-600 focus:ring-emerald-500"
-                    />
+                {/* Auto-Unbench Toggle — segmented pill style (matches event detail page) */}
+                <div className="flex items-center justify-between gap-3">
                     <div>
                         <span className="text-sm font-medium text-secondary">Auto-promote benched players</span>
                         <p className="text-xs text-dim mt-0.5">
                             When a roster slot opens, automatically move the next benched player in
                         </p>
                     </div>
-                </label>
+                    <div className="event-detail-autosub-toggle shrink-0">
+                        <div
+                            className="event-detail-autosub-toggle__track"
+                            role="switch"
+                            aria-checked={form.autoUnbench}
+                            aria-label="Auto-promote benched players"
+                            tabIndex={0}
+                            onClick={() => updateField('autoUnbench', !form.autoUnbench)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('autoUnbench', !form.autoUnbench); } }}
+                        >
+                            <span className={`event-detail-autosub-toggle__option ${form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                            <span className={`event-detail-autosub-toggle__option ${!form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                        </div>
+                    </div>
+                </div>
             </FormSection>
 
             {/* Divider */}
