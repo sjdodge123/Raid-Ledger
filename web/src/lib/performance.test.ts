@@ -183,12 +183,10 @@ describe('initPerformanceMonitoring', () => {
     });
 
     it('handles FCP observer throwing (paint not supported)', () => {
-        let callCount = 0;
         vi.stubGlobal('PerformanceObserver', class {
             callback: PerformanceObserverCallback;
             constructor(cb: PerformanceObserverCallback) { this.callback = cb; }
             observe(options: PerformanceObserverInit) {
-                callCount++;
                 if (options.type === 'paint') {
                     throw new Error('paint not supported');
                 }
