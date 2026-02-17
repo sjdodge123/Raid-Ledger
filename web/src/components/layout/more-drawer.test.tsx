@@ -144,10 +144,11 @@ describe('MoreDrawer', () => {
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('has 300ms ease-out transition on panel', () => {
+    it('has 300ms spring transition on panel', () => {
         renderDrawer();
         const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('duration-300', 'ease-out');
+        expect(panel).toHaveClass('duration-300');
+        expect(panel.style.transitionTimingFunction).toBe('var(--spring-smooth)');
     });
 
     it('has backdrop blur and dim effect', () => {

@@ -55,6 +55,9 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="modal-title"
+                style={{
+                    animation: 'modal-spring 350ms var(--spring-bounce) forwards',
+                }}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-edge">

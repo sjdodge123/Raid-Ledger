@@ -136,7 +136,8 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
 
             {/* Drawer panel — full-screen, slides from left */}
             <div
-                className={`absolute inset-0 bg-surface transform transition-transform duration-300 ease-out ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                className={`absolute inset-0 bg-surface transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
+                style={{ transitionTimingFunction: 'var(--spring-smooth)' }}
                 data-testid="more-drawer-panel"
                 role="dialog"
                 aria-modal="true"
