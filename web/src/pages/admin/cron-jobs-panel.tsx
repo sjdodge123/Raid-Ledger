@@ -162,16 +162,82 @@ function describeCron(expression: string): string {
     return expression;
 }
 
+/** Normalize cron expressions to match our preset format.
+ * Different cron libraries produce equivalent but syntactically different expressions.
+ */
+function normalizeCron(expression: string): string {
+    let parts = expression.trim().split(/\s+/);
+
+    // Handle 5-field cron (min hour day month weekday) → convert to 6-field (sec min hour day month weekday)
+    if (parts.length === 5) {
+        parts = ['0', ...parts];
+    }
+
+    if (parts.length !== 6) return expression;
+
+    // Normalize "0-23/N" → "*/N" in hour field
+    // e.g., "0 0-23/6 * * *" → "0 */6 * * *" (which becomes "0 0 */6 * * *" with sec prefix)
+    const [sec, min, hour, day, month, weekday] = parts;
+
+    let normalizedHour = hour;
+    const hourRangeMatch = hour.match(/^0-23\/(\d+)$/);
+    if (hourRangeMatch) {
+        const step = parseInt(hourRangeMatch[1], 10);
+        normalizedHour = step === 1 ? '*' : `*/${step}`;
+    }
+
+    // Normalize "0-59/N" → "*/N" in minute field
+    let normalizedMin = min;
+    const minRangeMatch = min.match(/^0-59\/(\d+)$/);
+    if (minRangeMatch) {
+        const step = parseInt(minRangeMatch[1], 10);
+        normalizedMin = step === 1 ? '*' : `*/${step}`;
+    }
+
+    // Map specific hour patterns to interval presets:
+    // "0 0 3,15 * * *" → "0 0 */12 * * *" (every 12 hours)
+    if (normalizedMin === '0' && day === '*' && month === '*' && weekday === '*') {
+        const hourCommaMatch = normalizedHour.match(/^(\d+(?:,\d+)*)$/);
+        if (hourCommaMatch) {
+            const hours = normalizedHour.split(',').map(Number).sort((a, b) => a - b);
+            if (hours.length >= 2) {
+                // Check if hours are evenly spaced
+                const interval = hours[1] - hours[0];
+                const isEvenlySpaced = hours.every((h, i) => i === 0 || h - hours[i - 1] === interval);
+                if (isEvenlySpaced && 24 % interval === 0 && hours.length === 24 / interval) {
+                    normalizedHour = `*/${interval}`;
+                }
+            }
+        }
+    }
+
+    // If hour is "*" and min is "0", this is "every hour" → match preset "0 0 * * * *"
+    if (normalizedHour === '*' && normalizedMin === '0') {
+        return `0 0 * * * *`;
+    }
+
+    return [sec, normalizedMin, normalizedHour, day, month, weekday].join(' ');
+}
+
 /** Interval presets for the schedule editor */
 const INTERVAL_PRESETS = [
     { label: 'Every 5 minutes', value: '0 */5 * * * *' },
     { label: 'Every 15 minutes', value: '0 */15 * * * *' },
     { label: 'Every 30 minutes', value: '0 */30 * * * *' },
     { label: 'Every hour', value: '0 0 * * * *' },
+    { label: 'Every 2 hours', value: '0 0 */2 * * *' },
     { label: 'Every 6 hours', value: '0 0 */6 * * *' },
+    { label: 'Every 12 hours', value: '0 0 */12 * * *' },
     { label: 'Every day at midnight', value: '0 0 0 * * *' },
     { label: 'Every week (Sunday midnight)', value: '0 0 0 * * 0' },
 ];
+
+/** Get a human-readable label for a cron expression, preferring preset labels */
+function getCronLabel(expression: string): string {
+    const normalized = normalizeCron(expression);
+    const match = INTERVAL_PRESETS.find(p => p.value === normalized);
+    return match ? match.label : describeCron(expression);
+}
 
 /** Format a date string in the user's timezone */
 function formatTimestamp(isoString: string | null, tz: string): string {
@@ -285,7 +351,7 @@ function JobCard({
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted mb-3">
                 <span title={job.cronExpression}>
                     <span className="text-secondary">Schedule:</span>{' '}
-                    {describeCron(job.cronExpression)}
+                    {getCronLabel(job.cronExpression)}
                 </span>
                 <span>
                     <span className="text-secondary">Last run:</span>{' '}
@@ -414,10 +480,13 @@ function EditScheduleModal({
     onClose: () => void;
 }) {
     const { updateSchedule } = useCronJobs();
-    const [selectedExpression, setSelectedExpression] = useState(job.cronExpression);
+    const normalizedExpression = normalizeCron(job.cronExpression);
+    const [selectedExpression, setSelectedExpression] = useState(
+        INTERVAL_PRESETS.some(p => p.value === normalizedExpression) ? normalizedExpression : job.cronExpression,
+    );
 
     const isCustomExpression = !INTERVAL_PRESETS.some(
-        (preset) => preset.value === job.cronExpression,
+        (preset) => preset.value === normalizedExpression,
     );
 
     const handleSave = () => {
@@ -476,7 +545,7 @@ function EditScheduleModal({
                         >
                             {isCustomExpression && (
                                 <option value={job.cronExpression}>
-                                    {describeCron(job.cronExpression)}
+                                    {getCronLabel(job.cronExpression)}
                                 </option>
                             )}
                             {INTERVAL_PRESETS.map((preset) => (
@@ -504,7 +573,7 @@ function EditScheduleModal({
                         </button>
                         <button
                             onClick={handleSave}
-                            disabled={updateSchedule.isPending || selectedExpression === job.cronExpression}
+                            disabled={updateSchedule.isPending || selectedExpression === job.cronExpression || selectedExpression === normalizedExpression}
                             className="px-4 py-2 text-sm font-medium bg-accent hover:bg-accent/80 rounded-lg text-white transition-colors disabled:opacity-50"
                         >
                             {updateSchedule.isPending ? 'Saving...' : 'Save'}
