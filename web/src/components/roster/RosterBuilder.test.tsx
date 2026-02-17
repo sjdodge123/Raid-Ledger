@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import React from 'react';
+
 import { MemoryRouter } from 'react-router-dom';
 import { RosterBuilder } from './RosterBuilder';
 import { computeAutoFill } from './roster-auto-fill';
