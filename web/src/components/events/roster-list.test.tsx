@@ -47,10 +47,11 @@ describe('RosterList', () => {
         render(<RosterList signups={confirmedSignups} />);
         // Character name should be displayed prominently
         expect(screen.getByText('Frostweaver')).toBeInTheDocument();
-        // Username should still be visible
+        // Username should still be visible (desktop inline + mobile stacked)
         expect(screen.getByText('Player2')).toBeInTheDocument();
-        // Class should be shown
-        expect(screen.getByText('Mage')).toBeInTheDocument();
+        // Class shown in both desktop inline and mobile stacked layouts
+        const mageElements = screen.getAllByText('Mage');
+        expect(mageElements.length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders pending confirmation indicator (AC-7)', () => {
@@ -63,7 +64,9 @@ describe('RosterList', () => {
     it('renders main character badge', () => {
         const confirmedSignups = [mockSignups[1]];
         render(<RosterList signups={confirmedSignups} />);
-        expect(screen.getByText('⭐')).toBeInTheDocument();
+        // Main badge appears in both desktop and mobile layouts
+        const starElements = screen.getAllByText('⭐');
+        expect(starElements.length).toBeGreaterThanOrEqual(1);
     });
 
     it('renders loading state with skeletons', () => {
