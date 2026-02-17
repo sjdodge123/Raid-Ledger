@@ -6,6 +6,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
+import { initPerformanceMonitoring } from './lib/performance';
 import './index.css';
 import App from './App.tsx';
 
@@ -15,6 +16,9 @@ const root = createRoot(document.getElementById('root')!, {
   onCaughtError: Sentry.reactErrorHandler(),
   onRecoverableError: Sentry.reactErrorHandler(),
 });
+
+// ROK-343: Web Vitals monitoring (FCP <1.8s, LCP <2.5s targets)
+initPerformanceMonitoring();
 
 root.render(
   <StrictMode>

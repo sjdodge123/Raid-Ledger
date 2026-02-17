@@ -1,5 +1,6 @@
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
 import { MemoryRouter } from 'react-router-dom';
 import { RosterBuilder } from './RosterBuilder';
 import { computeAutoFill } from './roster-auto-fill';
@@ -522,6 +523,21 @@ describe('RosterBuilder', () => {
 
             expect(screen.getByText('Clear All')).toBeInTheDocument();
             vi.useRealTimers();
+        });
+    });
+
+    // ROK-343: Memoization tests
+    describe('memoization (ROK-343)', () => {
+        it('is wrapped with React.memo', () => {
+            const memoSymbol = Symbol.for('react.memo');
+            expect((RosterBuilder as unknown as { $$typeof: symbol }).$$typeof).toBe(memoSymbol);
+        });
+
+        it('has an inner named function (not anonymous)', () => {
+            // Named function expression inside memo retains its name (may be mangled by build transforms)
+            const inner = (RosterBuilder as unknown as { type: { name: string } }).type;
+            expect(inner.name).toBeTruthy();
+            expect(inner.name.length).toBeGreaterThan(0);
         });
     });
 });

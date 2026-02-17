@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { toast } from '../../lib/toast';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
@@ -64,7 +64,7 @@ const BENCH_SLOT: { role: RosterRole; count: number; label: string; color: strin
  * Supports MMO-style role slots and generic player slots.
  * Admins click slots to open assignment popup. Regular users double-click to join.
  */
-export function RosterBuilder({
+export const RosterBuilder = memo(function RosterBuilder({
     pool,
     assignments,
     slots,
@@ -456,4 +456,4 @@ export function RosterBuilder({
             />
         </div>
     );
-}
+});

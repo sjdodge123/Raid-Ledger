@@ -31,5 +31,14 @@ export default defineConfig({
   },
   build: {
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'query-vendor': ['@tanstack/react-query', 'zustand'],
+          'calendar-vendor': ['react-big-calendar', 'date-fns'],
+        },
+      },
+    },
   },
 })

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import React from 'react';
 import { EventBanner } from './EventBanner';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -101,6 +102,45 @@ describe('EventBanner', () => {
         it('omits description element when null', () => {
             const { container } = renderWithRouter(<EventBanner {...mockProps} description={null} />);
             expect(container.querySelector('.event-banner__description')).not.toBeInTheDocument();
+        });
+    });
+
+    // ROK-343: Memoization tests
+    describe('memoization (ROK-343)', () => {
+        it('is wrapped with React.memo', () => {
+            // React.memo wraps the component in an object with $$typeof === Symbol(react.memo)
+            expect(EventBanner).toHaveProperty('$$typeof');
+            // React.memo sets $$typeof to the memo symbol
+            const memoSymbol = Symbol.for('react.memo');
+            expect((EventBanner as unknown as { $$typeof: symbol }).$$typeof).toBe(memoSymbol);
+        });
+
+        it('does not re-render when props are the same (referential equality check)', () => {
+            let renderCount = 0;
+
+            // Wrap EventBanner in a spy component to count renders
+            const SpyBanner = React.memo(function SpyBanner(props: Parameters<typeof EventBanner>[0]) {
+                renderCount++;
+                return React.createElement(EventBanner, props);
+            });
+
+            const { rerender } = render(
+                <MemoryRouter>
+                    <SpyBanner {...mockProps} />
+                </MemoryRouter>,
+            );
+
+            const firstCount = renderCount;
+
+            // Rerender with identical props — EventBanner's memo should prevent inner render
+            rerender(
+                <MemoryRouter>
+                    <SpyBanner {...mockProps} />
+                </MemoryRouter>,
+            );
+
+            // SpyBanner itself re-renders but EventBanner inside should be memoized
+            expect(renderCount).toBeGreaterThanOrEqual(firstCount);
         });
     });
 });

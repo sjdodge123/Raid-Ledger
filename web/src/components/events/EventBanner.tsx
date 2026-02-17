@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { Link } from 'react-router-dom';
 import { UserLink } from '../common/UserLink';
 import { toAvatarUser } from '../../lib/avatar';
@@ -32,7 +33,7 @@ interface EventBannerProps {
  *   - Full banner: cinematic header with game art, title, meta, and optional description
  *   - Collapsed banner: slim sticky bar with condensed info (ROK-192)
  */
-export function EventBanner({
+export const EventBanner = memo(function EventBanner({
     title,
     game,
     startTime,
@@ -155,4 +156,4 @@ export function EventBanner({
             </div>
         </div>
     );
-}
+});
