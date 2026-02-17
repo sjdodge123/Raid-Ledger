@@ -105,7 +105,7 @@ export function GameLibraryTable() {
             <div
                 className="sticky md:top-0 z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1"
                 style={{
-                    top: isHeaderHidden ? 52 : 116,
+                    top: isHeaderHidden ? 75 : 140,
                     transition: 'top 300ms ease-in-out',
                 }}
             >
