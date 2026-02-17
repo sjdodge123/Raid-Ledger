@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FunnelIcon, CheckIcon, ChevronRightIcon } from "@heroicons/react/24/outline";
+import { FunnelIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
 import { useDebouncedValue } from "../hooks/use-debounced-value";
@@ -25,7 +25,7 @@ const GENRE_FILTERS = [
   { id: 10, label: "Racing" },
   { id: 4, label: "Fighting" },
   { id: 32, label: "Indie" },
-  { id: 36, label: "MOBA" },
+  { id: 36, label: "Online/MOBA" },
 ];
 
 type GamesTab = "discover" | "manage";
@@ -35,7 +35,7 @@ export function GamesPage() {
   const canManage = isOperatorOrAdmin(user);
   const [activeTab, setActiveTab] = useState<GamesTab>("discover");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
+  const [selectedGenres, setSelectedGenres] = useState<Set<number>>(new Set());
   const [genreSheetOpen, setGenreSheetOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
@@ -51,8 +51,8 @@ export function GamesPage() {
   const filteredRows = discoverData?.rows
     ?.map((row) => ({
       ...row,
-      games: selectedGenre
-        ? row.games.filter((g) => g.genres.includes(selectedGenre))
+      games: selectedGenres.size > 0
+        ? row.games.filter((g) => g.genres.some(gid => selectedGenres.has(gid)))
         : row.games,
     }))
     .filter((row) => row.games.length > 0);
@@ -188,9 +188,9 @@ export function GamesPage() {
                 >
                   <FunnelIcon className="w-4 h-4" />
                   <span>Genre Filter</span>
-                  {selectedGenre !== null && (
+                  {selectedGenres.size > 0 && (
                     <span className="ml-1 flex items-center justify-center w-5 h-5 rounded-full bg-emerald-600 text-white text-xs font-bold">
-                      1
+                      {selectedGenres.size}
                     </span>
                   )}
                 </button>
@@ -204,30 +204,39 @@ export function GamesPage() {
                 style={{ scrollbarWidth: "none" }}
               >
                 <button
-                  onClick={() => setSelectedGenre(null)}
-                  className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedGenre === null
+                  onClick={() => setSelectedGenres(new Set())}
+                  className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedGenres.size === 0
                     ? "bg-emerald-600 text-white"
                     : "bg-panel text-secondary hover:bg-overlay"
                     }`}
                 >
                   All
                 </button>
-                {GENRE_FILTERS.map((genre) => (
-                  <button
-                    key={genre.id}
-                    onClick={() =>
-                      setSelectedGenre(
-                        selectedGenre === genre.id ? null : genre.id,
-                      )
-                    }
-                    className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${selectedGenre === genre.id
-                      ? "bg-emerald-600 text-white"
-                      : "bg-panel text-secondary hover:bg-overlay"
-                      }`}
-                  >
-                    {genre.label}
-                  </button>
-                ))}
+                {GENRE_FILTERS.map((genre) => {
+                  const isActive = selectedGenres.has(genre.id);
+                  return (
+                    <button
+                      key={genre.id}
+                      onClick={() => {
+                        setSelectedGenres(prev => {
+                          const next = new Set(prev);
+                          if (next.has(genre.id)) {
+                            next.delete(genre.id);
+                          } else {
+                            next.add(genre.id);
+                          }
+                          return next;
+                        });
+                      }}
+                      className={`px-3 py-2.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors ${isActive
+                        ? "bg-emerald-600 text-white"
+                        : "bg-panel text-secondary hover:bg-overlay"
+                        }`}
+                    >
+                      {genre.label}
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -319,7 +328,7 @@ export function GamesPage() {
                       No games in the library yet
                     </p>
                     <p className="text-dim text-sm mt-1">
-                      {selectedGenre
+                      {selectedGenres.size > 0
                         ? "Try selecting a different genre"
                         : "Games will appear here once synced from IGDB"}
                     </p>
@@ -339,52 +348,59 @@ export function GamesPage() {
       >
         <div className="flex flex-col">
           <button
-            onClick={() => {
-              setSelectedGenre(null);
-              setGenreSheetOpen(false);
-            }}
+            onClick={() => setSelectedGenres(new Set())}
             className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${
-              selectedGenre === null
+              selectedGenres.size === 0
                 ? "bg-emerald-600/10 text-emerald-400"
                 : "text-secondary hover:bg-overlay"
             }`}
           >
             <div className="flex items-center gap-3">
-              {selectedGenre === null ? (
+              {selectedGenres.size === 0 ? (
                 <CheckIcon className="w-5 h-5 text-emerald-400" />
               ) : (
                 <span className="w-5" />
               )}
               <span className="text-sm font-medium">All</span>
             </div>
-            <ChevronRightIcon className="w-4 h-4 text-dim" />
           </button>
-          {GENRE_FILTERS.map((genre) => (
-            <button
-              key={genre.id}
-              onClick={() => {
-                setSelectedGenre(
-                  selectedGenre === genre.id ? null : genre.id,
-                );
-                setGenreSheetOpen(false);
-              }}
-              className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${
-                selectedGenre === genre.id
-                  ? "bg-emerald-600/10 text-emerald-400"
-                  : "text-secondary hover:bg-overlay"
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                {selectedGenre === genre.id ? (
-                  <CheckIcon className="w-5 h-5 text-emerald-400" />
-                ) : (
-                  <span className="w-5" />
-                )}
-                <span className="text-sm font-medium">{genre.label}</span>
-              </div>
-              <ChevronRightIcon className="w-4 h-4 text-dim" />
-            </button>
-          ))}
+          {GENRE_FILTERS.map((genre) => {
+            const isActive = selectedGenres.has(genre.id);
+            return (
+              <button
+                key={genre.id}
+                onClick={() => {
+                  setSelectedGenres(prev => {
+                    const next = new Set(prev);
+                    if (next.has(genre.id)) {
+                      next.delete(genre.id);
+                    } else {
+                      next.add(genre.id);
+                    }
+                    return next;
+                  });
+                }}
+                className={`flex items-center justify-between h-12 px-3 rounded-lg transition-colors ${
+                  isActive
+                    ? "bg-emerald-600/10 text-emerald-400"
+                    : "text-secondary hover:bg-overlay"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                    isActive ? 'bg-emerald-500 border-emerald-500' : 'border-edge'
+                  }`}>
+                    {isActive && (
+                      <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </div>
+                  <span className="text-sm font-medium">{genre.label}</span>
+                </div>
+              </button>
+            );
+          })}
         </div>
       </BottomSheet>
     </div>
