@@ -7,7 +7,7 @@ import type { LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import * as path from 'path';
 import { AppModule } from './app.module';
-import { SentryGlobalFilter } from '@sentry/nestjs/setup';
+import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
 import { ThrottlerExceptionFilter } from './throttler/throttler-exception.filter';
 
 async function bootstrap() {
@@ -90,7 +90,7 @@ async function bootstrap() {
   // first, then SentryGlobalFilter. ThrottlerException is dropped by beforeSend in
   // instrument.ts so rate-limit responses are never reported to Sentry.
   app.useGlobalFilters(
-    new SentryGlobalFilter(),
+    new SentryExceptionFilter(),
     new ThrottlerExceptionFilter(),
   );
 
