@@ -66,6 +66,102 @@ function formatJobName(name: string): string {
         .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/** Convert a 6-field cron expression to a human-readable description */
+function describeCron(expression: string): string {
+    const parts = expression.trim().split(/\s+/);
+    // Expect 6 fields: sec min hour day month weekday
+    if (parts.length !== 6) return expression;
+
+    const [, min, hour, day, month, weekday] = parts;
+
+    // Every N minutes: 0 */N * * * *
+    if (hour === '*' && day === '*' && month === '*' && weekday === '*') {
+        if (min.startsWith('*/')) {
+            const n = parseInt(min.slice(2), 10);
+            return n === 1 ? 'Every minute' : `Every ${n} minutes`;
+        }
+    }
+
+    // Every N hours: 0 0 */N * * *
+    if (min === '0' && day === '*' && month === '*' && weekday === '*') {
+        if (hour.startsWith('*/')) {
+            const n = parseInt(hour.slice(2), 10);
+            return n === 1 ? 'Every hour' : `Every ${n} hours`;
+        }
+    }
+
+    // Specific hours: 0 0 H1,H2,... * * *
+    if (
+        min === '0' &&
+        day === '*' &&
+        month === '*' &&
+        weekday === '*' &&
+        !hour.includes('/') &&
+        !hour.includes('-')
+    ) {
+        const hours = hour.split(',').map((h) => parseInt(h, 10));
+        if (hours.every((h) => !isNaN(h))) {
+            const formatHour = (h: number) => {
+                if (h === 0) return '12:00 AM';
+                if (h === 12) return '12:00 PM';
+                return h < 12 ? `${h}:00 AM` : `${h - 12}:00 PM`;
+            };
+            if (hours.length === 1) {
+                return `Daily at ${formatHour(hours[0])}`;
+            }
+            const labels = hours.map(formatHour);
+            return `Daily at ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}`;
+        }
+    }
+
+    // Specific hour + minute: 0 M H * * *
+    if (
+        day === '*' &&
+        month === '*' &&
+        weekday === '*' &&
+        !min.includes('*') &&
+        !min.includes('/') &&
+        !hour.includes('*') &&
+        !hour.includes('/')
+    ) {
+        const h = parseInt(hour, 10);
+        const m = parseInt(min, 10);
+        if (!isNaN(h) && !isNaN(m)) {
+            const formatTime = (hr: number, mn: number) => {
+                const period = hr >= 12 ? 'PM' : 'AM';
+                const displayHour = hr === 0 ? 12 : hr > 12 ? hr - 12 : hr;
+                return `${displayHour}:${mn.toString().padStart(2, '0')} ${period}`;
+            };
+            return `Daily at ${formatTime(h, m)}`;
+        }
+    }
+
+    // Daily at midnight: 0 0 0 * * *
+    if (min === '0' && hour === '0' && day === '*' && month === '*' && weekday === '*') {
+        return 'Daily at midnight';
+    }
+
+    // Weekly: 0 0 0 * * N
+    if (min === '0' && hour === '0' && day === '*' && month === '*' && weekday !== '*') {
+        const dayNames = [
+            'Sunday',
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+        ];
+        const dayIdx = parseInt(weekday, 10);
+        if (!isNaN(dayIdx) && dayIdx >= 0 && dayIdx <= 6) {
+            return `Weekly on ${dayNames[dayIdx]} at midnight`;
+        }
+    }
+
+    // Fallback: return the expression
+    return expression;
+}
+
 /** Interval presets for the schedule editor */
 const INTERVAL_PRESETS = [
     { label: 'Every 5 minutes', value: '0 */5 * * * *' },
@@ -187,9 +283,9 @@ function JobCard({
 
             {/* Info row */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted mb-3">
-                <span title="Cron expression">
+                <span title={job.cronExpression}>
                     <span className="text-secondary">Schedule:</span>{' '}
-                    <span className="font-mono">{job.cronExpression}</span>
+                    {describeCron(job.cronExpression)}
                 </span>
                 <span>
                     <span className="text-secondary">Last run:</span>{' '}
@@ -356,7 +452,7 @@ function EditScheduleModal({
                         >
                             {isCustomExpression && (
                                 <option value={job.cronExpression}>
-                                    Current: {job.cronExpression}
+                                    {describeCron(job.cronExpression)}
                                 </option>
                             )}
                             {INTERVAL_PRESETS.map((preset) => (
