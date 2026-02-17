@@ -53,14 +53,12 @@ export function GamesPage() {
   const isSearching = debouncedSearch.length >= 2;
 
   // Filter discover results by genre if selected
+  const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
   const filteredRows = discoverData?.rows
     ?.map((row) => ({
       ...row,
-      games: selectedGenres.size > 0
-        ? row.games.filter((g) => {
-            const activeFilters = GENRE_FILTERS.filter(f => selectedGenres.has(f.key));
-            return activeFilters.some(f => f.match(g.genres));
-          })
+      games: activeFilters.length > 0
+        ? row.games.filter((g) => activeFilters.some(f => f.match(g.genres)))
         : row.games,
     }))
     .filter((row) => row.games.length > 0);

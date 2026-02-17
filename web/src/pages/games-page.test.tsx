@@ -174,13 +174,13 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(allButton).toBeInTheDocument();
         });
 
-        it('renders all 10 genre pills on desktop', () => {
+        it('renders all 11 genre pills on desktop', () => {
             const { container } = renderPage();
             const pillsContainer = container.querySelector('.hidden.md\\:flex');
             expect(pillsContainer).not.toBeNull();
-            // 1 "All" button + 10 genre buttons
+            // 1 "All" button + 11 genre buttons
             const buttons = pillsContainer!.querySelectorAll('button');
-            expect(buttons.length).toBe(11);
+            expect(buttons.length).toBe(12);
         });
     });
 
@@ -224,8 +224,8 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(allButton).toBeInTheDocument();
         });
 
-        it('renders all 10 genre rows in bottom sheet', () => {
-            const genreLabels = ['RPG', 'Shooter', 'Adventure', 'Strategy', 'Simulator', 'Sport', 'Racing', 'Fighting', 'Indie', 'MOBA'];
+        it('renders all 11 genre rows in bottom sheet', () => {
+            const genreLabels = ['RPG', 'Shooter', 'Adventure', 'Strategy', 'Simulator', 'Sport', 'Racing', 'Fighting', 'Indie', 'MMORPG', 'MOBA'];
 
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
@@ -256,7 +256,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
     });
 
     describe('Genre selection', () => {
-        it('selects a genre and closes sheet when genre row is tapped', () => {
+        it('selects a genre and keeps sheet open for multi-select', () => {
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
 
@@ -267,8 +267,8 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(rpgBtn).toBeDefined();
             fireEvent.click(rpgBtn!);
 
-            // Sheet should close after selection
-            expect(dialog).toHaveClass('translate-y-full');
+            // Sheet should stay open for multi-select
+            expect(dialog).toHaveClass('translate-y-0');
         });
 
         it('selected genre row shows emerald background styling', () => {
@@ -383,17 +383,27 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(checkIcon).toBeInTheDocument();
         });
 
-        it('"All" button closes bottom sheet on click', () => {
+        it('"All" button clears selection and keeps sheet open', () => {
             renderPage();
+            // First select a genre
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
             const dialog = screen.getByRole('dialog');
+            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
+                (b) => b.textContent?.includes('RPG'),
+            );
+            fireEvent.click(rpgBtn!);
+
+            // Now click "All" to clear
             const allBtn = Array.from(dialog.querySelectorAll('button')).find(
                 (b) => b.textContent?.includes('All'),
             );
             fireEvent.click(allBtn!);
 
-            expect(dialog).toHaveClass('translate-y-full');
+            // Sheet should stay open for multi-select
+            expect(dialog).toHaveClass('translate-y-0');
+            // "All" should now show checkmark (selected state)
+            const checkIcon = allBtn?.querySelector('svg');
+            expect(checkIcon).toBeInTheDocument();
         });
     });
 
