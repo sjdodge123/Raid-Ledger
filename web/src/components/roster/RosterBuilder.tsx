@@ -412,7 +412,7 @@ export function RosterBuilder({
                                 {/* ROK-183: For generic games show "Players" instead of just "Player" */}
                                 {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})
                             </h4>
-                            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-3">
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                                 {Array.from({ length: count }, (_, i) => {
                                     const position = i + 1;
                                     const assignedItem = assigned.find((a) => a.position === position);
