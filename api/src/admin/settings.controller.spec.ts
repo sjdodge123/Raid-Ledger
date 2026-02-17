@@ -25,6 +25,16 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
         message: 'Game "Valheim" is now visible to users.',
         name: 'Valheim',
       }),
+      banGame: jest.fn().mockResolvedValue({
+        success: true,
+        message: 'Game "Valheim" has been banned.',
+        name: 'Valheim',
+      }),
+      unbanGame: jest.fn().mockResolvedValue({
+        success: true,
+        message: 'Game "Valheim" has been unbanned and restored.',
+        name: 'Valheim',
+      }),
       isAdultFilterEnabled: jest.fn().mockResolvedValue(false),
       hideAdultGames: jest.fn().mockResolvedValue(0),
       getSyncStatus: jest.fn().mockResolvedValue({
@@ -163,6 +173,66 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
     it('calls igdbService.unhideGame with the correct id', async () => {
       await controller.unhideGame(7);
       expect(mockIgdbService.unhideGame).toHaveBeenCalledWith(7);
+    });
+  });
+
+  // ============================================================
+  // POST /admin/settings/games/:id/ban
+  // ============================================================
+  describe('banGame', () => {
+    it('returns success when game is banned', async () => {
+      const result = await controller.banGame(1);
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('banned');
+      expect(mockIgdbService.banGame).toHaveBeenCalledWith(1);
+    });
+
+    it('throws BadRequestException when game does not exist', async () => {
+      (mockIgdbService.banGame as jest.Mock).mockResolvedValue({
+        success: false,
+        message: 'Game not found',
+        name: '',
+      });
+
+      await expect(controller.banGame(999)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('calls igdbService.banGame with the correct id', async () => {
+      await controller.banGame(42);
+      expect(mockIgdbService.banGame).toHaveBeenCalledWith(42);
+    });
+  });
+
+  // ============================================================
+  // POST /admin/settings/games/:id/unban
+  // ============================================================
+  describe('unbanGame', () => {
+    it('returns success when game is unbanned', async () => {
+      const result = await controller.unbanGame(1);
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('unbanned');
+      expect(mockIgdbService.unbanGame).toHaveBeenCalledWith(1);
+    });
+
+    it('throws BadRequestException when game does not exist', async () => {
+      (mockIgdbService.unbanGame as jest.Mock).mockResolvedValue({
+        success: false,
+        message: 'Game not found',
+        name: '',
+      });
+
+      await expect(controller.unbanGame(999)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('calls igdbService.unbanGame with the correct id', async () => {
+      await controller.unbanGame(7);
+      expect(mockIgdbService.unbanGame).toHaveBeenCalledWith(7);
     });
   });
 

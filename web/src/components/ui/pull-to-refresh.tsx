@@ -14,7 +14,7 @@ export function PullToRefresh({ onRefresh, children }: PullToRefreshProps) {
     const pulling = useRef(false);
 
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
-        if (document.documentElement.scrollTop <= 0 && !isRefreshing) {
+        if (Math.max(document.documentElement.scrollTop, document.body.scrollTop) <= 0 && !isRefreshing) {
             startY.current = e.touches[0].clientY;
             pulling.current = true;
         }

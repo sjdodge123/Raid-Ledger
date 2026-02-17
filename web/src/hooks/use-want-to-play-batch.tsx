@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from 'react';
+import { useMemo, useCallback, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
@@ -59,6 +59,8 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
         staleTime: 1000 * 60 * 5,
     });
 
+    const [togglingIds, setTogglingIds] = useState<Set<number>>(new Set());
+
     const toggleMutation = useMutation<GameInterestResponseDto, Error, { gameId: number; wantToPlay: boolean }>({
         mutationFn: async ({ gameId, wantToPlay }) => {
             const method = wantToPlay ? 'POST' : 'DELETE';
@@ -70,6 +72,7 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
             return response.json();
         },
         onMutate: async ({ gameId, wantToPlay }) => {
+            setTogglingIds((prev) => new Set(prev).add(gameId));
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<BatchInterestData>(queryKey);
 
@@ -98,15 +101,22 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
 
             return { previous };
         },
-        onError: (_err, _vars, context) => {
+        onError: (_err, vars, context) => {
             if ((context as { previous?: BatchInterestData })?.previous) {
                 queryClient.setQueryData(
                     queryKey,
                     (context as { previous: BatchInterestData }).previous,
                 );
             }
+            // Also rollback the individual query cache
+            queryClient.invalidateQueries({ queryKey: ['games', 'interest', vars.gameId] });
         },
         onSettled: (_data, _err, vars) => {
+            setTogglingIds((prev) => {
+                const next = new Set(prev);
+                next.delete(vars.gameId);
+                return next;
+            });
             queryClient.invalidateQueries({ queryKey });
             queryClient.invalidateQueries({ queryKey: ['games', 'interest', vars.gameId] });
             queryClient.invalidateQueries({ queryKey: ['games', 'discover'] });
@@ -114,15 +124,17 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
         },
     });
 
+    const toggle = useCallback((gameId: number, wantToPlay: boolean) => {
+        toggleMutation.mutate({ gameId, wantToPlay });
+    }, [toggleMutation]);
+
     const value = useMemo<WantToPlayContextValue>(() => ({
         getInterest: (gameId: number) => {
             return batchData?.data[String(gameId)] ?? defaultEntry;
         },
-        toggle: (gameId: number, wantToPlay: boolean) => {
-            toggleMutation.mutate({ gameId, wantToPlay });
-        },
-        isToggling: toggleMutation.isPending,
-    }), [batchData, toggleMutation]);
+        toggle,
+        togglingIds,
+    }), [batchData, toggle, togglingIds]);
 
     return (
         <WantToPlayContext.Provider value={value}>

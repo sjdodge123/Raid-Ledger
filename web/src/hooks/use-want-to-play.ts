@@ -32,7 +32,7 @@ export function useWantToPlay(gameId: number | undefined) {
             players: [],
             isLoading: false,
             toggle: (wantToPlay: boolean) => ctx.toggle(gameId, wantToPlay),
-            isToggling: ctx.isToggling,
+            isToggling: ctx.togglingIds.has(gameId),
         };
     }
 

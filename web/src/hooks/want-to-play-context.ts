@@ -8,7 +8,7 @@ export interface InterestEntry {
 export interface WantToPlayContextValue {
     getInterest: (gameId: number) => InterestEntry;
     toggle: (gameId: number, wantToPlay: boolean) => void;
-    isToggling: boolean;
+    togglingIds: ReadonlySet<number>;
 }
 
 export const defaultEntry: InterestEntry = { wantToPlay: false, count: 0 };
@@ -17,7 +17,7 @@ export const defaultEntry: InterestEntry = { wantToPlay: false, count: 0 };
 export const NO_PROVIDER: WantToPlayContextValue = {
     getInterest: () => defaultEntry,
     toggle: () => {},
-    isToggling: false,
+    togglingIds: new Set(),
 };
 
 export const WantToPlayContext = createContext<WantToPlayContextValue>(NO_PROVIDER);

@@ -133,7 +133,7 @@ export type IgdbHealthStatusDto = z.infer<typeof IgdbHealthStatusSchema>;
 /** Admin game list query parameters */
 export const AdminGameListQuerySchema = z.object({
     search: z.string().optional(),
-    showHidden: z.coerce.boolean().optional(),
+    showHidden: z.enum(['only', 'true']).optional(),
     page: z.coerce.number().min(1).default(1),
     limit: z.coerce.number().min(1).max(100).default(20),
 });

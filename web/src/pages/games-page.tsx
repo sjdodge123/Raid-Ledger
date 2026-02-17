@@ -478,6 +478,7 @@ function AdultContentFilterToggle() {
         } ${updateAdultFilter.isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
         role="switch"
         aria-checked={igdbAdultFilter.data?.enabled ?? false}
+        aria-label="Filter adult content"
       >
         <span
           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
