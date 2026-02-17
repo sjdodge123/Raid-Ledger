@@ -16,6 +16,16 @@ const mockDeleteGame = {
     isPending: false,
 };
 
+const mockHideGame = {
+    mutateAsync: vi.fn(),
+    isPending: false,
+};
+
+const mockUnhideGame = {
+    mutateAsync: vi.fn(),
+    isPending: false,
+};
+
 const mockGames = {
     isLoading: false,
     data: null as null | {
@@ -26,6 +36,7 @@ const mockGames = {
             slug: string;
             coverUrl: string | null;
             cachedAt: string;
+            hidden?: boolean;
         }>;
         meta: {
             total: number;
@@ -40,6 +51,8 @@ vi.mock('../../hooks/use-admin-games', () => ({
     useAdminGames: () => ({
         games: mockGames,
         deleteGame: mockDeleteGame,
+        hideGame: mockHideGame,
+        unhideGame: mockUnhideGame,
     }),
 }));
 
@@ -75,6 +88,10 @@ describe('GameLibraryTable', () => {
         mockGames.data = null;
         mockDeleteGame.isPending = false;
         mockDeleteGame.mutateAsync = vi.fn();
+        mockHideGame.isPending = false;
+        mockHideGame.mutateAsync = vi.fn();
+        mockUnhideGame.isPending = false;
+        mockUnhideGame.mutateAsync = vi.fn();
     });
 
     // ── Loading & empty states ──────────────────────────────────
