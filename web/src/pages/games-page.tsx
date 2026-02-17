@@ -3,11 +3,13 @@ import { useGamesDiscover } from "../hooks/use-games-discover";
 import { useGameSearch } from "../hooks/use-game-search";
 import { useDebouncedValue } from "../hooks/use-debounced-value";
 import { useAuth, isOperatorOrAdmin } from "../hooks/use-auth";
+import { useAdminSettings } from "../hooks/use-admin-settings";
 import { GameCarousel } from "../components/games/GameCarousel";
 import { GameCard } from "../components/games/GameCard";
 import { MobileGameCard } from "../components/games/mobile-game-card";
 import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
+import { toast } from "../lib/toast";
 import type { GameDetailDto } from "@raid-ledger/contract";
 
 /** Common IGDB genre IDs for filter pills */
@@ -119,7 +121,12 @@ export function GamesPage() {
         )}
 
         {/* Manage tab (admin only) */}
-        {activeTab === "manage" && canManage && <GameLibraryTable />}
+        {activeTab === "manage" && canManage && (
+          <>
+            <AdultContentFilterToggle />
+            <GameLibraryTable />
+          </>
+        )}
 
         {/* Discover tab */}
         {activeTab === "discover" && (
@@ -302,6 +309,48 @@ export function GamesPage() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function AdultContentFilterToggle() {
+  const { igdbAdultFilter, updateAdultFilter } = useAdminSettings();
+
+  return (
+    <div className="flex items-center justify-between bg-panel/50 border border-edge rounded-lg p-4 mb-6">
+      <div>
+        <span className="text-sm font-medium text-foreground">Filter adult content</span>
+        <p className="text-dim text-xs mt-0.5">
+          Hide games with erotic/sexual themes from search and discovery
+        </p>
+      </div>
+      <button
+        type="button"
+        onClick={() => {
+          const newValue = !igdbAdultFilter.data?.enabled;
+          updateAdultFilter.mutateAsync(newValue).then((result) => {
+            if (result.success) {
+              toast.success(result.message);
+            } else {
+              toast.error(result.message);
+            }
+          }).catch(() => toast.error('Failed to update filter'));
+        }}
+        disabled={updateAdultFilter.isPending}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-panel ${
+          igdbAdultFilter.data?.enabled
+            ? 'bg-purple-600'
+            : 'bg-overlay'
+        } ${updateAdultFilter.isPending ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+        role="switch"
+        aria-checked={igdbAdultFilter.data?.enabled ?? false}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            igdbAdultFilter.data?.enabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
     </div>
   );
 }
