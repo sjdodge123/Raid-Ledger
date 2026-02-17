@@ -27,6 +27,8 @@ import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
 import { DayEventCard } from './DayEventCard';
 import { WeekEventCard } from './WeekEventCard';
+import { ScheduleView } from './ScheduleView';
+import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
@@ -68,6 +70,8 @@ interface CalendarViewProps {
     onGamesAvailable?: (games: GameInfo[]) => void;
     /** Game time template slots for overlap indicator (Set of "dayOfWeek:hour") */
     gameTimeSlots?: Set<string>;
+    /** Mobile calendar view mode (schedule/month/day) — when 'schedule', renders ScheduleView */
+    calendarView?: CalendarViewMode;
 }
 
 export function CalendarView({
@@ -77,6 +81,7 @@ export function CalendarView({
     selectedGames,
     onGamesAvailable,
     gameTimeSlots,
+    calendarView,
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -126,8 +131,18 @@ export function CalendarView({
 
 
 
-    // Calculate date range for current view (month, week, or day)
+    // Calculate date range for current view (month, week, day, or schedule)
+    const isScheduleView = calendarView === 'schedule';
     const { startAfter, endBefore } = useMemo(() => {
+        if (isScheduleView) {
+            // Schedule view uses week range like week view
+            const start = startOfWeek(currentDate, { weekStartsOn: 0 });
+            const end = endOfWeek(currentDate, { weekStartsOn: 0 });
+            return {
+                startAfter: start.toISOString(),
+                endBefore: end.toISOString(),
+            };
+        }
         if (view === Views.DAY) {
             const start = startOfDay(currentDate);
             const end = endOfDay(currentDate);
@@ -151,7 +166,7 @@ export function CalendarView({
             startAfter: start.toISOString(),
             endBefore: end.toISOString(),
         };
-    }, [currentDate, view]);
+    }, [currentDate, view, isScheduleView]);
 
     // Fetch events for the current month
     // ROK-177: Include signups preview for week/day views to show attendee avatars
@@ -159,7 +174,7 @@ export function CalendarView({
         startAfter,
         endBefore,
         upcoming: false, // Get all events in range, not just upcoming
-        includeSignups: view === Views.WEEK || view === Views.DAY,
+        includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
     });
 
     // Extract unique games from events
@@ -239,13 +254,15 @@ export function CalendarView({
     // Event click handler — pass calendar context so event detail page can navigate back
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
-            const viewStr = view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
+            const viewStr = isScheduleView
+                ? 'schedule'
+                : view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
             const dateStr = format(currentDate, 'yyyy-MM-dd');
             navigate(`/events/${event.id}`, {
                 state: { fromCalendar: true, calendarDate: dateStr, calendarView: viewStr },
             });
         },
-        [navigate, view, currentDate]
+        [navigate, view, currentDate, isScheduleView]
     );
 
     // Style events based on their game (using shared constants)
@@ -330,6 +347,29 @@ export function CalendarView({
         ),
         [eventOverlapsGameTime],
     );
+
+    // Schedule view — mobile agenda list
+    if (isScheduleView) {
+        return (
+            <div className={`calendar-container ${className}`}>
+                {isLoading && (
+                    <div className="calendar-loading">
+                        <div className="loading-spinner" />
+                        <span>Loading events...</span>
+                    </div>
+                )}
+                {!isLoading && (
+                    <ScheduleView
+                        events={calendarEvents}
+                        currentDate={currentDate}
+                        onDateChange={setCurrentDate}
+                        onSelectEvent={handleSelectEvent}
+                        eventOverlapsGameTime={eventOverlapsGameTime}
+                    />
+                )}
+            </div>
+        );
+    }
 
     return (
         <div className={`calendar-container calendar-view-${view} ${className}`}>

@@ -212,6 +212,7 @@ export function CalendarPage() {
                             selectedGames={selectedGames}
                             onGamesAvailable={handleGamesAvailable}
                             gameTimeSlots={gameTimeSlots}
+                            calendarView={calendarView}
                         />
                     </main>
                 </div>
