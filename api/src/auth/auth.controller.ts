@@ -7,9 +7,10 @@ import {
   UseGuards,
   Res,
   Query,
-  HttpException,
   HttpStatus,
   Logger,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -21,6 +22,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
+import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
@@ -53,6 +55,9 @@ export class AuthController {
     private configService: ConfigService,
     private jwtService: JwtService,
     private settingsService: SettingsService,
+    @Optional()
+    @Inject(DiscordNotificationService)
+    private discordNotificationService: DiscordNotificationService | null,
   ) {}
 
   /**
@@ -313,6 +318,17 @@ export class AuthController {
         discordProfile.username,
         discordProfile.avatar,
       );
+
+      // Send welcome DM now that Discord is linked (ROK-180 AC-1)
+      if (this.discordNotificationService) {
+        this.discordNotificationService
+          .sendWelcomeDM(userId)
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `Failed to send welcome DM after link: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            );
+          });
+      }
 
       // Redirect to profile with success
       res.redirect(`${clientUrl}/profile?linked=success`);

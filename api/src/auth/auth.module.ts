@@ -15,6 +15,7 @@ import { LocalAuthController } from './local-auth.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
 import { EventsModule } from '../events/events.module';
+import { NotificationModule } from '../notifications/notification.module';
 
 /**
  * Auth module with dynamic Discord OAuth support.
@@ -29,6 +30,7 @@ import { EventsModule } from '../events/events.module';
     DrizzleModule,
     SettingsModule,
     forwardRef(() => EventsModule),
+    forwardRef(() => NotificationModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
