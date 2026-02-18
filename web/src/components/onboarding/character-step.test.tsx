@@ -35,17 +35,27 @@ const mockUseMyCharacters = useMyCharacters as unknown as ReturnType<typeof vi.f
 const baseGame: GameRegistryDto = {
     id: 'wow',
     name: 'World of Warcraft',
+    shortName: 'WoW',
     slug: 'wow',
     hasRoles: true,
+    hasSpecs: true,
     iconUrl: null,
+    colorHex: '#F58518',
+    maxCharactersPerUser: 10,
+    createdAt: '2026-01-01T00:00:00.000Z',
 };
 
 const nonMmoGame: GameRegistryDto = {
     id: 'factorio',
     name: 'Factorio',
+    shortName: null,
     slug: 'factorio',
     hasRoles: false,
+    hasSpecs: false,
     iconUrl: null,
+    colorHex: '#6B7280',
+    maxCharactersPerUser: 5,
+    createdAt: '2026-01-01T00:00:00.000Z',
 };
 
 function createQueryClient() {

@@ -195,7 +195,7 @@ describe('AdminSetupWizard', () => {
 
     describe('Skip Setup button', () => {
         it('renders the Skip Setup button with min-h-[44px]', () => {
-            const { container } = renderWithRouter(<AdminSetupWizard />);
+            renderWithRouter(<AdminSetupWizard />);
             const skipButton = screen.getByRole('button', { name: /skip setup/i });
             expect(skipButton).toBeInTheDocument();
             expect(skipButton.className).toContain('min-h-[44px]');
