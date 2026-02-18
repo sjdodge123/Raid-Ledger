@@ -316,6 +316,13 @@
       "when": 1771429336633,
       "tag": "0044_breezy_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1771445363882,
+      "tag": "0045_breezy_scarlet_witch",
+      "breakpoints": true
     }
   ]
 }

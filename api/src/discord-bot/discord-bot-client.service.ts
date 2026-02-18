@@ -139,6 +139,14 @@ export class DiscordBotClientService {
     return this.client?.isReady() ?? false;
   }
 
+  /**
+   * Get the underlying Discord.js Client instance.
+   * Used by interaction handlers to register event listeners.
+   */
+  getClient(): Client | null {
+    return this.client;
+  }
+
   isConnecting(): boolean {
     return this.connecting;
   }

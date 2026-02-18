@@ -9,6 +9,7 @@ import {
   EMBED_COLORS,
   EMBED_STATES,
   type EmbedState,
+  SIGNUP_BUTTON_IDS,
 } from '../discord-bot.constants';
 
 /**
@@ -56,6 +57,7 @@ export class DiscordEmbedFactory {
   /**
    * Build an event announcement embed (Cyan accent).
    * Used when a new event is created and posted to Discord.
+   * Includes signup action buttons (ROK-137).
    */
   buildEventAnnouncement(
     event: EmbedEventData,
@@ -63,7 +65,7 @@ export class DiscordEmbedFactory {
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     const color = this.getColorForState(EMBED_STATES.POSTED);
     const embed = this.createBaseEmbed(event, context, color);
-    const row = this.buildViewEventButton(event.id, context.clientUrl);
+    const row = this.buildSignupButtons(event.id, context.clientUrl);
     return { embed, row };
   }
 
@@ -98,7 +100,11 @@ export class DiscordEmbedFactory {
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     const color = this.getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
-    const row = this.buildViewEventButton(event.id, context.clientUrl);
+    // Cancelled and completed states don't show buttons
+    if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
+      return { embed };
+    }
+    const row = this.buildSignupButtons(event.id, context.clientUrl);
     return { embed, row };
   }
 
@@ -225,20 +231,44 @@ export class DiscordEmbedFactory {
   }
 
   /**
-   * Build a URL button that links to the event on the web app.
+   * Build signup action buttons for the embed (ROK-137).
+   * Includes: Sign Up (green), Tentative (yellow), Decline (red), View Event (link).
    */
-  private buildViewEventButton(
+  private buildSignupButtons(
     eventId: number,
     clientUrl?: string | null,
-  ): ActionRowBuilder<ButtonBuilder> | undefined {
+  ): ActionRowBuilder<ButtonBuilder> {
+    const signupButton = new ButtonBuilder()
+      .setCustomId(`${SIGNUP_BUTTON_IDS.SIGNUP}:${eventId}`)
+      .setLabel('Sign Up')
+      .setStyle(ButtonStyle.Success);
+
+    const tentativeButton = new ButtonBuilder()
+      .setCustomId(`${SIGNUP_BUTTON_IDS.TENTATIVE}:${eventId}`)
+      .setLabel('Tentative')
+      .setStyle(ButtonStyle.Secondary);
+
+    const declineButton = new ButtonBuilder()
+      .setCustomId(`${SIGNUP_BUTTON_IDS.DECLINE}:${eventId}`)
+      .setLabel('Decline')
+      .setStyle(ButtonStyle.Danger);
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      signupButton,
+      tentativeButton,
+      declineButton,
+    );
+
+    // Add View Event link button if client URL is available
     const baseUrl = clientUrl || process.env.CLIENT_URL;
-    if (!baseUrl) return undefined;
+    if (baseUrl) {
+      const viewButton = new ButtonBuilder()
+        .setLabel('View Event')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${baseUrl}/events/${eventId}`);
+      row.addComponents(viewButton);
+    }
 
-    const button = new ButtonBuilder()
-      .setLabel('View Event')
-      .setStyle(ButtonStyle.Link)
-      .setURL(`${baseUrl}/events/${eventId}`);
-
-    return new ActionRowBuilder<ButtonBuilder>().addComponents(button);
+    return row;
   }
 }

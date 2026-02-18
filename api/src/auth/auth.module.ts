@@ -1,6 +1,7 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthService } from './local-auth.service';
+import { IntentTokenService } from './intent-token.service';
 import { UsersModule } from '../users/users.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -12,6 +13,7 @@ import { AuthController } from './auth.controller';
 import { LocalAuthController } from './local-auth.controller';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
+import { EventsModule } from '../events/events.module';
 
 /**
  * Auth module with dynamic Discord OAuth support.
@@ -25,6 +27,7 @@ import { SettingsModule } from '../settings/settings.module';
     ConfigModule,
     DrizzleModule,
     SettingsModule,
+    forwardRef(() => EventsModule),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -38,9 +41,15 @@ import { SettingsModule } from '../settings/settings.module';
   providers: [
     AuthService,
     LocalAuthService,
+    IntentTokenService,
     DynamicDiscordStrategy,
     JwtStrategy,
   ],
-  exports: [AuthService, LocalAuthService, DynamicDiscordStrategy],
+  exports: [
+    AuthService,
+    LocalAuthService,
+    IntentTokenService,
+    DynamicDiscordStrategy,
+  ],
 })
 export class AuthModule {}

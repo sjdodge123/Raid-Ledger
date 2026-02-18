@@ -12,6 +12,9 @@ import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 
+// -- Lazy loaded public pages --
+const JoinPage = lazy(() => import('./pages/join-page').then(m => ({ default: m.JoinPage })));
+
 // -- Lazy loaded pages --
 const CalendarPage = lazy(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
 const CreateEventPage = lazy(() => import('./pages/create-event-page').then(m => ({ default: m.CreateEventPage })));
@@ -75,6 +78,8 @@ function App() {
             <Route path="/login" element={<Navigate to="/" replace />} />
             {/* OAuth callback -- must stay public for Discord redirect flow */}
             <Route path="/auth/success" element={<AuthSuccessPage />} />
+            {/* ROK-137: Deferred signup landing page (public — handles intent tokens) */}
+            <Route path="/join" element={<JoinPage />} />
 
             {/* -- Protected routes (ROK-283: global auth guard) -- */}
             <Route element={<AuthGuard />}>

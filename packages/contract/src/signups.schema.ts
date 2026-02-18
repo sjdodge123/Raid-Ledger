@@ -1,12 +1,16 @@
 import { z } from 'zod';
 
 // ============================================================
-// Signup Schemas (FR-006 + ROK-131 Character Confirmation)
+// Signup Schemas (FR-006 + ROK-131 Character Confirmation + ROK-137 Interactive Buttons)
 // ============================================================
 
 /** Confirmation status for event signups (ROK-131 AC-1) */
 export const ConfirmationStatusSchema = z.enum(['pending', 'confirmed', 'changed']);
 export type ConfirmationStatus = z.infer<typeof ConfirmationStatusSchema>;
+
+/** Signup status for attendance intent (ROK-137) */
+export const SignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined']);
+export type SignupStatus = z.infer<typeof SignupStatusSchema>;
 
 /** Single signup user info with Discord avatar (ROK-194: includes characters for avatar resolution) */
 export const SignupUserSchema = z.object({
@@ -52,6 +56,14 @@ export const SignupResponseSchema = z.object({
     characterId: z.string().uuid().nullable(),
     character: SignupCharacterSchema.nullable(),
     confirmationStatus: ConfirmationStatusSchema,
+    /** Attendance status (ROK-137) */
+    status: SignupStatusSchema,
+    /** Whether this is an anonymous Discord participant (ROK-137) */
+    isAnonymous: z.boolean().optional(),
+    /** Discord info for anonymous participants (ROK-137) */
+    discordUserId: z.string().nullable().optional(),
+    discordUsername: z.string().nullable().optional(),
+    discordAvatarHash: z.string().nullable().optional(),
 });
 
 export type SignupResponseDto = z.infer<typeof SignupResponseSchema>;
@@ -85,3 +97,57 @@ export const ConfirmSignupSchema = z.object({
 });
 
 export type ConfirmSignupDto = z.infer<typeof ConfirmSignupSchema>;
+
+// ============================================================
+// Discord Signup Schemas (ROK-137)
+// ============================================================
+
+/** Create anonymous Discord signup */
+export const CreateDiscordSignupSchema = z.object({
+    discordUserId: z.string(),
+    discordUsername: z.string(),
+    discordAvatarHash: z.string().nullable().optional(),
+    /** Optional role for games that require roles */
+    role: z.enum(['tank', 'healer', 'dps', 'flex', 'player']).optional(),
+    status: SignupStatusSchema.optional(),
+});
+
+export type CreateDiscordSignupDto = z.infer<typeof CreateDiscordSignupSchema>;
+
+/** Update signup status (tentative/declined/signed_up) */
+export const UpdateSignupStatusSchema = z.object({
+    status: SignupStatusSchema,
+});
+
+export type UpdateSignupStatusDto = z.infer<typeof UpdateSignupStatusSchema>;
+
+// ============================================================
+// Intent Token Schemas (ROK-137 Deferred Signup)
+// ============================================================
+
+/** Intent token payload for deferred signup */
+export const IntentTokenPayloadSchema = z.object({
+    eventId: z.number(),
+    discordId: z.string(),
+    action: z.literal('signup'),
+    /** Token creation timestamp for TTL validation */
+    iat: z.number().optional(),
+});
+
+export type IntentTokenPayload = z.infer<typeof IntentTokenPayloadSchema>;
+
+/** Redeem intent request body */
+export const RedeemIntentSchema = z.object({
+    token: z.string(),
+});
+
+export type RedeemIntentDto = z.infer<typeof RedeemIntentSchema>;
+
+/** Redeem intent response */
+export const RedeemIntentResponseSchema = z.object({
+    success: z.boolean(),
+    eventId: z.number().optional(),
+    message: z.string(),
+});
+
+export type RedeemIntentResponseDto = z.infer<typeof RedeemIntentResponseSchema>;
