@@ -17,6 +17,7 @@ const GAMES_SEED = [
     {
         slug: 'wow',
         name: 'World of Warcraft',
+        shortName: 'WoW',
         iconUrl: 'https://assets.blizzard.com/wow/icon.png',
         colorHex: '#F58518',
         hasRoles: true,
@@ -63,6 +64,7 @@ const GAMES_SEED = [
     {
         slug: 'wow-classic',
         name: 'World of Warcraft Classic',
+        shortName: 'WoW Classic',
         iconUrl: 'https://assets.blizzard.com/wow/icon.png',
         colorHex: '#C79C6E',
         hasRoles: true,
@@ -102,6 +104,7 @@ const GAMES_SEED = [
     {
         slug: 'valheim',
         name: 'Valheim',
+        shortName: null,
         iconUrl: null,
         colorHex: '#4A7C59',
         hasRoles: false,
@@ -134,6 +137,7 @@ const GAMES_SEED = [
     {
         slug: 'ffxiv',
         name: 'Final Fantasy XIV Online',
+        shortName: 'FFXIV',
         iconUrl: null,
         colorHex: '#5D5CDE',
         hasRoles: true,
@@ -166,6 +170,7 @@ const GAMES_SEED = [
     {
         slug: 'generic',
         name: 'Generic',
+        shortName: null,
         iconUrl: null,
         colorHex: '#6B7280',
         hasRoles: false,
@@ -208,7 +213,7 @@ async function bootstrap() {
                 .onConflictDoNothing({ target: schema.gameRegistry.slug })
                 .returning();
 
-            // If game already existed, fetch it
+            // If game already existed, fetch it and update shortName
             let gameId: string;
             if (insertedGame) {
                 gameId = insertedGame.id;
@@ -220,7 +225,16 @@ async function bootstrap() {
                     .where(eq(schema.gameRegistry.slug, game.slug))
                     .limit(1);
                 gameId = existing.id;
-                console.log(`  ⏭️  Skipped game: ${game.name} (already exists)`);
+                // Update shortName if it changed
+                if (existing.shortName !== game.shortName) {
+                    await db
+                        .update(schema.gameRegistry)
+                        .set({ shortName: game.shortName })
+                        .where(eq(schema.gameRegistry.id, gameId));
+                    console.log(`  🔄 Updated game: ${game.name} (shortName → ${game.shortName ?? 'null'})`);
+                } else {
+                    console.log(`  ⏭️  Skipped game: ${game.name} (already exists)`);
+                }
             }
 
             // Insert event types

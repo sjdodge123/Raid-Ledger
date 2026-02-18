@@ -114,7 +114,7 @@ function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
                     ? 'bg-emerald-400'
                     : 'bg-edge/50'
                 }`} />
-            {game.name}
+            {game.shortName || game.name}
         </>
     );
 }
@@ -171,9 +171,10 @@ export function OnboardingWizardPage() {
         qualifyingGames.forEach((game) => {
             const total = 1 + (extraCharCounts[game.id] ?? 0);
             for (let j = 0; j < total; j++) {
+                const displayName = game.shortName || game.name;
                 s.push({
                     key: `character-${game.id}-${j}`,
-                    label: total > 1 ? `${game.name} (${j + 1})` : game.name,
+                    label: total > 1 ? `${displayName} (${j + 1})` : displayName,
                     registryGame: game,
                     charIndex: j,
                 });

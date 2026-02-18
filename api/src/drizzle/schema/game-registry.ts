@@ -17,6 +17,8 @@ export const gameRegistry = pgTable('game_registry', {
   id: uuid('id').primaryKey().defaultRandom(),
   slug: varchar('slug', { length: 50 }).unique().notNull(),
   name: varchar('name', { length: 100 }).notNull(),
+  /** Abbreviated display name for compact UI contexts (breadcrumbs, chips) */
+  shortName: varchar('short_name', { length: 30 }),
   iconUrl: text('icon_url'),
   colorHex: varchar('color_hex', { length: 7 }),
   /** Whether this game has role-based composition (Tank/Healer/DPS) */

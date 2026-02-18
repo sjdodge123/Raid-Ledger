@@ -106,6 +106,7 @@ export class GameRegistryService {
       id: game.id,
       slug: game.slug,
       name: game.name,
+      shortName: game.shortName,
       iconUrl: game.iconUrl,
       colorHex: game.colorHex,
       hasRoles: game.hasRoles,
