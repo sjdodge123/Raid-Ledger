@@ -22,7 +22,9 @@ export type NotificationType =
     | 'subscribed_game'
     | 'achievement_unlocked'
     | 'level_up'
-    | 'missed_event_nudge';
+    | 'missed_event_nudge'
+    | 'event_rescheduled'
+    | 'bench_promoted';
 
 export type Channel = 'inApp' | 'push' | 'discord';
 
@@ -160,6 +162,28 @@ async function patchPreferences(
     return response.json();
 }
 
+/**
+ * Fetch notification channel availability (ROK-180 AC-7)
+ */
+export interface ChannelAvailability {
+    discord: { available: boolean; reason?: string };
+}
+
+async function fetchChannelAvailability(): Promise<ChannelAvailability> {
+    const token = getAuthToken();
+    if (!token) return { discord: { available: false, reason: 'Not authenticated' } };
+
+    const response = await fetch(`${API_BASE_URL}/notifications/channels`, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        return { discord: { available: false } };
+    }
+
+    return response.json();
+}
+
 // Cache configuration
 const NOTIFICATION_STALE_TIME = 30 * 1000; // 30 seconds
 const PREFERENCES_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -227,6 +251,13 @@ export function useNotificationPreferences() {
         staleTime: PREFERENCES_STALE_TIME,
     });
 
+    // ROK-180 AC-7: Fetch channel availability
+    const { data: channelAvailability } = useQuery({
+        queryKey: ['notifications', 'channels'],
+        queryFn: fetchChannelAvailability,
+        staleTime: PREFERENCES_STALE_TIME,
+    });
+
     const updateMutation = useMutation({
         mutationFn: patchPreferences,
         onMutate: async (input: UpdatePreferencesInput) => {
@@ -275,5 +306,6 @@ export function useNotificationPreferences() {
         isLoading,
         error,
         updatePreferences: updateMutation.mutate,
+        channelAvailability,
     };
 }

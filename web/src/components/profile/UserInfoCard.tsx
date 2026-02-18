@@ -1,7 +1,7 @@
 import type { User } from '../../hooks/use-auth';
 import { API_BASE_URL } from '../../lib/config';
 import { toast } from '../../lib/toast';
-import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { resolveAvatar, toAvatarUser, isDiscordLinked } from '../../lib/avatar';
 import { RoleBadge } from '../ui/role-badge';
 
 interface UserInfoCardProps {
@@ -15,8 +15,7 @@ interface UserInfoCardProps {
  * ROK-222: Uses resolveAvatar() for unified avatar resolution.
  */
 export function UserInfoCard({ user }: UserInfoCardProps) {
-    // Check if user has Discord linked (discordId doesn't start with 'local:')
-    const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
+    const hasDiscordLinked = isDiscordLinked(user.discordId);
 
     // ROK-222: Use resolveAvatar for unified avatar resolution
     const avatarResolved = resolveAvatar(toAvatarUser(user));

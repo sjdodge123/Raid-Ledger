@@ -38,6 +38,14 @@ export interface AvatarUser {
 }
 
 /**
+ * Check if a discordId represents a real linked Discord account.
+ * Returns false for local-only accounts (local:xxx) and unlinked accounts (unlinked:xxx).
+ */
+export function isDiscordLinked(discordId: string | null | undefined): boolean {
+    return Boolean(discordId && !discordId.startsWith('local:') && !discordId.startsWith('unlinked:'));
+}
+
+/**
  * Build a full Discord CDN avatar URL from a discordId and avatar hash.
  * Returns null if either value is missing.
  * If the hash is already a full URL, returns it as-is.

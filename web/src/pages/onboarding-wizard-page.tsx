@@ -7,6 +7,7 @@ import { useUserHeartedGames } from '../hooks/use-user-profile';
 import { useMyCharacters } from '../hooks/use-characters';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
+import { isDiscordLinked } from '../lib/avatar';
 import { ConnectStep } from '../components/onboarding/connect-step';
 import { GamesStep } from '../components/onboarding/games-step';
 import { CharacterStep } from '../components/onboarding/character-step';
@@ -33,7 +34,7 @@ function ConnectStepLabel({ user, isCurrent, isVisited }: {
     isCurrent: boolean;
     isVisited: boolean;
 }) {
-    const isConnected = user && user.discordId && !user.discordId.startsWith('local:');
+    const isConnected = user && isDiscordLinked(user.discordId);
 
     if (isConnected) {
         return (
@@ -145,7 +146,7 @@ export function OnboardingWizardPage() {
         if (!user) return false;
         const discordConfigured = systemStatus?.discordConfigured ?? false;
         if (!discordConfigured) return false;
-        return !user.discordId || user.discordId.startsWith('local:');
+        return !isDiscordLinked(user.discordId);
     }, [user, systemStatus]);
 
     // Qualifying games = hearted games that exist in the game registry (by name).

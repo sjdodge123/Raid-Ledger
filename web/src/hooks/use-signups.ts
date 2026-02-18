@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { signupForEvent, cancelSignup, confirmSignup } from '../lib/api-client';
+import { signupForEvent, cancelSignup, confirmSignup, updateSignupStatus } from '../lib/api-client';
+import type { SignupStatus } from '@raid-ledger/contract';
 
 /**
  * Hook for signing up to an event
@@ -49,6 +50,23 @@ export function useConfirmSignup(eventId: number) {
         onSuccess: () => {
             // Invalidate roster query to refetch updated roster with character info
             queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+        },
+    });
+}
+
+/**
+ * Hook for updating signup status (ROK-137)
+ * Supports: signed_up, tentative, declined
+ */
+export function useUpdateSignupStatus(eventId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (status: SignupStatus) =>
+            updateSignupStatus(eventId, status),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });
+            queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster', 'assignments'] });
         },
     });
 }

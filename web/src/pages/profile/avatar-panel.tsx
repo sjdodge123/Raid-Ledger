@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 
 const AVATAR_PREF_KEY = 'raid-ledger:avatar-preference';
@@ -13,7 +13,7 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
     if (user.customAvatarUrl) {
         options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom' });
     }
-    const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
+    const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     if (hasDiscordLinked && discordUrl) {
         options.push({ url: discordUrl, label: 'Discord' });

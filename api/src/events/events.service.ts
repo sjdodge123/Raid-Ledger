@@ -860,13 +860,15 @@ export class EventsService {
     // Verify event exists
     await this.findOne(eventId);
 
-    // Get all signed-up user IDs
+    // Get all signed-up user IDs (filter out anonymous Discord participants)
     const signups = await this.db
       .select({ userId: schema.eventSignups.userId })
       .from(schema.eventSignups)
       .where(eq(schema.eventSignups.eventId, eventId));
 
-    const userIds = signups.map((s) => s.userId);
+    const userIds = signups
+      .map((s) => s.userId)
+      .filter((id): id is number => id !== null);
 
     if (userIds.length === 0) {
       return { eventId, totalUsers: 0, cells: [] };
@@ -947,7 +949,7 @@ export class EventsService {
 
     this.logger.log(`Event rescheduled: ${eventId} by user ${userId}`);
 
-    // Notify all signed-up users (except the rescheduler)
+    // Notify all signed-up RL users (except the rescheduler; skip anonymous Discord participants)
     const signups = await this.db
       .select({ userId: schema.eventSignups.userId })
       .from(schema.eventSignups)
@@ -955,7 +957,7 @@ export class EventsService {
 
     const usersToNotify = signups
       .map((s) => s.userId)
-      .filter((id) => id !== userId);
+      .filter((id): id is number => id !== null && id !== userId);
 
     const eventTitle = existing[0].title;
     const formatTime = (d: Date) =>

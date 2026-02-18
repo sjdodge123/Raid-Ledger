@@ -183,13 +183,15 @@ export class BenchPromotionProcessor extends WorkerHost {
       `Promoted bench player (signup ${benchPlayer.signupId}) to ${vacatedRole}:${vacatedPosition} for event ${eventId}`,
     );
 
-    // 5. Notify the promoted player
-    await this.notificationService.create({
-      userId: benchPlayer.userId,
-      type: 'bench_promoted',
-      title: 'Promoted from Bench!',
-      message: `A slot opened up in "${event.title}" and you've been moved from the bench to the roster!`,
-      payload: { eventId, role: vacatedRole, position: vacatedPosition },
-    });
+    // 5. Notify the promoted player (only RL members, not anonymous Discord users)
+    if (benchPlayer.userId) {
+      await this.notificationService.create({
+        userId: benchPlayer.userId,
+        type: 'bench_promoted',
+        title: 'Promoted from Bench!',
+        message: `A slot opened up in "${event.title}" and you've been moved from the bench to the roster!`,
+        payload: { eventId, role: vacatedRole, position: vacatedPosition },
+      });
+    }
   }
 }

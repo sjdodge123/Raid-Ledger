@@ -135,9 +135,10 @@ export class EventReminderService {
           .from(schema.eventSignups)
           .where(inArray(schema.eventSignups.eventId, eventIds));
 
-        // Group signups by event
+        // Group signups by event (filter out anonymous Discord participants)
         const signupsByEvent = new Map<number, number[]>();
         for (const signup of signups) {
+          if (signup.userId === null) continue; // Skip anonymous participants
           if (!signupsByEvent.has(signup.eventId)) {
             signupsByEvent.set(signup.eventId, []);
           }

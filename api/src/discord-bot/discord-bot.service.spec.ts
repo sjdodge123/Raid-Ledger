@@ -50,13 +50,13 @@ describe('DiscordBotService', () => {
     jest.clearAllMocks();
   });
 
-  describe('onModuleInit', () => {
+  describe('onApplicationBootstrap', () => {
     it('should auto-connect when configured and enabled', async () => {
       jest
         .spyOn(settingsService, 'getDiscordBotConfig')
         .mockResolvedValue(mockDiscordBotConfig);
 
-      await service.onModuleInit();
+      await service.onApplicationBootstrap();
 
       expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
       expect(clientService.connect).toHaveBeenCalledWith(
@@ -69,7 +69,7 @@ describe('DiscordBotService', () => {
         .spyOn(settingsService, 'getDiscordBotConfig')
         .mockResolvedValue(null);
 
-      await service.onModuleInit();
+      await service.onApplicationBootstrap();
 
       expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
       expect(clientService.connect).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ describe('DiscordBotService', () => {
         enabled: false,
       });
 
-      await service.onModuleInit();
+      await service.onApplicationBootstrap();
 
       expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
       expect(clientService.connect).not.toHaveBeenCalled();
@@ -96,7 +96,7 @@ describe('DiscordBotService', () => {
         .mockRejectedValue(new Error('Connection failed'));
 
       // Should not throw
-      await expect(service.onModuleInit()).resolves.not.toThrow();
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
 
       expect(clientService.connect).toHaveBeenCalled();
     });
@@ -107,7 +107,7 @@ describe('DiscordBotService', () => {
         .mockRejectedValue(new Error('Database error'));
 
       // Should not throw
-      await expect(service.onModuleInit()).resolves.not.toThrow();
+      await expect(service.onApplicationBootstrap()).resolves.not.toThrow();
 
       expect(clientService.connect).not.toHaveBeenCalled();
     });

@@ -3,6 +3,7 @@ import { useAuth } from '../../../hooks/use-auth';
 import { useOnboarding } from '../../../hooks/use-onboarding';
 import { API_BASE_URL } from '../../../lib/config';
 import { toast } from '../../../lib/toast';
+import { isDiscordLinked } from '../../../lib/avatar';
 
 interface SecureAccountStepProps {
   onNext: () => void;
@@ -43,8 +44,7 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
   const [showPasswords, setShowPasswords] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
 
-  const hasDiscordLinked =
-    user?.discordId != null && !user.discordId.startsWith('local:');
+  const hasDiscordLinked = isDiscordLinked(user?.discordId);
 
   const strength = getPasswordStrength(newPassword);
   const passwordsMatch = newPassword === confirmPassword;

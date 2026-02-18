@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
     useNotificationPreferences,
     type NotificationType,
@@ -31,24 +32,14 @@ const NOTIFICATION_TYPE_META: {
         description: 'Activity for games you follow',
     },
     {
-        type: 'achievement_unlocked',
-        label: 'Achievements',
-        description: 'When you earn an achievement',
-    },
-    {
-        type: 'level_up',
-        label: 'Level Up',
-        description: 'When you reach a new level',
-    },
-    {
         type: 'missed_event_nudge',
         label: 'Missed Event Nudge',
         description: 'Suggestions to update your game time',
     },
 ];
 
-/** Channel metadata for column headers */
-const CHANNEL_META: { channel: Channel; label: string }[] = [
+/** All possible channel metadata */
+const ALL_CHANNEL_META: { channel: Channel; label: string }[] = [
     { channel: 'inApp', label: 'In-App' },
     { channel: 'push', label: 'Push' },
     { channel: 'discord', label: 'Discord' },
@@ -145,12 +136,21 @@ function PreferencesSkeleton() {
 }
 
 /**
- * Notification preferences section for the Profile Page (ROK-179).
+ * Notification preferences section for the Profile Page (ROK-179, ROK-180).
  * Shows a per-type-per-channel toggle matrix with icon buttons.
+ * Discord column is only shown when user has Discord linked AND bot is connected (AC-7).
  */
 export function NotificationPreferencesSection() {
-    const { preferences, isLoading, updatePreferences } =
+    const { preferences, isLoading, updatePreferences, channelAvailability } =
         useNotificationPreferences();
+
+    // ROK-180 AC-7: Filter channels based on availability
+    const visibleChannels = useMemo(() => {
+        const discordAvailable = channelAvailability?.discord?.available ?? false;
+        return ALL_CHANNEL_META.filter(
+            ({ channel }) => channel !== 'discord' || discordAvailable,
+        );
+    }, [channelAvailability]);
 
     function handleToggle(type: NotificationType, channel: Channel) {
         if (!preferences) return;
@@ -177,7 +177,7 @@ export function NotificationPreferencesSection() {
                     <div className="flex items-center mb-2">
                         <div className="flex-1" />
                         <div className="flex gap-2 sm:gap-4">
-                            {CHANNEL_META.map(({ channel, label }) => (
+                            {visibleChannels.map(({ channel, label }) => (
                                 <div
                                     key={channel}
                                     className="w-10 sm:w-12 flex flex-col items-center"
@@ -212,7 +212,7 @@ export function NotificationPreferencesSection() {
 
                                 {/* Channel toggles */}
                                 <div className="flex gap-2 sm:gap-4 shrink-0">
-                                    {CHANNEL_META.map(({ channel }) => {
+                                    {visibleChannels.map(({ channel }) => {
                                         const active =
                                             preferences.channelPrefs[type]?.[channel] ?? false;
                                         return (
@@ -242,6 +242,13 @@ export function NotificationPreferencesSection() {
                             </div>
                         ))}
                     </div>
+
+                    {/* Discord availability hint (ROK-180 AC-7) */}
+                    {channelAvailability?.discord && !channelAvailability.discord.available && channelAvailability.discord.reason && (
+                        <p className="text-xs text-muted mt-4 italic">
+                            {channelAvailability.discord.reason}
+                        </p>
+                    )}
                 </div>
             )}
         </div>

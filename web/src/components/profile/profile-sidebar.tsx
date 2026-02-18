@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import { SECTIONS } from './profile-nav-data';
 
 interface ProfileSidebarProps {
@@ -10,6 +12,16 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
+    const { data: systemStatus } = useSystemStatus();
+
+    // Hide Discord nav item when Discord OAuth is not configured
+    const sections = useMemo(() => {
+        if (systemStatus?.discordConfigured) return SECTIONS;
+        return SECTIONS.map((section) => ({
+            ...section,
+            children: section.children.filter((child) => child.to !== '/profile/identity/discord'),
+        }));
+    }, [systemStatus?.discordConfigured]);
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
@@ -23,7 +35,7 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     return (
         <nav className="w-full h-full overflow-y-auto py-4 pr-2" aria-label="Profile navigation">
             <div className="space-y-4">
-                {SECTIONS.map((section) => (
+                {sections.map((section) => (
                     <div key={section.id}>
                         <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
                             <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">

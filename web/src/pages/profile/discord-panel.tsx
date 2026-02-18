@@ -1,14 +1,22 @@
+import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 
 export function ProfileDiscordPanel() {
     const { user } = useAuth();
+    const { data: systemStatus } = useSystemStatus();
 
     if (!user) return null;
 
-    const hasDiscordLinked = Boolean(user.discordId && !user.discordId.startsWith('local:'));
+    // Redirect away if Discord OAuth isn't configured (prevents direct URL access)
+    if (systemStatus && !systemStatus.discordConfigured) {
+        return <Navigate to="/profile/identity" replace />;
+    }
+
+    const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
 
     const handleLinkDiscord = () => {

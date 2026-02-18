@@ -246,7 +246,9 @@ describe('DiscordBotClientService', () => {
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
-      const destroySpy = jest.spyOn(mockClient, 'destroy').mockResolvedValue();
+      const destroySpy = jest
+        .spyOn(mockClient, 'destroy')
+        .mockResolvedValue(undefined);
 
       await service.disconnect();
 
@@ -448,6 +450,135 @@ describe('DiscordBotClientService', () => {
 
       await expect(
         service.sendDirectMessage(discordId, message),
+      ).rejects.toThrow('Cannot send messages to this user');
+    });
+  });
+
+  describe('sendEmbedDM', () => {
+    it('should send embed DM when connected', async () => {
+      const token = 'valid-token';
+      const discordId = '123456789';
+
+      const connectPromise = service.connect(token);
+      mockClient = getClient(service)!;
+      mockClient.user = { tag: 'Bot#1234' };
+      mockClient.isReady.mockReturnValue(true);
+      mockClient.emit(Events.ClientReady);
+      await connectPromise;
+
+      const mockUser = {
+        send: jest.fn().mockResolvedValue(undefined),
+      };
+      mockClient.users.fetch.mockResolvedValue(mockUser);
+
+      const mockEmbed = { toJSON: () => ({}) };
+      const mockRow = { toJSON: () => ({ components: [] }) };
+
+      await service.sendEmbedDM(
+        discordId,
+        mockEmbed as unknown as Parameters<typeof service.sendEmbedDM>[1],
+        mockRow as unknown as Parameters<typeof service.sendEmbedDM>[2],
+      );
+
+      expect(mockClient.users.fetch).toHaveBeenCalledWith(discordId);
+      expect(mockUser.send).toHaveBeenCalledWith({
+        embeds: [mockEmbed],
+        components: [mockRow],
+      });
+    });
+
+    it('should send embed without row when row is not provided', async () => {
+      const token = 'valid-token';
+      const discordId = '123456789';
+
+      const connectPromise = service.connect(token);
+      mockClient = getClient(service)!;
+      mockClient.user = { tag: 'Bot#1234' };
+      mockClient.isReady.mockReturnValue(true);
+      mockClient.emit(Events.ClientReady);
+      await connectPromise;
+
+      const mockUser = {
+        send: jest.fn().mockResolvedValue(undefined),
+      };
+      mockClient.users.fetch.mockResolvedValue(mockUser);
+
+      const mockEmbed = { toJSON: () => ({}) };
+
+      await service.sendEmbedDM(
+        discordId,
+        mockEmbed as Parameters<typeof service.sendEmbedDM>[1],
+      );
+
+      expect(mockUser.send).toHaveBeenCalledWith({
+        embeds: [mockEmbed],
+      });
+      // components key should NOT be present
+      const sendCalls = mockUser.send.mock.calls as Array<
+        [{ embeds: unknown[]; components?: unknown[] }]
+      >;
+      expect(sendCalls[0][0].components).toBeUndefined();
+    });
+
+    it('should throw when not connected', async () => {
+      const mockEmbed = { toJSON: () => ({}) };
+
+      await expect(
+        service.sendEmbedDM(
+          '123456',
+          mockEmbed as Parameters<typeof service.sendEmbedDM>[1],
+        ),
+      ).rejects.toThrow('Discord bot is not connected');
+    });
+
+    it('should throw when user fetch fails', async () => {
+      const token = 'valid-token';
+      const discordId = '999999999';
+
+      const connectPromise = service.connect(token);
+      mockClient = getClient(service)!;
+      mockClient.user = { tag: 'Bot#1234' };
+      mockClient.isReady.mockReturnValue(true);
+      mockClient.emit(Events.ClientReady);
+      await connectPromise;
+
+      const error = new Error('Unknown User');
+      mockClient.users.fetch.mockRejectedValue(error);
+
+      const mockEmbed = { toJSON: () => ({}) };
+
+      await expect(
+        service.sendEmbedDM(
+          discordId,
+          mockEmbed as Parameters<typeof service.sendEmbedDM>[1],
+        ),
+      ).rejects.toThrow('Unknown User');
+    });
+
+    it('should throw when send fails (e.g. DMs disabled)', async () => {
+      const token = 'valid-token';
+      const discordId = '123456789';
+
+      const connectPromise = service.connect(token);
+      mockClient = getClient(service)!;
+      mockClient.user = { tag: 'Bot#1234' };
+      mockClient.isReady.mockReturnValue(true);
+      mockClient.emit(Events.ClientReady);
+      await connectPromise;
+
+      const error = new Error('Cannot send messages to this user');
+      const mockUser = {
+        send: jest.fn().mockRejectedValue(error),
+      };
+      mockClient.users.fetch.mockResolvedValue(mockUser);
+
+      const mockEmbed = { toJSON: () => ({}) };
+
+      await expect(
+        service.sendEmbedDM(
+          discordId,
+          mockEmbed as Parameters<typeof service.sendEmbedDM>[1],
+        ),
       ).rejects.toThrow('Cannot send messages to this user');
     });
   });

@@ -1,24 +1,32 @@
 import {
   Controller,
   Get,
+  Post,
+  Body,
   Req,
   UseGuards,
   Res,
   Query,
-  HttpException,
   HttpStatus,
   Logger,
+  Optional,
+  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
+import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
+import { SignupsService } from '../events/signups.service';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
+import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
+import { RedeemIntentSchema } from '@raid-ledger/contract';
+import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
@@ -41,10 +49,15 @@ export class AuthController {
 
   constructor(
     private authService: AuthService,
+    private intentTokenService: IntentTokenService,
     private usersService: UsersService,
+    private signupsService: SignupsService,
     private configService: ConfigService,
     private jwtService: JwtService,
     private settingsService: SettingsService,
+    @Optional()
+    @Inject(DiscordNotificationService)
+    private discordNotificationService: DiscordNotificationService | null,
   ) {}
 
   /**
@@ -145,12 +158,16 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const clientUrl = this.getClientUrl(req);
+
     // Verify JWT from query param (browser redirects can't send headers)
+    // NOTE: Must handle errors with res.status() instead of throwing HttpException
+    // because @Res() bypasses NestJS exception filters (isHeadersSent crash).
     if (!token) {
-      throw new HttpException(
-        'Authentication token required',
-        HttpStatus.UNAUTHORIZED,
-      );
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: 'Authentication token required' });
+      return;
     }
 
     let userId: number;
@@ -158,19 +175,19 @@ export class AuthController {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       userId = this.jwtService.verify(token).sub;
     } catch {
-      throw new HttpException(
-        'Invalid or expired token',
-        HttpStatus.UNAUTHORIZED,
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
       );
+      return;
     }
 
     // Get OAuth config from database settings (ROK-146)
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) {
-      throw new HttpException(
-        'Discord OAuth is not configured',
-        HttpStatus.SERVICE_UNAVAILABLE,
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
       );
+      return;
     }
 
     // Create SIGNED state with user ID and action for linking
@@ -302,6 +319,17 @@ export class AuthController {
         discordProfile.avatar,
       );
 
+      // Send welcome DM now that Discord is linked (ROK-180 AC-1)
+      if (this.discordNotificationService) {
+        this.discordNotificationService
+          .sendWelcomeDM(userId)
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `Failed to send welcome DM after link: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            );
+          });
+      }
+
       // Redirect to profile with success
       res.redirect(`${clientUrl}/profile?linked=success`);
     } catch (error) {
@@ -331,5 +359,63 @@ export class AuthController {
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
     };
+  }
+
+  /**
+   * POST /auth/redeem-intent
+   * Validates an intent token and processes the deferred signup (ROK-137).
+   * Called after Discord OAuth completes for the "Join & Sign Up" flow.
+   * Requires authentication (user just completed OAuth).
+   */
+  @RateLimit('auth')
+  @Post('redeem-intent')
+  @UseGuards(AuthGuard('jwt'))
+  async redeemIntent(
+    @Req() req: RequestWithUser,
+    @Body() body: unknown,
+  ): Promise<RedeemIntentResponseDto> {
+    const dto = RedeemIntentSchema.parse(body);
+
+    const payload = this.intentTokenService.validate(dto.token);
+    if (!payload) {
+      return {
+        success: false,
+        message: 'Intent token is invalid, expired, or already used',
+      };
+    }
+
+    try {
+      // Auto-complete the signup
+      await this.signupsService.signup(payload.eventId, req.user.id);
+
+      // Claim any anonymous signups this Discord user had
+      if (req.user.id) {
+        const user = await this.usersService.findById(req.user.id);
+        if (user?.discordId) {
+          await this.signupsService.claimAnonymousSignups(
+            user.discordId,
+            req.user.id,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Redeemed intent token: user ${req.user.id} signed up for event ${payload.eventId}`,
+      );
+
+      return {
+        success: true,
+        eventId: payload.eventId,
+        message: "You're signed up!",
+      };
+    } catch (error) {
+      this.logger.error('Failed to redeem intent token:', error);
+      return {
+        success: false,
+        eventId: payload.eventId,
+        message:
+          error instanceof Error ? error.message : 'Failed to process signup',
+      };
+    }
   }
 }

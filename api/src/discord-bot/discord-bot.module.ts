@@ -1,14 +1,28 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { SettingsModule } from '../settings/settings.module';
+import { AuthModule } from '../auth/auth.module';
+import { EventsModule } from '../events/events.module';
+import { UsersModule } from '../users/users.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
 import { DiscordEventListener } from './listeners/event.listener';
+import { InteractionListener } from './listeners/interaction.listener';
+import { SignupInteractionListener } from './listeners/signup-interaction.listener';
+import { RegisterCommandsService } from './commands/register-commands';
+import { EventCreateCommand } from './commands/event-create.command';
+import { EventsListCommand } from './commands/events-list.command';
+import { RosterViewCommand } from './commands/roster-view.command';
 
 @Module({
-  imports: [SettingsModule],
+  imports: [
+    SettingsModule,
+    forwardRef(() => UsersModule),
+    forwardRef(() => EventsModule),
+    forwardRef(() => AuthModule),
+  ],
   controllers: [DiscordBotSettingsController],
   providers: [
     DiscordBotService,
@@ -16,7 +30,18 @@ import { DiscordEventListener } from './listeners/event.listener';
     DiscordEmbedFactory,
     ChannelResolverService,
     DiscordEventListener,
+    InteractionListener,
+    SignupInteractionListener,
+    RegisterCommandsService,
+    EventCreateCommand,
+    EventsListCommand,
+    RosterViewCommand,
   ],
-  exports: [DiscordBotService, DiscordEmbedFactory, DiscordEventListener],
+  exports: [
+    DiscordBotService,
+    DiscordBotClientService,
+    DiscordEmbedFactory,
+    DiscordEventListener,
+  ],
 })
 export class DiscordBotModule {}

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
-import { useSignup, useCancelSignup } from '../hooks/use-signups';
+import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
@@ -15,6 +15,7 @@ import { AttendeeAvatars } from '../components/calendar/AttendeeAvatars';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { PugSection } from '../components/pugs';
 import { PluginSlot } from '../plugins';
@@ -40,6 +41,9 @@ export function EventDetailPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const eventId = Number(id);
+
+    // ROK-180 AC-4: Mark notification as read when arriving from Discord DM link
+    useNotifReadSync();
     const navState = location.state as { fromCalendar?: boolean; calendarDate?: string; calendarView?: string } | null;
     // Only treat as "from calendar" if the state includes the calendar date (guards against stale state)
     const fromCalendar = navState?.fromCalendar === true && !!navState?.calendarDate;
@@ -74,6 +78,7 @@ export function EventDetailPage() {
 
     const signup = useSignup(eventId);
     const cancelSignup = useCancelSignup(eventId);
+    const updateStatus = useUpdateSignupStatus(eventId);
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
@@ -210,8 +215,12 @@ export function EventDetailPage() {
     // Group signups by status for roster display, sorted alphabetically (ROK-300)
     const alphabetical = (a: { user: { username: string } }, b: { user: { username: string } }) =>
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
-    const confirmedSignups = (roster?.signups.filter(s => s.confirmationStatus === 'confirmed') || []).sort(alphabetical);
-    const pendingSignups = (roster?.signups.filter(s => s.confirmationStatus === 'pending') || []).sort(alphabetical);
+    // Filter out declined signups from display
+    const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
+    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus === 'confirmed').sort(alphabetical);
+    const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending').sort(alphabetical);
+    // tentativeSignups can be used to show a separate section if needed
+    // const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
 
     return (
         <div className="event-detail-page pb-20 md:pb-0">
@@ -365,13 +374,38 @@ export function EventDetailPage() {
                                 </Link>
                             )}
                             {isSignedUp && (
-                                <button
-                                    onClick={handleCancel}
-                                    disabled={cancelSignup.isPending}
-                                    className="btn btn-danger btn-sm"
-                                >
-                                    {cancelSignup.isPending ? 'Leaving...' : 'Leave Event'}
-                                </button>
+                                <div className="flex items-center gap-1.5">
+                                    {/* ROK-137: Status toggle buttons */}
+                                    {userSignup?.status === 'tentative' && (
+                                        <button
+                                            onClick={() => updateStatus.mutate('signed_up')}
+                                            disabled={updateStatus.isPending}
+                                            className="btn btn-primary btn-sm"
+                                        >
+                                            Confirm
+                                        </button>
+                                    )}
+                                    {userSignup?.status !== 'tentative' && (
+                                        <button
+                                            onClick={() => {
+                                                updateStatus.mutate('tentative');
+                                                toast.info('Marked as tentative');
+                                            }}
+                                            disabled={updateStatus.isPending}
+                                            className="btn btn-secondary btn-sm"
+                                            title="Mark as tentative"
+                                        >
+                                            Tentative
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={handleCancel}
+                                        disabled={cancelSignup.isPending}
+                                        className="btn btn-danger btn-sm"
+                                    >
+                                        {cancelSignup.isPending ? 'Leaving...' : 'Leave'}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
@@ -513,14 +547,24 @@ export function EventDetailPage() {
                         <h3><span role="img" aria-hidden="true">⏳</span> Pending ({pendingSignups.length})</h3>
                         <div className="event-detail-roster__list">
                             {pendingSignups.map(signup => (
-                                <div key={signup.id} className="event-detail-roster__item event-detail-roster__item--pending">
-                                    <UserLink
-                                        userId={signup.user.id}
-                                        username={signup.user.username}
-                                        user={toAvatarUser(signup.user)}
-                                        showAvatar
-                                        size="md"
-                                    />
+                                <div key={signup.id} className="event-detail-roster__item event-detail-roster__item--pending flex items-center gap-2">
+                                    {signup.isAnonymous ? (
+                                        <span className="flex items-center gap-1.5 text-sm text-muted">
+                                            <span>{signup.discordUsername ?? signup.user.username}</span>
+                                            <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
+                                        </span>
+                                    ) : (
+                                        <UserLink
+                                            userId={signup.user.id}
+                                            username={signup.user.username}
+                                            user={toAvatarUser(signup.user)}
+                                            showAvatar
+                                            size="md"
+                                        />
+                                    )}
+                                    {signup.status === 'tentative' && (
+                                        <span className="text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">tentative</span>
+                                    )}
                                 </div>
                             ))}
                         </div>

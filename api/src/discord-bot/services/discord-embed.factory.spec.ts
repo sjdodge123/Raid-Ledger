@@ -87,9 +87,9 @@ describe('DiscordEmbedFactory', () => {
       const json = embed.toJSON();
 
       expect(json.description).toContain('ROSTER:');
-      expect(json.description).toContain('Tanks:');
-      expect(json.description).toContain('Healers:');
-      expect(json.description).toContain('DPS:');
+      expect(json.description).toContain('Tanks (');
+      expect(json.description).toContain('Healers (');
+      expect(json.description).toContain('DPS (');
     });
 
     it('should set game art as thumbnail', () => {
@@ -107,15 +107,23 @@ describe('DiscordEmbedFactory', () => {
       expect(json.footer?.text).toContain('View in Raid Ledger');
     });
 
-    it('should include a View Event URL button', () => {
+    it('should include signup action buttons and a View Event link button', () => {
       const { row } = factory.buildEventAnnouncement(baseEvent, baseContext);
 
       expect(row).toBeDefined();
-      const components = row!.toJSON().components;
-      expect(components).toHaveLength(1);
-      const button = components[0] as { label?: string; url?: string };
-      expect(button.label).toBe('View Event');
-      expect(button.url).toBe('http://localhost:5173/events/42');
+      const components = row!.toJSON().components as {
+        label?: string;
+        url?: string;
+        custom_id?: string;
+        style?: number;
+      }[];
+      expect(components).toHaveLength(4);
+      expect(components[0].label).toBe('Sign Up');
+      expect(components[0].style).toBe(3); // ButtonStyle.Success
+      expect(components[1].label).toBe('Tentative');
+      expect(components[2].label).toBe('Decline');
+      expect(components[3].label).toBe('View Event');
+      expect(components[3].url).toBe('http://localhost:5173/events/42');
     });
 
     it('should handle events without game data', () => {
@@ -179,7 +187,7 @@ describe('DiscordEmbedFactory', () => {
       expect(json.description).not.toContain('ROSTER');
     });
 
-    it('should omit View Event button when no client URL', () => {
+    it('should omit View Event link button when no client URL but keep signup buttons', () => {
       const noUrlContext: EmbedContext = {
         communityName: 'Test',
         clientUrl: null,
@@ -189,7 +197,13 @@ describe('DiscordEmbedFactory', () => {
 
       const { row } = factory.buildEventAnnouncement(baseEvent, noUrlContext);
 
-      expect(row).toBeUndefined();
+      expect(row).toBeDefined();
+      const components = row!.toJSON().components as { label?: string }[];
+      // Should have 3 signup buttons but no View Event link
+      expect(components).toHaveLength(3);
+      expect(components[0].label).toBe('Sign Up');
+      expect(components[1].label).toBe('Tentative');
+      expect(components[2].label).toBe('Decline');
 
       process.env.CLIENT_URL = origEnv;
     });

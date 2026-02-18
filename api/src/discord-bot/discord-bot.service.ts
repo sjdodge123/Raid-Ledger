@@ -1,7 +1,7 @@
 import {
   Injectable,
   Logger,
-  OnModuleInit,
+  OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -15,7 +15,9 @@ import { friendlyDiscordErrorMessage } from './discord-bot.constants';
 import type { DiscordBotStatusResponse } from '@raid-ledger/contract';
 
 @Injectable()
-export class DiscordBotService implements OnModuleInit, OnModuleDestroy {
+export class DiscordBotService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(DiscordBotService.name);
 
   constructor(
@@ -25,8 +27,10 @@ export class DiscordBotService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Auto-connect on startup if configured and enabled.
+   * Uses OnApplicationBootstrap (not OnModuleInit) so that @OnEvent listeners
+   * from EventEmitterModule are registered before the CONNECTED event fires.
    */
-  async onModuleInit(): Promise<void> {
+  async onApplicationBootstrap(): Promise<void> {
     try {
       const config = await this.settingsService.getDiscordBotConfig();
       if (config?.enabled) {

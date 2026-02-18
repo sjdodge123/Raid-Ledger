@@ -61,6 +61,24 @@ export function AuthSuccessPage() {
                         }
                     }
 
+                    // ROK-137: Check for stored join intent from Discord signup flow
+                    const storedIntent = sessionStorage.getItem('join_intent');
+                    if (storedIntent) {
+                        sessionStorage.removeItem('join_intent');
+                        try {
+                            const intentData = JSON.parse(storedIntent) as {
+                                intent: string;
+                                eventId: string;
+                                token: string;
+                            };
+                            const joinUrl = `/join?intent=${intentData.intent}&eventId=${intentData.eventId}&token=${encodeURIComponent(intentData.token)}`;
+                            navigate(joinUrl, { replace: true });
+                            return;
+                        } catch {
+                            // Invalid stored intent, fall through to normal redirect
+                        }
+                    }
+
                     const redirectTo = consumeAuthRedirect() || '/calendar';
                     toast.success('Logged in successfully!');
                     navigate(redirectTo, { replace: true });

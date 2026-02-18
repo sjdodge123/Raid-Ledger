@@ -4,7 +4,9 @@
  */
 
 function loadInstrument(env: Record<string, string | undefined> = {}): {
-  sentryInitMock: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
+  sentryInitMock: jest.MockedFunction<
+    (options?: Record<string, unknown>) => void
+  >;
 } {
   // Save and restore env
   const saved: Record<string, string | undefined> = {};
@@ -56,7 +58,9 @@ describe('Sentry instrument.ts', () => {
   });
 
   describe('when telemetry is enabled (default)', () => {
-    let sentryInitMock: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
+    let sentryInitMock: jest.MockedFunction<
+      (options?: Record<string, unknown>) => void
+    >;
 
     beforeEach(() => {
       ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: undefined }));
@@ -143,10 +147,15 @@ describe('Sentry instrument.ts', () => {
   });
 
   describe('when NODE_ENV=production', () => {
-    let sentryInitMock: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
+    let sentryInitMock: jest.MockedFunction<
+      (options?: Record<string, unknown>) => void
+    >;
 
     beforeEach(() => {
-      ({ sentryInitMock } = loadInstrument({ NODE_ENV: 'production', DISABLE_TELEMETRY: undefined }));
+      ({ sentryInitMock } = loadInstrument({
+        NODE_ENV: 'production',
+        DISABLE_TELEMETRY: undefined,
+      }));
     });
 
     it('sets tracesSampleRate to 0.1 in production', () => {
@@ -170,7 +179,9 @@ describe('Sentry instrument.ts', () => {
   });
 
   describe('when DISABLE_TELEMETRY=true', () => {
-    let sentryInitMock: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
+    let sentryInitMock: jest.MockedFunction<
+      (options?: Record<string, unknown>) => void
+    >;
 
     beforeEach(() => {
       ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: 'true' }));
@@ -182,7 +193,9 @@ describe('Sentry instrument.ts', () => {
   });
 
   describe('when DISABLE_TELEMETRY is not set', () => {
-    let sentryInitMock: jest.MockedFunction<(options?: Record<string, unknown>) => void>;
+    let sentryInitMock: jest.MockedFunction<
+      (options?: Record<string, unknown>) => void
+    >;
 
     beforeEach(() => {
       ({ sentryInitMock } = loadInstrument({ DISABLE_TELEMETRY: undefined }));

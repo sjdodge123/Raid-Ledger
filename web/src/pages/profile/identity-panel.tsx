@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
 import { RoleBadge } from '../../components/ui/role-badge';
 import { toast } from '../../lib/toast';
 import { AvatarSelectorModal } from '../../components/profile/AvatarSelectorModal';
@@ -15,7 +15,7 @@ function buildAvatarOptions(user: { discordId: string | null; avatar: string | n
     if (user.customAvatarUrl) {
         options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom' });
     }
-    const hasDiscordLinked = user.discordId && !user.discordId.startsWith('local:');
+    const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     if (hasDiscordLinked && discordUrl) {
         options.push({ url: discordUrl, label: 'Discord' });
@@ -103,7 +103,7 @@ export function IdentityPanel() {
                             <span className="text-lg font-bold text-foreground">{user.username}</span>
                             <RoleBadge role={user.role} />
                         </div>
-                        <p className="text-sm text-muted mt-0.5">{user.discordId && !user.discordId.startsWith('local:') ? 'Discord linked' : 'Local account'}</p>
+                        <p className="text-sm text-muted mt-0.5">{isDiscordLinked(user.discordId) ? 'Discord linked' : 'Local account'}</p>
                     </div>
                 </div>
             </div>

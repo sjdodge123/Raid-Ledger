@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
   ForbiddenException,
+  Optional,
 } from '@nestjs/common';
 import { eq, and, isNull, desc, lt, not } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -14,6 +15,7 @@ import {
   type ChannelPrefs,
   type NotificationType,
 } from '../drizzle/schema/notification-preferences';
+import { DiscordNotificationService } from './discord-notification.service';
 
 export type { ChannelPrefs, NotificationType };
 export type Channel = 'inApp' | 'push' | 'discord';
@@ -61,6 +63,9 @@ export class NotificationService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    @Optional()
+    @Inject(DiscordNotificationService)
+    private discordNotificationService: DiscordNotificationService | null,
   ) {}
 
   /**
@@ -98,6 +103,24 @@ export class NotificationService {
     this.logger.log(
       `Created notification ${created.id} for user ${input.userId} (${input.type})`,
     );
+
+    // Dispatch to Discord channel (ROK-180 AC-2)
+    if (this.discordNotificationService) {
+      this.discordNotificationService
+        .dispatch({
+          notificationId: created.id,
+          userId: input.userId,
+          type: input.type,
+          title: input.title,
+          message: input.message,
+          payload: input.payload,
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to dispatch Discord notification: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+    }
 
     return this.mapToDto(created);
   }
@@ -256,6 +279,15 @@ export class NotificationService {
       }
     }
 
+    // Check if Discord is being enabled for the first time (AC-1 welcome DM trigger)
+    const discordWasEnabled = Object.values(current.channelPrefs).some(
+      (ch) => ch.discord === true,
+    );
+    const discordNowEnabled = Object.values(merged).some(
+      (ch) => ch.discord === true,
+    );
+    const discordJustEnabled = !discordWasEnabled && discordNowEnabled;
+
     const [updated] = await this.db
       .update(schema.userNotificationPreferences)
       .set({ channelPrefs: merged })
@@ -263,6 +295,18 @@ export class NotificationService {
       .returning();
 
     this.logger.log(`User ${userId} updated notification preferences`);
+
+    // Send welcome DM if Discord was just enabled (AC-1)
+    if (discordJustEnabled && this.discordNotificationService) {
+      this.discordNotificationService
+        .sendWelcomeDM(userId)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to send welcome DM: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+    }
+
     return this.mapPreferencesToDto(updated);
   }
 

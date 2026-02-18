@@ -139,6 +139,14 @@ export class DiscordBotClientService {
     return this.client?.isReady() ?? false;
   }
 
+  /**
+   * Get the underlying Discord.js Client instance.
+   * Used by interaction handlers to register event listeners.
+   */
+  getClient(): Client | null {
+    return this.client;
+  }
+
   isConnecting(): boolean {
     return this.connecting;
   }
@@ -175,12 +183,52 @@ export class DiscordBotClientService {
   }
 
   /**
+   * Send a rich embed DM to a user by their Discord ID.
+   * Used by the Discord notification system (ROK-180).
+   */
+  async sendEmbedDM(
+    discordId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<void> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+
+    try {
+      const user = await this.client.users.fetch(discordId);
+      const messagePayload: {
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+      } = { embeds: [embed] };
+
+      if (row) {
+        messagePayload.components = [row];
+      }
+
+      await user.send(messagePayload);
+    } catch (error) {
+      this.logger.error(`Failed to send embed DM to ${discordId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the guild ID of the first (primary) guild the bot is in.
    */
   getGuildId(): string | null {
     if (!this.client?.isReady()) return null;
     const guild = this.client.guilds.cache.first();
     return guild?.id ?? null;
+  }
+
+  /**
+   * Get the bot's application/client ID.
+   * Used for slash command registration.
+   */
+  getClientId(): string | null {
+    if (!this.client?.isReady()) return null;
+    return this.client.user?.id ?? null;
   }
 
   /**

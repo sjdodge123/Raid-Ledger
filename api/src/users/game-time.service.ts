@@ -426,13 +426,17 @@ export class GameTimeService {
         const eventSignups = allSignups.filter(
           (s) => s.eventId === eventId && s.rowNum <= 6,
         );
-        for (const s of eventSignups) allSignupUsers.push(s.userId);
+        for (const s of eventSignups) {
+          if (s.userId !== null) allSignupUsers.push(s.userId);
+        }
         signupsMap.set(eventId, {
-          preview: eventSignups.map((s) => ({
-            id: s.userId,
-            username: s.username,
-            avatar: s.avatar,
-          })),
+          preview: eventSignups
+            .filter((s) => s.userId !== null)
+            .map((s) => ({
+              id: s.userId as number,
+              username: s.username,
+              avatar: s.avatar,
+            })),
           count: countMap.get(eventId) ?? 0,
         });
       }
