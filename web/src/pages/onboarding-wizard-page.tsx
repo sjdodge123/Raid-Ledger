@@ -5,6 +5,7 @@ import { useCompleteOnboardingFte } from '../hooks/use-onboarding-fte';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useUserHeartedGames } from '../hooks/use-user-profile';
 import { useMyCharacters } from '../hooks/use-characters';
+import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
 import { ConnectStep } from '../components/onboarding/connect-step';
 import { GamesStep } from '../components/onboarding/games-step';
@@ -131,6 +132,7 @@ export function OnboardingWizardPage() {
     const completeOnboarding = useCompleteOnboardingFte();
     const { games: registryGames } = useGameRegistry();
     const { data: heartedGamesData } = useUserHeartedGames(user?.id);
+    const { data: systemStatus } = useSystemStatus();
 
     const [currentStep, setCurrentStep] = useState(0);
     // Extra character steps beyond the initial one per game
@@ -138,11 +140,13 @@ export function OnboardingWizardPage() {
 
     const isRerun = searchParams.get('rerun') === '1';
 
-    // Determine if user needs the connect step (no OAuth linked)
+    // Determine if user needs the connect step (no OAuth linked AND Discord is configured)
     const needsConnect = useMemo(() => {
         if (!user) return false;
+        const discordConfigured = systemStatus?.discordConfigured ?? false;
+        if (!discordConfigured) return false;
         return !user.discordId || user.discordId.startsWith('local:');
-    }, [user]);
+    }, [user, systemStatus]);
 
     // Qualifying games = hearted games that exist in the game registry (by name).
     // We match by name because IGDB slugs differ from registry slugs

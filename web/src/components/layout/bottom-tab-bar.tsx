@@ -26,6 +26,10 @@ export function BottomTabBar() {
     const scrollDirection = useScrollDirection();
     const isHidden = scrollDirection === 'down';
 
+    // Hide tab bar on full-screen modal routes (onboarding wizard, admin setup)
+    const isModalRoute = location.pathname === '/onboarding' || location.pathname === '/setup';
+    if (isModalRoute) return null;
+
     const isActive = (path: string) => location.pathname.startsWith(path);
 
     return (
