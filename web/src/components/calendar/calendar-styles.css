@@ -768,7 +768,7 @@
     position: relative;
 }
 
-/* Day view: allow event content to overflow for action buttons */
+/* Day view: allow event content to expand beyond time-slot height */
 .calendar-view-day .rbc-time-view .rbc-event {
     overflow: visible;
     height: auto !important;
@@ -777,6 +777,10 @@
 
 .calendar-view-day .rbc-time-view .rbc-event-content {
     overflow: visible;
+    height: auto;
+}
+
+.calendar-view-day .day-event-block {
     height: auto;
 }
 
@@ -1077,7 +1081,6 @@
 @media (max-width: 768px) {
     .day-event-block {
         flex-direction: column;
-        overflow: hidden;
     }
 
     .day-event-content {
@@ -1157,20 +1160,21 @@
     align-items: center;
     justify-content: center;
     height: 36px;
-    padding: 0 0.875rem;
-    font-size: 0.875rem;
+    padding: 0 1rem;
+    font-size: 0.8125rem;
     font-weight: 600;
-    background: rgba(16, 185, 129, 0.2);
-    border: 1px solid rgba(16, 185, 129, 0.4);
+    background: #10b981;
+    border: 1px solid #10b981;
     border-radius: 0.5rem;
-    color: #10b981;
+    color: #fff;
     cursor: pointer;
     transition: all 0.15s ease;
     white-space: nowrap;
 }
 
 .calendar-mobile-nav-today:hover {
-    background: rgba(16, 185, 129, 0.35);
+    background: #34d399;
+    border-color: #34d399;
 }
 
 /* ============================================
@@ -1630,11 +1634,12 @@
 }
 
 [data-scheme="light"] .calendar-mobile-nav-today {
-    background: rgba(16, 185, 129, 0.15);
-    border-color: rgba(16, 185, 129, 0.35);
-    color: #059669;
+    background: #059669;
+    border-color: #059669;
+    color: #fff;
 }
 
 [data-scheme="light"] .calendar-mobile-nav-today:hover {
-    background: rgba(16, 185, 129, 0.25);
+    background: #10b981;
+    border-color: #10b981;
 }
