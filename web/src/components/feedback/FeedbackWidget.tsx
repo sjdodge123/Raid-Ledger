@@ -130,20 +130,20 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
         }
 
         // Dual-send: POST /feedback saves to local DB (persistent record for admin panel),
-        // then Sentry.captureFeedback() forwards to the maintainer's Sentry project
-        // for triaging and automatic GitHub issue creation via Sentry alert rules.
+        // then Sentry.captureMessage() forwards to the maintainer's Sentry project
+        // as an issue, triggering alert rules for automatic GitHub issue creation.
         submitFeedback.mutate(payload, {
             onSuccess: (data) => {
-                // Send feedback to Sentry for maintainer visibility (ROK-306)
+                // Send feedback to Sentry as an issue for maintainer visibility (ROK-306)
                 try {
-                    Sentry.captureFeedback({
-                        message: `[${category.toUpperCase()}] ${message}`,
-                        name: 'User Feedback',
-                    }, {
-                        captureContext: {
+                    Sentry.captureMessage(
+                        `[${category.toUpperCase()}] ${message}`,
+                        {
+                            level: category === 'bug' ? 'error' : 'info',
                             tags: {
                                 feedback_category: category,
                                 feedback_id: String(data.id),
+                                source: 'feedback_widget',
                             },
                             contexts: {
                                 feedback: {
@@ -153,7 +153,7 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
                                 },
                             },
                         },
-                    });
+                    );
                 } catch {
                     // Sentry capture is best-effort — don't break the user flow
                 }
