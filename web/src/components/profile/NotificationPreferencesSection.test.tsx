@@ -129,15 +129,16 @@ describe('NotificationPreferencesSection', () => {
     });
 
     describe('Notification type rows', () => {
-        it('renders all 7 notification type labels', () => {
+        it('renders visible notification type labels (Achievements and Level Up hidden)', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
             expect(screen.getByText('Event Reminders')).toBeInTheDocument();
             expect(screen.getByText('New Events')).toBeInTheDocument();
             expect(screen.getByText('Subscribed Games')).toBeInTheDocument();
-            expect(screen.getByText('Achievements')).toBeInTheDocument();
-            expect(screen.getByText('Level Up')).toBeInTheDocument();
             expect(screen.getByText('Missed Event Nudge')).toBeInTheDocument();
+            // Achievements and Level Up are hidden until those features are implemented
+            expect(screen.queryByText('Achievements')).not.toBeInTheDocument();
+            expect(screen.queryByText('Level Up')).not.toBeInTheDocument();
         });
 
         it('renders description for each notification type', () => {

@@ -19,6 +19,8 @@ vi.mock('../../lib/config', () => ({
 }));
 
 vi.mock('../../lib/avatar', () => ({
+    isDiscordLinked: (discordId: string | null | undefined) =>
+        Boolean(discordId && !discordId.startsWith('local:') && !discordId.startsWith('unlinked:')),
     buildDiscordAvatarUrl: (discordId: string | null, avatar: string | null) => {
         if (discordId && !discordId.startsWith('local:') && avatar) {
             return `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png`;
