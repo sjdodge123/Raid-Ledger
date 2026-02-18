@@ -8,7 +8,7 @@ import {
   ButtonStyle,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -567,6 +567,21 @@ export class SignupInteractionListener {
 
       if (!event) return;
 
+      // Query per-role counts from roster_assignments
+      const roleRows = await this.db
+        .select({
+          role: schema.rosterAssignments.role,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(schema.rosterAssignments)
+        .where(eq(schema.rosterAssignments.eventId, eventId))
+        .groupBy(schema.rosterAssignments.role);
+
+      const roleCounts: Record<string, number> = {};
+      for (const row of roleRows) {
+        if (row.role) roleCounts[row.role] = row.count;
+      }
+
       // Build event data for embed update
       const eventData: EmbedEventData = {
         id: event.id,
@@ -577,6 +592,7 @@ export class SignupInteractionListener {
         signupCount: activeCount,
         maxAttendees: event.maxAttendees,
         slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+        roleCounts,
       };
 
       // Look up game info if available

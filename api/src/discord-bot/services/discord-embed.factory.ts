@@ -33,6 +33,8 @@ export interface EmbedEventData {
     player?: number;
     bench?: number;
   } | null;
+  /** Actual per-role signup counts from roster_assignments */
+  roleCounts?: Record<string, number> | null;
   game?: {
     name: string;
     coverUrl?: string | null;
@@ -211,10 +213,11 @@ export class DiscordEmbedFactory {
       const dpsMax = slotConfig.dps ?? 0;
       const totalMax = tankMax + healerMax + dpsMax + (slotConfig.flex ?? 0);
 
+      const rc = event.roleCounts ?? {};
       const parts: string[] = [];
-      if (tankMax > 0) parts.push(`🛡️ Tanks: 0/${tankMax}`);
-      if (healerMax > 0) parts.push(`💚 Healers: 0/${healerMax}`);
-      if (dpsMax > 0) parts.push(`⚔️ DPS: 0/${dpsMax}`);
+      if (tankMax > 0) parts.push(`🛡️ Tanks: ${rc['tank'] ?? 0}/${tankMax}`);
+      if (healerMax > 0) parts.push(`💚 Healers: ${rc['healer'] ?? 0}/${healerMax}`);
+      if (dpsMax > 0) parts.push(`⚔️ DPS: ${rc['dps'] ?? 0}/${dpsMax}`);
 
       return `── ROSTER: ${event.signupCount}/${totalMax} ──\n${parts.join(' │ ')}`;
     }
