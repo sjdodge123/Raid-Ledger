@@ -10,6 +10,7 @@ import { EMBED_STATES } from '../discord-bot.constants';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 
 describe('DiscordEventListener', () => {
+  let module: TestingModule;
   let listener: DiscordEventListener;
   let clientService: jest.Mocked<DiscordBotClientService>;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
@@ -20,6 +21,7 @@ describe('DiscordEventListener', () => {
     update: jest.Mock;
     delete: jest.Mock;
   };
+  const originalClientUrl = process.env.CLIENT_URL;
 
   const mockPayload: EventPayload = {
     eventId: 42,
@@ -39,6 +41,8 @@ describe('DiscordEventListener', () => {
   const mockRow = new ActionRowBuilder<ButtonBuilder>();
 
   beforeEach(async () => {
+    delete process.env.CLIENT_URL;
+
     // Chain-able mock for Drizzle query builder
     const createChainMock = (resolvedValue: unknown[] = []) => {
       const chain: Record<string, jest.Mock> = {};
@@ -58,7 +62,7 @@ describe('DiscordEventListener', () => {
       delete: jest.fn().mockReturnValue(createChainMock()),
     };
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         DiscordEventListener,
         {
@@ -114,8 +118,16 @@ describe('DiscordEventListener', () => {
     channelResolver = module.get(ChannelResolverService);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     jest.clearAllMocks();
+    await module.close();
+
+    // Restore CLIENT_URL to its original value
+    if (originalClientUrl !== undefined) {
+      process.env.CLIENT_URL = originalClientUrl;
+    } else {
+      delete process.env.CLIENT_URL;
+    }
   });
 
   describe('handleEventCreated', () => {
