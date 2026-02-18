@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
 
 export function ProfileDiscordPanel() {
@@ -16,7 +16,7 @@ export function ProfileDiscordPanel() {
         return <Navigate to="/profile/identity" replace />;
     }
 
-    const hasDiscordLinked = Boolean(user.discordId && !user.discordId.startsWith('local:'));
+    const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
 
     const handleLinkDiscord = () => {
