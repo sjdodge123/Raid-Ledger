@@ -85,6 +85,8 @@ describe('SignupInteractionListener', () => {
     chain.from = jest.fn().mockReturnValue(chain);
     chain.where = jest.fn().mockReturnValue(chain);
     chain.limit = jest.fn().mockResolvedValue(result);
+    chain.leftJoin = jest.fn().mockReturnValue(chain);
+    chain.groupBy = jest.fn().mockResolvedValue(result);
     return chain;
   }
 
@@ -171,20 +173,30 @@ describe('SignupInteractionListener', () => {
 
     it('should register interactionCreate listener when client is available', () => {
       const mockOn = jest.fn();
-      const mockRemoveAllListeners = jest.fn();
+      const mockRemoveListener = jest.fn();
       const fakeClient = {
         on: mockOn,
-        removeAllListeners: mockRemoveAllListeners,
+        removeListener: mockRemoveListener,
       };
       mockClientService.getClient.mockReturnValue(fakeClient);
 
+      // First call — no previous handler, so removeListener should not be called
       listener.onBotConnected();
 
-      expect(mockRemoveAllListeners).toHaveBeenCalledWith('interactionCreate');
+      expect(mockRemoveListener).not.toHaveBeenCalled();
       expect(mockOn).toHaveBeenCalledWith(
         'interactionCreate',
         expect.any(Function),
       );
+
+      // Second call — previous handler exists, so removeListener should be called
+      listener.onBotConnected();
+
+      expect(mockRemoveListener).toHaveBeenCalledWith(
+        'interactionCreate',
+        expect.any(Function),
+      );
+      expect(mockOn).toHaveBeenCalledTimes(2);
     });
   });
 

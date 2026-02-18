@@ -42,7 +42,9 @@ const COOLDOWN_MS = 3000; // 3 seconds between interactions per user per event
 @Injectable()
 export class SignupInteractionListener {
   private readonly logger = new Logger(SignupInteractionListener.name);
-  private boundHandler: ((interaction: import('discord.js').Interaction) => void) | null = null;
+  private boundHandler:
+    | ((interaction: import('discord.js').Interaction) => void)
+    | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -69,9 +71,9 @@ export class SignupInteractionListener {
 
     this.boundHandler = (interaction: import('discord.js').Interaction) => {
       if (interaction.isButton()) {
-        void this.handleButtonInteraction(interaction as ButtonInteraction);
+        void this.handleButtonInteraction(interaction);
       } else if (interaction.isStringSelectMenu()) {
-        void this.handleSelectMenuInteraction(interaction as StringSelectMenuInteraction);
+        void this.handleSelectMenuInteraction(interaction);
       }
     };
 

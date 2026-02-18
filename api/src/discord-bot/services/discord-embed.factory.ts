@@ -222,15 +222,21 @@ export class DiscordEmbedFactory {
 
       if (tankMax > 0) {
         const roleMentions = this.getMentionsForRole(mentions, 'tank');
-        lines.push(`🛡️ Tanks (${rc['tank'] ?? 0}/${tankMax}): ${roleMentions || '—'}`);
+        lines.push(
+          `🛡️ Tanks (${rc['tank'] ?? 0}/${tankMax}): ${roleMentions || '—'}`,
+        );
       }
       if (healerMax > 0) {
         const roleMentions = this.getMentionsForRole(mentions, 'healer');
-        lines.push(`💚 Healers (${rc['healer'] ?? 0}/${healerMax}): ${roleMentions || '—'}`);
+        lines.push(
+          `💚 Healers (${rc['healer'] ?? 0}/${healerMax}): ${roleMentions || '—'}`,
+        );
       }
       if (dpsMax > 0) {
         const roleMentions = this.getMentionsForRole(mentions, 'dps');
-        lines.push(`⚔️ DPS (${rc['dps'] ?? 0}/${dpsMax}): ${roleMentions || '—'}`);
+        lines.push(
+          `⚔️ DPS (${rc['dps'] ?? 0}/${dpsMax}): ${roleMentions || '—'}`,
+        );
       }
 
       return lines.join('\n');
@@ -262,9 +268,8 @@ export class DiscordEmbedFactory {
     mentions: Array<{ discordId: string; role: string | null }>,
     role: string | null,
   ): string {
-    const filtered = role !== null
-      ? mentions.filter((m) => m.role === role)
-      : mentions;
+    const filtered =
+      role !== null ? mentions.filter((m) => m.role === role) : mentions;
     return filtered.map((m) => `<@${m.discordId}>`).join(' ');
   }
 

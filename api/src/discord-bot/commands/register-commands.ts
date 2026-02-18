@@ -91,9 +91,7 @@ export class RegisterCommandsService {
           });
       }
 
-      this.logger.log(
-        `Registered ${commands.length} global slash command(s)`,
-      );
+      this.logger.log(`Registered ${commands.length} global slash command(s)`);
     } catch (error) {
       this.logger.error('Failed to register slash commands:', error);
     }

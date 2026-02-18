@@ -428,16 +428,16 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(0x38bdf8);
     });
 
-    it('should include "Welcome to Discord Notifications!" title', () => {
+    it('should include community name in title', () => {
       const { embed } = service.buildWelcomeEmbed('Community');
       const json = embed.toJSON() as { title: string };
-      expect(json.title).toBe('Welcome to Discord Notifications!');
+      expect(json.title).toBe('Welcome to Community!');
     });
 
-    it('should include community name in description', () => {
+    it('should include Raid Ledger in description', () => {
       const { embed } = service.buildWelcomeEmbed('My Guild');
       const json = embed.toJSON() as { description: string };
-      expect(json.description).toContain('My Guild');
+      expect(json.description).toContain('Raid Ledger');
     });
 
     it('should include "Notification Settings" button in row', () => {
@@ -457,13 +457,21 @@ describe('DiscordNotificationEmbedService', () => {
       );
     });
 
-    it('should include fields about what you will receive', () => {
+    it('should include feature fields', () => {
       const { embed } = service.buildWelcomeEmbed('Community');
       const json = embed.toJSON() as { fields: Array<{ name: string }> };
-      const whatYouReceiveField = json.fields?.find(
-        (f) => f.name === "What you'll receive",
+      const browseField = json.fields?.find(
+        (f) => f.name === 'Browse & sign up for events',
       );
-      expect(whatYouReceiveField).toBeDefined();
+      const loopField = json.fields?.find(
+        (f) => f.name === 'Stay in the loop',
+      );
+      const profileField = json.fields?.find(
+        (f) => f.name === 'Set up your profile',
+      );
+      expect(browseField).toBeDefined();
+      expect(loopField).toBeDefined();
+      expect(profileField).toBeDefined();
     });
   });
 

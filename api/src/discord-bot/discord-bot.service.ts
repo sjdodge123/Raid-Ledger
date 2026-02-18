@@ -15,7 +15,9 @@ import { friendlyDiscordErrorMessage } from './discord-bot.constants';
 import type { DiscordBotStatusResponse } from '@raid-ledger/contract';
 
 @Injectable()
-export class DiscordBotService implements OnApplicationBootstrap, OnModuleDestroy {
+export class DiscordBotService
+  implements OnApplicationBootstrap, OnModuleDestroy
+{
   private readonly logger = new Logger(DiscordBotService.name);
 
   constructor(

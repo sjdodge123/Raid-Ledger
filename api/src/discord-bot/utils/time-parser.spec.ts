@@ -16,9 +16,10 @@ describe('time-parser', () => {
       expect(result).toBeNull();
     });
 
-    it('should return null for dates in the past', () => {
+    it('should still parse explicit past dates (forwardDate only affects ambiguous dates)', () => {
       const result = parseNaturalTime('January 1, 2020 8:00pm', 'UTC');
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result!.date.getFullYear()).toBe(2020);
     });
 
     it('should use UTC as default timezone when none provided', () => {

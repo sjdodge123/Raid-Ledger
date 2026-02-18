@@ -12,7 +12,13 @@ import { encrypt } from './encryption.util';
 
 /** Build a DB row as returned by drizzle select().from(appSettings). */
 function makeRow(key: string, value: string) {
-  return { key, encryptedValue: encrypt(value), updatedAt: new Date(), createdAt: new Date(), id: 1 };
+  return {
+    key,
+    encryptedValue: encrypt(value),
+    updatedAt: new Date(),
+    createdAt: new Date(),
+    id: 1,
+  };
 }
 
 describe('SettingsService — ROK-365 cache behavior', () => {
@@ -36,7 +42,9 @@ describe('SettingsService — ROK-365 cache behavior', () => {
       _selectChain: { from: jest.fn() },
       _insertChain: { values: jest.fn() },
       _deleteChain: { where: jest.fn() },
-      _insertValuesChain: { onConflictDoUpdate: jest.fn().mockResolvedValue([]) },
+      _insertValuesChain: {
+        onConflictDoUpdate: jest.fn().mockResolvedValue([]),
+      },
       select: jest.fn(),
       insert: jest.fn(),
       delete: jest.fn(),
@@ -164,7 +172,9 @@ describe('SettingsService — ROK-365 cache behavior', () => {
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
       expect(mockDb._insertChain.values).toHaveBeenCalledTimes(1);
-      expect(mockDb._insertValuesChain.onConflictDoUpdate).toHaveBeenCalledTimes(1);
+      expect(
+        mockDb._insertValuesChain.onConflictDoUpdate,
+      ).toHaveBeenCalledTimes(1);
     });
 
     it('set() on a new key makes it available via get() without DB reload', async () => {
@@ -415,7 +425,13 @@ describe('SettingsService — ROK-365 cache behavior', () => {
     it('skips a malformed row and still caches other rows', async () => {
       mockDb._selectChain.from.mockResolvedValue([
         // Malformed encrypted value — decrypt will throw
-        { key: SETTING_KEYS.DISCORD_CLIENT_ID, encryptedValue: 'BAD_VALUE', updatedAt: new Date(), createdAt: new Date(), id: 1 },
+        {
+          key: SETTING_KEYS.DISCORD_CLIENT_ID,
+          encryptedValue: 'BAD_VALUE',
+          updatedAt: new Date(),
+          createdAt: new Date(),
+          id: 1,
+        },
         makeRow(SETTING_KEYS.DEMO_MODE, 'true'),
       ]);
 

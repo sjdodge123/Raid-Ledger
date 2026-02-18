@@ -178,10 +178,14 @@ export class EventCreateCommand
     }
 
     // Use the user's timezone preference, falling back to community default
-    const userTzPref = await this.preferencesService.getUserPreference(user.id, 'timezone');
+    const userTzPref = await this.preferencesService.getUserPreference(
+      user.id,
+      'timezone',
+    );
     const userTz = userTzPref?.value as string | undefined;
     const defaultTz = await this.settingsService.get('default_timezone');
-    const timezone = (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
+    const timezone =
+      (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
 
     // Parse natural language time
     const parsed = parseNaturalTime(timeInput, timezone);
@@ -199,7 +203,14 @@ export class EventCreateCommand
     );
 
     // Build slot config based on roster type
-    let slotConfig: { type: 'generic' | 'mmo'; tank?: number; healer?: number; dps?: number } | undefined;
+    let slotConfig:
+      | {
+          type: 'generic' | 'mmo';
+          tank?: number;
+          healer?: number;
+          dps?: number;
+        }
+      | undefined;
     let maxAttendees = slots;
 
     if (rosterType === 'mmo') {
