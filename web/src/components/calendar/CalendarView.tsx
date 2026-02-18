@@ -271,8 +271,16 @@ export function CalendarView({
     }, [setCurrentDate]);
 
     // Event click handler — pass calendar context so event detail page can navigate back
+    // On mobile month view, tapping an event drills down to day view instead of navigating to detail
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
+            const isMobile = window.innerWidth < 768;
+            if (isMobile && view === Views.MONTH) {
+                setCurrentDate(event.start);
+                setView(Views.DAY);
+                onCalendarViewChange?.('day');
+                return;
+            }
             const viewStr = isScheduleView
                 ? 'schedule'
                 : view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
@@ -281,7 +289,7 @@ export function CalendarView({
                 state: { fromCalendar: true, calendarDate: dateStr, calendarView: viewStr },
             });
         },
-        [navigate, view, currentDate, isScheduleView]
+        [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]
     );
 
     // Style events based on their game (using shared constants)

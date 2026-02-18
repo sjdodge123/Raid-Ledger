@@ -312,6 +312,15 @@
         background: transparent;
     }
 
+    /* Month view: make entire date cells tappable for drill-down to day view */
+    .calendar-view-month .rbc-day-bg {
+        cursor: pointer;
+    }
+
+    .calendar-view-month .rbc-date-cell {
+        cursor: pointer;
+    }
+
     /* Day view: fit all 24 hours on screen by sizing slots to viewport */
     .calendar-view-day .rbc-calendar {
         min-height: auto !important;
