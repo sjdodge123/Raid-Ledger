@@ -74,6 +74,8 @@ interface CalendarViewProps {
     gameTimeSlots?: Set<string>;
     /** Mobile calendar view mode (schedule/month/day) — when 'schedule', renders ScheduleView */
     calendarView?: CalendarViewMode;
+    /** Callback to sync view changes back to mobile toolbar (ROK-368) */
+    onCalendarViewChange?: (view: CalendarViewMode) => void;
 }
 
 export function CalendarView({
@@ -84,6 +86,7 @@ export function CalendarView({
     onGamesAvailable,
     gameTimeSlots,
     calendarView,
+    onCalendarViewChange,
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -507,7 +510,7 @@ export function CalendarView({
                     onNavigate={handleNavigate}
                     onView={setView}
                     onSelectEvent={handleSelectEvent}
-                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); }}
+                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); onCalendarViewChange?.('day'); }}
                     drilldownView={Views.DAY}
                     eventPropGetter={eventPropGetter}
                     components={{
@@ -521,9 +524,11 @@ export function CalendarView({
                     popup
                     selectable
                     onSelectSlot={(slotInfo) => {
-                        if (slotInfo.action === 'doubleClick') {
+                        const isMobile = window.innerWidth < 768;
+                        if (slotInfo.action === 'doubleClick' || (isMobile && slotInfo.action === 'click' && view === Views.MONTH)) {
                             setCurrentDate(slotInfo.start);
                             setView(Views.DAY);
+                            onCalendarViewChange?.('day');
                         }
                     }}
                     style={{ minHeight: '500px' }}

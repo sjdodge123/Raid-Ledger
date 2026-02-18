@@ -1072,10 +1072,27 @@
 
 /* Responsive day view */
 @media (max-width: 768px) {
+    .day-event-block {
+        flex-direction: column;
+        overflow: hidden;
+    }
+
     .day-event-content {
         min-width: auto;
         max-width: 100%;
         padding: 0.5rem 0.75rem;
+    }
+
+    .day-event-right {
+        flex-direction: row;
+        margin-left: 0;
+        justify-content: space-between;
+        padding: 0.375rem 0.75rem 0.5rem;
+        align-items: center;
+    }
+
+    .day-event-right .day-event-actions {
+        justify-content: flex-start;
     }
 
     .day-event-title {
@@ -1087,6 +1104,66 @@
     .day-event-description {
         font-size: 0.75rem;
     }
+}
+
+/* ============================================
+   Mobile Date Navigation Bar (ROK-368)
+   ============================================ */
+
+.calendar-mobile-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(30, 41, 59, 0.6);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.calendar-mobile-nav-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.calendar-mobile-nav-arrow:hover {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.calendar-mobile-nav-label {
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+    border-radius: 9999px;
+    color: #10b981;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today:hover {
+    background: rgba(16, 185, 129, 0.35);
 }
 
 /* ============================================
@@ -1522,4 +1599,35 @@
 
 [data-scheme="light"] .day-event-login-link:hover {
     color: rgba(0, 0, 0, 0.8);
+}
+
+/* Mobile nav bar light overrides (ROK-368) */
+[data-scheme="light"] .calendar-mobile-nav {
+    background: rgba(241, 245, 249, 0.8);
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .calendar-mobile-nav-arrow {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-arrow:hover {
+    background: rgba(203, 213, 225, 0.7);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+[data-scheme="light"] .calendar-mobile-nav-label {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-today {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: rgba(16, 185, 129, 0.35);
+    color: #059669;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-today:hover {
+    background: rgba(16, 185, 129, 0.25);
 }
