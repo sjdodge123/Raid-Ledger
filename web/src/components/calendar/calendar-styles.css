@@ -312,6 +312,24 @@
         background: transparent;
     }
 
+    /* Day view: fit all 24 hours on screen without scroll */
+    .calendar-view-day .rbc-calendar {
+        min-height: auto !important;
+    }
+
+    .calendar-view-day .rbc-time-view {
+        overflow: hidden;
+    }
+
+    .calendar-view-day .rbc-timeslot-group {
+        min-height: 0 !important;
+    }
+
+    .calendar-view-day .calendar-grid-wrapper {
+        max-height: calc(100dvh - 11rem);
+        overflow: hidden;
+    }
+
     .calendar-toolbar {
         flex-direction: column;
         align-items: stretch;
