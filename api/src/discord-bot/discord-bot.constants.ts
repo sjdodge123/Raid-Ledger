@@ -5,6 +5,56 @@ export const DISCORD_BOT_EVENTS = {
 } as const;
 
 /**
+ * Application-level event names for the event lifecycle.
+ * Emitted by EventsService, consumed by DiscordEventListener.
+ */
+export const APP_EVENT_EVENTS = {
+  CREATED: 'event.created',
+  UPDATED: 'event.updated',
+  CANCELLED: 'event.cancelled',
+  DELETED: 'event.deleted',
+} as const;
+
+/**
+ * Accent colors for Discord embeds (design spec section 2.1).
+ * Values are decimal representations of hex colors for discord.js.
+ */
+export const EMBED_COLORS = {
+  /** New Event / Announcement — Cyan #38bdf8 */
+  ANNOUNCEMENT: 0x38bdf8,
+  /** Reminder / Urgent — Amber #f59e0b */
+  REMINDER: 0xf59e0b,
+  /** Signup Confirmation — Emerald #34d399 */
+  SIGNUP_CONFIRMATION: 0x34d399,
+  /** Roster Update / Info — Purple #8b5cf6 */
+  ROSTER_UPDATE: 0x8b5cf6,
+  /** Ad-Hoc Live Event — Magenta #d946ef */
+  LIVE_EVENT: 0xd946ef,
+  /** PUG Invite — Teal #2dd4bf */
+  PUG_INVITE: 0x2dd4bf,
+  /** Error / Cancellation — Red #ef4444 */
+  ERROR: 0xef4444,
+  /** System / Admin — Slate #64748b */
+  SYSTEM: 0x64748b,
+} as const;
+
+/**
+ * Embed state values for the discord_event_messages table.
+ * Tracks the embed lifecycle (design spec section 3.4).
+ */
+export const EMBED_STATES = {
+  POSTED: 'posted',
+  FILLING: 'filling',
+  FULL: 'full',
+  IMMINENT: 'imminent',
+  LIVE: 'live',
+  COMPLETED: 'completed',
+  CANCELLED: 'cancelled',
+} as const;
+
+export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
+
+/**
  * Convert Discord.js errors into admin-friendly messages.
  * Shared between DiscordBotService and DiscordBotClientService to avoid
  * duplicating intent / token / network error detection.

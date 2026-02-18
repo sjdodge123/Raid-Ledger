@@ -426,4 +426,19 @@ export class SettingsService {
     this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
     this.logger.log('Discord bot configuration cleared');
   }
+
+  /**
+   * Get Discord bot default channel ID (ROK-118)
+   */
+  async getDiscordBotDefaultChannel(): Promise<string | null> {
+    return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL);
+  }
+
+  /**
+   * Set Discord bot default channel ID (ROK-118)
+   */
+  async setDiscordBotDefaultChannel(channelId: string): Promise<void> {
+    await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, channelId);
+    this.logger.log('Discord bot default channel updated');
+  }
 }
