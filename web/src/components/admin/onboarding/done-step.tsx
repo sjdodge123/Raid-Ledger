@@ -161,7 +161,7 @@ export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
           onClick={onComplete}
           className="px-8 py-3 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors text-sm"
         >
-          Go to Dashboard
+          Complete
         </button>
         <Link
           to="/admin/settings/general"

@@ -435,7 +435,7 @@ export function OnboardingWizardPage() {
                         className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm"
                     >
                         {isFinalStep
-                            ? (completeOnboarding.isPending ? 'Finishing...' : 'Finish Setup')
+                            ? (completeOnboarding.isPending ? 'Completing...' : 'Complete')
                             : 'Next'}
                     </button>
                 </div>
