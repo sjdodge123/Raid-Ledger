@@ -487,7 +487,7 @@ describe('EventCreateCommand', () => {
     });
 
     it('should fall back to America/New_York when both user preference and community default are unavailable', async () => {
-      preferencesService.getUserPreference.mockResolvedValue(null);
+      preferencesService.getUserPreference.mockResolvedValue(undefined);
       settingsService.get.mockResolvedValue(null);
       const interaction = makeInteraction();
 
