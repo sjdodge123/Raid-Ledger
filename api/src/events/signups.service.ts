@@ -126,6 +126,56 @@ export class SignupsService {
           )
           .limit(1);
 
+        // ROK-353: If caller requested a slot but the signup has no roster
+        // assignment (e.g. after self-unassign), create one now.
+        const slotRole = autoBench ? 'bench' : dto?.slotRole;
+        if (slotRole) {
+          const existingAssignment = await tx
+            .select()
+            .from(schema.rosterAssignments)
+            .where(eq(schema.rosterAssignments.signupId, existing.id))
+            .limit(1);
+
+          if (existingAssignment.length === 0) {
+            let position = dto?.slotPosition ?? 0;
+            if (autoBench || !position) {
+              const positionsInRole = await tx
+                .select({ position: schema.rosterAssignments.position })
+                .from(schema.rosterAssignments)
+                .where(
+                  and(
+                    eq(schema.rosterAssignments.eventId, eventId),
+                    eq(schema.rosterAssignments.role, slotRole),
+                  ),
+                );
+              position =
+                positionsInRole.reduce(
+                  (max, r) => Math.max(max, r.position),
+                  0,
+                ) + 1;
+            }
+
+            await tx.insert(schema.rosterAssignments).values({
+              eventId,
+              signupId: existing.id,
+              role: slotRole,
+              position,
+              isOverride: 0,
+            });
+            this.logger.log(
+              `Re-assigned user ${userId} to ${slotRole} slot ${position} (existing signup)`,
+            );
+
+            if (slotRole !== 'bench') {
+              await this.benchPromotionService.cancelPromotion(
+                eventId,
+                slotRole,
+                position,
+              );
+            }
+          }
+        }
+
         const character = existing.characterId
           ? await this.getCharacterById(existing.characterId)
           : null;
