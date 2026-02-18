@@ -306,6 +306,28 @@
     .calendar-container {
         padding: 0.75rem;
         overflow-x: clip;
+        min-height: auto;
+        border: none;
+        border-radius: 0;
+        background: transparent;
+    }
+
+    /* Month view: make entire date cells tappable for drill-down to day view */
+    .calendar-view-month .rbc-day-bg {
+        cursor: pointer;
+    }
+
+    .calendar-view-month .rbc-date-cell {
+        cursor: pointer;
+    }
+
+    /* Day view: readable slot heights — scroll rather than cramming 24h */
+    .calendar-view-day .rbc-calendar {
+        min-height: auto !important;
+    }
+
+    .calendar-view-day .rbc-timeslot-group {
+        min-height: 44px !important;
     }
 
     .calendar-toolbar {
@@ -768,13 +790,20 @@
     position: relative;
 }
 
-/* Day view: allow event content to overflow for action buttons */
+/* Day view: allow event content to expand beyond time-slot height */
 .calendar-view-day .rbc-time-view .rbc-event {
     overflow: visible;
+    height: auto !important;
+    min-height: 100px;
 }
 
 .calendar-view-day .rbc-time-view .rbc-event-content {
     overflow: visible;
+    height: auto;
+}
+
+.calendar-view-day .day-event-block {
+    height: auto;
 }
 
 /* Week event block component */
@@ -1072,10 +1101,26 @@
 
 /* Responsive day view */
 @media (max-width: 768px) {
+    .day-event-block {
+        flex-direction: column;
+    }
+
     .day-event-content {
         min-width: auto;
         max-width: 100%;
         padding: 0.5rem 0.75rem;
+    }
+
+    .day-event-right {
+        flex-direction: row;
+        margin-left: 0;
+        justify-content: space-between;
+        padding: 0.375rem 0.75rem 0.5rem;
+        align-items: center;
+    }
+
+    .day-event-right .day-event-actions {
+        justify-content: flex-start;
     }
 
     .day-event-title {
@@ -1087,6 +1132,78 @@
     .day-event-description {
         font-size: 0.75rem;
     }
+
+
+    .calendar-view-day .day-event-meta {
+        gap: 0.25rem;
+    }
+}
+
+/* ============================================
+   Mobile Date Navigation Bar (ROK-368)
+   ============================================ */
+
+.calendar-mobile-nav {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: rgba(30, 41, 59, 0.95);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.calendar-mobile-nav-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: rgba(51, 65, 85, 0.5);
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 0.5rem;
+    color: #e2e8f0;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.calendar-mobile-nav-arrow:hover {
+    background: rgba(71, 85, 105, 0.6);
+    border-color: rgba(148, 163, 184, 0.3);
+}
+
+.calendar-mobile-nav-label {
+    flex: 1;
+    text-align: center;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: #f1f5f9;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 1rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #10b981;
+    border: 1px solid #10b981;
+    border-radius: 0.5rem;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+}
+
+.calendar-mobile-nav-today:hover {
+    background: #34d399;
+    border-color: #34d399;
 }
 
 /* ============================================
@@ -1522,4 +1639,36 @@
 
 [data-scheme="light"] .day-event-login-link:hover {
     color: rgba(0, 0, 0, 0.8);
+}
+
+/* Mobile nav bar light overrides (ROK-368) */
+[data-scheme="light"] .calendar-mobile-nav {
+    background: rgba(241, 245, 249, 0.95);
+    border-bottom-color: rgba(203, 213, 225, 0.4);
+}
+
+[data-scheme="light"] .calendar-mobile-nav-arrow {
+    background: rgba(226, 232, 240, 0.6);
+    border-color: rgba(203, 213, 225, 0.5);
+    color: #334155;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-arrow:hover {
+    background: rgba(203, 213, 225, 0.7);
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+[data-scheme="light"] .calendar-mobile-nav-label {
+    color: #0f172a;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-today {
+    background: #059669;
+    border-color: #059669;
+    color: #fff;
+}
+
+[data-scheme="light"] .calendar-mobile-nav-today:hover {
+    background: #10b981;
+    border-color: #10b981;
 }
