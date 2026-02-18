@@ -35,6 +35,8 @@ export interface EmbedEventData {
   } | null;
   /** Actual per-role signup counts from roster_assignments */
   roleCounts?: Record<string, number> | null;
+  /** Discord IDs of signed-up users, grouped by role for mention display */
+  signupMentions?: Array<{ discordId: string; role: string | null }> | null;
   game?: {
     name: string;
     coverUrl?: string | null;
@@ -206,6 +208,7 @@ export class DiscordEmbedFactory {
    */
   private buildRosterLine(event: EmbedEventData): string | null {
     const slotConfig = event.slotConfig;
+    const mentions = event.signupMentions ?? [];
 
     if (slotConfig && slotConfig.type === 'mmo') {
       const tankMax = slotConfig.tank ?? 0;
@@ -214,23 +217,55 @@ export class DiscordEmbedFactory {
       const totalMax = tankMax + healerMax + dpsMax + (slotConfig.flex ?? 0);
 
       const rc = event.roleCounts ?? {};
-      const parts: string[] = [];
-      if (tankMax > 0) parts.push(`🛡️ Tanks: ${rc['tank'] ?? 0}/${tankMax}`);
-      if (healerMax > 0) parts.push(`💚 Healers: ${rc['healer'] ?? 0}/${healerMax}`);
-      if (dpsMax > 0) parts.push(`⚔️ DPS: ${rc['dps'] ?? 0}/${dpsMax}`);
+      const lines: string[] = [];
+      lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
 
-      return `── ROSTER: ${event.signupCount}/${totalMax} ──\n${parts.join(' │ ')}`;
+      if (tankMax > 0) {
+        const roleMentions = this.getMentionsForRole(mentions, 'tank');
+        lines.push(`🛡️ Tanks (${rc['tank'] ?? 0}/${tankMax}): ${roleMentions || '—'}`);
+      }
+      if (healerMax > 0) {
+        const roleMentions = this.getMentionsForRole(mentions, 'healer');
+        lines.push(`💚 Healers (${rc['healer'] ?? 0}/${healerMax}): ${roleMentions || '—'}`);
+      }
+      if (dpsMax > 0) {
+        const roleMentions = this.getMentionsForRole(mentions, 'dps');
+        lines.push(`⚔️ DPS (${rc['dps'] ?? 0}/${dpsMax}): ${roleMentions || '—'}`);
+      }
+
+      return lines.join('\n');
     }
 
     if (event.maxAttendees) {
+      const allMentions = this.getMentionsForRole(mentions, null);
+      if (allMentions) {
+        return `── ROSTER: ${event.signupCount}/${event.maxAttendees} ──\n${allMentions}`;
+      }
       return `── ROSTER: ${event.signupCount}/${event.maxAttendees} ──`;
     }
 
     if (event.signupCount > 0) {
+      const allMentions = this.getMentionsForRole(mentions, null);
+      if (allMentions) {
+        return `── ROSTER: ${event.signupCount} signed up ──\n${allMentions}`;
+      }
       return `── ROSTER: ${event.signupCount} signed up ──`;
     }
 
     return null;
+  }
+
+  /**
+   * Format Discord mentions for a specific role (or all if role is null).
+   */
+  private getMentionsForRole(
+    mentions: Array<{ discordId: string; role: string | null }>,
+    role: string | null,
+  ): string {
+    const filtered = role !== null
+      ? mentions.filter((m) => m.role === role)
+      : mentions;
+    return filtered.map((m) => `<@${m.discordId}>`).join(' ');
   }
 
   /**

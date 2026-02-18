@@ -582,6 +582,25 @@ export class SignupInteractionListener {
         if (row.role) roleCounts[row.role] = row.count;
       }
 
+      // Query signups with Discord IDs and assigned roles for mention display
+      const signupRows = await this.db
+        .select({
+          discordId: sql<string>`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+          role: schema.rosterAssignments.role,
+          status: schema.eventSignups.status,
+        })
+        .from(schema.eventSignups)
+        .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+        .leftJoin(
+          schema.rosterAssignments,
+          eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+        )
+        .where(eq(schema.eventSignups.eventId, eventId));
+
+      const signupMentions = signupRows
+        .filter((r) => r.status !== 'declined' && r.discordId)
+        .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
+
       // Build event data for embed update
       const eventData: EmbedEventData = {
         id: event.id,
@@ -593,6 +612,7 @@ export class SignupInteractionListener {
         maxAttendees: event.maxAttendees,
         slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
         roleCounts,
+        signupMentions,
       };
 
       // Look up game info if available

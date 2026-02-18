@@ -87,9 +87,9 @@ describe('DiscordEmbedFactory', () => {
       const json = embed.toJSON();
 
       expect(json.description).toContain('ROSTER:');
-      expect(json.description).toContain('Tanks:');
-      expect(json.description).toContain('Healers:');
-      expect(json.description).toContain('DPS:');
+      expect(json.description).toContain('Tanks (');
+      expect(json.description).toContain('Healers (');
+      expect(json.description).toContain('DPS (');
     });
 
     it('should set game art as thumbnail', () => {
