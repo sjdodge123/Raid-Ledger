@@ -107,22 +107,32 @@ export function AdminSetupWizard() {
           </div>
           <button
             onClick={handleSkipAll}
-            className="text-sm text-muted hover:text-foreground transition-colors underline underline-offset-2"
+            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20"
           >
             Skip Setup
           </button>
         </div>
       </div>
 
-      {/* Stepper */}
+      {/* Stepper — mobile: "Step X of Y" + title; desktop: full stepper */}
       <div className="border-b border-edge/30 bg-panel/10">
         <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
+          {/* Mobile stepper */}
+          <div className="flex items-center justify-between md:hidden">
+            <span className="text-sm text-muted">
+              Step {currentStep + 1} of {STEPS.length}
+            </span>
+            <span className="text-sm font-medium text-foreground">
+              {STEPS[currentStep].label}
+            </span>
+          </div>
+          {/* Desktop stepper */}
+          <div className="hidden md:flex items-center justify-between">
             {STEPS.map((step, index) => (
               <button
                 key={step.key}
                 onClick={() => goToStep(index)}
-                className="flex items-center gap-2 group"
+                className="flex items-center gap-2 group min-h-[44px]"
               >
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
@@ -150,7 +160,7 @@ export function AdminSetupWizard() {
                   )}
                 </div>
                 <span
-                  className={`text-sm font-medium hidden sm:block transition-colors ${
+                  className={`text-sm font-medium transition-colors ${
                     index === currentStep
                       ? 'text-foreground'
                       : 'text-muted group-hover:text-foreground'
@@ -160,7 +170,7 @@ export function AdminSetupWizard() {
                 </span>
                 {index < STEPS.length - 1 && (
                   <div
-                    className={`hidden sm:block w-8 h-px ml-2 ${
+                    className={`w-8 h-px ml-2 ${
                       index < currentStep
                         ? 'bg-emerald-600/50'
                         : 'bg-edge/50'

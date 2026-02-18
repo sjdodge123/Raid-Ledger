@@ -103,7 +103,7 @@ export function CommunityIdentityStep({
           value={communityName}
           onChange={(e) => setCommunityName(e.target.value)}
           placeholder="e.g., Midnight Raiders, The Vanguard"
-          className="w-full max-w-md px-4 py-2.5 bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm"
+          className="w-full sm:max-w-md px-4 py-2.5 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground placeholder:text-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all text-sm"
         />
         <p className="text-xs text-dim">{communityName.length}/60</p>
       </div>
@@ -146,7 +146,7 @@ export function CommunityIdentityStep({
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={uploadLogo.isPending}
-            className="px-4 py-2 text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 min-h-[44px] text-sm font-medium bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground transition-colors disabled:opacity-50"
           >
             {uploadLogo.isPending ? 'Uploading...' : 'Upload Logo'}
           </button>
@@ -175,7 +175,7 @@ export function CommunityIdentityStep({
         <select
           value={timezone}
           onChange={(e) => setTimezone(e.target.value)}
-          className="w-full max-w-md px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm"
+          className="w-full sm:max-w-md px-4 py-3 min-h-[44px] bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors text-sm"
         >
           <option value={TIMEZONE_AUTO}>
             Auto -- detect from browser ({browserAbbr})
@@ -237,13 +237,13 @@ export function CommunityIdentityStep({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="px-5 py-2.5 bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
+            className="px-5 py-2.5 min-h-[44px] bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
           >
             Back
           </button>
           <button
             onClick={onSkip}
-            className="text-sm text-muted hover:text-foreground transition-colors"
+            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20"
           >
             Skip
           </button>
@@ -251,7 +251,7 @@ export function CommunityIdentityStep({
         <button
           onClick={handleSaveAndNext}
           disabled={updateCommunity.isPending}
-          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-semibold rounded-lg transition-colors text-sm"
+          className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-semibold rounded-lg transition-colors text-sm"
         >
           {updateCommunity.isPending ? 'Saving...' : 'Next'}
         </button>

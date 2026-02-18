@@ -115,13 +115,13 @@ export function ConnectPluginsStep({
         <div className="flex items-center justify-between pt-4 border-t border-edge/30">
           <button
             onClick={onBack}
-            className="px-5 py-2.5 bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
+            className="px-5 py-2.5 min-h-[44px] bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
           >
             Back
           </button>
           <button
             onClick={onSkip}
-            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
+            className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
           >
             Skip
           </button>
@@ -182,20 +182,20 @@ export function ConnectPluginsStep({
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
-            className="px-5 py-2.5 bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
+            className="px-5 py-2.5 min-h-[44px] bg-surface/50 hover:bg-surface border border-edge rounded-lg text-foreground font-medium transition-colors text-sm"
           >
             Back
           </button>
           <button
             onClick={onSkip}
-            className="text-sm text-muted hover:text-foreground transition-colors"
+            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-lg hover:bg-edge/20"
           >
             Skip
           </button>
         </div>
         <button
           onClick={onNext}
-          className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
+          className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg transition-colors text-sm"
         >
           Next
         </button>
@@ -237,7 +237,7 @@ function PluginCard({
 
   return (
     <div className="bg-panel/50 rounded-xl border border-edge/50 p-5 space-y-3">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 sm:gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="text-sm font-semibold text-foreground">
@@ -258,7 +258,7 @@ function PluginCard({
             <button
               onClick={() => onInstall(plugin.slug)}
               disabled={isPending}
-              className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
             >
               Install
             </button>
@@ -267,7 +267,7 @@ function PluginCard({
             <button
               onClick={() => onActivate(plugin.slug)}
               disabled={isPending}
-              className="px-3 py-1.5 text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+              className="px-4 py-2.5 min-h-[44px] text-sm bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
             >
               Activate
             </button>

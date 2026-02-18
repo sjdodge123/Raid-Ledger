@@ -34,7 +34,7 @@ export function ConnectStep() {
                 <button
                     onClick={handleDiscordConnect}
                     disabled={isRedirecting}
-                    className="w-full py-3 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3"
+                    className="w-full py-3 px-4 min-h-[44px] bg-[#5865F2] hover:bg-[#4752C4] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition-colors flex items-center justify-center gap-3"
                 >
                     {isRedirecting ? (
                         <>

@@ -182,7 +182,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                             onClick={() => handleDeleteCharacter(savedCharacter.id)}
                             disabled={deleteMutation.isPending}
                             title="Remove character"
-                            className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/40 hover:text-red-300 transition-colors disabled:opacity-40"
+                            className="absolute top-1 right-1 w-10 h-10 flex items-center justify-center rounded-full bg-red-600/20 text-red-400 hover:bg-red-600/40 hover:text-red-300 transition-colors disabled:opacity-40"
                         >
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
@@ -194,7 +194,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                     <button
                         type="button"
                         onClick={onAddAnother}
-                        className="w-full px-4 py-2 bg-panel hover:bg-overlay text-muted hover:text-foreground border border-edge/50 rounded-lg transition-colors text-sm"
+                        className="w-full px-4 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted hover:text-foreground border border-edge/50 rounded-lg transition-colors text-sm"
                     >
                         + Add Another Character
                     </button>
@@ -232,7 +232,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                                     onChange={(e) => updateField('name', e.target.value)}
                                     placeholder="Character name"
                                     maxLength={100}
-                                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                    className="w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                 />
                             </div>
 
@@ -240,7 +240,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                             {showMmoFields && (
                                 <>
                                     {/* Class & Spec */}
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-sm font-medium text-foreground mb-1">
                                                 Class
@@ -251,7 +251,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                                                 onChange={(e) => updateField('class', e.target.value)}
                                                 placeholder="e.g. Warrior"
                                                 maxLength={50}
-                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                                className="w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                             />
                                         </div>
                                         <div>
@@ -264,7 +264,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                                                 onChange={(e) => updateField('spec', e.target.value)}
                                                 placeholder="e.g. Arms"
                                                 maxLength={50}
-                                                className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                                className="w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                             />
                                         </div>
                                     </div>
@@ -277,7 +277,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                                         <select
                                             value={form.role}
                                             onChange={(e) => updateField('role', e.target.value as CharacterRole | '')}
-                                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            className="w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                         >
                                             <option value="">Select role...</option>
                                             <option value="tank">Tank</option>
@@ -297,7 +297,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                                             onChange={(e) => updateField('realm', e.target.value)}
                                             placeholder="e.g. Illidan"
                                             maxLength={100}
-                                            className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                                            className="w-full px-3 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                                         />
                                     </div>
                                 </>
@@ -312,7 +312,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
                             <button
                                 type="submit"
                                 disabled={createMutation.isPending}
-                                className="w-full px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm"
+                                className="w-full px-4 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-medium rounded-lg transition-colors text-sm"
                             >
                                 {createMutation.isPending ? 'Creating...' : 'Create Character'}
                             </button>
