@@ -9,7 +9,12 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { ChannelResolverService } from '../services/channel-resolver.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ApplicationCommandOptionType,
+} from 'discord.js';
 
 describe('EventCreateCommand', () => {
   let module: TestingModule;
@@ -53,14 +58,16 @@ describe('EventCreateCommand', () => {
     return chain;
   };
 
-  const makeInteraction = (options: {
-    title?: string;
-    game?: string;
-    time?: string;
-    slots?: number | null;
-    discordId?: string;
-    subcommand?: string;
-  } = {}) => ({
+  const makeInteraction = (
+    options: {
+      title?: string;
+      game?: string;
+      time?: string;
+      slots?: number | null;
+      discordId?: string;
+      subcommand?: string;
+    } = {},
+  ) => ({
     deferReply: jest.fn().mockResolvedValue(undefined),
     editReply: jest.fn().mockResolvedValue(undefined),
     user: { id: options.discordId ?? 'discord-user-123' },
@@ -178,7 +185,9 @@ describe('EventCreateCommand', () => {
       const definition = command.getDefinition();
       const options = definition.options ?? [];
       const createSub = options.find(
-        (o) => o.name === 'create' && o.type === 1, // type 1 = Subcommand
+        (o) =>
+          o.name === 'create' &&
+          o.type === ApplicationCommandOptionType.Subcommand,
       );
       expect(createSub).toBeDefined();
     });
@@ -225,7 +234,7 @@ describe('EventCreateCommand', () => {
     });
 
     it('should reply with account linking message when user has no Raid Ledger account', async () => {
-      usersService.findByDiscordId.mockResolvedValue(null);
+      usersService.findByDiscordId.mockResolvedValue(undefined);
       const interaction = makeInteraction();
 
       await command.handleInteraction(
@@ -283,14 +292,16 @@ describe('EventCreateCommand', () => {
         mockUser.id,
         expect.objectContaining({
           title: 'Test Raid',
-          startTime: expect.any(String),
-          endTime: expect.any(String),
+          startTime: expect.any(String) as unknown,
+          endTime: expect.any(String) as unknown,
           maxAttendees: 20, // default slots
         }),
       );
 
       // Verify end time is 2 hours after start time
-      const callArgs = (eventsService.create as jest.Mock).mock.calls[0][1] as {
+      const callArgs = (
+        (eventsService.create as jest.Mock).mock.calls as unknown[][]
+      )[0][1] as {
         startTime: string;
         endTime: string;
       };
@@ -371,7 +382,7 @@ describe('EventCreateCommand', () => {
 
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -386,7 +397,7 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toContain('America/New_York');
@@ -405,7 +416,7 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components.length).toBeGreaterThan(0);
@@ -421,7 +432,7 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components).toHaveLength(0);
@@ -438,7 +449,7 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components).toHaveLength(0);
@@ -542,7 +553,7 @@ describe('EventCreateCommand', () => {
       // Confirmation embed should still have been sent
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -635,7 +646,7 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      const callArgs = mockRespond.mock.calls[0][0] as {
+      const callArgs = (mockRespond.mock.calls as unknown[][])[0][0] as {
         name: string;
         value: string;
       }[];

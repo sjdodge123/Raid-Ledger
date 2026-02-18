@@ -140,7 +140,7 @@ describe('EventsListCommand', () => {
 
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -158,7 +158,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { color?: number } }[];
       };
       expect(call.embeds[0].data.color).toBe(EMBED_COLORS.ANNOUNCEMENT);
@@ -177,7 +177,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toContain('No game');
@@ -196,7 +196,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toContain('5/20');
@@ -215,7 +215,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toContain('3 signed up');
@@ -235,7 +235,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components.length).toBeGreaterThan(0);
@@ -255,7 +255,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components).toHaveLength(0);
@@ -274,7 +274,7 @@ describe('EventsListCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { footer?: { text: string } } }[];
       };
       expect(call.embeds[0].data.footer?.text).toContain('10');

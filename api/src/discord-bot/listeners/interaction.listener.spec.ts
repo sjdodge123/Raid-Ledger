@@ -122,15 +122,15 @@ describe('InteractionListener', () => {
   });
 
   describe('handleInteraction (via attached listener)', () => {
-    let interactionHandler: (interaction: unknown) => void;
+    let interactionHandler: (interaction: unknown) => Promise<void>;
 
     beforeEach(() => {
       listener.attachListener();
 
       // Capture the handler registered with client.on
-      const callArgs = mockClient.on.mock.calls[0] as [
+      const callArgs = (mockClient.on.mock.calls as unknown[][])[0] as [
         string,
-        (interaction: unknown) => void,
+        (interaction: unknown) => Promise<void>,
       ];
       interactionHandler = callArgs[1];
     });
@@ -299,7 +299,7 @@ describe('InteractionListener', () => {
         respond: mockRespond,
       };
 
-      eventCreateCommand.handleAutocomplete!.mockRejectedValue(
+      eventCreateCommand.handleAutocomplete.mockRejectedValue(
         new Error('Autocomplete error'),
       );
 

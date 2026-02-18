@@ -201,7 +201,9 @@ describe('RosterViewCommand', () => {
 
     it('should show "No signups yet." when roster is empty', async () => {
       const interaction = mockInteraction('42');
-      const chain = createChainMock([{ title: 'Empty Raid', maxAttendees: 20 }]);
+      const chain = createChainMock([
+        { title: 'Empty Raid', maxAttendees: 20 },
+      ]);
       mockDb.select.mockReturnValue(chain);
       signupsService.getRosterWithAssignments.mockResolvedValue(
         makeRoster([], []) as unknown as Awaited<
@@ -215,7 +217,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toBe('No signups yet.');
@@ -247,7 +249,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       const description = call.embeds[0].data.description ?? '';
@@ -261,11 +263,7 @@ describe('RosterViewCommand', () => {
       const chain = createChainMock([{ title: 'Test Raid', maxAttendees: 20 }]);
       mockDb.select.mockReturnValue(chain);
 
-      const roster = makeRoster(
-        [],
-        [{ username: 'UnassignedPlayer' }],
-        null,
-      );
+      const roster = makeRoster([], [{ username: 'UnassignedPlayer' }], null);
       signupsService.getRosterWithAssignments.mockResolvedValue(
         roster as unknown as Awaited<
           ReturnType<typeof signupsService.getRosterWithAssignments>
@@ -278,7 +276,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(call.embeds[0].data.description).toContain('UnassignedPlayer');
@@ -287,7 +285,9 @@ describe('RosterViewCommand', () => {
 
     it('should use roster update color for the embed', async () => {
       const interaction = mockInteraction('42');
-      const chain = createChainMock([{ title: 'Test Raid', maxAttendees: null }]);
+      const chain = createChainMock([
+        { title: 'Test Raid', maxAttendees: null },
+      ]);
       mockDb.select.mockReturnValue(chain);
       signupsService.getRosterWithAssignments.mockResolvedValue(
         makeRoster() as unknown as Awaited<
@@ -301,7 +301,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { color?: number } }[];
       };
       expect(call.embeds[0].data.color).toBe(EMBED_COLORS.ROSTER_UPDATE);
@@ -328,7 +328,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { footer?: { text: string } } }[];
       };
       expect(call.embeds[0].data.footer?.text).toContain('2 total signups');
@@ -352,7 +352,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components.length).toBeGreaterThan(0);
@@ -375,7 +375,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const call = interaction.editReply.mock.calls[0][0] as {
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
       expect(call.components).toHaveLength(0);
@@ -489,7 +489,7 @@ describe('RosterViewCommand', () => {
         >[0],
       );
 
-      const callArgs = mockRespond.mock.calls[0][0] as {
+      const callArgs = (mockRespond.mock.calls as unknown[][])[0][0] as {
         name: string;
         value: string;
       }[];
