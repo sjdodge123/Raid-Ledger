@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
@@ -8,6 +8,7 @@ import { DiscordIcon } from '../icons/DiscordIcon';
 import { useQuery } from '@tanstack/react-query';
 import { getAuthToken } from '../../hooks/use-auth';
 import { RoleBadge } from '../ui/role-badge';
+import { useFocusTrap } from '../../hooks/use-focus-trap';
 
 interface ImpersonateUser {
     id: number;
@@ -31,6 +32,13 @@ export function UserMenu() {
     const menuRef = useRef<HTMLDivElement>(null);
     const impersonateSearchRef = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
+    const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
+
+    const closeMenu = useCallback(() => {
+        setIsOpen(false);
+        setShowImpersonateMenu(false);
+        setImpersonateSearch('');
+    }, []);
 
     const discordConfigured = systemStatus?.discordConfigured ?? false;
 
@@ -54,9 +62,7 @@ export function UserMenu() {
     useEffect(() => {
         function handleClickOutside(event: MouseEvent) {
             if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-                setShowImpersonateMenu(false);
-                setImpersonateSearch('');
+                closeMenu();
             }
         }
 
@@ -64,15 +70,13 @@ export function UserMenu() {
             document.addEventListener('mousedown', handleClickOutside);
         }
         return () => document.removeEventListener('mousedown', handleClickOutside);
-    }, [isOpen]);
+    }, [isOpen, closeMenu]);
 
     // Close on Escape key
     useEffect(() => {
         function handleEscape(event: KeyboardEvent) {
             if (event.key === 'Escape') {
-                setIsOpen(false);
-                setShowImpersonateMenu(false);
-                setImpersonateSearch('');
+                closeMenu();
             }
         }
 
@@ -80,7 +84,7 @@ export function UserMenu() {
             document.addEventListener('keydown', handleEscape);
         }
         return () => document.removeEventListener('keydown', handleEscape);
-    }, [isOpen]);
+    }, [isOpen, closeMenu]);
 
     const handleLogout = () => {
         logout();
@@ -155,7 +159,7 @@ export function UserMenu() {
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
+                <div ref={trapRef} role="menu" className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
                     <Link
                         to="/profile"
                         className="block p-3 border-b border-edge hover:bg-panel/50 transition-colors"

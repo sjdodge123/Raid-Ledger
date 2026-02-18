@@ -8,6 +8,7 @@ import type { AvailableSlot } from './AssignmentPopup';
 import { Modal } from '../ui/modal';
 import { computeAutoFill } from './roster-auto-fill';
 import type { AutoFillResult } from './roster-auto-fill';
+import { useAriaLive } from '../../hooks/use-aria-live';
 
 interface RosterBuilderProps {
     /** Unassigned users (pool) */
@@ -76,6 +77,8 @@ export const RosterBuilder = memo(function RosterBuilder({
     onSelfRemove,
     stickyExtra,
 }: RosterBuilderProps) {
+    const { announce } = useAriaLive();
+
     // ROK-208: Assignment popup state
     const [assignmentTarget, setAssignmentTarget] = React.useState<{
         role: RosterRole;
@@ -169,7 +172,9 @@ export const RosterBuilder = memo(function RosterBuilder({
         });
 
         onRosterChange(newPool, newAssignments);
-        toast.success(`${sourceItem.username} assigned to ${assignmentTarget.role} ${assignmentTarget.position}`);
+        const msg = `${sourceItem.username} assigned to ${assignmentTarget.role} ${assignmentTarget.position}`;
+        toast.success(msg);
+        announce(msg);
         setAssignmentTarget(null);
     };
 
@@ -182,7 +187,9 @@ export const RosterBuilder = memo(function RosterBuilder({
         const newPool = [...pool, { ...sourceItem, slot: null, position: 0 }];
 
         onRosterChange(newPool, newAssignments);
-        toast.success(`${sourceItem.username} moved to unassigned`);
+        const msg = `${sourceItem.username} moved to unassigned`;
+        toast.success(msg);
+        announce(msg);
         setAssignmentTarget(null);
     };
 
@@ -251,7 +258,9 @@ export const RosterBuilder = memo(function RosterBuilder({
         setIsBulkUpdating(true);
         try {
             onRosterChange(autoFillPreview.newPool, autoFillPreview.newAssignments);
-            toast.success(`Auto-filled ${autoFillPreview.totalFilled} players`);
+            const msg = `Auto-filled ${autoFillPreview.totalFilled} players`;
+            toast.success(msg);
+            announce(msg);
         } finally {
             setAutoFillPreview(null);
             setIsBulkUpdating(false);
@@ -268,7 +277,9 @@ export const RosterBuilder = memo(function RosterBuilder({
                 const clearedPlayers = assignments.map(a => ({ ...a, slot: null, position: 0 }));
                 const mergedPool = [...pool, ...clearedPlayers];
                 onRosterChange(mergedPool, []);
-                toast.success(`Roster cleared — ${assignments.length} players moved to pool`);
+                const msg = `Roster cleared — ${assignments.length} players moved to pool`;
+                toast.success(msg);
+                announce(msg);
             } finally {
                 setIsBulkUpdating(false);
             }
@@ -294,7 +305,9 @@ export const RosterBuilder = memo(function RosterBuilder({
         });
 
         onRosterChange(newPool, newAssignments);
-        toast.success(`${sourceItem.username} assigned to ${role} ${position}`);
+        const msg = `${sourceItem.username} assigned to ${role} ${position}`;
+        toast.success(msg);
+        announce(msg);
         setBrowseAll(false);
     };
 

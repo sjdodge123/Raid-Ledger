@@ -1,5 +1,6 @@
-import { useEffect, useCallback, type ReactNode } from 'react';
+import { useEffect, useCallback, useId, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useFocusTrap } from '../../hooks/use-focus-trap';
 
 interface ModalProps {
     isOpen: boolean;
@@ -15,8 +16,12 @@ interface ModalProps {
 /**
  * Simple modal component for dialogs.
  * Uses portal pattern for proper z-index stacking.
+ * ROK-342: Focus trap + ARIA dialog semantics.
  */
 export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md', bodyClassName }: ModalProps) {
+    const titleId = useId();
+    const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
+
     // Close on Escape key
     const handleKeyDown = useCallback(
         (e: KeyboardEvent) => {
@@ -51,17 +56,18 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'max-w-md',
 
             {/* Modal Content */}
             <div
+                ref={trapRef}
                 className={`relative bg-surface border border-edge rounded-xl shadow-2xl ${maxWidth} w-full mx-4 max-h-[90vh] overflow-hidden`}
                 role="dialog"
                 aria-modal="true"
-                aria-labelledby="modal-title"
+                aria-labelledby={titleId}
                 style={{
                     animation: 'modal-spring 350ms var(--spring-bounce) forwards',
                 }}
             >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-edge">
-                    <h2 id="modal-title" className="text-lg font-semibold text-foreground">
+                    <h2 id={titleId} className="text-lg font-semibold text-foreground">
                         {title}
                     </h2>
                     <button
