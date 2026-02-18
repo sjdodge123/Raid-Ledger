@@ -52,12 +52,6 @@ export class RegisterCommandsService {
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async registerCommands(): Promise<void> {
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) {
-      this.logger.warn('No guild found, skipping slash command registration');
-      return;
-    }
-
     const config = await this.settingsService.getDiscordBotConfig();
     if (!config) {
       this.logger.warn(
@@ -72,7 +66,6 @@ export class RegisterCommandsService {
     try {
       const rest = new REST({ version: '10' }).setToken(config.token);
 
-      // Use guild-specific registration for instant updates (no 1-hour global cache)
       const clientId = this.clientService.getClientId();
       if (!clientId) {
         this.logger.warn(
@@ -81,12 +74,25 @@ export class RegisterCommandsService {
         return;
       }
 
-      await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
+      // Register globally so commands work in both guild channels and DMs
+      await rest.put(Routes.applicationCommands(clientId), {
         body: commands,
       });
 
+      // Clear any stale guild-scoped commands from previous registrations
+      const guildId = this.clientService.getGuildId();
+      if (guildId) {
+        await rest
+          .put(Routes.applicationGuildCommands(clientId, guildId), {
+            body: [],
+          })
+          .catch(() => {
+            /* ignore — guild cleanup is best-effort */
+          });
+      }
+
       this.logger.log(
-        `Registered ${commands.length} slash command(s) in guild ${guildId}`,
+        `Registered ${commands.length} global slash command(s)`,
       );
     } catch (error) {
       this.logger.error('Failed to register slash commands:', error);

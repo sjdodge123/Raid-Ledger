@@ -54,6 +54,7 @@ export class EventCreateCommand
     return new SlashCommandBuilder()
       .setName('event')
       .setDescription('Event management commands')
+      .setDMPermission(true)
       .addSubcommand((sub) =>
         sub
           .setName('create')

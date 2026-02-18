@@ -29,6 +29,7 @@ export class EventsListCommand
     return new SlashCommandBuilder()
       .setName('events')
       .setDescription('List upcoming events')
+      .setDMPermission(true)
       .toJSON();
   }
 

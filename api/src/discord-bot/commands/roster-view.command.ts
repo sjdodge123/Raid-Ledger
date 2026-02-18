@@ -35,6 +35,7 @@ export class RosterViewCommand
     return new SlashCommandBuilder()
       .setName('roster')
       .setDescription('View roster for an event')
+      .setDMPermission(true)
       .addStringOption((opt) =>
         opt
           .setName('event')
