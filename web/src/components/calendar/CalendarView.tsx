@@ -510,7 +510,12 @@ export function CalendarView({
                     onNavigate={handleNavigate}
                     onView={setView}
                     onSelectEvent={handleSelectEvent}
-                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); onCalendarViewChange?.('day'); }}
+                    onDrillDown={(date) => {
+                        // On mobile, onSelectSlot already handles click-to-day navigation
+                        // so skip onDrillDown to prevent double-firing and race conditions
+                        if (window.innerWidth < 768) return;
+                        setCurrentDate(date); setView(Views.DAY); onCalendarViewChange?.('day');
+                    }}
                     drilldownView={Views.DAY}
                     eventPropGetter={eventPropGetter}
                     components={{

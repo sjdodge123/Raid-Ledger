@@ -771,10 +771,13 @@
 /* Day view: allow event content to overflow for action buttons */
 .calendar-view-day .rbc-time-view .rbc-event {
     overflow: visible;
+    height: auto !important;
+    min-height: 100px;
 }
 
 .calendar-view-day .rbc-time-view .rbc-event-content {
     overflow: visible;
+    height: auto;
 }
 
 /* Week event block component */
@@ -1150,12 +1153,16 @@
 }
 
 .calendar-mobile-nav-today {
-    padding: 0.25rem 0.75rem;
-    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 0.875rem;
+    font-size: 0.875rem;
     font-weight: 600;
     background: rgba(16, 185, 129, 0.2);
     border: 1px solid rgba(16, 185, 129, 0.4);
-    border-radius: 9999px;
+    border-radius: 0.5rem;
     color: #10b981;
     cursor: pointer;
     transition: all 0.15s ease;
