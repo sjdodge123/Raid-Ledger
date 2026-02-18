@@ -282,7 +282,7 @@ export function DiscordBotForm() {
                     {discordBotStatus.data?.connected && discordChannels.data && discordChannels.data.length > 0 && (
                         <div className="mt-4">
                             <label htmlFor="discordChannel" className="block text-sm font-medium text-secondary mb-1.5">
-                                Event Notification Channel
+                                Default Notification Channel
                             </label>
                             <select
                                 id="discordChannel"
@@ -305,7 +305,7 @@ export function DiscordBotForm() {
                                     <option key={ch.id} value={ch.id}>#{ch.name}</option>
                                 ))}
                             </select>
-                            <p className="text-xs text-secondary mt-1.5">Event embeds will be posted to this channel</p>
+                            <p className="text-xs text-secondary mt-1.5">Fallback channel for event embeds when no game-specific binding is set</p>
                         </div>
                     )}
                 </div>
