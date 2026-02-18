@@ -246,7 +246,9 @@ describe('DiscordBotClientService', () => {
       mockClient.emit(Events.ClientReady);
       await connectPromise;
 
-      const destroySpy = jest.spyOn(mockClient, 'destroy').mockResolvedValue();
+      const destroySpy = jest
+        .spyOn(mockClient, 'destroy')
+        .mockResolvedValue(undefined);
 
       await service.disconnect();
 

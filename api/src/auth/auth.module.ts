@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LocalAuthService } from './local-auth.service';
+import { MagicLinkService } from './magic-link.service';
 import { UsersModule } from '../users/users.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
@@ -38,9 +39,15 @@ import { SettingsModule } from '../settings/settings.module';
   providers: [
     AuthService,
     LocalAuthService,
+    MagicLinkService,
     DynamicDiscordStrategy,
     JwtStrategy,
   ],
-  exports: [AuthService, LocalAuthService, DynamicDiscordStrategy],
+  exports: [
+    AuthService,
+    LocalAuthService,
+    MagicLinkService,
+    DynamicDiscordStrategy,
+  ],
 })
 export class AuthModule {}

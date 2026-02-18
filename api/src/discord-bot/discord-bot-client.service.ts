@@ -184,6 +184,23 @@ export class DiscordBotClientService {
   }
 
   /**
+   * Get the bot's application/client ID.
+   * Used for slash command registration.
+   */
+  getClientId(): string | null {
+    if (!this.client?.isReady()) return null;
+    return this.client.user?.id ?? null;
+  }
+
+  /**
+   * Get the underlying Discord.js Client instance.
+   * Used by the interaction listener to register event handlers.
+   */
+  getClient(): Client | null {
+    return this.client;
+  }
+
+  /**
    * Send an embed message to a specific channel.
    * @returns The sent Message object for tracking
    */
