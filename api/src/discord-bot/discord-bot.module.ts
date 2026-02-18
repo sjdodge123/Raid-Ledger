@@ -19,7 +19,7 @@ import { RosterViewCommand } from './commands/roster-view.command';
 @Module({
   imports: [
     SettingsModule,
-    UsersModule,
+    forwardRef(() => UsersModule),
     forwardRef(() => EventsModule),
     forwardRef(() => AuthModule),
   ],

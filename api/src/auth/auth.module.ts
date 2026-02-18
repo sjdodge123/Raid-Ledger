@@ -23,7 +23,7 @@ import { EventsModule } from '../events/events.module';
  */
 @Module({
   imports: [
-    UsersModule,
+    forwardRef(() => UsersModule),
     PassportModule,
     ConfigModule,
     DrizzleModule,
