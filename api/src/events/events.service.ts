@@ -985,7 +985,12 @@ export class EventsService {
       ),
     );
 
-    return this.findOne(eventId);
+    const rescheduledEvent = await this.findOne(eventId);
+
+    // ROK-118: Emit event.updated so Discord embed is refreshed
+    this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, rescheduledEvent);
+
+    return rescheduledEvent;
   }
 
   /**
