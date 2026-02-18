@@ -463,9 +463,7 @@ describe('DiscordNotificationEmbedService', () => {
       const browseField = json.fields?.find(
         (f) => f.name === 'Browse & sign up for events',
       );
-      const loopField = json.fields?.find(
-        (f) => f.name === 'Stay in the loop',
-      );
+      const loopField = json.fields?.find((f) => f.name === 'Stay in the loop');
       const profileField = json.fields?.find(
         (f) => f.name === 'Set up your profile',
       );

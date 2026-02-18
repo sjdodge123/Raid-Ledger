@@ -138,7 +138,11 @@ describe('RegisterCommandsService', () => {
       expect(settingsService.getDiscordBotConfig).toHaveBeenCalled();
       // Global registration still happens
       expect(mockRestPut).toHaveBeenCalledWith('/global-route', {
-        body: expect.any(Array),
+        body: [
+          { name: 'event', description: 'Event commands' },
+          { name: 'events', description: 'List events' },
+          { name: 'roster', description: 'View roster' },
+        ],
       });
       // Guild cleanup is skipped
       expect(Routes.applicationGuildCommands).not.toHaveBeenCalled();
