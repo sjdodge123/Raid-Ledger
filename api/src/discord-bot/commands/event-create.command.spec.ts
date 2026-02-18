@@ -3,29 +3,20 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { EventCreateCommand } from './event-create.command';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
+import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
-import { DiscordBotClientService } from '../discord-bot-client.service';
-import { DiscordEmbedFactory } from '../services/discord-embed.factory';
-import { ChannelResolverService } from '../services/channel-resolver.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ApplicationCommandOptionType,
-} from 'discord.js';
+import { ApplicationCommandOptionType } from 'discord.js';
 
 describe('EventCreateCommand', () => {
   let module: TestingModule;
   let command: EventCreateCommand;
   let eventsService: jest.Mocked<EventsService>;
   let usersService: jest.Mocked<UsersService>;
+  let preferencesService: jest.Mocked<PreferencesService>;
   let settingsService: jest.Mocked<SettingsService>;
   let magicLinkService: jest.Mocked<MagicLinkService>;
-  let clientService: jest.Mocked<DiscordBotClientService>;
-  let channelResolver: jest.Mocked<ChannelResolverService>;
-  let embedFactory: jest.Mocked<DiscordEmbedFactory>;
   let mockDb: {
     select: jest.Mock;
     insert: jest.Mock;
@@ -44,9 +35,6 @@ describe('EventCreateCommand', () => {
     maxAttendees: 20,
     game: { name: 'WoW', coverUrl: null },
   };
-
-  const mockEmbed = new EmbedBuilder().setTitle('Test');
-  const mockRow = new ActionRowBuilder<ButtonBuilder>();
 
   const createChainMock = (resolvedValue: unknown[] = []) => {
     const chain: Record<string, jest.Mock> = {};
@@ -111,6 +99,12 @@ describe('EventCreateCommand', () => {
           },
         },
         {
+          provide: PreferencesService,
+          useValue: {
+            getUserPreference: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
           provide: SettingsService,
           useValue: {
             get: jest.fn().mockResolvedValue('UTC'),
@@ -127,29 +121,6 @@ describe('EventCreateCommand', () => {
             generateLink: jest.fn().mockResolvedValue(null),
           },
         },
-        {
-          provide: DiscordBotClientService,
-          useValue: {
-            isConnected: jest.fn().mockReturnValue(false),
-            getGuildId: jest.fn().mockReturnValue('guild-123'),
-            sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
-          },
-        },
-        {
-          provide: DiscordEmbedFactory,
-          useValue: {
-            buildEventAnnouncement: jest.fn().mockReturnValue({
-              embed: mockEmbed,
-              row: mockRow,
-            }),
-          },
-        },
-        {
-          provide: ChannelResolverService,
-          useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue(null),
-          },
-        },
       ],
     }).compile();
 
@@ -157,11 +128,9 @@ describe('EventCreateCommand', () => {
     command = module.get(EventCreateCommand);
     eventsService = module.get(EventsService);
     usersService = module.get(UsersService);
+    preferencesService = module.get(PreferencesService);
     settingsService = module.get(SettingsService);
     magicLinkService = module.get(MagicLinkService);
-    clientService = module.get(DiscordBotClientService);
-    channelResolver = module.get(ChannelResolverService);
-    embedFactory = module.get(DiscordEmbedFactory);
   });
 
   afterEach(async () => {
@@ -470,10 +439,15 @@ describe('EventCreateCommand', () => {
       );
     });
 
-    it('should post public announcement when bot is connected and channel is resolved', async () => {
-      clientService.isConnected.mockReturnValue(true);
-      channelResolver.resolveChannelForEvent.mockResolvedValue('channel-789');
-
+    it('should use user timezone preference when available', async () => {
+      preferencesService.getUserPreference.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        key: 'timezone',
+        value: 'America/New_York',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
       const interaction = makeInteraction();
 
       await command.handleInteraction(
@@ -482,12 +456,22 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      expect(embedFactory.buildEventAnnouncement).toHaveBeenCalled();
-      expect(clientService.sendEmbed).toHaveBeenCalled();
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+        embeds: { data: { description?: string } }[];
+      };
+      expect(call.embeds[0].data.description).toContain('America/New_York');
     });
 
-    it('should skip public announcement when bot is not connected', async () => {
-      clientService.isConnected.mockReturnValue(false);
+    it('should fall back to community default when user preference is auto', async () => {
+      preferencesService.getUserPreference.mockResolvedValue({
+        id: 1,
+        userId: 1,
+        key: 'timezone',
+        value: 'auto',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      settingsService.get.mockResolvedValue('America/Chicago');
       const interaction = makeInteraction();
 
       await command.handleInteraction(
@@ -496,14 +480,15 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      expect(embedFactory.buildEventAnnouncement).not.toHaveBeenCalled();
-      expect(clientService.sendEmbed).not.toHaveBeenCalled();
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+        embeds: { data: { description?: string } }[];
+      };
+      expect(call.embeds[0].data.description).toContain('America/Chicago');
     });
 
-    it('should skip public announcement when no channel is resolved', async () => {
-      clientService.isConnected.mockReturnValue(true);
-      channelResolver.resolveChannelForEvent.mockResolvedValue(null);
-
+    it('should fall back to America/New_York when both user preference and community default are unavailable', async () => {
+      preferencesService.getUserPreference.mockResolvedValue(null);
+      settingsService.get.mockResolvedValue(null);
       const interaction = makeInteraction();
 
       await command.handleInteraction(
@@ -512,50 +497,10 @@ describe('EventCreateCommand', () => {
         >[0],
       );
 
-      expect(clientService.sendEmbed).not.toHaveBeenCalled();
-    });
-
-    it('should store discord message reference after posting announcement', async () => {
-      clientService.isConnected.mockReturnValue(true);
-      channelResolver.resolveChannelForEvent.mockResolvedValue('channel-789');
-      const insertChain = createChainMock();
-      mockDb.insert.mockReturnValue(insertChain);
-
-      const interaction = makeInteraction();
-
-      await command.handleInteraction(
-        interaction as unknown as Parameters<
-          typeof command.handleInteraction
-        >[0],
-      );
-
-      expect(mockDb.insert).toHaveBeenCalled();
-    });
-
-    it('should not throw when public announcement fails', async () => {
-      clientService.isConnected.mockReturnValue(true);
-      channelResolver.resolveChannelForEvent.mockResolvedValue('channel-789');
-      clientService.sendEmbed.mockRejectedValue(
-        new Error('Discord channel error'),
-      );
-
-      const interaction = makeInteraction();
-
-      // Should not throw
-      await expect(
-        command.handleInteraction(
-          interaction as unknown as Parameters<
-            typeof command.handleInteraction
-          >[0],
-        ),
-      ).resolves.not.toThrow();
-
-      // Confirmation embed should still have been sent
-      expect(interaction.editReply).toHaveBeenCalledWith(
-        expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]) as unknown,
-        }),
-      );
+      const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+        embeds: { data: { description?: string } }[];
+      };
+      expect(call.embeds[0].data.description).toContain('America/New_York');
     });
   });
 

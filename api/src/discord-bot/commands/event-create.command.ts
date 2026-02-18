@@ -18,19 +18,13 @@ import { UsersService } from '../../users/users.service';
 import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
-import { DiscordBotClientService } from '../discord-bot-client.service';
-import {
-  DiscordEmbedFactory,
-  type EmbedContext,
-} from '../services/discord-embed.factory';
-import { ChannelResolverService } from '../services/channel-resolver.service';
-import { EMBED_STATES } from '../discord-bot.constants';
 import { parseNaturalTime, toDiscordTimestamp } from '../utils/time-parser';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
 const DEFAULT_SLOTS = 20;
 const DEFAULT_DURATION_HOURS = 2;
+const FALLBACK_TIMEZONE = 'America/New_York';
 
 @Injectable()
 export class EventCreateCommand
@@ -47,9 +41,6 @@ export class EventCreateCommand
     private readonly preferencesService: PreferencesService,
     private readonly settingsService: SettingsService,
     private readonly magicLinkService: MagicLinkService,
-    private readonly clientService: DiscordBotClientService,
-    private readonly embedFactory: DiscordEmbedFactory,
-    private readonly channelResolver: ChannelResolverService,
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
@@ -190,7 +181,7 @@ export class EventCreateCommand
     const userTzPref = await this.preferencesService.getUserPreference(user.id, 'timezone');
     const userTz = userTzPref?.value as string | undefined;
     const defaultTz = await this.settingsService.get('default_timezone');
-    const timezone = userTz && userTz !== 'auto' ? userTz : defaultTz;
+    const timezone = (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
 
     // Parse natural language time
     const parsed = parseNaturalTime(timeInput, timezone);
@@ -287,84 +278,12 @@ export class EventCreateCommand
         components,
       });
 
-      // Post public announcement embed to the bound channel
-      await this.postPublicAnnouncement(event, registryGameId ?? null);
+      // Public announcement embed is posted automatically by DiscordEventListener
+      // when EventsService.create() emits the 'event.created' app event.
     } catch (error) {
       this.logger.error('Failed to create event via slash command:', error);
       await interaction.editReply(
         'Failed to create event. Please try again or use the web app.',
-      );
-    }
-  }
-
-  /**
-   * Post a public announcement embed to the bound (or default) channel.
-   * Uses the ROK-118 DiscordEmbedFactory if available.
-   */
-  private async postPublicAnnouncement(
-    event: {
-      id: number;
-      title: string;
-      startTime: string;
-      endTime: string;
-      signupCount: number;
-      maxAttendees?: number | null;
-      game?: { name: string; coverUrl?: string | null } | null;
-    },
-    registryGameId: string | null,
-  ): Promise<void> {
-    if (!this.clientService.isConnected()) return;
-
-    const channelId = await this.channelResolver.resolveChannelForEvent(
-      registryGameId,
-    );
-    if (!channelId) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    try {
-      const branding = await this.settingsService.getBranding();
-      const context: EmbedContext = {
-        communityName: branding.communityName,
-        clientUrl: process.env.CLIENT_URL ?? null,
-      };
-
-      const embedData = {
-        id: event.id,
-        title: event.title,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        signupCount: event.signupCount,
-        maxAttendees: event.maxAttendees,
-        game: event.game
-          ? { name: event.game.name, coverUrl: event.game.coverUrl ?? null }
-          : null,
-      };
-
-      const { embed, row } = this.embedFactory.buildEventAnnouncement(
-        embedData,
-        context,
-      );
-
-      const message = await this.clientService.sendEmbed(channelId, embed, row);
-
-      // Store message reference for future updates
-      await this.db.insert(schema.discordEventMessages).values({
-        eventId: event.id,
-        guildId,
-        channelId,
-        messageId: message.id,
-        embedState: EMBED_STATES.POSTED,
-      });
-
-      this.logger.log(
-        `Posted event embed for event ${event.id} to channel ${channelId}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to post public announcement for event ${event.id}:`,
-        error,
       );
     }
   }
