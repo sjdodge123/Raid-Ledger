@@ -119,6 +119,10 @@ export class DiscordNotificationEmbedService {
         .setLabel('Set Up Profile')
         .setStyle(ButtonStyle.Link)
         .setURL(`${this.clientUrl}/profile`),
+      new ButtonBuilder()
+        .setLabel('Notification Settings')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
     );
 
     return { embed, row };
