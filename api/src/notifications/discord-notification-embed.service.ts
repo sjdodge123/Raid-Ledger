@@ -79,43 +79,46 @@ export class DiscordNotificationEmbedService {
       ? parseInt(accentColor.replace('#', ''), 16)
       : EMBED_COLORS.ANNOUNCEMENT;
 
+    const name = communityName || 'Raid Ledger';
+
     const embed = new EmbedBuilder()
-      .setAuthor({ name: communityName || 'Raid Ledger' })
-      .setTitle('Welcome to Discord Notifications!')
+      .setAuthor({ name })
+      .setTitle(`Welcome to ${name}!`)
       .setDescription(
-        `You've enabled Discord notifications for **${communityName || 'Raid Ledger'}**. ` +
-          `You'll now receive important updates directly in your DMs.`,
+        `Hosted by **Raid Ledger** — your Discord account is now linked and you're officially part of the community! ` +
+          `Here's what you can do:`,
       )
       .setColor(color)
       .addFields(
         {
-          name: "What you'll receive",
-          value: [
-            '- Event reminders and new event alerts',
-            '- Signup confirmations and roster changes',
-            '- Game activity for subscribed games',
-            '- Slot vacated and bench promotion notices',
-          ].join('\n'),
+          name: 'Browse & sign up for events',
+          value:
+            'Check the calendar for upcoming raids and events. One click to join — your roster spot is reserved.',
         },
         {
-          name: 'Cross-channel sync',
+          name: 'Stay in the loop',
           value:
-            'Reading a notification on the web marks it as read on Discord too, and vice versa. No duplicate alerts!',
+            "You'll get DMs for event reminders, roster changes, and new events for games you follow. " +
+            'Customize what you receive anytime in your notification settings.',
         },
         {
-          name: 'Customize anytime',
+          name: 'Set up your profile',
           value:
-            'Visit your profile settings to choose exactly which notification types you receive on Discord.',
+            'Add your characters, pick a display name, and choose an avatar to stand out on the roster.',
         },
       )
-      .setFooter({ text: communityName || 'Raid Ledger' })
+      .setFooter({ text: name })
       .setTimestamp();
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setLabel('Notification Settings')
+        .setLabel('View Events')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
+        .setURL(`${this.clientUrl}/events`),
+      new ButtonBuilder()
+        .setLabel('Set Up Profile')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${this.clientUrl}/profile`),
     );
 
     return { embed, row };
