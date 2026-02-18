@@ -20,10 +20,14 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
     const dragCurrentY = useRef<number>(0);
     const [expanded, setExpanded] = useState(false);
 
-    // Reset expanded state when sheet closes
-    useEffect(() => {
-        if (!isOpen) setExpanded(false);
-    }, [isOpen]);
+    // Reset expanded state when sheet closes (React-recommended derived state pattern)
+    const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+    if (isOpen !== prevIsOpen) {
+        setPrevIsOpen(isOpen);
+        if (!isOpen) {
+            setExpanded(false);
+        }
+    }
 
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
