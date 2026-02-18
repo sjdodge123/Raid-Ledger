@@ -127,7 +127,7 @@ export function CalendarPage() {
                 onToday={handleMobileNavToday}
             />
 
-            <div className={`max-w-7xl mx-auto ${calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-4 py-6'}`} style={{ overflowX: 'clip' }}>
+            <div className={`max-w-7xl mx-auto ${calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-2 py-1 md:px-4 md:py-6'}`} style={{ overflowX: 'clip' }}>
                 <div className={`mb-6 hidden md:block ${calendarView === 'schedule' ? 'px-4' : ''}`}>
                     <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
                     <p className="text-muted mt-1">

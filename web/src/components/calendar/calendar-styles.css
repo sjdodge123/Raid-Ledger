@@ -306,6 +306,10 @@
     .calendar-container {
         padding: 0.75rem;
         overflow-x: clip;
+        min-height: auto;
+        border: none;
+        border-radius: 0;
+        background: transparent;
     }
 
     .calendar-toolbar {
