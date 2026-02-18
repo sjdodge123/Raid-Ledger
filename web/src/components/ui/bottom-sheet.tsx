@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { Z_INDEX } from '../../lib/z-index';
@@ -12,10 +12,18 @@ interface BottomSheetProps {
     maxHeight?: string;
 }
 
+const EXPANDED_HEIGHT = '95vh';
+
 export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60vh' }: BottomSheetProps) {
     const sheetRef = useRef<HTMLDivElement>(null);
     const dragStartY = useRef<number>(0);
     const dragCurrentY = useRef<number>(0);
+    const [expanded, setExpanded] = useState(false);
+
+    // Reset expanded state when sheet closes
+    useEffect(() => {
+        if (!isOpen) setExpanded(false);
+    }, [isOpen]);
 
     useEffect(() => {
         const handleEscape = (e: KeyboardEvent) => {
@@ -38,14 +46,26 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
 
     const handleDragStart = (e: React.TouchEvent) => {
         dragStartY.current = e.touches[0].clientY;
+        dragCurrentY.current = e.touches[0].clientY;
+        // Disable transition during drag for responsive feel
+        if (sheetRef.current) {
+            sheetRef.current.style.transition = 'none';
+        }
     };
 
     const handleDragMove = (e: React.TouchEvent) => {
         dragCurrentY.current = e.touches[0].clientY;
         const delta = dragCurrentY.current - dragStartY.current;
 
-        if (delta > 0 && sheetRef.current) {
+        if (!sheetRef.current) return;
+
+        if (delta > 0) {
+            // Dragging down — slide sheet down
             sheetRef.current.style.transform = `translateY(${delta}px)`;
+        } else {
+            // Dragging up — grow the sheet with dampened visual feedback
+            const dampened = delta * 0.4;
+            sheetRef.current.style.transform = `translateY(${dampened}px)`;
         }
     };
 
@@ -53,17 +73,30 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
         const delta = dragCurrentY.current - dragStartY.current;
         const sheetHeight = sheetRef.current?.offsetHeight || 0;
 
-        if (delta > 150 || delta > sheetHeight * 0.4) {
-            onClose();
+        // Restore transition for snap animation
+        if (sheetRef.current) {
+            sheetRef.current.style.transition = '';
+            sheetRef.current.style.transform = '';
         }
 
-        if (sheetRef.current) {
-            sheetRef.current.style.transform = '';
+        if (delta < -60) {
+            // Dragged up past threshold → expand
+            setExpanded(true);
+        } else if (delta > 0) {
+            if (expanded && delta > 80) {
+                // Expanded + dragged down → collapse
+                setExpanded(false);
+            } else if (!expanded && (delta > 150 || delta > sheetHeight * 0.4)) {
+                // Collapsed + dragged down far → dismiss
+                onClose();
+            }
         }
 
         dragStartY.current = 0;
         dragCurrentY.current = 0;
     };
+
+    const activeMaxHeight = expanded ? EXPANDED_HEIGHT : maxHeight;
 
     return createPortal(
         <div
@@ -82,11 +115,11 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
                 role="dialog"
                 aria-modal="true"
                 aria-label={title || 'Bottom sheet'}
-                className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
+                className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-all duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
                     }`}
-                style={{ maxHeight }}
+                style={{ maxHeight: activeMaxHeight }}
             >
-                {/* Drag handle — only this area captures drag-to-dismiss gestures */}
+                {/* Drag handle — swipe up to expand, swipe down to collapse/dismiss */}
                 <div
                     className="flex justify-center pt-3 pb-2 cursor-grab"
                     onTouchStart={handleDragStart}
@@ -109,7 +142,7 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
                     </div>
                 )}
 
-                <div className="overflow-y-auto px-4 py-4" style={{ maxHeight: `calc(${maxHeight} - 80px)` }}>
+                <div className="overflow-y-auto px-4 py-4" style={{ maxHeight: `calc(${activeMaxHeight} - 80px)` }}>
                     {children}
                 </div>
             </div>
