@@ -1,4 +1,6 @@
 import { format } from 'date-fns';
+import { useScrollDirection } from '../../hooks/use-scroll-direction';
+import { Z_INDEX } from '../../lib/z-index';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
 
 interface CalendarMobileNavProps {
@@ -11,9 +13,13 @@ interface CalendarMobileNavProps {
 
 /**
  * Compact inline date navigation bar for mobile month/day views (ROK-368).
+ * Sticky below the MobilePageToolbar, responds to scroll direction.
  * Hidden on desktop and when schedule view is active.
  */
 export function CalendarMobileNav({ currentDate, calendarView, onPrev, onNext, onToday }: CalendarMobileNavProps) {
+    const scrollDirection = useScrollDirection();
+    const isHeaderHidden = scrollDirection === 'down';
+
     // Only show for month and day views — schedule uses swipe gestures
     if (calendarView === 'schedule') return null;
 
@@ -22,7 +28,15 @@ export function CalendarMobileNav({ currentDate, calendarView, onPrev, onNext, o
         : format(currentDate, 'EEE, MMM d');
 
     return (
-        <div className="calendar-mobile-nav md:hidden">
+        <div
+            className="calendar-mobile-nav md:hidden"
+            style={{
+                position: 'sticky',
+                top: isHeaderHidden ? '4.25rem' : '8.25rem',
+                zIndex: Z_INDEX.TOOLBAR,
+                transition: 'top 300ms ease-in-out',
+            }}
+        >
             <button
                 type="button"
                 onClick={onPrev}

@@ -1149,7 +1149,7 @@
     justify-content: center;
     gap: 0.5rem;
     padding: 0.5rem 1rem;
-    background: rgba(30, 41, 59, 0.6);
+    background: rgba(30, 41, 59, 0.95);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
 }
@@ -1643,7 +1643,7 @@
 
 /* Mobile nav bar light overrides (ROK-368) */
 [data-scheme="light"] .calendar-mobile-nav {
-    background: rgba(241, 245, 249, 0.8);
+    background: rgba(241, 245, 249, 0.95);
     border-bottom-color: rgba(203, 213, 225, 0.4);
 }
 
