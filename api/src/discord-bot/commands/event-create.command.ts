@@ -130,14 +130,25 @@ export class EventCreateCommand
       return;
     }
 
-    // Resolve the game from the registry
-    const games = await this.db
+    // Resolve the game from the IGDB games catalog
+    const matchedGames = await this.db
       .select()
-      .from(schema.gameRegistry)
-      .where(ilike(schema.gameRegistry.name, gameName))
+      .from(schema.games)
+      .where(ilike(schema.games.name, gameName))
       .limit(1);
 
-    const game = games[0] ?? null;
+    const game = matchedGames[0] ?? null;
+
+    // Also check if there's a matching game_registry entry (for slot configs, event types, etc.)
+    let registryGameId: string | undefined;
+    if (game) {
+      const [registryMatch] = await this.db
+        .select({ id: schema.gameRegistry.id })
+        .from(schema.gameRegistry)
+        .where(ilike(schema.gameRegistry.name, game.name))
+        .limit(1);
+      registryGameId = registryMatch?.id;
+    }
 
     // Parse natural language time
     const defaultTz = await this.settingsService.get('default_timezone');
@@ -161,7 +172,8 @@ export class EventCreateCommand
         title,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        registryGameId: game?.id ?? undefined,
+        gameId: game?.igdbId ?? undefined,
+        registryGameId,
         maxAttendees: slots,
       });
 
@@ -211,7 +223,7 @@ export class EventCreateCommand
       });
 
       // Post public announcement embed to the bound channel
-      await this.postPublicAnnouncement(event, game);
+      await this.postPublicAnnouncement(event, registryGameId ?? null);
     } catch (error) {
       this.logger.error('Failed to create event via slash command:', error);
       await interaction.editReply(
@@ -234,12 +246,12 @@ export class EventCreateCommand
       maxAttendees?: number | null;
       game?: { name: string; coverUrl?: string | null } | null;
     },
-    game: typeof schema.gameRegistry.$inferSelect | null,
+    registryGameId: string | null,
   ): Promise<void> {
     if (!this.clientService.isConnected()) return;
 
     const channelId = await this.channelResolver.resolveChannelForEvent(
-      game?.id ?? null,
+      registryGameId,
     );
     if (!channelId) return;
 
@@ -294,19 +306,20 @@ export class EventCreateCommand
 
   /**
    * Autocomplete handler for game names.
+   * Searches the full IGDB games catalog, not just the game registry.
    */
   private async autocompleteGame(
     interaction: AutocompleteInteraction,
     query: string,
   ): Promise<void> {
-    const games = await this.db
-      .select({ id: schema.gameRegistry.id, name: schema.gameRegistry.name })
-      .from(schema.gameRegistry)
-      .where(ilike(schema.gameRegistry.name, `%${query}%`))
+    const results = await this.db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(ilike(schema.games.name, `%${query}%`))
       .limit(25);
 
     await interaction.respond(
-      games.map((g) => ({ name: g.name, value: g.name })),
+      results.map((g) => ({ name: g.name, value: g.name })),
     );
   }
 }
