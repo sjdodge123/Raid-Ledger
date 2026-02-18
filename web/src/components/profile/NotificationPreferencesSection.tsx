@@ -32,16 +32,6 @@ const NOTIFICATION_TYPE_META: {
         description: 'Activity for games you follow',
     },
     {
-        type: 'achievement_unlocked',
-        label: 'Achievements',
-        description: 'When you earn an achievement',
-    },
-    {
-        type: 'level_up',
-        label: 'Level Up',
-        description: 'When you reach a new level',
-    },
-    {
         type: 'missed_event_nudge',
         label: 'Missed Event Nudge',
         description: 'Suggestions to update your game time',
