@@ -175,6 +175,37 @@ export class DiscordBotClientService {
   }
 
   /**
+   * Send a rich embed DM to a user by their Discord ID.
+   * Used by the Discord notification system (ROK-180).
+   */
+  async sendEmbedDM(
+    discordId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<void> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+
+    try {
+      const user = await this.client.users.fetch(discordId);
+      const messagePayload: {
+        embeds: EmbedBuilder[];
+        components?: ActionRowBuilder<ButtonBuilder>[];
+      } = { embeds: [embed] };
+
+      if (row) {
+        messagePayload.components = [row];
+      }
+
+      await user.send(messagePayload);
+    } catch (error) {
+      this.logger.error(`Failed to send embed DM to ${discordId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * Get the guild ID of the first (primary) guild the bot is in.
    */
   getGuildId(): string | null {

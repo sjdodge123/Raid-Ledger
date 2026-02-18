@@ -16,6 +16,7 @@ import {
   type NotificationPreferencesDto,
   type UpdatePreferencesInput,
 } from './notification.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 interface AuthenticatedRequest {
   user: { id: number; discordId?: string };
@@ -27,7 +28,10 @@ interface AuthenticatedRequest {
  */
 @Controller('notifications')
 export class NotificationController {
-  constructor(private readonly notificationService: NotificationService) {}
+  constructor(
+    private readonly notificationService: NotificationService,
+    private readonly botClientService: DiscordBotClientService,
+  ) {}
 
   /**
    * Get all notifications for the current user (paginated).
@@ -117,5 +121,39 @@ export class NotificationController {
     @Body() body: UpdatePreferencesInput,
   ): Promise<NotificationPreferencesDto> {
     return this.notificationService.updatePreferences(req.user.id, body);
+  }
+
+  /**
+   * Get notification channel availability (ROK-180 AC-7).
+   * Returns which channels are available for the current user.
+   * GET /notifications/channels
+   */
+  @Get('channels')
+  @UseGuards(AuthGuard('jwt'))
+  getChannelAvailability(@Request() req: AuthenticatedRequest): {
+    discord: { available: boolean; reason?: string };
+  } {
+    const hasDiscord = !!req.user.discordId;
+    const botConnected = this.botClientService.isConnected();
+
+    if (!hasDiscord) {
+      return {
+        discord: {
+          available: false,
+          reason: 'Link your Discord account to enable Discord notifications',
+        },
+      };
+    }
+
+    if (!botConnected) {
+      return {
+        discord: {
+          available: false,
+          reason: 'Discord bot is not connected',
+        },
+      };
+    }
+
+    return { discord: { available: true } };
   }
 }

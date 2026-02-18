@@ -17,6 +17,11 @@ import { DiscordEventListener } from './listeners/event.listener';
     ChannelResolverService,
     DiscordEventListener,
   ],
-  exports: [DiscordBotService, DiscordEmbedFactory, DiscordEventListener],
+  exports: [
+    DiscordBotService,
+    DiscordBotClientService,
+    DiscordEmbedFactory,
+    DiscordEventListener,
+  ],
 })
 export class DiscordBotModule {}

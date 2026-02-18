@@ -15,6 +15,7 @@ import { AttendeeAvatars } from '../components/calendar/AttendeeAvatars';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { PugSection } from '../components/pugs';
 import { PluginSlot } from '../plugins';
@@ -40,6 +41,9 @@ export function EventDetailPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const eventId = Number(id);
+
+    // ROK-180 AC-4: Mark notification as read when arriving from Discord DM link
+    useNotifReadSync();
     const navState = location.state as { fromCalendar?: boolean; calendarDate?: string; calendarView?: string } | null;
     // Only treat as "from calendar" if the state includes the calendar date (guards against stale state)
     const fromCalendar = navState?.fromCalendar === true && !!navState?.calendarDate;
