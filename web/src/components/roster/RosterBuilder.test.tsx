@@ -526,6 +526,239 @@ describe('RosterBuilder', () => {
         });
     });
 
+    // ROK-353: Join? confirmation state tests
+    describe('Join? confirmation flow (ROK-353)', () => {
+        const mockSlotClick = vi.fn();
+
+        it('AC-1: first click shows "Join?", second click triggers onSlotClick', () => {
+            renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // First click on an empty slot — should show "Join?"
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+            expect(mockSlotClick).not.toHaveBeenCalled();
+
+            // Second click — should trigger onSlotClick with role and position
+            fireEvent.click(screen.getByText('Join?'));
+
+            expect(mockSlotClick).toHaveBeenCalledTimes(1);
+            expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
+        });
+
+        it('AC-4: pending state auto-resets after 3 seconds', () => {
+            vi.useFakeTimers();
+            renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Advance past the 3-second timeout
+            act(() => {
+                vi.advanceTimersByTime(3000);
+            });
+
+            // Should have reset back to "Join"
+            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
+            vi.useRealTimers();
+        });
+
+        it('AC-1: confirm works after 2+ seconds (within 3s window)', () => {
+            vi.useFakeTimers();
+            renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Wait 2 seconds — still within the 3s window
+            act(() => {
+                vi.advanceTimersByTime(2000);
+            });
+
+            // "Join?" should still be showing
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Confirm click should work
+            fireEvent.click(screen.getByText('Join?'));
+            expect(mockSlotClick).toHaveBeenCalledTimes(1);
+
+            vi.useRealTimers();
+        });
+
+        it('AC-3: pending state persists across prop changes (simulated refetch)', () => {
+            const { rerender } = renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Re-render with same props (simulates background refetch re-render)
+            rerender(
+                <MemoryRouter>
+                    <RosterBuilder
+                        pool={[]}
+                        assignments={[]}
+                        onRosterChange={mockOnRosterChange}
+                        canEdit={false}
+                        canJoin={true}
+                        onSlotClick={mockSlotClick}
+                    />
+                </MemoryRouter>
+            );
+
+            // "Join?" should still be showing after re-render
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Confirm click should still work
+            fireEvent.click(screen.getByText('Join?'));
+            expect(mockSlotClick).toHaveBeenCalledTimes(1);
+        });
+
+        it('AC-3: pending state persists when canJoin briefly becomes false (refetch race)', () => {
+            const { rerender } = renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Simulate a background refetch that briefly sets canJoin=false
+            // (e.g., isSignedUp momentarily reflects stale data)
+            rerender(
+                <MemoryRouter>
+                    <RosterBuilder
+                        pool={[]}
+                        assignments={[]}
+                        onRosterChange={mockOnRosterChange}
+                        canEdit={false}
+                        canJoin={false}
+                        onSlotClick={mockSlotClick}
+                    />
+                </MemoryRouter>
+            );
+
+            // The pending "Join?" should still be visible because pendingSlotKey
+            // is stored in RosterBuilder state, not derived from canJoin
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // The confirm click should still work via savedJoinClickRef
+            fireEvent.click(screen.getByText('Join?'));
+            expect(mockSlotClick).toHaveBeenCalledTimes(1);
+        });
+
+        it('AC-5: admin assignment popup is unaffected by join confirmation', () => {
+            renderWithRouter(
+                <RosterBuilder
+                    pool={mockPool}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={true}
+                    canJoin={false}
+                />
+            );
+
+            // Admin sees "Assign" text, not "Join"
+            const assignLabels = screen.getAllByText('Assign');
+            expect(assignLabels.length).toBeGreaterThan(0);
+            expect(screen.queryByText('Join')).not.toBeInTheDocument();
+
+            // Click should open popup, not enter pending state
+            const firstSlot = assignLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText(/Assign to/)).toBeInTheDocument();
+            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
+        });
+
+        it('only one slot can be in pending state at a time', () => {
+            renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            const joinLabels = screen.getAllByText('Join');
+            // Click first slot
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Click a different slot — should move the pending state
+            const secondSlot = joinLabels[1].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(secondSlot);
+
+            // Should still have exactly one "Join?" (the new slot)
+            const joinQuestions = screen.getAllByText('Join?');
+            expect(joinQuestions.length).toBe(1);
+        });
+    });
+
     // ROK-343: Memoization tests
     describe('memoization (ROK-343)', () => {
         it('is wrapped with React.memo', () => {
