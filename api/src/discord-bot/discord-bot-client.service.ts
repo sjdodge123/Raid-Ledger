@@ -27,13 +27,18 @@ export interface PermissionCheckResult {
  */
 const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
+  { label: 'Manage Channels', flag: PermissionsBitField.Flags.ManageChannels },
+  {
+    label: 'Create Instant Invite',
+    flag: PermissionsBitField.Flags.CreateInstantInvite,
+  },
+  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
   { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
   { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
   {
     label: 'Read Message History',
     flag: PermissionsBitField.Flags.ReadMessageHistory,
   },
-  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
 ];
 
 @Injectable()

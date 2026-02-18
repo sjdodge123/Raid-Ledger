@@ -116,7 +116,9 @@ export function DiscordBotForm() {
                 <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
                     <li>Go to the <strong>OAuth2 → URL Generator</strong> tab</li>
                     <li>Under <strong>Scopes</strong>, check <strong>bot</strong> and <strong>applications.commands</strong></li>
-                    <li>A <strong>Bot Permissions</strong> section will appear — enable: <em>Manage Roles</em>, <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em>, and <em>View Channels</em></li>
+                    <li>A <strong>Bot Permissions</strong> section will appear — enable these permissions:</li>
+                    <li className="ml-4"><strong>General:</strong> <em>Manage Roles</em>, <em>Manage Channels</em>, <em>Create Instant Invite</em>, <em>View Channels</em></li>
+                    <li className="ml-4"><strong>Text:</strong> <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em></li>
                     <li>Copy the generated URL, open it in your browser, and select your server</li>
                 </ul>
             </div>
