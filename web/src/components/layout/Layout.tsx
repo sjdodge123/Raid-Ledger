@@ -3,6 +3,7 @@ import { Header } from './Header';
 import { Footer } from './Footer';
 import { BottomTabBar } from './bottom-tab-bar';
 import { MoreDrawer } from './more-drawer';
+import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
@@ -42,13 +43,14 @@ export function Layout({ children }: LayoutProps) {
             <SpaceEffects />
             <ImpersonationBanner />
             <Header onMenuClick={openMoreDrawer} />
-            <main className="flex-1">
+            <main id="main-content" className="flex-1">
                 {children}
             </main>
             <Footer />
             <BottomTabBar />
             <MoreDrawer isOpen={moreDrawerOpen} onClose={closeMoreDrawer} onFeedbackClick={handleFeedbackClick} />
             <FeedbackWidget onRegisterOpen={registerFeedbackOpen} />
+            <LiveRegionProvider />
         </div>
     );
 }

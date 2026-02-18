@@ -41,11 +41,16 @@ export function Header({ onMenuClick }: HeaderProps) {
     ];
 
     return (
-        <header
-            className={`sticky top-0 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle will-change-transform md:will-change-auto md:translate-y-0 ${isHidden ? '-translate-y-full' : 'translate-y-0'
-                }`}
-            style={{ zIndex: Z_INDEX.HEADER, transition: 'transform 300ms ease-in-out' }}
-        >
+        <>
+            {/* ROK-342: Skip link for keyboard users */}
+            <a href="#main-content" className="skip-link">
+                Skip to main content
+            </a>
+            <header
+                className={`sticky top-0 bg-backdrop/95 backdrop-blur-sm border-b border-edge-subtle will-change-transform md:will-change-auto md:translate-y-0 ${isHidden ? '-translate-y-full' : 'translate-y-0'
+                    }`}
+                style={{ zIndex: Z_INDEX.HEADER, transition: 'transform 300ms ease-in-out' }}
+            >
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 {/* Logo (ROK-271: custom branding) */}
                 <Link
@@ -65,7 +70,7 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </Link>
 
                 {/* Desktop Navigation */}
-                <nav className="hidden md:flex items-center gap-6">
+                <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
                     {navLinks.map(({ to, label }) => (
                         <Link
                             key={to}
@@ -131,5 +136,6 @@ export function Header({ onMenuClick }: HeaderProps) {
                 </div>
             </div>
         </header>
+        </>
     );
 }

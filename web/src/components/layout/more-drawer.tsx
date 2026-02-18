@@ -17,6 +17,7 @@ import {
     buildNavSections,
 } from '../admin/admin-nav-data';
 import { SidebarNavItem } from '../admin/admin-sidebar';
+import { useFocusTrap } from '../../hooks/use-focus-trap';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -35,6 +36,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
     const { user, isAuthenticated, isImpersonating, logout, impersonate, exitImpersonation } = useAuth();
     const themeMode = useThemeStore((s) => s.themeMode);
     const cycleTheme = useThemeStore((s) => s.cycleTheme);
+    const trapRef = useFocusTrap<HTMLDivElement>(isOpen);
 
     // Close on route change
     const prevPathRef = useRef(location.pathname);
@@ -158,6 +160,7 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
 
             {/* Drawer panel — full-screen, slides from left */}
             <div
+                ref={trapRef}
                 className={`absolute inset-0 bg-surface flex flex-col transform transition-transform duration-300 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}
                 style={{ transitionTimingFunction: 'var(--spring-smooth)' }}
                 data-testid="more-drawer-panel"
