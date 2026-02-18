@@ -5,6 +5,7 @@ import { useCompleteOnboardingFte } from '../hooks/use-onboarding-fte';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useUserHeartedGames } from '../hooks/use-user-profile';
 import { useMyCharacters } from '../hooks/use-characters';
+import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
 import { ConnectStep } from '../components/onboarding/connect-step';
 import { GamesStep } from '../components/onboarding/games-step';
@@ -113,7 +114,7 @@ function CharacterStepLabel({ game, charIndex, isCurrent, isVisited }: {
                     ? 'bg-emerald-400'
                     : 'bg-edge/50'
                 }`} />
-            {game.name}
+            {game.shortName || game.name}
         </>
     );
 }
@@ -131,6 +132,7 @@ export function OnboardingWizardPage() {
     const completeOnboarding = useCompleteOnboardingFte();
     const { games: registryGames } = useGameRegistry();
     const { data: heartedGamesData } = useUserHeartedGames(user?.id);
+    const { data: systemStatus } = useSystemStatus();
 
     const [currentStep, setCurrentStep] = useState(0);
     // Extra character steps beyond the initial one per game
@@ -138,11 +140,13 @@ export function OnboardingWizardPage() {
 
     const isRerun = searchParams.get('rerun') === '1';
 
-    // Determine if user needs the connect step (no OAuth linked)
+    // Determine if user needs the connect step (no OAuth linked AND Discord is configured)
     const needsConnect = useMemo(() => {
         if (!user) return false;
+        const discordConfigured = systemStatus?.discordConfigured ?? false;
+        if (!discordConfigured) return false;
         return !user.discordId || user.discordId.startsWith('local:');
-    }, [user]);
+    }, [user, systemStatus]);
 
     // Qualifying games = hearted games that exist in the game registry (by name).
     // We match by name because IGDB slugs differ from registry slugs
@@ -167,9 +171,10 @@ export function OnboardingWizardPage() {
         qualifyingGames.forEach((game) => {
             const total = 1 + (extraCharCounts[game.id] ?? 0);
             for (let j = 0; j < total; j++) {
+                const displayName = game.shortName || game.name;
                 s.push({
                     key: `character-${game.id}-${j}`,
-                    label: total > 1 ? `${game.name} (${j + 1})` : game.name,
+                    label: total > 1 ? `${displayName} (${j + 1})` : displayName,
                     registryGame: game,
                     charIndex: j,
                 });
@@ -261,7 +266,7 @@ export function OnboardingWizardPage() {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
             <div
-                className="relative w-full max-w-2xl h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl"
+                className="relative w-full max-w-2xl mx-4 h-[90vh] flex flex-col bg-surface border border-edge/50 rounded-2xl shadow-2xl"
                 role="dialog"
                 aria-label="Onboarding wizard"
             >
@@ -273,7 +278,7 @@ export function OnboardingWizardPage() {
                     {!isFinalStep && (
                         <button
                             onClick={handleSkipAll}
-                            className="text-sm text-muted hover:text-foreground transition-colors underline underline-offset-2"
+                            className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] rounded-full hover:bg-edge/20"
                         >
                             Skip All
                         </button>
@@ -320,8 +325,8 @@ export function OnboardingWizardPage() {
                                 key={step.key}
                                 type="button"
                                 onClick={() => setCurrentStep(index)}
-                                className={`group relative flex items-center rounded-full text-xs font-medium
-                                    transition-all duration-300 ease-in-out
+                                className={`group relative flex items-center justify-center rounded-full text-xs font-medium
+                                    transition-all duration-300 ease-in-out min-w-[44px] min-h-[44px]
                                     ${isCurrent
                                         ? 'bg-emerald-600 text-white px-2.5 py-1.5'
                                         : isVisited
@@ -330,7 +335,7 @@ export function OnboardingWizardPage() {
                                     }`}
                             >
                                 {/* Collapsed dot — shrinks to 0 when step is expanded via proximity */}
-                                <span className={`rounded-full flex-shrink-0 transition-all duration-300 ease-in-out ${dotColor} ${isExpanded ? 'w-0 h-0 opacity-0' : 'w-2 h-2 opacity-100'
+                                <span className={`rounded-full flex-shrink-0 transition-all duration-300 ease-in-out ${dotColor} ${isExpanded ? 'w-0 h-0 opacity-0' : 'w-3 h-3 opacity-100'
                                     }`} />
                                 {/* In-flow label — visible when expanded by proximity */}
                                 <span className={`flex items-center gap-1.5 overflow-hidden whitespace-nowrap
@@ -347,7 +352,7 @@ export function OnboardingWizardPage() {
                                                 removeCharacterStep(step.registryGame!.id);
                                             }}
                                             onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); removeCharacterStep(step.registryGame!.id); } }}
-                                            className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-red-500/30 text-current opacity-60 hover:opacity-100 transition-all flex-shrink-0"
+                                            className="ml-0.5 w-6 h-6 flex items-center justify-center rounded-full hover:bg-red-500/30 text-current opacity-60 hover:opacity-100 transition-all flex-shrink-0"
                                             title="Remove this character slot"
                                         >
                                             <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -410,7 +415,7 @@ export function OnboardingWizardPage() {
                         <button
                             type="button"
                             onClick={goBack}
-                            className="px-5 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
+                            className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
                         >
                             Back
                         </button>
@@ -419,7 +424,7 @@ export function OnboardingWizardPage() {
                         <button
                             type="button"
                             onClick={goNext}
-                            className="px-5 py-2.5 bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
+                            className="px-5 py-2.5 min-h-[44px] bg-panel hover:bg-overlay text-muted rounded-lg transition-colors text-sm"
                         >
                             Skip
                         </button>
@@ -428,10 +433,10 @@ export function OnboardingWizardPage() {
                         type="button"
                         onClick={isFinalStep ? handleComplete : goNext}
                         disabled={isFinalStep && completeOnboarding.isPending}
-                        className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm"
+                        className="px-6 py-2.5 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-white font-semibold rounded-lg transition-colors text-sm"
                     >
                         {isFinalStep
-                            ? (completeOnboarding.isPending ? 'Finishing...' : 'Finish Setup')
+                            ? (completeOnboarding.isPending ? 'Completing...' : 'Complete')
                             : 'Next'}
                     </button>
                 </div>

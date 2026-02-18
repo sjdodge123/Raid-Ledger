@@ -226,7 +226,7 @@ export function GamesStep() {
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search for a game..."
-                    className="w-full pl-10 pr-4 py-2.5 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                    className="w-full pl-10 pr-4 py-2.5 min-h-[44px] bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
                 />
             </div>
 
@@ -235,7 +235,7 @@ export function GamesStep() {
                 <div className="flex flex-wrap gap-2 justify-center">
                     <button
                         onClick={() => setSelectedGenre(null)}
-                        className={`px-3 py-2.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === null
+                        className={`px-3 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors ${selectedGenre === null
                             ? 'bg-emerald-600 text-white'
                             : 'bg-panel text-muted hover:bg-overlay'
                             }`}
@@ -248,7 +248,7 @@ export function GamesStep() {
                             onClick={() =>
                                 setSelectedGenre(selectedGenre === genre.id ? null : genre.id)
                             }
-                            className={`px-3 py-2.5 rounded-full text-xs font-medium transition-colors ${selectedGenre === genre.id
+                            className={`px-3 py-2.5 min-h-[44px] rounded-full text-xs font-medium transition-colors ${selectedGenre === genre.id
                                 ? 'bg-emerald-600 text-white'
                                 : 'bg-panel text-muted hover:bg-overlay'
                                 }`}

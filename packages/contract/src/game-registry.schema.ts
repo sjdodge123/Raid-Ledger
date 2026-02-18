@@ -11,6 +11,7 @@ export const GameRegistrySchema = z.object({
     id: z.string().uuid(),
     slug: z.string().min(1).max(50),
     name: z.string().min(1).max(100),
+    shortName: z.string().max(30).nullable(),
     iconUrl: z.string().url().nullable(),
     colorHex: z.string().regex(/^#[0-9A-Fa-f]{6}$/).nullable(),
     hasRoles: z.boolean(),

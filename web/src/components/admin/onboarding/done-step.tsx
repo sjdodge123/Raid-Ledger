@@ -94,7 +94,7 @@ export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
               key={item.label}
               type="button"
               onClick={() => goToStep(item.wizardStep)}
-              className="w-full flex items-center justify-between py-2 px-3 -mx-3 border-b border-edge/20 last:border-0 rounded-lg hover:bg-surface/50 transition-colors cursor-pointer group text-left"
+              className="w-full flex items-center justify-between py-2.5 px-3 -mx-3 min-h-[44px] border-b border-edge/20 last:border-0 rounded-lg hover:bg-surface/50 transition-colors cursor-pointer group text-left"
             >
               <span className="text-sm text-foreground group-hover:text-emerald-400 transition-colors">
                 {item.label}
@@ -159,13 +159,13 @@ export function DoneStep({ onComplete, goToStep }: DoneStepProps) {
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
         <button
           onClick={onComplete}
-          className="px-8 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors text-sm"
+          className="px-8 py-3 min-h-[44px] bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg transition-colors text-sm"
         >
-          Go to Dashboard
+          Complete
         </button>
         <Link
           to="/admin/settings/general"
-          className="text-sm text-muted hover:text-foreground transition-colors underline underline-offset-2"
+          className="text-sm text-muted hover:text-foreground transition-colors px-4 py-2.5 min-h-[44px] inline-flex items-center rounded-lg hover:bg-edge/20"
         >
           Review Settings
         </Link>

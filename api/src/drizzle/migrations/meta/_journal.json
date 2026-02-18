@@ -302,6 +302,13 @@
       "when": 1771357865138,
       "tag": "0042_strange_moon_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1771379334133,
+      "tag": "0043_condemned_lenny_balinger",
+      "breakpoints": true
     }
   ]
 }
