@@ -30,6 +30,11 @@ import { RosterViewCommand } from './commands/roster-view.command';
     EventsListCommand,
     RosterViewCommand,
   ],
-  exports: [DiscordBotService, DiscordEmbedFactory, DiscordEventListener],
+  exports: [
+    DiscordBotService,
+    DiscordBotClientService,
+    DiscordEmbedFactory,
+    DiscordEventListener,
+  ],
 })
 export class DiscordBotModule {}

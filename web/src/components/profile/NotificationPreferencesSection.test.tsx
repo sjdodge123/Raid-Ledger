@@ -21,10 +21,12 @@ describe('NotificationPreferencesSection', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        // Default: Discord available
         vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
             preferences: mockPreferences,
             isLoading: false,
             updatePreferences: mockUpdatePreferences,
+            channelAvailability: { discord: { available: true } },
         } as any);
     });
 
@@ -34,6 +36,7 @@ describe('NotificationPreferencesSection', () => {
                 preferences: null,
                 isLoading: true,
                 updatePreferences: mockUpdatePreferences,
+                channelAvailability: undefined,
             } as any);
 
             const { container } = render(<NotificationPreferencesSection />);
@@ -45,6 +48,7 @@ describe('NotificationPreferencesSection', () => {
                 preferences: null,
                 isLoading: false,
                 updatePreferences: mockUpdatePreferences,
+                channelAvailability: undefined,
             } as any);
 
             const { container } = render(<NotificationPreferencesSection />);
@@ -75,15 +79,52 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('Push')).toBeInTheDocument();
         });
 
-        it('renders Discord channel column header', () => {
+        it('renders Discord channel column header when available', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Discord')).toBeInTheDocument();
         });
 
-        it('renders column headers with responsive width classes', () => {
+        it('hides Discord column when not available (ROK-180 AC-7)', () => {
+            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+                preferences: mockPreferences,
+                isLoading: false,
+                updatePreferences: mockUpdatePreferences,
+                channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
+            } as any);
+
+            render(<NotificationPreferencesSection />);
+            expect(screen.queryByText('Discord')).not.toBeInTheDocument();
+        });
+
+        it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
+            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+                preferences: mockPreferences,
+                isLoading: false,
+                updatePreferences: mockUpdatePreferences,
+                channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
+            } as any);
+
+            render(<NotificationPreferencesSection />);
+            expect(screen.getByText('Link your Discord account')).toBeInTheDocument();
+        });
+
+        it('renders 3 column headers when Discord is available', () => {
             const { container } = render(<NotificationPreferencesSection />);
             const headerCells = container.querySelectorAll('.w-10.sm\\:w-12.flex.flex-col');
             expect(headerCells.length).toBe(3);
+        });
+
+        it('renders 2 column headers when Discord is not available', () => {
+            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
+                preferences: mockPreferences,
+                isLoading: false,
+                updatePreferences: mockUpdatePreferences,
+                channelAvailability: { discord: { available: false } },
+            } as any);
+
+            const { container } = render(<NotificationPreferencesSection />);
+            const headerCells = container.querySelectorAll('.w-10.sm\\:w-12.flex.flex-col');
+            expect(headerCells.length).toBe(2);
         });
     });
 
@@ -156,13 +197,13 @@ describe('NotificationPreferencesSection', () => {
 
         it('toggle button has correct aria-label for active toggle', () => {
             render(<NotificationPreferencesSection />);
-            // slot_vacated inApp is true → should say "Disable"
+            // slot_vacated inApp is true -> should say "Disable"
             expect(screen.getByLabelText('Disable Slot Vacated inApp notifications')).toBeInTheDocument();
         });
 
         it('toggle button has correct aria-label for inactive toggle', () => {
             render(<NotificationPreferencesSection />);
-            // slot_vacated push is false → should say "Enable"
+            // slot_vacated push is false -> should say "Enable"
             expect(screen.getByLabelText('Enable Slot Vacated push notifications')).toBeInTheDocument();
         });
 
