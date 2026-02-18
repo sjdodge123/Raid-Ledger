@@ -3,11 +3,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotService } from './discord-bot.service';
+import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 
 describe('DiscordBotSettingsController', () => {
   let controller: DiscordBotSettingsController;
   let discordBotService: DiscordBotService;
+  let discordBotClientService: DiscordBotClientService;
   let settingsService: SettingsService;
 
   beforeEach(async () => {
@@ -22,11 +24,19 @@ describe('DiscordBotSettingsController', () => {
           },
         },
         {
+          provide: DiscordBotClientService,
+          useValue: {
+            getTextChannels: jest.fn(),
+          },
+        },
+        {
           provide: SettingsService,
           useValue: {
             setDiscordBotConfig: jest.fn(),
             getDiscordBotConfig: jest.fn(),
             clearDiscordBotConfig: jest.fn(),
+            getDiscordBotDefaultChannel: jest.fn(),
+            setDiscordBotDefaultChannel: jest.fn(),
           },
         },
       ],
@@ -36,6 +46,9 @@ describe('DiscordBotSettingsController', () => {
       DiscordBotSettingsController,
     );
     discordBotService = module.get<DiscordBotService>(DiscordBotService);
+    discordBotClientService = module.get<DiscordBotClientService>(
+      DiscordBotClientService,
+    );
     settingsService = module.get<SettingsService>(SettingsService);
   });
 
@@ -270,6 +283,104 @@ describe('DiscordBotSettingsController', () => {
         .mockRejectedValue(new Error('Database error'));
 
       await expect(controller.clearConfig()).rejects.toThrow('Database error');
+    });
+  });
+
+  describe('getChannels', () => {
+    it('should return text channels from the client service', () => {
+      const mockChannels = [
+        { id: '123', name: 'general' },
+        { id: '456', name: 'raids' },
+      ];
+      jest
+        .spyOn(discordBotClientService, 'getTextChannels')
+        .mockReturnValue(mockChannels);
+
+      const result = controller.getChannels();
+
+      expect(result).toEqual(mockChannels);
+      expect(discordBotClientService.getTextChannels).toHaveBeenCalled();
+    });
+
+    it('should return empty array when bot is not connected', () => {
+      jest
+        .spyOn(discordBotClientService, 'getTextChannels')
+        .mockReturnValue([]);
+
+      const result = controller.getChannels();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getDefaultChannel', () => {
+    it('should return the default channel ID', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue('123456');
+
+      const result = await controller.getDefaultChannel();
+
+      expect(result).toEqual({ channelId: '123456' });
+    });
+
+    it('should return null when no default channel is set', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue(null);
+
+      const result = await controller.getDefaultChannel();
+
+      expect(result).toEqual({ channelId: null });
+    });
+  });
+
+  describe('setDefaultChannel', () => {
+    it('should set the default channel and return success', async () => {
+      const result = await controller.setDefaultChannel({
+        channelId: '123456',
+      });
+
+      expect(settingsService.setDiscordBotDefaultChannel).toHaveBeenCalledWith(
+        '123456',
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'Default channel updated.',
+      });
+    });
+
+    it('should throw BadRequestException when channelId is missing', async () => {
+      await expect(controller.setDefaultChannel({})).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(
+        settingsService.setDiscordBotDefaultChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when channelId is empty string', async () => {
+      await expect(
+        controller.setDefaultChannel({ channelId: '' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        settingsService.setDiscordBotDefaultChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when channelId is not a string', async () => {
+      await expect(
+        controller.setDefaultChannel({ channelId: 123 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        settingsService.setDiscordBotDefaultChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when body is null', async () => {
+      await expect(controller.setDefaultChannel(null)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 });

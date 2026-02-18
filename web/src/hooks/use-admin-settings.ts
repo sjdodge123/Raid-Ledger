@@ -512,6 +512,54 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Discord Bot Channel Selection (ROK-118)
+    // ============================================================
+
+    const discordChannels = useQuery<{ id: string; name: string }[]>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'channels'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/channels`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch Discord channels');
+            return response.json();
+        },
+        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+        staleTime: 30_000,
+    });
+
+    const discordDefaultChannel = useQuery<{ channelId: string | null }>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'channel'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/channel`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch default channel');
+            return response.json();
+        },
+        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+        staleTime: 30_000,
+    });
+
+    const setDiscordChannel = useMutation<ApiResponse, Error, string>({
+        mutationFn: async (channelId) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/channel`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify({ channelId }),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to set default channel' }));
+                throw new Error(error.message || 'Failed to set default channel');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot', 'channel'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -537,5 +585,8 @@ export function useAdminSettings() {
         testDiscordBot,
         clearDiscordBot,
         checkDiscordBotPermissions,
+        discordChannels,
+        discordDefaultChannel,
+        setDiscordChannel,
     };
 }
