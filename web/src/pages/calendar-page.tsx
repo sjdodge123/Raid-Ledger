@@ -1,8 +1,10 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
+import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
 import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
+import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { FAB } from '../components/ui/fab';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { getGameColors } from '../constants/game-colors';
@@ -26,7 +28,9 @@ export function CalendarPage() {
     });
     const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
     const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
-    const [calendarView, setCalendarView] = useState<CalendarViewMode>('month');
+    const [calendarView, setCalendarView] = useState<CalendarViewMode>(
+        () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
+    );
     const [gameFilterOpen, setGameFilterOpen] = useState(false);
 
     // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
@@ -99,11 +103,31 @@ export function CalendarPage() {
         setSelectedGames(new Set());
     };
 
+    // Mobile date navigation handlers
+    const handleMobileNavPrev = useCallback(() => {
+        setCurrentDate((prev) => calendarView === 'day' ? subDays(prev, 1) : subMonths(prev, 1));
+    }, [calendarView]);
+
+    const handleMobileNavNext = useCallback(() => {
+        setCurrentDate((prev) => calendarView === 'day' ? addDays(prev, 1) : addMonths(prev, 1));
+    }, [calendarView]);
+
+    const handleMobileNavToday = useCallback(() => {
+        setCurrentDate(new Date());
+    }, []);
+
     return (
         <div className="pb-20 md:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={calendarView} onViewChange={setCalendarView} />
+            <CalendarMobileNav
+                currentDate={currentDate}
+                calendarView={calendarView}
+                onPrev={handleMobileNavPrev}
+                onNext={handleMobileNavNext}
+                onToday={handleMobileNavToday}
+            />
 
-            <div className={`max-w-7xl mx-auto ${calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-4 py-6'}`} style={{ overflowX: 'clip' }}>
+            <div className={`max-w-7xl mx-auto ${calendarView === 'schedule' ? 'py-0 md:py-6 md:px-4' : 'px-2 py-1 md:px-4 md:py-6'}`} style={{ overflowX: 'clip' }}>
                 <div className={`mb-6 hidden md:block ${calendarView === 'schedule' ? 'px-4' : ''}`}>
                     <h1 className="text-3xl font-bold text-foreground">Calendar</h1>
                     <p className="text-muted mt-1">
@@ -213,6 +237,7 @@ export function CalendarPage() {
                             onGamesAvailable={handleGamesAvailable}
                             gameTimeSlots={gameTimeSlots}
                             calendarView={calendarView}
+                            onCalendarViewChange={setCalendarView}
                         />
                     </main>
                 </div>

@@ -5,6 +5,11 @@ import {
   GatewayIntentBits,
   Events,
   PermissionsBitField,
+  type EmbedBuilder,
+  type ActionRowBuilder,
+  type ButtonBuilder,
+  type TextChannel,
+  type Message,
 } from 'discord.js';
 import {
   DISCORD_BOT_EVENTS,
@@ -27,13 +32,18 @@ export interface PermissionCheckResult {
  */
 const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
   { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
+  { label: 'Manage Channels', flag: PermissionsBitField.Flags.ManageChannels },
+  {
+    label: 'Create Instant Invite',
+    flag: PermissionsBitField.Flags.CreateInstantInvite,
+  },
+  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
   { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
   { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
   {
     label: 'Read Message History',
     flag: PermissionsBitField.Flags.ReadMessageHistory,
   },
-  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
 ];
 
 @Injectable()
@@ -162,6 +172,109 @@ export class DiscordBotClientService {
       this.logger.error(`Failed to send DM to ${discordId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Get the guild ID of the first (primary) guild the bot is in.
+   */
+  getGuildId(): string | null {
+    if (!this.client?.isReady()) return null;
+    const guild = this.client.guilds.cache.first();
+    return guild?.id ?? null;
+  }
+
+  /**
+   * Send an embed message to a specific channel.
+   * @returns The sent Message object for tracking
+   */
+  async sendEmbed(
+    channelId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<Message> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !('send' in channel)) {
+      throw new Error(`Channel ${channelId} not found or not a text channel`);
+    }
+
+    const textChannel = channel as TextChannel;
+    const messagePayload: {
+      embeds: EmbedBuilder[];
+      components?: ActionRowBuilder<ButtonBuilder>[];
+    } = { embeds: [embed] };
+
+    if (row) {
+      messagePayload.components = [row];
+    }
+
+    return textChannel.send(messagePayload);
+  }
+
+  /**
+   * Edit an existing embed message in a channel.
+   */
+  async editEmbed(
+    channelId: string,
+    messageId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<Message> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !('messages' in channel)) {
+      throw new Error(`Channel ${channelId} not found or not a text channel`);
+    }
+
+    const textChannel = channel as TextChannel;
+    const message = await textChannel.messages.fetch(messageId);
+
+    const messagePayload: {
+      embeds: EmbedBuilder[];
+      components: ActionRowBuilder<ButtonBuilder>[];
+    } = {
+      embeds: [embed],
+      components: row ? [row] : [],
+    };
+
+    return message.edit(messagePayload);
+  }
+
+  /**
+   * Delete a message from a channel.
+   */
+  async deleteMessage(channelId: string, messageId: string): Promise<void> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !('messages' in channel)) {
+      throw new Error(`Channel ${channelId} not found or not a text channel`);
+    }
+
+    const textChannel = channel as TextChannel;
+    const message = await textChannel.messages.fetch(messageId);
+    await message.delete();
+  }
+
+  /**
+   * List text channels from the connected guild.
+   */
+  getTextChannels(): { id: string; name: string }[] {
+    if (!this.client?.isReady()) return [];
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return [];
+    return guild.channels.cache
+      .filter((ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased())
+      .map((ch) => ({ id: ch.id, name: ch.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /**

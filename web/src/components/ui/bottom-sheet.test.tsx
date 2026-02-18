@@ -388,7 +388,7 @@ describe('BottomSheet', () => {
         expect(closeButton).toHaveClass('min-w-[44px]', 'min-h-[44px]');
     });
 
-    it('has transition-transform duration-300 ease-out', () => {
+    it('has transition-all duration-300 ease-out', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
                 <p>Content</p>
@@ -396,7 +396,7 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('transition-transform', 'duration-300', 'ease-out');
+        expect(dialog).toHaveClass('transition-all', 'duration-300', 'ease-out');
     });
 
     it('backdrop has transition-opacity duration-200', () => {
@@ -410,7 +410,7 @@ describe('BottomSheet', () => {
         expect(backdrop).toHaveClass('transition-opacity', 'duration-200');
     });
 
-    // Swipe gesture tests
+    // Swipe gesture tests — touch handlers are on the drag handle (.cursor-grab)
     it('handles touch start', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
@@ -419,12 +419,11 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
-        });
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
-        dialog.dispatchEvent(touchStartEvent);
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
+        });
         // No assertion needed - just verify it doesn't throw
     });
 
@@ -436,22 +435,17 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
-        // Simulate drag start
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
         });
-        dialog.dispatchEvent(touchStartEvent);
 
-        // Simulate drag move
-        const touchMoveEvent = new TouchEvent('touchmove', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 150 } as Touch],
+        fireEvent.touchMove(dragHandle, {
+            touches: [{ clientX: 0, clientY: 150 }],
         });
-        dialog.dispatchEvent(touchMoveEvent);
 
-        // The transform should be applied (verified via transform style)
+        // The transform should be applied on the sheet (dialog ref)
         expect(dialog.style.transform).toBe('translateY(50px)');
     });
 
@@ -463,23 +457,19 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
-        // Simulate drag start
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
         });
-        dialog.dispatchEvent(touchStartEvent);
 
-        // Simulate upward drag (negative delta)
-        const touchMoveEvent = new TouchEvent('touchmove', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 50 } as Touch],
+        // Simulate upward drag (negative delta) — dampened transform applied
+        fireEvent.touchMove(dragHandle, {
+            touches: [{ clientX: 0, clientY: 50 }],
         });
-        dialog.dispatchEvent(touchMoveEvent);
 
-        // Transform should not be applied for upward swipes
-        expect(dialog.style.transform).toBe('');
+        // Upward swipe applies dampened transform (delta * 0.4)
+        expect(dialog.style.transform).toBe('translateY(-20px)');
     });
 
     it('calls onClose when dragged down >150px', async () => {
@@ -492,22 +482,17 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
-        // Simulate drag gesture that exceeds 150px threshold
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
         });
-        dialog.dispatchEvent(touchStartEvent);
 
-        const touchMoveEvent = new TouchEvent('touchmove', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 260 } as Touch],
+        fireEvent.touchMove(dragHandle, {
+            touches: [{ clientX: 0, clientY: 260 }],
         });
-        dialog.dispatchEvent(touchMoveEvent);
 
-        const touchEndEvent = new TouchEvent('touchend', { bubbles: true });
-        dialog.dispatchEvent(touchEndEvent);
+        fireEvent.touchEnd(dragHandle);
 
         await waitFor(() => {
             expect(handleClose).toHaveBeenCalledTimes(1);
@@ -524,6 +509,7 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
         // Mock the offsetHeight to ensure we're below both thresholds
         Object.defineProperty(dialog, 'offsetHeight', {
@@ -532,21 +518,15 @@ describe('BottomSheet', () => {
             configurable: true,
         });
 
-        // Simulate drag gesture below both thresholds (100px < 150px and < 40% of 400px)
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
         });
-        dialog.dispatchEvent(touchStartEvent);
 
-        const touchMoveEvent = new TouchEvent('touchmove', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 200 } as Touch],
+        fireEvent.touchMove(dragHandle, {
+            touches: [{ clientX: 0, clientY: 200 }],
         });
-        dialog.dispatchEvent(touchMoveEvent);
 
-        const touchEndEvent = new TouchEvent('touchend', { bubbles: true });
-        dialog.dispatchEvent(touchEndEvent);
+        fireEvent.touchEnd(dragHandle);
 
         expect(handleClose).not.toHaveBeenCalled();
     });
@@ -559,25 +539,19 @@ describe('BottomSheet', () => {
         );
 
         const dialog = screen.getByRole('dialog');
+        const dragHandle = dialog.querySelector('.cursor-grab')!;
 
-        // Simulate drag
-        const touchStartEvent = new TouchEvent('touchstart', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 100 } as Touch],
+        fireEvent.touchStart(dragHandle, {
+            touches: [{ clientX: 0, clientY: 100 }],
         });
-        dialog.dispatchEvent(touchStartEvent);
 
-        const touchMoveEvent = new TouchEvent('touchmove', {
-            bubbles: true,
-            touches: [{ clientX: 0, clientY: 150 } as Touch],
+        fireEvent.touchMove(dragHandle, {
+            touches: [{ clientX: 0, clientY: 150 }],
         });
-        dialog.dispatchEvent(touchMoveEvent);
 
         expect(dialog.style.transform).toBe('translateY(50px)');
 
-        // End drag
-        const touchEndEvent = new TouchEvent('touchend', { bubbles: true });
-        dialog.dispatchEvent(touchEndEvent);
+        fireEvent.touchEnd(dragHandle);
 
         // Transform should be reset
         expect(dialog.style.transform).toBe('');

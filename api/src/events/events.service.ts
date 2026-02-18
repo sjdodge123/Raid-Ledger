@@ -25,8 +25,10 @@ import {
   UserEventSignupsResponseDto,
 } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
+import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
 
 /** Constants for events service */
 const EVENTS_CONFIG = {
@@ -43,6 +45,7 @@ export class EventsService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly availabilityService: AvailabilityService,
     private readonly notificationService: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -104,6 +107,14 @@ export class EventsService {
 
       // Return the first instance with all IDs for controller to auto-signup
       const response = await this.findOne(events[0].id);
+
+      // Emit event.created for each recurring instance
+      for (const evt of events) {
+        const evtResponse =
+          evt.id === events[0].id ? response : await this.findOne(evt.id);
+        this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, evtResponse);
+      }
+
       return { ...response, allEventIds: events.map((e) => e.id) };
     }
 
@@ -118,7 +129,10 @@ export class EventsService {
 
     this.logger.log(`Event created: ${event.id} by user ${creatorId}`);
 
-    return this.findOne(event.id);
+    const createdEvent = await this.findOne(event.id);
+    this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, createdEvent);
+
+    return createdEvent;
   }
 
   /**
@@ -714,7 +728,10 @@ export class EventsService {
 
     this.logger.log(`Event updated: ${id} by user ${userId}`);
 
-    return this.findOne(id);
+    const updatedEvent = await this.findOne(id);
+    this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, updatedEvent);
+
+    return updatedEvent;
   }
 
   /**
@@ -739,6 +756,9 @@ export class EventsService {
     if (existing[0].creatorId !== userId && !isAdmin) {
       throw new ForbiddenException('You can only delete your own events');
     }
+
+    // Emit event.deleted BEFORE the DB delete (so listener can read the record)
+    this.eventEmitter.emit(APP_EVENT_EVENTS.DELETED, { eventId: id });
 
     await this.db.delete(schema.events).where(eq(schema.events.id, id));
 
@@ -965,7 +985,12 @@ export class EventsService {
       ),
     );
 
-    return this.findOne(eventId);
+    const rescheduledEvent = await this.findOne(eventId);
+
+    // ROK-118: Emit event.updated so Discord embed is refreshed
+    this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, rescheduledEvent);
+
+    return rescheduledEvent;
   }
 
   /**
@@ -1153,5 +1178,35 @@ export class EventsService {
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Emit an event lifecycle event for Discord bot integration (ROK-118).
+   * Fires asynchronously — failures are logged but do not block the caller.
+   */
+  private emitEventLifecycle(
+    eventName: string,
+    eventResponse: EventResponseDto,
+  ): void {
+    this.eventEmitter.emit(eventName, {
+      eventId: eventResponse.id,
+      event: {
+        id: eventResponse.id,
+        title: eventResponse.title,
+        description: eventResponse.description,
+        startTime: eventResponse.startTime,
+        endTime: eventResponse.endTime,
+        signupCount: eventResponse.signupCount,
+        maxAttendees: eventResponse.maxAttendees,
+        slotConfig: eventResponse.slotConfig,
+        game: eventResponse.game
+          ? {
+              name: eventResponse.game.name,
+              coverUrl: eventResponse.game.coverUrl,
+            }
+          : null,
+      },
+      registryGameId: eventResponse.game?.registryId ?? null,
+    });
   }
 }

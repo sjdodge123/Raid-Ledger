@@ -67,10 +67,12 @@ jest.mock('discord.js', () => {
     PermissionsBitField: {
       Flags: {
         ManageRoles: BigInt(1),
+        ManageChannels: BigInt(32),
+        CreateInstantInvite: BigInt(64),
+        ViewChannel: BigInt(16),
         SendMessages: BigInt(2),
         EmbedLinks: BigInt(4),
         ReadMessageHistory: BigInt(8),
-        ViewChannel: BigInt(16),
       },
     },
   };
@@ -454,7 +456,7 @@ describe('DiscordBotClientService', () => {
     it('should return all false when no client exists', () => {
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(7);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -464,7 +466,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(7);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -477,7 +479,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(7);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -491,7 +493,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(7);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -513,7 +515,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(5);
+      expect(results).toHaveLength(7);
       const manageRoles = results.find((r) => r.name === 'Manage Roles');
       expect(manageRoles?.granted).toBe(false);
       const sendMessages = results.find((r) => r.name === 'Send Messages');

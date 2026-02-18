@@ -15,7 +15,7 @@ const EyeIcon = (
 );
 
 export function DiscordBotForm() {
-    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions } = useAdminSettings();
+    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions, discordChannels, discordDefaultChannel, setDiscordChannel } = useAdminSettings();
 
     const [botToken, setBotToken] = useState('');
     const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
@@ -116,7 +116,9 @@ export function DiscordBotForm() {
                 <ul className="text-xs text-secondary space-y-0.5 list-disc list-inside ml-2">
                     <li>Go to the <strong>OAuth2 → URL Generator</strong> tab</li>
                     <li>Under <strong>Scopes</strong>, check <strong>bot</strong> and <strong>applications.commands</strong></li>
-                    <li>A <strong>Bot Permissions</strong> section will appear — enable: <em>Manage Roles</em>, <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em>, and <em>View Channels</em></li>
+                    <li>A <strong>Bot Permissions</strong> section will appear — enable these permissions:</li>
+                    <li className="ml-4"><strong>General:</strong> <em>Manage Roles</em>, <em>Manage Channels</em>, <em>Create Instant Invite</em>, <em>View Channels</em></li>
+                    <li className="ml-4"><strong>Text:</strong> <em>Send Messages</em>, <em>Embed Links</em>, <em>Read Message History</em></li>
                     <li>Copy the generated URL, open it in your browser, and select your server</li>
                 </ul>
             </div>
@@ -275,6 +277,37 @@ export function DiscordBotForm() {
                                     </div>
                                 ))}
                             </div>
+                        </div>
+                    )}
+
+                    {/* Channel Selector (ROK-118) */}
+                    {discordBotStatus.data?.connected && discordChannels.data && discordChannels.data.length > 0 && (
+                        <div className="mt-4">
+                            <label htmlFor="discordChannel" className="block text-sm font-medium text-secondary mb-1.5">
+                                Default Notification Channel
+                            </label>
+                            <select
+                                id="discordChannel"
+                                value={discordDefaultChannel.data?.channelId ?? ''}
+                                onChange={async (e) => {
+                                    if (e.target.value) {
+                                        try {
+                                            await setDiscordChannel.mutateAsync(e.target.value);
+                                            toast.success('Default channel updated');
+                                        } catch {
+                                            toast.error('Failed to update default channel');
+                                        }
+                                    }
+                                }}
+                                disabled={setDiscordChannel.isPending}
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                                <option value="" disabled>Select a channel...</option>
+                                {discordChannels.data.map((ch) => (
+                                    <option key={ch.id} value={ch.id}>#{ch.name}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-secondary mt-1.5">Fallback channel for event embeds when no game-specific binding is set</p>
                         </div>
                     )}
                 </div>

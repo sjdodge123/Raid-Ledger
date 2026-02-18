@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
@@ -129,6 +130,12 @@ describe('EventsService', () => {
           provide: NotificationService,
           useValue: {
             create: jest.fn(),
+          },
+        },
+        {
+          provide: EventEmitter2,
+          useValue: {
+            emit: jest.fn(),
           },
         },
       ],

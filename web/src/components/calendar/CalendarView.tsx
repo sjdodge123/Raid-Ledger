@@ -74,6 +74,8 @@ interface CalendarViewProps {
     gameTimeSlots?: Set<string>;
     /** Mobile calendar view mode (schedule/month/day) — when 'schedule', renders ScheduleView */
     calendarView?: CalendarViewMode;
+    /** Callback to sync view changes back to mobile toolbar (ROK-368) */
+    onCalendarViewChange?: (view: CalendarViewMode) => void;
 }
 
 export function CalendarView({
@@ -84,6 +86,7 @@ export function CalendarView({
     onGamesAvailable,
     gameTimeSlots,
     calendarView,
+    onCalendarViewChange,
 }: CalendarViewProps) {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
@@ -268,8 +271,16 @@ export function CalendarView({
     }, [setCurrentDate]);
 
     // Event click handler — pass calendar context so event detail page can navigate back
+    // On mobile month view, tapping an event drills down to day view instead of navigating to detail
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
+            const isMobile = window.innerWidth < 768;
+            if (isMobile && view === Views.MONTH) {
+                setCurrentDate(event.start);
+                setView(Views.DAY);
+                onCalendarViewChange?.('day');
+                return;
+            }
             const viewStr = isScheduleView
                 ? 'schedule'
                 : view === Views.WEEK ? 'week' : view === Views.DAY ? 'day' : 'month';
@@ -278,7 +289,7 @@ export function CalendarView({
                 state: { fromCalendar: true, calendarDate: dateStr, calendarView: viewStr },
             });
         },
-        [navigate, view, currentDate, isScheduleView]
+        [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]
     );
 
     // Style events based on their game (using shared constants)
@@ -310,6 +321,19 @@ export function CalendarView({
         [gameTimeSlots],
     );
 
+    // Mobile month drill-down: tapping an event chip drills to day view
+    const handleMonthChipClick = useCallback(
+        (e: React.MouseEvent, eventStart: Date) => {
+            if (window.innerWidth >= 768) return; // desktop: let onSelectEvent handle it
+            e.stopPropagation();
+            e.preventDefault();
+            setCurrentDate(eventStart);
+            setView(Views.DAY);
+            onCalendarViewChange?.('day');
+        },
+        [setCurrentDate, setView, onCalendarViewChange],
+    );
+
     // Custom event component for MONTH view (compact chip)
     const MonthEventComponent = useCallback(
         ({ event }: { event: CalendarEvent }) => {
@@ -325,6 +349,7 @@ export function CalendarView({
                 <div
                     className="calendar-event-chip"
                     title={`${event.title}${event.resource?.game?.name ? ` (${event.resource.game.name})` : ''}`}
+                    onClick={(e) => handleMonthChipClick(e, event.start)}
                     style={{
                         backgroundImage: coverUrl
                             ? `linear-gradient(135deg, ${colors.bg}dd 50%, ${colors.bg}88 100%), url(${coverUrl})`
@@ -345,7 +370,7 @@ export function CalendarView({
                 </div>
             );
         },
-        [eventOverlapsGameTime]
+        [eventOverlapsGameTime, handleMonthChipClick]
     );
 
     // Custom event component for WEEK view — delegates to extracted WeekEventCard
@@ -507,7 +532,11 @@ export function CalendarView({
                     onNavigate={handleNavigate}
                     onView={setView}
                     onSelectEvent={handleSelectEvent}
-                    onDrillDown={(date) => { setCurrentDate(date); setView(Views.DAY); }}
+                    onDrillDown={(date) => {
+                        setCurrentDate(date);
+                        setView(Views.DAY);
+                        onCalendarViewChange?.('day');
+                    }}
                     drilldownView={Views.DAY}
                     eventPropGetter={eventPropGetter}
                     components={{
@@ -521,9 +550,11 @@ export function CalendarView({
                     popup
                     selectable
                     onSelectSlot={(slotInfo) => {
-                        if (slotInfo.action === 'doubleClick') {
+                        const isMobile = window.innerWidth < 768;
+                        if (slotInfo.action === 'doubleClick' || (isMobile && slotInfo.action === 'click' && view === Views.MONTH)) {
                             setCurrentDate(slotInfo.start);
                             setView(Views.DAY);
+                            onCalendarViewChange?.('day');
                         }
                     }}
                     style={{ minHeight: '500px' }}

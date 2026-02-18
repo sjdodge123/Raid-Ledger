@@ -13,6 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotService } from './discord-bot.service';
+import { DiscordBotClientService } from './discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   DiscordBotConfigSchema,
@@ -43,6 +44,7 @@ export class DiscordBotSettingsController {
 
   constructor(
     private readonly discordBotService: DiscordBotService,
+    private readonly discordBotClientService: DiscordBotClientService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -122,6 +124,46 @@ export class DiscordBotSettingsController {
     return {
       success: true,
       message: 'Discord bot configuration cleared.',
+    };
+  }
+
+  @Get('channels')
+  getChannels(): { id: string; name: string }[] {
+    return this.discordBotClientService.getTextChannels();
+  }
+
+  @Get('channel')
+  async getDefaultChannel(): Promise<{ channelId: string | null }> {
+    const channelId = await this.settingsService.getDiscordBotDefaultChannel();
+    return { channelId };
+  }
+
+  @Put('channel')
+  @HttpCode(HttpStatus.OK)
+  async setDefaultChannel(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('channelId' in body) ||
+      typeof (body as Record<string, unknown>).channelId !== 'string' ||
+      !(body as Record<string, unknown>).channelId
+    ) {
+      throw new BadRequestException(
+        'channelId is required and must be a non-empty string',
+      );
+    }
+
+    await this.settingsService.setDiscordBotDefaultChannel(
+      (body as Record<string, unknown>).channelId as string,
+    );
+
+    this.logger.log('Discord bot default channel updated via admin UI');
+
+    return {
+      success: true,
+      message: 'Default channel updated.',
     };
   }
 }
