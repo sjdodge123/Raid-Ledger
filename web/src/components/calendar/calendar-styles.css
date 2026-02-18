@@ -1149,6 +1149,8 @@
 }
 
 .calendar-mobile-nav-label {
+    flex: 1;
+    text-align: center;
     font-size: 0.9375rem;
     font-weight: 600;
     color: #f1f5f9;

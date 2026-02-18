@@ -38,14 +38,6 @@ export function CalendarMobileNav({ currentDate, calendarView, onPrev, onNext, o
 
             <button
                 type="button"
-                onClick={onToday}
-                className="calendar-mobile-nav-today"
-            >
-                Today
-            </button>
-
-            <button
-                type="button"
                 onClick={onNext}
                 className="calendar-mobile-nav-arrow"
                 aria-label={calendarView === 'month' ? 'Next month' : 'Next day'}
@@ -53,6 +45,14 @@ export function CalendarMobileNav({ currentDate, calendarView, onPrev, onNext, o
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
+            </button>
+
+            <button
+                type="button"
+                onClick={onToday}
+                className="calendar-mobile-nav-today"
+            >
+                Today
             </button>
         </div>
     );

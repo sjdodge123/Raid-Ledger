@@ -85,11 +85,14 @@ export function BottomSheet({ isOpen, onClose, title, children, maxHeight = '60v
                 className={`absolute bottom-0 inset-x-0 bg-surface rounded-t-2xl shadow-2xl transition-transform duration-300 ease-out ${isOpen ? 'translate-y-0' : 'translate-y-full'
                     }`}
                 style={{ maxHeight }}
-                onTouchStart={handleDragStart}
-                onTouchMove={handleDragMove}
-                onTouchEnd={handleDragEnd}
             >
-                <div className="flex justify-center pt-3 pb-2">
+                {/* Drag handle — only this area captures drag-to-dismiss gestures */}
+                <div
+                    className="flex justify-center pt-3 pb-2 cursor-grab"
+                    onTouchStart={handleDragStart}
+                    onTouchMove={handleDragMove}
+                    onTouchEnd={handleDragEnd}
+                >
                     <div className="w-10 h-1 bg-muted rounded-full" />
                 </div>
 
