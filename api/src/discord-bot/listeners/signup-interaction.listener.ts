@@ -42,6 +42,7 @@ const COOLDOWN_MS = 3000; // 3 seconds between interactions per user per event
 @Injectable()
 export class SignupInteractionListener {
   private readonly logger = new Logger(SignupInteractionListener.name);
+  private boundHandler: ((interaction: import('discord.js').Interaction) => void) | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -61,17 +62,20 @@ export class SignupInteractionListener {
     const client = this.clientService.getClient();
     if (!client) return;
 
-    // Remove any existing interactionCreate listeners from this handler
-    // to prevent duplicates on reconnect.
-    client.removeAllListeners('interactionCreate');
+    // Remove only our own listener to prevent duplicates on reconnect
+    if (this.boundHandler) {
+      client.removeListener('interactionCreate', this.boundHandler);
+    }
 
-    client.on('interactionCreate', (interaction) => {
+    this.boundHandler = (interaction: import('discord.js').Interaction) => {
       if (interaction.isButton()) {
-        void this.handleButtonInteraction(interaction);
+        void this.handleButtonInteraction(interaction as ButtonInteraction);
       } else if (interaction.isStringSelectMenu()) {
-        void this.handleSelectMenuInteraction(interaction);
+        void this.handleSelectMenuInteraction(interaction as StringSelectMenuInteraction);
       }
-    });
+    };
+
+    client.on('interactionCreate', this.boundHandler);
 
     this.logger.log('Registered signup interaction handler');
   }
