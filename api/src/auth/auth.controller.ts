@@ -153,12 +153,16 @@ export class AuthController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const clientUrl = this.getClientUrl(req);
+
     // Verify JWT from query param (browser redirects can't send headers)
+    // NOTE: Must handle errors with res.status() instead of throwing HttpException
+    // because @Res() bypasses NestJS exception filters (isHeadersSent crash).
     if (!token) {
-      throw new HttpException(
-        'Authentication token required',
-        HttpStatus.UNAUTHORIZED,
-      );
+      res
+        .status(HttpStatus.UNAUTHORIZED)
+        .json({ message: 'Authentication token required' });
+      return;
     }
 
     let userId: number;
@@ -166,19 +170,19 @@ export class AuthController {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       userId = this.jwtService.verify(token).sub;
     } catch {
-      throw new HttpException(
-        'Invalid or expired token',
-        HttpStatus.UNAUTHORIZED,
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
       );
+      return;
     }
 
     // Get OAuth config from database settings (ROK-146)
     const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
     if (!oauthConfig) {
-      throw new HttpException(
-        'Discord OAuth is not configured',
-        HttpStatus.SERVICE_UNAVAILABLE,
+      res.redirect(
+        `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Discord OAuth is not configured. Please set it up in admin settings.')}`,
       );
+      return;
     }
 
     // Create SIGNED state with user ID and action for linking
