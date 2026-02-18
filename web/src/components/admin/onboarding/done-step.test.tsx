@@ -65,9 +65,9 @@ describe('DoneStep', () => {
             expect(screen.getByText(/configuration summary/i)).toBeInTheDocument();
         });
 
-        it('renders Go to Dashboard button', () => {
+        it('renders Complete button', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
-            expect(screen.getByRole('button', { name: /go to dashboard/i })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: /complete/i })).toBeInTheDocument();
         });
 
         it('renders Review Settings link', () => {
@@ -77,9 +77,9 @@ describe('DoneStep', () => {
     });
 
     describe('Touch target compliance (min-h-[44px])', () => {
-        it('"Go to Dashboard" button has min-h-[44px]', () => {
+        it('"Complete" button has min-h-[44px]', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
-            const btn = screen.getByRole('button', { name: /go to dashboard/i });
+            const btn = screen.getByRole('button', { name: /complete/i });
             expect(btn.className).toContain('min-h-[44px]');
         });
 
@@ -197,9 +197,9 @@ describe('DoneStep', () => {
     });
 
     describe('Actions', () => {
-        it('calls onComplete when Go to Dashboard is clicked', () => {
+        it('calls onComplete when Complete is clicked', () => {
             renderWithProviders(<DoneStep onComplete={mockOnComplete} goToStep={mockGoToStep} />);
-            fireEvent.click(screen.getByRole('button', { name: /go to dashboard/i }));
+            fireEvent.click(screen.getByRole('button', { name: /complete/i }));
             expect(mockOnComplete).toHaveBeenCalledOnce();
         });
     });

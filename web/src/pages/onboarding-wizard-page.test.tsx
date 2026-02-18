@@ -117,7 +117,16 @@ vi.mock('../lib/toast', () => ({
     },
 }));
 
+vi.mock('../hooks/use-system-status', () => ({
+    useSystemStatus: vi.fn(() => ({
+        data: { discordConfigured: false },
+    })),
+}));
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
+import { useSystemStatus } from '../hooks/use-system-status';
+
+const mockUseSystemStatus = useSystemStatus as unknown as ReturnType<typeof vi.fn>;
 
 const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
 const mockIsAdmin = isAdmin as unknown as ReturnType<typeof vi.fn>;
@@ -220,6 +229,9 @@ describe('OnboardingWizardPage', () => {
     });
 
     it('shows connect step for local-auth user without Discord', () => {
+        mockUseSystemStatus.mockReturnValue({
+            data: { discordConfigured: true },
+        });
         mockUseAuth.mockReturnValue({
             user: {
                 id: 1,
