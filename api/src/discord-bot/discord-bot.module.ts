@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
@@ -10,13 +10,19 @@ import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { InteractionListener } from './listeners/interaction.listener';
+import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
 import { EventsListCommand } from './commands/events-list.command';
 import { RosterViewCommand } from './commands/roster-view.command';
 
 @Module({
-  imports: [SettingsModule, AuthModule, EventsModule, UsersModule],
+  imports: [
+    SettingsModule,
+    UsersModule,
+    forwardRef(() => EventsModule),
+    forwardRef(() => AuthModule),
+  ],
   controllers: [DiscordBotSettingsController],
   providers: [
     DiscordBotService,
@@ -25,6 +31,7 @@ import { RosterViewCommand } from './commands/roster-view.command';
     ChannelResolverService,
     DiscordEventListener,
     InteractionListener,
+    SignupInteractionListener,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,

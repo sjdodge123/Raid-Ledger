@@ -329,6 +329,35 @@ export async function confirmSignup(
     );
 }
 
+/**
+ * Update signup status (ROK-137)
+ */
+export async function updateSignupStatus(
+    eventId: number,
+    status: 'signed_up' | 'tentative' | 'declined',
+): Promise<SignupResponseDto> {
+    return fetchApi(
+        `/events/${eventId}/signup/status`,
+        {
+            method: 'PATCH',
+            body: JSON.stringify({ status }),
+        },
+        SignupResponseSchema,
+    );
+}
+
+/**
+ * Redeem an intent token for deferred signup (ROK-137)
+ */
+export async function redeemIntent(
+    token: string,
+): Promise<{ success: boolean; eventId?: number; message: string }> {
+    return fetchApi('/auth/redeem-intent', {
+        method: 'POST',
+        body: JSON.stringify({ token }),
+    });
+}
+
 // ============================================================
 // Characters API
 // ============================================================

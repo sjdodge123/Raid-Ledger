@@ -24,6 +24,7 @@ import {
   EventListQuerySchema,
   CreateSignupSchema,
   ConfirmSignupSchema,
+  UpdateSignupStatusSchema,
   RescheduleEventSchema,
   CreatePugSlotSchema,
   UpdatePugSlotSchema,
@@ -377,6 +378,30 @@ export class EventsController {
         eventId,
         signupId,
         req.user.id,
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Update signup status (ROK-137).
+   * Allows changing between signed_up, tentative, declined.
+   * Requires authentication.
+   */
+  @Patch(':id/signup/status')
+  @UseGuards(AuthGuard('jwt'))
+  async updateSignupStatus(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<SignupResponseDto> {
+    try {
+      const dto = UpdateSignupStatusSchema.parse(body);
+      return this.signupsService.updateStatus(
+        eventId,
+        { userId: req.user.id },
         dto,
       );
     } catch (error) {

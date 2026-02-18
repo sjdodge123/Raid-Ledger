@@ -8,7 +8,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -21,14 +21,18 @@ import type {
   ConfirmSignupDto,
   SignupCharacterDto,
   ConfirmationStatus,
+  SignupStatus,
   UpdateRosterDto,
   RosterWithAssignments,
   RosterAssignmentResponse,
   RosterRole,
+  CreateDiscordSignupDto,
+  UpdateSignupStatusDto,
 } from '@raid-ledger/contract';
 
 /**
- * Service for managing event signups (FR-006) and character confirmation (ROK-131).
+ * Service for managing event signups (FR-006), character confirmation (ROK-131),
+ * and anonymous Discord signups (ROK-137).
  */
 @Injectable()
 export class SignupsService {
@@ -107,6 +111,7 @@ export class SignupsService {
           userId,
           note: dto?.note ?? null,
           confirmationStatus: 'pending', // ROK-131 AC-1
+          status: 'signed_up',
         })
         .onConflictDoNothing({
           target: [schema.eventSignups.eventId, schema.eventSignups.userId],
@@ -236,6 +241,298 @@ export class SignupsService {
     }
 
     return this.buildSignupResponse(result.signup, user, null);
+  }
+
+  /**
+   * Create an anonymous Discord participant signup (ROK-137 Path B).
+   * @param eventId - Event to sign up for
+   * @param dto - Discord user info and optional role
+   * @returns The signup record
+   */
+  async signupDiscord(
+    eventId: number,
+    dto: CreateDiscordSignupDto,
+  ): Promise<SignupResponseDto> {
+    // Verify event exists
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Check if this Discord user already has an RL account linked
+    const [linkedUser] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.discordId, dto.discordUserId))
+      .limit(1);
+
+    if (linkedUser) {
+      // User has an RL account — use the normal signup path
+      return this.signup(eventId, linkedUser.id);
+    }
+
+    // Insert anonymous signup
+    const result = await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .insert(schema.eventSignups)
+        .values({
+          eventId,
+          userId: null,
+          discordUserId: dto.discordUserId,
+          discordUsername: dto.discordUsername,
+          discordAvatarHash: dto.discordAvatarHash ?? null,
+          confirmationStatus: 'pending',
+          status: dto.status ?? 'signed_up',
+        })
+        .onConflictDoNothing({
+          target: [
+            schema.eventSignups.eventId,
+            schema.eventSignups.discordUserId,
+          ],
+        })
+        .returning();
+
+      if (rows.length === 0) {
+        // Already signed up — return existing
+        const [existing] = await tx
+          .select()
+          .from(schema.eventSignups)
+          .where(
+            and(
+              eq(schema.eventSignups.eventId, eventId),
+              eq(schema.eventSignups.discordUserId, dto.discordUserId),
+            ),
+          )
+          .limit(1);
+
+        return existing;
+      }
+
+      const [inserted] = rows;
+
+      // If role was provided, create roster assignment
+      if (dto.role) {
+        const existingPositions = await tx
+          .select({ position: schema.rosterAssignments.position })
+          .from(schema.rosterAssignments)
+          .where(
+            and(
+              eq(schema.rosterAssignments.eventId, eventId),
+              eq(schema.rosterAssignments.role, dto.role),
+            ),
+          );
+        const position =
+          existingPositions.reduce((max, r) => Math.max(max, r.position), 0) +
+          1;
+
+        await tx.insert(schema.rosterAssignments).values({
+          eventId,
+          signupId: inserted.id,
+          role: dto.role,
+          position,
+          isOverride: 0,
+        });
+      }
+
+      this.logger.log(
+        `Anonymous Discord user ${dto.discordUsername} (${dto.discordUserId}) signed up for event ${eventId}`,
+      );
+
+      return inserted;
+    });
+
+    return this.buildAnonymousSignupResponse(result);
+  }
+
+  /**
+   * Update a signup's attendance status (ROK-137).
+   * Works for both RL members and anonymous Discord participants.
+   */
+  async updateStatus(
+    eventId: number,
+    signupIdentifier: { userId?: number; discordUserId?: string },
+    dto: UpdateSignupStatusDto,
+  ): Promise<SignupResponseDto> {
+    const conditions = [eq(schema.eventSignups.eventId, eventId)];
+
+    if (signupIdentifier.userId) {
+      conditions.push(
+        eq(schema.eventSignups.userId, signupIdentifier.userId),
+      );
+    } else if (signupIdentifier.discordUserId) {
+      conditions.push(
+        eq(
+          schema.eventSignups.discordUserId,
+          signupIdentifier.discordUserId,
+        ),
+      );
+    } else {
+      throw new BadRequestException(
+        'Either userId or discordUserId must be provided',
+      );
+    }
+
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(and(...conditions))
+      .limit(1);
+
+    if (!signup) {
+      throw new NotFoundException('Signup not found');
+    }
+
+    const [updated] = await this.db
+      .update(schema.eventSignups)
+      .set({ status: dto.status })
+      .where(eq(schema.eventSignups.id, signup.id))
+      .returning();
+
+    this.logger.log(
+      `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
+    );
+
+    if (updated.userId) {
+      const [user] = await this.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.id, updated.userId))
+        .limit(1);
+      const character = updated.characterId
+        ? await this.getCharacterById(updated.characterId)
+        : null;
+      return this.buildSignupResponse(updated, user, character);
+    }
+
+    return this.buildAnonymousSignupResponse(updated);
+  }
+
+  /**
+   * Find a signup by Discord user ID for a given event.
+   */
+  async findByDiscordUser(
+    eventId: number,
+    discordUserId: string,
+  ): Promise<SignupResponseDto | null> {
+    // First check if this Discord user has a linked RL account
+    const [linkedUser] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.discordId, discordUserId))
+      .limit(1);
+
+    if (linkedUser) {
+      const [signup] = await this.db
+        .select()
+        .from(schema.eventSignups)
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            eq(schema.eventSignups.userId, linkedUser.id),
+          ),
+        )
+        .limit(1);
+
+      if (!signup) return null;
+      const character = signup.characterId
+        ? await this.getCharacterById(signup.characterId)
+        : null;
+      return this.buildSignupResponse(signup, linkedUser, character);
+    }
+
+    // Check for anonymous signup
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.discordUserId, discordUserId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) return null;
+    return this.buildAnonymousSignupResponse(signup);
+  }
+
+  /**
+   * Cancel a signup by Discord user ID.
+   * Works for both linked RL accounts and anonymous participants.
+   */
+  async cancelByDiscordUser(
+    eventId: number,
+    discordUserId: string,
+  ): Promise<void> {
+    // Check if Discord user has a linked RL account
+    const [linkedUser] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.discordId, discordUserId))
+      .limit(1);
+
+    if (linkedUser) {
+      return this.cancel(eventId, linkedUser.id);
+    }
+
+    // Cancel anonymous signup
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.discordUserId, discordUserId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) {
+      throw new NotFoundException(
+        `Signup not found for Discord user ${discordUserId} on event ${eventId}`,
+      );
+    }
+
+    await this.db
+      .delete(schema.eventSignups)
+      .where(eq(schema.eventSignups.id, signup.id));
+
+    this.logger.log(
+      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId}`,
+    );
+  }
+
+  /**
+   * Claim anonymous signups when a Discord user creates an RL account (ROK-137).
+   * Backfills user_id on signups that match the discord_user_id.
+   */
+  async claimAnonymousSignups(
+    discordUserId: string,
+    userId: number,
+  ): Promise<number> {
+    const result = await this.db
+      .update(schema.eventSignups)
+      .set({ userId })
+      .where(
+        and(
+          eq(schema.eventSignups.discordUserId, discordUserId),
+          isNull(schema.eventSignups.userId),
+        ),
+      )
+      .returning();
+
+    if (result.length > 0) {
+      this.logger.log(
+        `Claimed ${result.length} anonymous signup(s) for Discord user ${discordUserId} → RL user ${userId}`,
+      );
+    }
+
+    return result.length;
   }
 
   /**
@@ -423,6 +720,7 @@ export class SignupsService {
   /**
    * Get the roster (all signups) for an event.
    * Includes character data for confirmed signups (ROK-131 AC-6).
+   * Now includes anonymous Discord participants (ROK-137).
    * @param eventId - Event to get roster for
    * @returns List of signups with user and character info
    * @throws NotFoundException if event doesn't exist
@@ -451,22 +749,31 @@ export class SignupsService {
       .where(eq(schema.eventSignups.eventId, eventId))
       .orderBy(schema.eventSignups.signedUpAt);
 
-    const signupResponses: SignupResponseDto[] = signups.map((row) => ({
-      id: row.event_signups.id,
-      eventId: row.event_signups.eventId,
-      user: {
-        id: row.users?.id ?? 0,
-        discordId: row.users?.discordId ?? '',
-        username: row.users?.username ?? 'Unknown',
-        avatar: row.users?.avatar ?? null,
-      },
-      note: row.event_signups.note,
-      signedUpAt: row.event_signups.signedUpAt.toISOString(),
-      characterId: row.event_signups.characterId,
-      character: row.characters ? this.buildCharacterDto(row.characters) : null,
-      confirmationStatus: row.event_signups
-        .confirmationStatus as ConfirmationStatus,
-    }));
+    const signupResponses: SignupResponseDto[] = signups.map((row) => {
+      const isAnonymous = !row.event_signups.userId;
+      if (isAnonymous) {
+        return this.buildAnonymousSignupResponse(row.event_signups);
+      }
+      return {
+        id: row.event_signups.id,
+        eventId: row.event_signups.eventId,
+        user: {
+          id: row.users?.id ?? 0,
+          discordId: row.users?.discordId ?? '',
+          username: row.users?.username ?? 'Unknown',
+          avatar: row.users?.avatar ?? null,
+        },
+        note: row.event_signups.note,
+        signedUpAt: row.event_signups.signedUpAt.toISOString(),
+        characterId: row.event_signups.characterId,
+        character: row.characters
+          ? this.buildCharacterDto(row.characters)
+          : null,
+        confirmationStatus: row.event_signups
+          .confirmationStatus as ConfirmationStatus,
+        status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
+      };
+    });
 
     return {
       eventId,
@@ -540,6 +847,35 @@ export class SignupsService {
       characterId: signup.characterId,
       character: character ? this.buildCharacterDto(character) : null,
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
+      status: (signup.status as SignupStatus) ?? 'signed_up',
+    };
+  }
+
+  /**
+   * Build signup response for anonymous Discord participants (ROK-137).
+   */
+  private buildAnonymousSignupResponse(
+    signup: typeof schema.eventSignups.$inferSelect,
+  ): SignupResponseDto {
+    return {
+      id: signup.id,
+      eventId: signup.eventId,
+      user: {
+        id: 0,
+        discordId: signup.discordUserId ?? '',
+        username: signup.discordUsername ?? 'Discord User',
+        avatar: null,
+      },
+      note: signup.note,
+      signedUpAt: signup.signedUpAt.toISOString(),
+      characterId: null,
+      character: null,
+      confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
+      status: (signup.status as SignupStatus) ?? 'signed_up',
+      isAnonymous: true,
+      discordUserId: signup.discordUserId,
+      discordUsername: signup.discordUsername,
+      discordAvatarHash: signup.discordAvatarHash,
     };
   }
 
@@ -884,6 +1220,7 @@ export class SignupsService {
 
   /**
    * Build roster assignment response from signup data.
+   * Supports both RL members and anonymous Discord participants (ROK-137).
    */
   private buildRosterAssignmentResponse(
     row: {
@@ -893,12 +1230,17 @@ export class SignupsService {
     },
     assignment?: typeof schema.rosterAssignments.$inferSelect,
   ): RosterAssignmentResponse {
+    const isAnonymous = !row.event_signups.userId;
     return {
       id: assignment?.id ?? 0,
       signupId: row.event_signups.id,
       userId: row.users?.id ?? 0,
-      discordId: row.users?.discordId ?? '',
-      username: row.users?.username ?? 'Unknown',
+      discordId: isAnonymous
+        ? (row.event_signups.discordUserId ?? '')
+        : (row.users?.discordId ?? ''),
+      username: isAnonymous
+        ? (row.event_signups.discordUsername ?? 'Discord User')
+        : (row.users?.username ?? 'Unknown'),
       avatar: row.users?.avatar ?? null,
       customAvatarUrl: row.users?.customAvatarUrl ?? null,
       slot: (assignment?.role as RosterRole) ?? null,

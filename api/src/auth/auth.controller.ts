@@ -1,6 +1,8 @@
 import {
   Controller,
   Get,
+  Post,
+  Body,
   Req,
   UseGuards,
   Res,
@@ -11,7 +13,9 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
+import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
+import { SignupsService } from '../events/signups.service';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -19,6 +23,8 @@ import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
+import { RedeemIntentSchema } from '@raid-ledger/contract';
+import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
@@ -41,7 +47,9 @@ export class AuthController {
 
   constructor(
     private authService: AuthService,
+    private intentTokenService: IntentTokenService,
     private usersService: UsersService,
+    private signupsService: SignupsService,
     private configService: ConfigService,
     private jwtService: JwtService,
     private settingsService: SettingsService,
@@ -331,5 +339,63 @@ export class AuthController {
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
     };
+  }
+
+  /**
+   * POST /auth/redeem-intent
+   * Validates an intent token and processes the deferred signup (ROK-137).
+   * Called after Discord OAuth completes for the "Join & Sign Up" flow.
+   * Requires authentication (user just completed OAuth).
+   */
+  @RateLimit('auth')
+  @Post('redeem-intent')
+  @UseGuards(AuthGuard('jwt'))
+  async redeemIntent(
+    @Req() req: RequestWithUser,
+    @Body() body: unknown,
+  ): Promise<RedeemIntentResponseDto> {
+    const dto = RedeemIntentSchema.parse(body);
+
+    const payload = this.intentTokenService.validate(dto.token);
+    if (!payload) {
+      return {
+        success: false,
+        message: 'Intent token is invalid, expired, or already used',
+      };
+    }
+
+    try {
+      // Auto-complete the signup
+      await this.signupsService.signup(payload.eventId, req.user.id);
+
+      // Claim any anonymous signups this Discord user had
+      if (req.user.id) {
+        const user = await this.usersService.findById(req.user.id);
+        if (user?.discordId) {
+          await this.signupsService.claimAnonymousSignups(
+            user.discordId,
+            req.user.id,
+          );
+        }
+      }
+
+      this.logger.log(
+        `Redeemed intent token: user ${req.user.id} signed up for event ${payload.eventId}`,
+      );
+
+      return {
+        success: true,
+        eventId: payload.eventId,
+        message: "You're signed up!",
+      };
+    } catch (error) {
+      this.logger.error('Failed to redeem intent token:', error);
+      return {
+        success: false,
+        eventId: payload.eventId,
+        message:
+          error instanceof Error ? error.message : 'Failed to process signup',
+      };
+    }
   }
 }
