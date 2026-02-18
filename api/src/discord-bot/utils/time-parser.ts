@@ -21,7 +21,7 @@ export function parseNaturalTime(
   const refDate = new Date();
   const tz = timezone || 'UTC';
 
-  const results = chrono.parse(input, { instant: refDate, timezone: tz });
+  const results = chrono.parse(input, { instant: refDate, timezone: tz }, { forwardDate: true });
 
   if (results.length === 0) {
     return null;
@@ -29,11 +29,6 @@ export function parseNaturalTime(
 
   const result = results[0];
   const date = result.start.date();
-
-  // Reject dates in the past
-  if (date <= refDate) {
-    return null;
-  }
 
   return {
     date,
