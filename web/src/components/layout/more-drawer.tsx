@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useThemeStore } from '../../stores/theme-store';
@@ -11,6 +11,7 @@ import { SECTIONS as PROFILE_SECTIONS } from '../profile/profile-nav-data';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -401,6 +402,16 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
 function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
+    const { data: systemStatus } = useSystemStatus();
+
+    // Hide Discord nav item when Discord OAuth is not configured
+    const sections = useMemo(() => {
+        if (systemStatus?.discordConfigured) return PROFILE_SECTIONS;
+        return PROFILE_SECTIONS.map((section) => ({
+            ...section,
+            children: section.children.filter((child) => child.to !== '/profile/identity/discord'),
+        }));
+    }, [systemStatus?.discordConfigured]);
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
@@ -413,7 +424,7 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
 
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="profile-submenu">
-            {PROFILE_SECTIONS.map((section) => (
+            {sections.map((section) => (
                 <div key={section.id}>
                     <div className="flex items-center gap-2 px-3 py-1.5 text-secondary">
                         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
