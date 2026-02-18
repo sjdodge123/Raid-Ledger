@@ -1144,7 +1144,7 @@
    ============================================ */
 
 .calendar-mobile-nav {
-    display: flex;
+    display: none;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
@@ -1152,6 +1152,12 @@
     background: rgba(30, 41, 59, 0.95);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+@media (max-width: 767px) {
+    .calendar-mobile-nav {
+        display: flex;
+    }
 }
 
 .calendar-mobile-nav-arrow {
