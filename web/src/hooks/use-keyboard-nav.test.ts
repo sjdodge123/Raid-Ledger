@@ -1,5 +1,5 @@
 import { renderHook } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import React from 'react';
 import { useKeyboardNav } from './use-keyboard-nav';
 
@@ -29,15 +29,15 @@ function createContainer(itemCount: number, disabledIndexes: number[] = []): HTM
 function makeKeyboardEvent(
     key: string,
     currentTarget: HTMLElement,
-): React.KeyboardEvent<HTMLElement> {
+): React.KeyboardEvent<HTMLElement> & { preventDefault: ReturnType<typeof vi.fn> } {
     const nativeEvent = new KeyboardEvent('keydown', { key, bubbles: true });
-    const preventDefaultSpy = vi.fn();
+    const preventDefault = vi.fn();
     return {
         key,
         currentTarget,
-        preventDefault: preventDefaultSpy,
+        preventDefault,
         nativeEvent,
-    } as unknown as React.KeyboardEvent<HTMLElement>;
+    } as unknown as React.KeyboardEvent<HTMLElement> & { preventDefault: ReturnType<typeof vi.fn> };
 }
 
 describe('useKeyboardNav', () => {
@@ -56,7 +56,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(document.activeElement).toBe(items[1]);
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
 
         it('ArrowDown wraps from last item to first', () => {
@@ -81,7 +81,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(document.activeElement).toBe(items[1]);
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
 
         it('ArrowUp wraps from first item to last', () => {
@@ -174,7 +174,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(document.activeElement).toBe(items[0]);
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
 
         it('End key moves focus to last item', () => {
@@ -187,7 +187,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(document.activeElement).toBe(items[3]);
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
     });
 
@@ -203,7 +203,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(onSelect).toHaveBeenCalledWith(1);
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
 
         it('Space calls onSelect with current index', () => {
@@ -242,7 +242,7 @@ describe('useKeyboardNav', () => {
             result.current.onKeyDown(event);
 
             expect(onEscape).toHaveBeenCalledOnce();
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).toHaveBeenCalled();
+            expect(event.preventDefault).toHaveBeenCalled();
         });
 
         it('Escape does not throw when onEscape is undefined', () => {
@@ -266,7 +266,7 @@ describe('useKeyboardNav', () => {
             // ArrowDown on empty container should be a no-op
             const event = makeKeyboardEvent('ArrowDown', container);
             expect(() => result.current.onKeyDown(event)).not.toThrow();
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).not.toHaveBeenCalled();
+            expect(event.preventDefault).not.toHaveBeenCalled();
         });
 
         it('skips disabled nav items', () => {
@@ -295,7 +295,7 @@ describe('useKeyboardNav', () => {
 
             expect(onEscape).not.toHaveBeenCalled();
             expect(onSelect).not.toHaveBeenCalled();
-            expect((event as { preventDefault: ReturnType<typeof vi.fn> }).preventDefault).not.toHaveBeenCalled();
+            expect(event.preventDefault).not.toHaveBeenCalled();
         });
     });
 });

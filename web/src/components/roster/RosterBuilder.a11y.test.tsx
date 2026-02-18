@@ -4,7 +4,7 @@
  * announced to screen readers via the ARIA live regions.
  */
 import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { RosterBuilder } from './RosterBuilder';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
