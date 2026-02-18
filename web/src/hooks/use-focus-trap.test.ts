@@ -21,13 +21,6 @@ describe('useFocusTrap', () => {
         document.body.innerHTML = '';
     });
 
-    // Helper to fire a keydown event on document
-    function fireKeyDown(key: string, shiftKey = false) {
-        const event = new KeyboardEvent('keydown', { key, shiftKey, bubbles: true });
-        document.dispatchEvent(event);
-        return event;
-    }
-
     it('returns a ref object', () => {
         const { result } = renderHook(() => useFocusTrap(false));
         expect(result.current).toBeDefined();
