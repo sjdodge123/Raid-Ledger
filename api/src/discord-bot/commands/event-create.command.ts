@@ -80,12 +80,42 @@ export class EventCreateCommand
               )
               .setRequired(true),
           )
+          .addStringOption((opt) =>
+            opt
+              .setName('roster')
+              .setDescription('Roster type (default: generic)')
+              .addChoices(
+                { name: 'Generic (headcount only)', value: 'generic' },
+                { name: 'MMO Roles (Tank/Healer/DPS)', value: 'mmo' },
+              ),
+          )
           .addIntegerOption((opt) =>
             opt
               .setName('slots')
               .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
               .setMinValue(1)
               .setMaxValue(100),
+          )
+          .addIntegerOption((opt) =>
+            opt
+              .setName('tanks')
+              .setDescription('Number of tank slots (MMO roster only)')
+              .setMinValue(0)
+              .setMaxValue(20),
+          )
+          .addIntegerOption((opt) =>
+            opt
+              .setName('healers')
+              .setDescription('Number of healer slots (MMO roster only)')
+              .setMinValue(0)
+              .setMaxValue(20),
+          )
+          .addIntegerOption((opt) =>
+            opt
+              .setName('dps')
+              .setDescription('Number of DPS slots (MMO roster only)')
+              .setMinValue(0)
+              .setMaxValue(50),
           ),
       )
       .toJSON();
@@ -117,7 +147,11 @@ export class EventCreateCommand
     const title = interaction.options.getString('title', true);
     const gameName = interaction.options.getString('game', true);
     const timeInput = interaction.options.getString('time', true);
+    const rosterType = interaction.options.getString('roster') ?? 'generic';
     const slots = interaction.options.getInteger('slots') ?? DEFAULT_SLOTS;
+    const tanks = interaction.options.getInteger('tanks');
+    const healers = interaction.options.getInteger('healers');
+    const dps = interaction.options.getInteger('dps');
 
     // Resolve the Discord user to a Raid Ledger user
     const discordId = interaction.user.id;
@@ -166,6 +200,24 @@ export class EventCreateCommand
       startTime.getTime() + DEFAULT_DURATION_HOURS * 60 * 60 * 1000,
     );
 
+    // Build slot config based on roster type
+    let slotConfig: { type: 'generic' | 'mmo'; tank?: number; healer?: number; dps?: number } | undefined;
+    let maxAttendees = slots;
+
+    if (rosterType === 'mmo') {
+      const tankSlots = tanks ?? 2;
+      const healerSlots = healers ?? 2;
+      const dpsSlots = dps ?? 6;
+      maxAttendees = tankSlots + healerSlots + dpsSlots;
+
+      slotConfig = {
+        type: 'mmo',
+        tank: tankSlots,
+        healer: healerSlots,
+        dps: dpsSlots,
+      };
+    }
+
     // Create the event via EventsService
     try {
       const event = await this.eventsService.create(user.id, {
@@ -174,7 +226,8 @@ export class EventCreateCommand
         endTime: endTime.toISOString(),
         gameId: game?.igdbId ?? undefined,
         registryGameId,
-        maxAttendees: slots,
+        maxAttendees,
+        slotConfig,
       });
 
       // Build ephemeral confirmation for creator
@@ -188,6 +241,11 @@ export class EventCreateCommand
         );
       }
 
+      const rosterInfo =
+        rosterType === 'mmo' && slotConfig
+          ? `Roster: **MMO** (${slotConfig.tank}T / ${slotConfig.healer}H / ${slotConfig.dps}D)`
+          : `Slots: **${maxAttendees}**`;
+
       const confirmEmbed = new EmbedBuilder()
         .setColor(0x34d399) // Emerald
         .setTitle('Event Created')
@@ -197,7 +255,7 @@ export class EventCreateCommand
             '',
             `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
             game ? `Game: **${game.name}**` : null,
-            `Slots: **${slots}**`,
+            rosterInfo,
             '',
             `Timezone: ${parsed.timezone}`,
           ]
