@@ -15,6 +15,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
+import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -43,6 +44,7 @@ export class EventCreateCommand
     private db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
     private readonly usersService: UsersService,
+    private readonly preferencesService: PreferencesService,
     private readonly settingsService: SettingsService,
     private readonly magicLinkService: MagicLinkService,
     private readonly clientService: DiscordBotClientService,
@@ -184,9 +186,14 @@ export class EventCreateCommand
       registryGameId = registryMatch?.id;
     }
 
-    // Parse natural language time
+    // Use the user's timezone preference, falling back to community default
+    const userTzPref = await this.preferencesService.getUserPreference(user.id, 'timezone');
+    const userTz = userTzPref?.value as string | undefined;
     const defaultTz = await this.settingsService.get('default_timezone');
-    const parsed = parseNaturalTime(timeInput, defaultTz);
+    const timezone = userTz && userTz !== 'auto' ? userTz : defaultTz;
+
+    // Parse natural language time
+    const parsed = parseNaturalTime(timeInput, timezone);
     if (!parsed) {
       await interaction.editReply(
         `Could not parse time: "${timeInput}". Try something like "tonight 8pm" or "Friday 7:30pm".`,
@@ -205,9 +212,9 @@ export class EventCreateCommand
     let maxAttendees = slots;
 
     if (rosterType === 'mmo') {
-      const tankSlots = tanks ?? 2;
-      const healerSlots = healers ?? 2;
-      const dpsSlots = dps ?? 6;
+      const tankSlots = tanks ?? 1;
+      const healerSlots = healers ?? 1;
+      const dpsSlots = dps ?? 3;
       maxAttendees = tankSlots + healerSlots + dpsSlots;
 
       slotConfig = {
