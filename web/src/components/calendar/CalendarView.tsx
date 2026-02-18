@@ -321,6 +321,19 @@ export function CalendarView({
         [gameTimeSlots],
     );
 
+    // Mobile month drill-down: tapping an event chip drills to day view
+    const handleMonthChipClick = useCallback(
+        (e: React.MouseEvent, eventStart: Date) => {
+            if (window.innerWidth >= 768) return; // desktop: let onSelectEvent handle it
+            e.stopPropagation();
+            e.preventDefault();
+            setCurrentDate(eventStart);
+            setView(Views.DAY);
+            onCalendarViewChange?.('day');
+        },
+        [setCurrentDate, setView, onCalendarViewChange],
+    );
+
     // Custom event component for MONTH view (compact chip)
     const MonthEventComponent = useCallback(
         ({ event }: { event: CalendarEvent }) => {
@@ -336,6 +349,7 @@ export function CalendarView({
                 <div
                     className="calendar-event-chip"
                     title={`${event.title}${event.resource?.game?.name ? ` (${event.resource.game.name})` : ''}`}
+                    onClick={(e) => handleMonthChipClick(e, event.start)}
                     style={{
                         backgroundImage: coverUrl
                             ? `linear-gradient(135deg, ${colors.bg}dd 50%, ${colors.bg}88 100%), url(${coverUrl})`
@@ -356,7 +370,7 @@ export function CalendarView({
                 </div>
             );
         },
-        [eventOverlapsGameTime]
+        [eventOverlapsGameTime, handleMonthChipClick]
     );
 
     // Custom event component for WEEK view — delegates to extracted WeekEventCard
