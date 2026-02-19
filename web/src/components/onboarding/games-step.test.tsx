@@ -307,4 +307,167 @@ describe('GamesStep', () => {
             expect(grid!.className).toContain('sm:grid-cols-3');
         });
     });
+
+    // ============================================================
+    // ROK-375: Local source warning banner
+    // ============================================================
+    describe('ROK-375: local source warning banner', () => {
+        it('shows "external search unavailable" warning when search source is "local"', () => {
+            mockUseGameSearch.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 10,
+                            name: 'Fallback Game',
+                            slug: 'fallback-game',
+                            coverUrl: null,
+                            genres: [],
+                            gameModes: [],
+                            summary: null,
+                            rating: null,
+                            aggregatedRating: null,
+                            popularity: null,
+                            themes: [],
+                            platforms: [],
+                            screenshots: [],
+                            videos: [],
+                            firstReleaseDate: null,
+                            playerCount: null,
+                            twitchGameId: null,
+                            crossplay: null,
+                        },
+                    ],
+                    meta: { total: 1, cached: true, source: 'local' },
+                },
+                isLoading: false,
+            });
+
+            renderWithProviders(<GamesStep />);
+            const searchInput = screen.getByPlaceholderText(/search for a game/i);
+            fireEvent.change(searchInput, { target: { value: 'fallback' } });
+
+            expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
+        });
+
+        it('does NOT show warning when search source is "igdb"', () => {
+            mockUseGameSearch.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 10,
+                            name: 'IGDB Game',
+                            slug: 'igdb-game',
+                            coverUrl: null,
+                            genres: [],
+                            gameModes: [],
+                            summary: null,
+                            rating: null,
+                            aggregatedRating: null,
+                            popularity: null,
+                            themes: [],
+                            platforms: [],
+                            screenshots: [],
+                            videos: [],
+                            firstReleaseDate: null,
+                            playerCount: null,
+                            twitchGameId: null,
+                            crossplay: null,
+                        },
+                    ],
+                    meta: { total: 1, cached: false, source: 'igdb' },
+                },
+                isLoading: false,
+            });
+
+            renderWithProviders(<GamesStep />);
+            const searchInput = screen.getByPlaceholderText(/search for a game/i);
+            fireEvent.change(searchInput, { target: { value: 'igdb game' } });
+
+            expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+        });
+
+        it('does NOT show warning when search source is "database"', () => {
+            mockUseGameSearch.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 10,
+                            name: 'DB Game',
+                            slug: 'db-game',
+                            coverUrl: null,
+                            genres: [],
+                            gameModes: [],
+                            summary: null,
+                            rating: null,
+                            aggregatedRating: null,
+                            popularity: null,
+                            themes: [],
+                            platforms: [],
+                            screenshots: [],
+                            videos: [],
+                            firstReleaseDate: null,
+                            playerCount: null,
+                            twitchGameId: null,
+                            crossplay: null,
+                        },
+                    ],
+                    meta: { total: 1, cached: true, source: 'database' },
+                },
+                isLoading: false,
+            });
+
+            renderWithProviders(<GamesStep />);
+            const searchInput = screen.getByPlaceholderText(/search for a game/i);
+            fireEvent.change(searchInput, { target: { value: 'db game' } });
+
+            expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+        });
+
+        it('does NOT show warning when not searching', () => {
+            mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+
+            renderWithProviders(<GamesStep />);
+
+            expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+        });
+
+        it('warning banner has yellow styling', () => {
+            mockUseGameSearch.mockReturnValue({
+                data: {
+                    data: [
+                        {
+                            id: 10,
+                            name: 'Fallback Game',
+                            slug: 'fallback-game',
+                            coverUrl: null,
+                            genres: [],
+                            gameModes: [],
+                            summary: null,
+                            rating: null,
+                            aggregatedRating: null,
+                            popularity: null,
+                            themes: [],
+                            platforms: [],
+                            screenshots: [],
+                            videos: [],
+                            firstReleaseDate: null,
+                            playerCount: null,
+                            twitchGameId: null,
+                            crossplay: null,
+                        },
+                    ],
+                    meta: { total: 1, cached: true, source: 'local' },
+                },
+                isLoading: false,
+            });
+
+            renderWithProviders(<GamesStep />);
+            const searchInput = screen.getByPlaceholderText(/search for a game/i);
+            fireEvent.change(searchInput, { target: { value: 'fallback' } });
+
+            const warning = screen.getByText(/external search unavailable/i).closest('div');
+            expect(warning).toHaveClass('bg-yellow-900/30');
+            expect(warning).toHaveClass('border-yellow-700/40');
+        });
+    });
 });
