@@ -169,12 +169,12 @@ export class SetupWizardService {
           .setCustomId(SETUP_IDS.START)
           .setLabel('Set Up Now')
           .setStyle(ButtonStyle.Primary)
-          .setEmoji('1f527'),
+          .setEmoji('🔧'),
         new ButtonBuilder()
           .setCustomId(SETUP_IDS.SKIP)
           .setLabel("I'll do this later")
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('23ed'),
+          .setEmoji('⏭'),
       );
 
       await this.clientService.sendEmbedDM(discordId, embed, row);
@@ -288,12 +288,12 @@ export class SetupWizardService {
         .setCustomId(SETUP_IDS.NAME_CONFIRM)
         .setLabel('Looks Good')
         .setStyle(ButtonStyle.Success)
-        .setEmoji('2705'),
+        .setEmoji('✅'),
       new ButtonBuilder()
         .setCustomId(SETUP_IDS.NAME_EDIT)
         .setLabel('Edit')
         .setStyle(ButtonStyle.Secondary)
-        .setEmoji('270f'),
+        .setEmoji('✏'),
     );
 
     await interaction.update({
@@ -410,12 +410,12 @@ export class SetupWizardService {
           .setCustomId(SETUP_IDS.NAME_CONFIRM)
           .setLabel('Looks Good')
           .setStyle(ButtonStyle.Success)
-          .setEmoji('2705'),
+          .setEmoji('✅'),
         new ButtonBuilder()
           .setCustomId(SETUP_IDS.NAME_EDIT)
           .setLabel('Edit')
           .setStyle(ButtonStyle.Secondary)
-          .setEmoji('270f'),
+          .setEmoji('✏'),
       );
 
       await dmChannel.send({
