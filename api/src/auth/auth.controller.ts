@@ -11,6 +11,8 @@ import {
   Logger,
   Optional,
   Inject,
+  BadRequestException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
@@ -181,13 +183,13 @@ export class AuthController {
     @Body() body: { code: string },
   ): Promise<{ access_token: string }> {
     if (!body.code) {
-      throw new Error('Auth code is required');
+      throw new BadRequestException('Auth code is required');
     }
 
     const redisKey = `auth_code:${body.code}`;
     const token = await this.redis.get(redisKey);
     if (!token) {
-      throw new Error('Invalid or expired auth code');
+      throw new UnauthorizedException('Invalid or expired auth code');
     }
 
     // Consume the code (single-use)
