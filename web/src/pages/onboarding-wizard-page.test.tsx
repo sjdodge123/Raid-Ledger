@@ -17,6 +17,7 @@ vi.mock('react-router-dom', async () => {
 vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
     isAdmin: vi.fn(),
+    getAuthToken: () => 'test-token',
 }));
 
 vi.mock('../hooks/use-onboarding-fte', () => ({

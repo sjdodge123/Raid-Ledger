@@ -78,6 +78,7 @@ vi.mock('../../hooks/use-auth', () => ({
     useAuth: vi.fn(() => ({
         isAuthenticated: true,
     })),
+    getAuthToken: () => 'test-token',
 }));
 
 import { useGameSearch } from '../../hooks/use-game-search';

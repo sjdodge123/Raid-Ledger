@@ -24,6 +24,7 @@ import './event-detail-page.css';
 // ROK-343: Lazy load modals — only fetched when user triggers them
 const SignupConfirmationModal = lazy(() => import('../components/events/signup-confirmation-modal').then(m => ({ default: m.SignupConfirmationModal })));
 const RescheduleModal = lazy(() => import('../components/events/RescheduleModal').then(m => ({ default: m.RescheduleModal })));
+const CancelEventModal = lazy(() => import('../components/events/cancel-event-modal').then(m => ({ default: m.CancelEventModal })));
 
 /**
  * Event Detail Page - ROK-184 Redesign
@@ -83,6 +84,7 @@ export function EventDetailPage() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+    const [showCancelModal, setShowCancelModal] = useState(false);
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
@@ -93,8 +95,10 @@ export function EventDetailPage() {
     const isEventCreator = user?.id === event?.creator?.id;
     const canManageEvent = isOperatorOrAdmin(user);
     const canManageRoster = isEventCreator || canManageEvent;
+    // ROK-374: Check if event is cancelled
+    const isCancelled = !!event?.cancelledAt;
     // ROK-208: Admins use assignment popup, not click-to-join
-    const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster;
+    const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster && !isCancelled;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
@@ -245,7 +249,7 @@ export function EventDetailPage() {
                     {fromCalendar ? '← Back to Calendar' : '← Back'}
                 </button>
 
-                {canManageRoster && (
+                {canManageRoster && !isCancelled && (
                     <div className="flex gap-2">
                         <button
                             onClick={() => setShowRescheduleModal(true)}
@@ -259,9 +263,38 @@ export function EventDetailPage() {
                         >
                             Edit Event
                         </button>
+                        <button
+                            onClick={() => setShowCancelModal(true)}
+                            className="btn btn-danger btn-sm"
+                        >
+                            Cancel Event
+                        </button>
                     </div>
                 )}
             </div>
+
+            {/* ROK-374: Cancelled event banner */}
+            {isCancelled && event && (
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-4">
+                    <div className="flex items-center gap-2 text-red-400 font-semibold text-sm">
+                        <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                        </svg>
+                        This event has been cancelled
+                    </div>
+                    {event.cancellationReason && (
+                        <p className="text-sm text-muted mt-1">
+                            Reason: {event.cancellationReason}
+                        </p>
+                    )}
+                    <p className="text-xs text-dim mt-1">
+                        Cancelled on {new Intl.DateTimeFormat('en-US', {
+                            month: 'short', day: 'numeric', year: 'numeric',
+                            hour: 'numeric', minute: '2-digit',
+                        }).format(new Date(event.cancelledAt!))}
+                    </p>
+                </div>
+            )}
 
             {/* ROK-192: Full banner (in-flow, observed for scroll detection) */}
             <div ref={bannerRef}>
@@ -463,7 +496,7 @@ export function EventDetailPage() {
             )}
 
             {/* Fallback signup button if no roster slots */}
-            {!rosterAssignments && isAuthenticated && !isSignedUp && (
+            {!rosterAssignments && isAuthenticated && !isSignedUp && !isCancelled && (
                 <div className="event-detail-signup-fallback">
                     <button
                         onClick={handleSignup}
@@ -605,6 +638,19 @@ export function EventDetailPage() {
                         gameName={event.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event.game?.slug ?? undefined}
+                    />
+                </Suspense>
+            )}
+
+            {/* ROK-374: Cancel Event Modal */}
+            {showCancelModal && event && (
+                <Suspense fallback={null}>
+                    <CancelEventModal
+                        isOpen={showCancelModal}
+                        onClose={() => setShowCancelModal(false)}
+                        eventId={eventId}
+                        eventTitle={event.title}
+                        signupCount={event.signupCount}
                     />
                 </Suspense>
             )}

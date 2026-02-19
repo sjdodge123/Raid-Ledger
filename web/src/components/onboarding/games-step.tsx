@@ -3,6 +3,7 @@ import { useGamesDiscover } from '../../hooks/use-games-discover';
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { useAuth } from '../../hooks/use-auth';
+import { WantToPlayProvider } from '../../hooks/use-want-to-play-batch';
 import type { GameDetailDto } from '@raid-ledger/contract';
 
 
@@ -202,7 +203,11 @@ export function GamesStep() {
 
     const displayGames = isSearching ? (searchResults ?? []) : filteredGames;
 
-
+    // Batch interest queries: extract IDs for WantToPlayProvider (ROK-377)
+    const displayGameIds = useMemo(
+        () => displayGames.slice(0, 24).map((g) => g.id),
+        [displayGames],
+    );
 
     return (
         <div className="space-y-5">
@@ -272,11 +277,13 @@ export function GamesStep() {
                     </p>
                 </div>
             ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {displayGames.slice(0, 24).map((game) => (
-                        <OnboardingGameCard key={game.id} game={game} />
-                    ))}
-                </div>
+                <WantToPlayProvider gameIds={displayGameIds}>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                        {displayGames.slice(0, 24).map((game) => (
+                            <OnboardingGameCard key={game.id} game={game} />
+                        ))}
+                    </div>
+                </WantToPlayProvider>
             )}
 
         </div>

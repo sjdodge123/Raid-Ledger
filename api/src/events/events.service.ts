@@ -23,6 +23,7 @@ import {
   AggregateGameTimeResponse,
   RescheduleEventDto,
   UserEventSignupsResponseDto,
+  CancelEventDto,
 } from '@raid-ledger/contract';
 import { randomUUID } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -194,6 +195,8 @@ export class EventsService {
           sql`${new Date().toISOString()}::timestamp`,
         ),
       );
+      // ROK-374: Exclude cancelled events from upcoming queries by default
+      conditions.push(sql`${schema.events.cancelledAt} IS NULL`);
     }
 
     // ROK-174: startAfter filter - events starting after this date
@@ -399,6 +402,8 @@ export class EventsService {
     const now = new Date().toISOString();
     const conditions: ReturnType<typeof gte>[] = [
       gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
+      // ROK-374: Exclude cancelled events from dashboard
+      sql`${schema.events.cancelledAt} IS NULL`,
     ];
     if (!isAdmin) {
       conditions.push(eq(schema.events.creatorId, userId));
@@ -605,6 +610,8 @@ export class EventsService {
     const conditions = [
       inArray(schema.events.id, signedUpEventIds),
       gte(sql`lower(${schema.events.duration})`, sql`${now}::timestamp`),
+      // ROK-374: Exclude cancelled events from user upcoming events
+      sql`${schema.events.cancelledAt} IS NULL`,
     ];
 
     // Count total matching events (before limit)
@@ -763,6 +770,89 @@ export class EventsService {
     await this.db.delete(schema.events).where(eq(schema.events.id, id));
 
     this.logger.log(`Event deleted: ${id} by user ${userId}`);
+  }
+
+  /**
+   * Soft-cancel an event (ROK-374).
+   * Sets cancelledAt, notifies all signed-up users, and emits CANCELLED event for Discord.
+   * @param eventId - Event ID
+   * @param userId - ID of user cancelling the event
+   * @param isAdmin - Whether the user is an admin/operator
+   * @param dto - Optional cancellation reason
+   * @returns Cancelled event
+   */
+  async cancel(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+    dto: CancelEventDto,
+  ): Promise<EventResponseDto> {
+    const existing = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (existing.length === 0) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (existing[0].creatorId !== userId && !isAdmin) {
+      throw new ForbiddenException(
+        'Only the event creator, operator, or admin can cancel this event',
+      );
+    }
+
+    if (existing[0].cancelledAt) {
+      throw new BadRequestException('This event has already been cancelled');
+    }
+
+    // Soft-cancel: set cancelledAt and optional reason
+    await this.db
+      .update(schema.events)
+      .set({
+        cancelledAt: new Date(),
+        cancellationReason: dto.reason ?? null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.events.id, eventId));
+
+    this.logger.log(`Event cancelled: ${eventId} by user ${userId}`);
+
+    // Notify all signed-up users
+    const signups = await this.db
+      .select({ userId: schema.eventSignups.userId })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    const usersToNotify = signups
+      .map((s) => s.userId)
+      .filter((id): id is number => id !== null);
+
+    const eventTitle = existing[0].title;
+    const reasonSuffix = dto.reason ? ` Reason: ${dto.reason}` : '';
+
+    await Promise.all(
+      usersToNotify.map((uid) =>
+        this.notificationService.create({
+          userId: uid,
+          type: 'event_cancelled',
+          title: 'Event Cancelled',
+          message: `"${eventTitle}" has been cancelled.${reasonSuffix}`,
+          payload: {
+            eventId,
+            reason: dto.reason ?? null,
+          },
+        }),
+      ),
+    );
+
+    const cancelledEvent = await this.findOne(eventId);
+
+    // Emit CANCELLED event for Discord embed handler
+    this.emitEventLifecycle(APP_EVENT_EVENTS.CANCELLED, cancelledEvent);
+
+    return cancelledEvent;
   }
 
   /**
@@ -1177,6 +1267,8 @@ export class EventsService {
         (event.contentInstances as EventResponseDto['contentInstances']) ??
         null,
       recurrenceGroupId: event.recurrenceGroupId ?? null,
+      cancelledAt: event.cancelledAt?.toISOString() ?? null,
+      cancellationReason: event.cancellationReason ?? null,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };
