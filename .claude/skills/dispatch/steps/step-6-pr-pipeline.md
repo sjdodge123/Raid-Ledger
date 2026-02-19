@@ -15,32 +15,42 @@ When a dev teammate messages the lead that their story is complete:
 2. **Immediately return to delegate mode** — handle other messages, respond to the operator
 3. The test agent runs independently in the dev's worktree, writes tests, and messages the lead when done
 
-## 6b. When a Test Agent Completes -> Validate CI -> Update Linear (NO PR YET)
+## 6b. When a Test Agent Completes -> Validate CI -> Push + PR -> Update Linear
 
-When a test agent messages the lead that tests are written and passing, **run the full CI pipeline locally**. Individual PRs are NOT created — all stories in the batch will be combined into a single PR later (Step 8).
+When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and create a PR**. Each story gets its own individual PR.
 
-**1. Delegate CI validation to the build agent:**
+**1. Delegate push pipeline to the build agent:**
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
-  content: "Validate ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
-  summary: "Validate ROK-<num>")
+  content: "Push ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+  summary: "Push ROK-<num>")
 ```
 
-The build agent will run full CI (build/lint/test) in the worktree and message back with pass/fail.
+The build agent will: sync with origin/main (fetch + rebase) -> re-run full CI (build/lint/test) -> push. This sync step is critical — other stories may have already merged to main, and pushing a stale branch causes duplicate CI runs on GitHub.
 
-**If CI fails:** The build agent messages back with errors. Re-spawn the dev teammate to fix:
+**If rebase conflicts:** The build agent will message back. Re-spawn the dev teammate to resolve conflicts and re-commit.
+
+**If CI fails after rebase:** The build agent messages back with errors. Re-spawn the dev teammate to fix:
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
      name: "dev-rok-<num>", mode: "bypassPermissions",
      prompt: <rework prompt with build/lint/test errors>)
 ```
-After fixes, ask the build agent to re-validate. Repeat until CI passes.
+After fixes, ask the build agent to push again. Repeat until CI passes and push succeeds.
 
-**2. After build agent confirms CI passes — update Linear (MANDATORY):**
+**2. After build agent confirms push succeeded — create PR and update Linear (MANDATORY):**
+
+```bash
+gh pr create --base main --head rok-<num>-<short-name> \
+  --title "feat(ROK-<num>): <short description>" \
+  --body "<summary of changes>"
+gh pr merge <number> --auto --squash
+```
+
 ```
 mcp__linear__update_issue(id: <issue_id>, state: "In Review")
-mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing locally.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
+mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing. PR #<num> created.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
 ```
 
 **The operator uses Linear "In Review" to know what needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
@@ -54,8 +64,6 @@ Read `templates/qa-test-cases.md` for the prompt template.
 Task(subagent_type: "general-purpose", model: "sonnet", run_in_background: true,
      prompt: <read and fill templates/qa-test-cases.md>)
 ```
-
-**No PR is created at this point. The branch stays local (or pushed for backup) but no GitHub PR exists yet. The single batch PR is created in Step 8 after all stories pass code review.**
 
 ## 6c. Shut Down Dev + Test Teammates for This Story
 
