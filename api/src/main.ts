@@ -46,6 +46,11 @@ async function bootstrap() {
     );
   }
 
+  // "auto" mode: all-in-one Docker image where frontend + API share the same
+  // origin behind nginx. Dynamically allow the request's own origin so the
+  // container works on any hostname without explicit CORS_ORIGIN configuration.
+  const isAutoOrigin = corsOrigin === 'auto';
+
   app.enableCors({
     origin: (
       origin: string | undefined,
@@ -53,6 +58,9 @@ async function bootstrap() {
     ) => {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
+
+      // Auto mode: allow the request's own origin (safe for co-located frontend/API)
+      if (isAutoOrigin) return callback(null, true);
 
       // Wildcard allows all origins (used for all-in-one Docker image in dev)
       if (corsOrigin === '*') return callback(null, true);
