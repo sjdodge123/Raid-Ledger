@@ -47,7 +47,7 @@ export function UnassignedBar({ pool, onBarClick, inline }: UnassignedBarProps) 
                         style={{ marginLeft: i > 0 ? '-8px' : 0, zIndex: pool.length - i }}
                     >
                         <AvatarWithFallback
-                            user={toAvatarUser(item)}
+                            user={toAvatarUser({ ...item, id: item.userId })}
                             username={item.username}
                             sizeClassName="h-6 w-6"
                         />

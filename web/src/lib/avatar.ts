@@ -2,6 +2,7 @@
  * Avatar resolution utility for ROK-194: Dynamic Avatar Resolution
  * Updated for ROK-220: Custom Avatar Upload (highest priority)
  * Updated for ROK-222: Unified avatar helpers (buildDiscordAvatarUrl, toAvatarUser)
+ * Updated for ROK-352: Current user avatar preference sync across all components
  *
  * Resolves avatars based on context:
  * - Custom upload: Always highest priority when set
@@ -45,6 +46,39 @@ export interface AvatarUser {
     avatarPreference?: AvatarPreference | null;
 }
 
+// ============================================================
+// Current User Overlay (ROK-352)
+// ============================================================
+// Module-level cache of the current user's avatar preference and characters.
+// Set by CurrentUserAvatarSync (mounted in Layout) so that toAvatarUser()
+// can automatically overlay the current user's preference data onto any
+// user DTO that matches by id — without every component needing useAuth().
+
+interface CurrentUserAvatarData {
+    id: number;
+    avatarPreference?: AvatarPreference | null;
+    characters?: Array<{ gameId: string; name?: string; avatarUrl: string | null }>;
+    customAvatarUrl?: string | null;
+}
+
+let _currentUserAvatarData: CurrentUserAvatarData | null = null;
+
+/**
+ * Set the current user's avatar data for global overlay.
+ * Called by CurrentUserAvatarSync whenever the auth user changes.
+ * Pass null to clear (e.g., on logout).
+ */
+export function setCurrentUserAvatarData(data: CurrentUserAvatarData | null): void {
+    _currentUserAvatarData = data;
+}
+
+/**
+ * Get the current user avatar data (for testing/inspection).
+ */
+export function getCurrentUserAvatarData(): CurrentUserAvatarData | null {
+    return _currentUserAvatarData;
+}
+
 /**
  * Check if a discordId represents a real linked Discord account.
  * Returns false for local-only accounts (local:xxx) and unlinked accounts (unlinked:xxx).
@@ -73,19 +107,32 @@ export function buildDiscordAvatarUrl(
  *
  * Use this when passing data from API DTOs (SignupUserDto, User, RosterAssignmentResponse)
  * that have `avatar` as a Discord hash and `discordId` as a separate field.
+ *
+ * ROK-352: When the user's `id` matches the current logged-in user, automatically
+ * overlays `avatarPreference` and `characters` from the cached auth data so the
+ * current user's avatar preference is honored everywhere — not just in components
+ * that use useAuth() directly.
  */
 export function toAvatarUser(user: {
+    id?: number;
     avatar: string | null;
     discordId?: string | null;
     customAvatarUrl?: string | null;
     characters?: Array<{ gameId: string; name?: string; avatarUrl: string | null }>;
     avatarPreference?: AvatarPreference | null;
 }): AvatarUser {
+    // ROK-352: Overlay current user's preference data when IDs match
+    const overlay = _currentUserAvatarData
+        && user.id != null
+        && user.id === _currentUserAvatarData.id
+        ? _currentUserAvatarData
+        : null;
+
     return {
         avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null),
-        customAvatarUrl: user.customAvatarUrl,
-        characters: user.characters,
-        avatarPreference: user.avatarPreference,
+        customAvatarUrl: overlay?.customAvatarUrl ?? user.customAvatarUrl,
+        characters: overlay?.characters ?? user.characters,
+        avatarPreference: overlay?.avatarPreference ?? user.avatarPreference,
     };
 }
 

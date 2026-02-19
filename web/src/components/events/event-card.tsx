@@ -2,7 +2,7 @@ import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
-import { resolveAvatar } from '../../lib/avatar';
+import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -100,10 +100,8 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
     const showPlaceholder = !gameCoverUrl || imageError;
 
     // ROK-222: Resolve creator avatar through unified pipeline
-    const creatorAvatar = resolveAvatar({
-        avatar: event.creator.avatar,
-        customAvatarUrl: event.creator.customAvatarUrl,
-    });
+    // ROK-352: Use toAvatarUser() so current user overlay applies
+    const creatorAvatar = resolveAvatar(toAvatarUser(event.creator));
 
     return (
         <div

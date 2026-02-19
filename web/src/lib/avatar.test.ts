@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { resolveAvatar, toAvatarUser, type AvatarUser } from './avatar';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { resolveAvatar, toAvatarUser, setCurrentUserAvatarData, getCurrentUserAvatarData, type AvatarUser } from './avatar';
 
 // Mock config module so API_BASE_URL is defined for custom avatar URL resolution
 vi.mock('./config', () => ({
@@ -706,6 +706,211 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
 
             expect(result.type).toBe('discord');
             expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
+        });
+    });
+});
+
+// ============================================================
+// Current User Overlay Tests (ROK-352 fix)
+// ============================================================
+
+describe('toAvatarUser — current user overlay (ROK-352)', () => {
+    afterEach(() => {
+        // Always clear the overlay after each test to avoid leaking state
+        setCurrentUserAvatarData(null);
+    });
+
+    it('overlays avatarPreference when user id matches current user', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+            characters: [{ gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' }],
+        });
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: 'abc123',
+            discordId: '111222333',
+            customAvatarUrl: '/avatars/custom.png',
+            // No avatarPreference from API response
+        });
+
+        expect(result.avatarPreference).toEqual({ type: 'discord' });
+    });
+
+    it('overlays characters when user id matches current user', () => {
+        const characters = [
+            { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+        ];
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: null,
+            characters,
+        });
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+            // No characters from API response
+        });
+
+        expect(result.characters).toBe(characters);
+    });
+
+    it('overlays customAvatarUrl when user id matches current user', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            customAvatarUrl: '/avatars/current-user.webp',
+        });
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null, // API returns null
+        });
+
+        expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
+    });
+
+    it('does NOT overlay when user id does not match current user', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+            characters: [{ gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' }],
+        });
+
+        const result = toAvatarUser({
+            id: 99, // Different user
+            avatar: null,
+            discordId: null,
+        });
+
+        expect(result.avatarPreference).toBeUndefined();
+        expect(result.characters).toBeUndefined();
+    });
+
+    it('does NOT overlay when no current user data is set', () => {
+        // _currentUserAvatarData is null (default / cleared in afterEach)
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+        });
+
+        expect(result.avatarPreference).toBeUndefined();
+        expect(result.characters).toBeUndefined();
+    });
+
+    it('does NOT overlay when user has no id', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+        });
+
+        const result = toAvatarUser({
+            avatar: null,
+            discordId: null,
+            // No id field
+        });
+
+        expect(result.avatarPreference).toBeUndefined();
+    });
+
+    it('preserves existing user avatarPreference when it is already set (no overlay needed)', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+        });
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+            avatarPreference: { type: 'custom' },
+        });
+
+        // Overlay is applied but user already had preference — overlay wins
+        // because the current user data is more authoritative
+        expect(result.avatarPreference).toEqual({ type: 'discord' });
+    });
+
+    it('end-to-end: current user discord preference honored in resolveAvatar', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+        });
+
+        // Simulates a SignupUserDto from an event API response (no avatarPreference)
+        const avatarUser = toAvatarUser({
+            id: 42,
+            avatar: 'abc123',
+            discordId: '111222333',
+            customAvatarUrl: '/avatars/custom.png',
+        });
+        const result = resolveAvatar(avatarUser);
+
+        // Without overlay: would default to custom (highest priority)
+        // With overlay: discord preference is honored
+        expect(result.type).toBe('discord');
+        expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
+    });
+
+    it('end-to-end: current user character preference honored in resolveAvatar', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'character', characterName: 'Thrall' },
+            characters: [
+                { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+            ],
+        });
+
+        // Simulates a UserPreviewDto (no avatarPreference, no characters)
+        const avatarUser = toAvatarUser({
+            id: 42,
+            avatar: 'abc123',
+            discordId: '111222333',
+            customAvatarUrl: '/avatars/custom.png',
+        });
+        const result = resolveAvatar(avatarUser);
+
+        expect(result.type).toBe('character');
+        expect(result.url).toBe('https://example.com/thrall.png');
+    });
+
+    it('end-to-end: other user is not affected by current user overlay', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+        });
+
+        // Different user — should use default priority (custom > character > discord)
+        const avatarUser = toAvatarUser({
+            id: 99,
+            avatar: 'abc123',
+            discordId: '999888777',
+            customAvatarUrl: '/avatars/other-custom.png',
+        });
+        const result = resolveAvatar(avatarUser);
+
+        // Default priority: custom avatar wins
+        expect(result.type).toBe('custom');
+        expect(result.url).toBe('http://localhost:3000/avatars/other-custom.png');
+    });
+
+    describe('setCurrentUserAvatarData / getCurrentUserAvatarData', () => {
+        it('sets and gets current user data', () => {
+            const data = { id: 42, avatarPreference: { type: 'discord' as const } };
+            setCurrentUserAvatarData(data);
+            expect(getCurrentUserAvatarData()).toBe(data);
+        });
+
+        it('clears current user data with null', () => {
+            setCurrentUserAvatarData({ id: 42 });
+            setCurrentUserAvatarData(null);
+            expect(getCurrentUserAvatarData()).toBeNull();
         });
     });
 });
