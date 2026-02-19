@@ -62,6 +62,8 @@ export interface GameTimeGridProps {
     fullDayNames?: boolean;
     /** Compact mode — shorter cell height for space-constrained layouts (e.g. onboarding wizard) */
     compact?: boolean;
+    /** Disable the top-16 sticky offset on day headers (use top-0). For use inside modals. */
+    noStickyOffset?: boolean;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
@@ -243,6 +245,7 @@ export function GameTimeGrid({
     onCellClick,
     fullDayNames,
     compact,
+    noStickyOffset,
 }: GameTimeGridProps) {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
     const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
@@ -320,8 +323,9 @@ export function GameTimeGrid({
     }, [hoveredCell]);
 
     // Measure grid dimensions for absolute positioning of overlays + hover effects.
-    // Uses getBoundingClientRect() delta from the wrapper (positioning ancestor) to avoid
-    // the offsetParent chain being broken by CSS transforms on ancestor elements (e.g. modal-spring animation).
+    // Measure grid layout using offsetTop/offsetLeft — these give position relative to the
+    // offsetParent (the wrapper with position:relative), which matches how position:absolute
+    // works. Unlike getBoundingClientRect(), unaffected by scroll or CSS transforms.
     const needsMeasurement = (events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || todayIndex !== undefined || isInteractive;
     useEffect(() => {
         const el = gridRef.current;
@@ -329,29 +333,29 @@ export function GameTimeGrid({
         if (!el || !wrapper || !needsMeasurement) return;
 
         const measure = () => {
-            const firstCell = el.querySelector('[data-testid="cell-0-0"]') ??
+            const firstCell = el.querySelector(`[data-testid="cell-0-${rangeStart}"]`) ??
                 el.querySelector(`[data-testid^="cell-0-"]`);
-            const dayHeader = el.querySelector('[data-testid="day-header-0"]');
-            if (!firstCell || !dayHeader) return;
+            if (!firstCell || !(firstCell instanceof HTMLElement)) return;
 
-            const wrapperRect = wrapper.getBoundingClientRect();
-            const firstRect = firstCell.getBoundingClientRect();
-            const headerRect = dayHeader.getBoundingClientRect();
+            // Grid's offset within the wrapper (grid is the only flow child, usually 0)
+            const gridOffsetTop = el.offsetTop;
+            const gridOffsetLeft = el.offsetLeft;
 
-            // Find the actual first two visible hour cells to measure row height
             const allCells = el.querySelectorAll('[data-testid^="cell-0-"]');
-            let rowHeight = 20; // fallback
+            let rowHeight = firstCell.offsetHeight + gap;
             if (allCells.length >= 2) {
-                const r1 = allCells[0].getBoundingClientRect();
-                const r2 = allCells[1].getBoundingClientRect();
-                rowHeight = r2.top - r1.top;
+                const c0 = allCells[0] as HTMLElement;
+                const c1 = allCells[1] as HTMLElement;
+                rowHeight = c1.offsetTop - c0.offsetTop;
             }
 
+            // offsetTop/Left are relative to offsetParent (the grid).
+            // Add gridOffset to get position relative to the wrapper.
             setGridDims({
-                colWidth: firstRect.width,
+                colWidth: firstCell.offsetWidth,
                 rowHeight,
-                headerHeight: (headerRect.top - wrapperRect.top) + headerRect.height,
-                colStartLeft: firstRect.left - wrapperRect.left,
+                headerHeight: gridOffsetTop + firstCell.offsetTop,
+                colStartLeft: gridOffsetLeft + firstCell.offsetLeft,
             });
         };
 
@@ -542,8 +546,8 @@ export function GameTimeGrid({
             >
                 {/* Header row: timezone label corner + day labels */}
                 <div
-                    className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
-                    style={{ transition: 'top 300ms ease-in-out' }}
+                    className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
+                    style={{ transition: noStickyOffset ? undefined : 'top 300ms ease-in-out' }}
                 >
                     {tzLabel && (
                         <span className="text-[10px] text-dim font-medium">{tzLabel}</span>
@@ -559,7 +563,7 @@ export function GameTimeGrid({
                     return (
                         <div
                             key={day}
-                            className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${isTodaySplit
+                            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${isTodaySplit
                                     ? 'text-secondary'
                                     : isToday
                                         ? 'bg-emerald-500/15 text-emerald-300'

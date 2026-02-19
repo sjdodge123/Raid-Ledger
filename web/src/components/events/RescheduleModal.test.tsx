@@ -104,8 +104,8 @@ describe('RescheduleModal', () => {
         it('grid cells use compact (h-4) height inside the modal', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
-            // Grab a cell inside the grid
-            const cell = within(grid).getByTestId('cell-0-6');
+            // Grab a cell within the data-driven range (heatmap has hour 18)
+            const cell = within(grid).getByTestId('cell-0-18');
             expect(cell.className).toContain('h-4');
             expect(cell.className).not.toContain('h-5');
         });
@@ -113,8 +113,8 @@ describe('RescheduleModal', () => {
         it('all visible cells in the modal grid use compact height', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
-            // Check several cells across different days
-            const cellIds = ['cell-0-10', 'cell-3-15', 'cell-6-20'];
+            // Check cells within the data-driven range (heatmap 18-20, event 20-22 → range ~17-23)
+            const cellIds = ['cell-0-18', 'cell-3-20', 'cell-6-21'];
             for (const id of cellIds) {
                 const cell = within(grid).getByTestId(id);
                 expect(cell.className).toContain('h-4');
@@ -122,19 +122,21 @@ describe('RescheduleModal', () => {
         });
     });
 
-    describe('hourRange clamping (ROK-370)', () => {
-        it('grid does not render hours before 6 AM even when event is later', () => {
-            // Event at hour 20 — hourRange floor is Math.max(6, ...) = 6
+    describe('hourRange is data-driven (ROK-370)', () => {
+        it('grid range does not include early morning hours far from data', () => {
+            // Heatmap hours 18-20 + event at local hour → range should NOT include 5 AM
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             expect(within(grid).queryByTestId('cell-0-5')).not.toBeInTheDocument();
-            expect(within(grid).getByTestId('cell-0-6')).toBeInTheDocument();
         });
 
-        it('grid always includes hour 23 (up to 24)', () => {
+        it('grid range includes heatmap hours', () => {
+            // Heatmap has cells at hours 18, 19, 20 — all should be visible
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
-            expect(within(grid).getByTestId('cell-0-23')).toBeInTheDocument();
+            expect(within(grid).getByTestId('cell-0-18')).toBeInTheDocument();
+            expect(within(grid).getByTestId('cell-0-19')).toBeInTheDocument();
+            expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
         });
     });
 

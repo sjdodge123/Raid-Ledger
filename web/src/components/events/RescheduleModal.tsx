@@ -144,17 +144,36 @@ export function RescheduleModal({
         return blocks;
     }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
 
-    // Smart hour range — floor at 6 AM to keep grid compact within modal viewport
+    // Smart hour range — zoom into hours with meaningful availability (yellow/green).
+    // Only considers cells where > 50% of players are available, plus the current event
+    // and any grid selection. Falls back to current event ± 3h if no strong matches.
     const hourRange: [number, number] = useMemo(() => {
+        const eventEndHour = currentHour + durationHours;
         let minHour = currentHour;
-        if (gridSelection) minHour = Math.min(minHour, gridSelection.hour);
-        if (gameTimeData?.cells.length) {
-            const heatmapMinHour = Math.min(...gameTimeData.cells.map(c => c.hour));
-            minHour = Math.min(minHour, heatmapMinHour);
+        let maxHour = eventEndHour;
+
+        if (gridSelection) {
+            minHour = Math.min(minHour, gridSelection.hour);
+            maxHour = Math.max(maxHour, gridSelection.hour + durationHours);
         }
-        const rangeStart = Math.max(6, Math.min(minHour - 1, 6));
-        return [rangeStart, 24];
-    }, [currentHour, gridSelection, gameTimeData]);
+
+        if (gameTimeData?.cells.length) {
+            // Only consider cells where at least half of players are available
+            const strongCells = gameTimeData.cells.filter(
+                c => c.totalCount > 0 && c.availableCount / c.totalCount > 0.25,
+            );
+            if (strongCells.length > 0) {
+                const hours = strongCells.map(c => c.hour);
+                minHour = Math.min(minHour, Math.min(...hours));
+                maxHour = Math.max(maxHour, Math.max(...hours) + 1);
+            }
+        }
+
+        // 1-hour padding, clamped to [0, 24]
+        const rangeStart = Math.max(0, minHour - 1);
+        const rangeEnd = Math.min(24, maxHour + 1);
+        return [rangeStart, rangeEnd];
+    }, [currentHour, durationHours, gridSelection, gameTimeData]);
 
     // Grid cell click → set grid selection and start time input
     const handleCellClick = (dayOfWeek: number, hour: number) => {
@@ -260,6 +279,7 @@ export function RescheduleModal({
                         slots={[]}
                         readOnly
                         compact
+                        noStickyOffset
                         hourRange={hourRange}
                         events={currentEventBlocks}
                         previewBlocks={previewBlocks}
@@ -400,7 +420,7 @@ export function RescheduleModal({
             onClose={handleClose}
             title="Reschedule Event"
             maxWidth="max-w-4xl"
-            bodyClassName="p-4"
+            bodyClassName="p-4 overflow-y-auto max-h-[calc(90vh-4rem)]"
         >
             {content}
         </Modal>
