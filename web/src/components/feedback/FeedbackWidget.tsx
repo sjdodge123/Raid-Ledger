@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSubmitFeedback } from '../../hooks/use-feedback';
-import { Sentry } from '../../sentry';
+import { captureMessageVerified } from '../../sentry';
 import type {
     FeedbackCategory,
     CreateFeedbackDto,
@@ -79,6 +79,8 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
     const [message, setMessage] = useState('');
     const [includeClientLogs, setIncludeClientLogs] = useState(true);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [sentryError, setSentryError] = useState(false);
 
     // Use ref for submitFeedback.reset to avoid dependency churn in useCallback
     const resetRef = useRef(submitFeedback.reset);
@@ -91,6 +93,8 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
         setMessage('');
         setIncludeClientLogs(true);
         setShowSuccess(false);
+        setIsSubmitting(false);
+        setSentryError(false);
         resetRef.current();
     }, []);
 
@@ -113,7 +117,10 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
     }, [reset]);
 
     const handleSubmit = useCallback(() => {
-        if (message.length < MIN_LENGTH) return;
+        if (message.length < MIN_LENGTH || isSubmitting) return;
+
+        setIsSubmitting(true);
+        setSentryError(false);
 
         const payload: CreateFeedbackDto = {
             category,
@@ -130,38 +137,42 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
         }
 
         // Dual-send: POST /feedback saves to local DB (persistent record for admin panel),
-        // then Sentry.captureMessage() forwards to the maintainer's Sentry project
+        // then captureMessageVerified() forwards to the maintainer's Sentry project
         // as an issue, triggering alert rules for automatic GitHub issue creation.
         submitFeedback.mutate(payload, {
-            onSuccess: (data) => {
-                // Send feedback to Sentry as an issue for maintainer visibility (ROK-306)
-                try {
-                    Sentry.captureMessage(
-                        `[${category.toUpperCase()}] ${message}`,
-                        {
-                            level: category === 'bug' ? 'error' : 'info',
-                            tags: {
-                                feedback_category: category,
-                                feedback_id: String(data.id),
-                                source: 'feedback_widget',
-                            },
-                            contexts: {
-                                feedback: {
-                                    pageUrl: window.location.href,
-                                    category,
-                                    feedbackId: data.id,
-                                },
+            onSuccess: async (data) => {
+                // Send feedback to Sentry and verify delivery (ROK-306)
+                const sentryOk = await captureMessageVerified(
+                    `[${category.toUpperCase()}] ${message}`,
+                    {
+                        level: category === 'bug' ? 'error' : 'info',
+                        tags: {
+                            feedback_category: category,
+                            feedback_id: String(data.id),
+                            source: 'feedback_widget',
+                        },
+                        contexts: {
+                            feedback: {
+                                pageUrl: window.location.href,
+                                category,
+                                feedbackId: data.id,
                             },
                         },
-                    );
-                } catch {
-                    // Sentry capture is best-effort — don't break the user flow
-                }
+                    },
+                );
 
-                setShowSuccess(true);
+                if (sentryOk) {
+                    setShowSuccess(true);
+                } else {
+                    setSentryError(true);
+                }
+                setIsSubmitting(false);
+            },
+            onError: () => {
+                setIsSubmitting(false);
             },
         });
-    }, [category, message, includeClientLogs, submitFeedback]);
+    }, [category, message, includeClientLogs, submitFeedback, isSubmitting]);
 
     // Only render for authenticated users
     if (!isAuthenticated) return null;
@@ -396,15 +407,17 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
                                 </p>
 
                                 {/* Error display */}
-                                {submitFeedback.isError && (
+                                {(submitFeedback.isError || sentryError) && (
                                     <p
                                         className="mb-3 text-sm"
                                         style={{
                                             color: 'var(--color-danger, #ef4444)',
                                         }}
                                     >
-                                        {submitFeedback.error?.message ||
-                                            'Something went wrong. Please try again.'}
+                                        {sentryError
+                                            ? 'Feedback saved locally but failed to notify maintainers. Check Sentry configuration.'
+                                            : submitFeedback.error?.message ||
+                                              'Something went wrong. Please try again.'}
                                     </p>
                                 )}
 
@@ -413,14 +426,14 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
                                     onClick={handleSubmit}
                                     disabled={
                                         message.length < MIN_LENGTH ||
-                                        submitFeedback.isPending
+                                        isSubmitting
                                     }
                                     className="w-full rounded-lg py-2.5 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-50"
                                     style={{
                                         backgroundColor: 'var(--color-accent)',
                                     }}
                                 >
-                                    {submitFeedback.isPending
+                                    {isSubmitting
                                         ? 'Sending...'
                                         : 'Send Feedback'}
                                 </button>

@@ -100,8 +100,8 @@ async function bootstrap() {
   });
 
   // NestJS applies global filters in reverse order: ThrottlerExceptionFilter runs
-  // first, then SentryGlobalFilter. ThrottlerException is dropped by beforeSend in
-  // instrument.ts so rate-limit responses are never reported to Sentry.
+  // first, then SentryExceptionFilter. ThrottlerException is dropped by beforeSend
+  // in instrument.ts so rate-limit responses are never reported to Sentry.
   app.useGlobalFilters(
     new SentryExceptionFilter(),
     new ThrottlerExceptionFilter(),
