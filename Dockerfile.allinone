@@ -7,6 +7,7 @@
 # Environment Variables:
 #   PORT           - External port (default: 80)
 #   ADMIN_PASSWORD - Set a specific admin password on first run (default: random)
+#   CORS_ORIGIN    - Allowed CORS origin (default: auto-derived from RENDER_EXTERNAL_URL or localhost)
 #
 # Data is persisted under /data (PostgreSQL + Redis). Mount a volume to
 # retain data across container updates (e.g. Watchtower).
@@ -196,6 +197,17 @@ until redis-cli -s /tmp/redis.sock ping > /dev/null 2>&1; do
 done
 echo "✅ Redis is ready"
 
+# Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set.
+# Render provides RENDER_EXTERNAL_URL; local Docker falls back to localhost.
+if [ -z "$CORS_ORIGIN" ] || [ "$CORS_ORIGIN" = "auto" ]; then
+  if [ -n "$RENDER_EXTERNAL_URL" ]; then
+    export CORS_ORIGIN="$RENDER_EXTERNAL_URL"
+  else
+    export CORS_ORIGIN="http://localhost:${NGINX_PORT:-80}"
+  fi
+  echo "🌐 CORS_ORIGIN auto-derived: $CORS_ORIGIN"
+fi
+
 # Run entrypoint (migrations, admin bootstrap, seeding)
 cd /app
 exec /usr/local/bin/docker-entrypoint.sh node /app/dist/src/main.js
@@ -259,7 +271,7 @@ ENV DATABASE_URL=postgresql://raid_ledger:raid_ledger@localhost:5432/raid_ledger
 ENV REDIS_URL=/tmp/redis.sock
 ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV DOTENV_CONFIG_QUIET=true
-ENV CORS_ORIGIN=*
+ENV CORS_ORIGIN=auto
 ENV CLIENT_URL=
 ENV ADMIN_PASSWORD=
 
