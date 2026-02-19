@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
+/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 /**
  * ROK-375: Unit tests for IGDB game search enrichment, zero-results cache guard,
  * Redis re-query with filters, and adult filter on local fallback.
@@ -171,9 +171,7 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
 
     it('Redis layer returns full GameDetailDto via mapDbRowToDetail re-query', async () => {
       // Redis cache hit — contains cached game IDs
-      mockRedis.get.mockResolvedValue(
-        JSON.stringify([{ id: 1 }]),
-      );
+      mockRedis.get.mockResolvedValue(JSON.stringify([{ id: 1 }]));
 
       const result = await service.searchGames('halo');
 
@@ -358,9 +356,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       );
 
       // DB re-query returns only non-hidden/non-banned games
-      const whereCall = jest.fn().mockImplementation(() =>
-        thenableResult([fullGameRow]),
-      );
+      const whereCall = jest
+        .fn()
+        .mockImplementation(() => thenableResult([fullGameRow]));
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: whereCall,
@@ -378,16 +376,12 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
 
     it('returns empty results from Redis if all cached games are now banned/hidden', async () => {
       // Redis returns cached game IDs
-      mockRedis.get.mockResolvedValue(
-        JSON.stringify([{ id: 1 }]),
-      );
+      mockRedis.get.mockResolvedValue(JSON.stringify([{ id: 1 }]));
 
       // DB re-query returns empty (game was banned since caching)
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
-          where: jest.fn().mockImplementation(() =>
-            thenableResult([]),
-          ),
+          where: jest.fn().mockImplementation(() => thenableResult([])),
         })),
       }));
 
@@ -411,9 +405,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       mockSettingsService.get.mockResolvedValue('true');
 
       // Track the where clause call
-      const whereCall = jest.fn().mockImplementation(() =>
-        thenableResult([fullGameRow]),
-      );
+      const whereCall = jest
+        .fn()
+        .mockImplementation(() => thenableResult([fullGameRow]));
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: whereCall,
@@ -432,9 +426,9 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       // Disable adult filter (default: null)
       mockSettingsService.get.mockResolvedValue(null);
 
-      const whereCall = jest.fn().mockImplementation(() =>
-        thenableResult([fullGameRow]),
-      );
+      const whereCall = jest
+        .fn()
+        .mockImplementation(() => thenableResult([fullGameRow]));
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: whereCall,

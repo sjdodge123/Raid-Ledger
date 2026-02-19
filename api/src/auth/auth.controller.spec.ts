@@ -129,7 +129,15 @@ describe('AuthController — redeemIntent', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
-        { provide: REDIS_CLIENT, useValue: { get: jest.fn(), set: jest.fn(), setex: jest.fn(), del: jest.fn() } },
+        {
+          provide: REDIS_CLIENT,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            setex: jest.fn(),
+            del: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -350,7 +358,15 @@ describe('AuthController — getProfile (ROK-352)', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
-        { provide: REDIS_CLIENT, useValue: { get: jest.fn(), set: jest.fn(), setex: jest.fn(), del: jest.fn() } },
+        {
+          provide: REDIS_CLIENT,
+          useValue: {
+            get: jest.fn(),
+            set: jest.fn(),
+            setex: jest.fn(),
+            del: jest.fn(),
+          },
+        },
       ],
     }).compile();
     return module.get<AuthController>(AuthController);

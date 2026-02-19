@@ -36,7 +36,7 @@ import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
-class DiscordAuthGuard extends AuthGuard('discord') { }
+class DiscordAuthGuard extends AuthGuard('discord') {}
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -67,7 +67,7 @@ export class AuthController {
     private discordNotificationService: DiscordNotificationService | null,
     private charactersService: CharactersService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) { }
+  ) {}
 
   /**
    * Sign OAuth state parameter to prevent tampering
@@ -115,7 +115,10 @@ export class AuthController {
 
       // Enforce 10-minute expiry on state parameter to prevent replay attacks
       const MAX_STATE_AGE_MS = 10 * 60 * 1000;
-      if (!parsed.timestamp || Date.now() - parsed.timestamp > MAX_STATE_AGE_MS) {
+      if (
+        !parsed.timestamp ||
+        Date.now() - parsed.timestamp > MAX_STATE_AGE_MS
+      ) {
         this.logger.warn('OAuth state parameter expired');
         return null;
       }
@@ -158,7 +161,10 @@ export class AuthController {
   @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
-  async discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
+  async discordLoginCallback(
+    @Req() req: RequestWithUser,
+    @Res() res: Response,
+  ) {
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
 

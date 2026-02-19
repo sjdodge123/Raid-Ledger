@@ -4,7 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { and, eq, ilike, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -545,7 +545,7 @@ export class IgdbService {
             .from(schema.games)
             .where(
               and(
-                sql`${schema.games.id} = ANY(${cachedIds})`,
+                inArray(schema.games.id, cachedIds),
                 eq(schema.games.hidden, false),
                 eq(schema.games.banned, false),
                 ...(adultFilterEnabled
@@ -863,7 +863,7 @@ export class IgdbService {
       .from(schema.games)
       .where(
         and(
-          sql`${schema.games.igdbId} = ANY(${incomingIgdbIds})`,
+          inArray(schema.games.igdbId, incomingIgdbIds),
           eq(schema.games.banned, true),
         ),
       );
@@ -908,7 +908,7 @@ export class IgdbService {
     const results = await this.db
       .select()
       .from(schema.games)
-      .where(sql`${schema.games.igdbId} = ANY(${igdbIds})`);
+      .where(inArray(schema.games.igdbId, igdbIds));
 
     return results.map((g) => this.mapDbRowToDetail(g));
   }
