@@ -16,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
+import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -23,6 +24,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
+import { CharactersService } from '../characters/characters.service';
 import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
@@ -51,6 +53,7 @@ export class AuthController {
     private authService: AuthService,
     private intentTokenService: IntentTokenService,
     private usersService: UsersService,
+    private preferencesService: PreferencesService,
     private signupsService: SignupsService,
     private configService: ConfigService,
     private jwtService: JwtService,
@@ -58,6 +61,7 @@ export class AuthController {
     @Optional()
     @Inject(DiscordNotificationService)
     private discordNotificationService: DiscordNotificationService | null,
+    private charactersService: CharactersService,
   ) {}
 
   /**
@@ -349,6 +353,16 @@ export class AuthController {
     if (!user) {
       return req.user; // Fallback to JWT payload if user not found
     }
+
+    // Fetch avatar preference and characters for avatar resolution (ROK-352)
+    const [avatarPref, charactersResult] = await Promise.all([
+      this.preferencesService.getUserPreference(
+        req.user.id,
+        'avatarPreference',
+      ),
+      this.charactersService.findAllForUser(req.user.id),
+    ]);
+
     return {
       id: user.id,
       discordId: user.discordId,
@@ -358,6 +372,12 @@ export class AuthController {
       customAvatarUrl: user.customAvatarUrl,
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+      avatarPreference: avatarPref?.value ?? null,
+      characters: charactersResult.data.map((c) => ({
+        gameId: c.gameId,
+        name: c.name,
+        avatarUrl: c.avatarUrl,
+      })),
     };
   }
 

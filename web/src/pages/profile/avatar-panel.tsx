@@ -1,26 +1,27 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import type { AvatarType } from '../../lib/avatar';
 import { toast } from '../../lib/toast';
-
-const AVATAR_PREF_KEY = 'raid-ledger:avatar-preference';
+import { updatePreference } from '../../lib/api-client';
 
 function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?: string | null; avatar?: string | null }, characters: { avatarUrl?: string | null; name: string }[]) {
-    const options: { url: string; label: string }[] = [];
+    const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
     if (user.customAvatarUrl) {
-        options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom' });
+        options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom', type: 'custom' });
     }
     const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     if (hasDiscordLinked && discordUrl) {
-        options.push({ url: discordUrl, label: 'Discord' });
+        options.push({ url: discordUrl, label: 'Discord', type: 'discord' });
     }
     for (const char of characters) {
         if (char.avatarUrl) {
-            options.push({ url: char.avatarUrl, label: char.name });
+            options.push({ url: char.avatarUrl, label: char.name, type: 'character', characterName: char.name });
         }
     }
     return options;
@@ -28,13 +29,9 @@ function buildAvatarOptions(user: { customAvatarUrl?: string | null; discordId?:
 
 export function AvatarPanel() {
     const { user, isAuthenticated, refetch } = useAuth();
+    const queryClient = useQueryClient();
     const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
-
-    const [avatarIndex, setAvatarIndex] = useState(() => {
-        const stored = localStorage.getItem(AVATAR_PREF_KEY);
-        return stored ? parseInt(stored, 10) : 0;
-    });
 
     const handleUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -57,17 +54,23 @@ export function AvatarPanel() {
     const characters = charactersData?.data ?? [];
     const options = buildAvatarOptions(user, characters);
 
-    const currentUrl = options.length > 0 && avatarIndex >= 0 && avatarIndex < options.length
-        ? options[avatarIndex].url
-        : (buildDiscordAvatarUrl(user.discordId, user.avatar) || '/default-avatar.svg');
+    const avatarUser = toAvatarUser({ ...user, characters });
+    const resolved = resolveAvatar(avatarUser);
+    const currentUrl = resolved.url ?? '/default-avatar.svg';
 
     const handleSelect = (url: string) => {
-        const idx = options.findIndex(o => o.url === url);
-        if (idx >= 0) {
-            setAvatarIndex(idx);
-            localStorage.setItem(AVATAR_PREF_KEY, String(idx));
-        }
+        const option = options.find(o => o.url === url);
+        if (!option) return;
+        const pref = option.type === 'character'
+            ? { type: option.type, characterName: option.characterName }
+            : { type: option.type };
+        updatePreference('avatarPreference', pref)
+            .then(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }))
+            .catch(() => toast.error('Failed to save avatar preference'));
     };
+
+    // Determine current label from resolved avatar
+    const currentLabel = options.find(o => o.url === currentUrl)?.label ?? 'Default';
 
     return (
         <div className="space-y-6">
@@ -84,7 +87,7 @@ export function AvatarPanel() {
                     />
                     <div>
                         <p className="text-sm font-medium text-foreground">
-                            {options[avatarIndex]?.label || 'Default'} avatar
+                            {currentLabel} avatar
                         </p>
                         <p className="text-xs text-muted">Click below to change</p>
                     </div>
@@ -94,12 +97,12 @@ export function AvatarPanel() {
                     <div className="mb-6">
                         <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
                         <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
-                            {options.map((opt, idx) => (
+                            {options.map((opt) => (
                                 <button
                                     key={opt.url}
                                     onClick={() => handleSelect(opt.url)}
                                     className={`relative group rounded-full ${
-                                        idx === avatarIndex
+                                        currentUrl === opt.url
                                             ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface'
                                             : 'hover:ring-2 hover:ring-edge-strong hover:ring-offset-2 hover:ring-offset-surface'
                                     }`}

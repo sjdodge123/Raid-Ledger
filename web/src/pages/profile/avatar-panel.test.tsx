@@ -6,6 +6,7 @@ import { AvatarPanel } from './avatar-panel';
 import * as useAuthHook from '../../hooks/use-auth';
 import * as useCharactersHook from '../../hooks/use-characters';
 import * as useAvatarUploadHook from '../../hooks/use-avatar-upload';
+import * as apiClient from '../../lib/api-client';
 
 vi.mock('../../lib/toast', () => ({
     toast: {
@@ -27,6 +28,24 @@ vi.mock('../../lib/avatar', () => ({
         }
         return null;
     },
+    resolveAvatar: (user: any) => {
+        if (!user) return { url: null, type: 'initials' };
+        if (user.customAvatarUrl) return { url: `http://localhost:3000${user.customAvatarUrl}`, type: 'custom' };
+        if (user.avatar) return { url: user.avatar, type: 'discord' };
+        return { url: null, type: 'initials' };
+    },
+    toAvatarUser: (user: any) => ({
+        avatar: user.discordId && !user.discordId.startsWith('local:') && user.avatar
+            ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
+            : null,
+        customAvatarUrl: user.customAvatarUrl,
+        characters: user.characters,
+        avatarPreference: user.avatarPreference,
+    }),
+}));
+
+vi.mock('../../lib/api-client', () => ({
+    updatePreference: vi.fn(() => Promise.resolve()),
 }));
 
 const mockUser = {
@@ -35,6 +54,7 @@ const mockUser = {
     discordId: '123456789',
     avatar: 'abc123',
     customAvatarUrl: null,
+    avatarPreference: null,
 };
 
 const createWrapper = () => {
@@ -53,9 +73,6 @@ describe('AvatarPanel', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
-
-        // Clear localStorage before each test
-        localStorage.clear();
 
         vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
             user: mockUser,
@@ -176,6 +193,7 @@ describe('AvatarPanel', () => {
                 discordId: 'local:xyz',
                 avatar: null,
                 customAvatarUrl: null,
+                avatarPreference: null,
             };
             vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
                 user,
@@ -219,7 +237,7 @@ describe('AvatarPanel', () => {
 
         it('renders Discord label for linked discord account', () => {
             render(<AvatarPanel />, { wrapper: createWrapper() });
-            // User has discordId '123456789' and avatar 'abc123' → Discord option
+            // User has discordId '123456789' and avatar 'abc123' -> Discord option
             expect(screen.getByText('Discord')).toBeInTheDocument();
         });
 
@@ -241,24 +259,8 @@ describe('AvatarPanel', () => {
         });
     });
 
-    describe('Avatar selection', () => {
-        it('renders active ring on the selected avatar thumbnail', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const selectedButton = container.querySelector('.ring-2.ring-emerald-500');
-            expect(selectedButton).toBeInTheDocument();
-        });
-
-        it('updates selected avatar when a thumbnail is clicked', () => {
+    describe('Avatar selection (ROK-352)', () => {
+        it('calls updatePreference when a thumbnail is clicked', () => {
             const user = {
                 ...mockUser,
                 customAvatarUrl: '/custom/avatar.jpg',
@@ -275,10 +277,51 @@ describe('AvatarPanel', () => {
             const thumbnailButtons = container.querySelectorAll('button.relative.group');
             if (thumbnailButtons.length > 1) {
                 fireEvent.click(thumbnailButtons[1]);
-                // The second button should now have the ring
-                expect(thumbnailButtons[1]).toHaveClass('ring-2');
-                expect(thumbnailButtons[1]).toHaveClass('ring-emerald-500');
+                expect(apiClient.updatePreference).toHaveBeenCalledWith(
+                    'avatarPreference',
+                    { type: 'discord' },
+                );
             }
+        });
+
+        it('calls updatePreference with characterName for character avatar', () => {
+            vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
+                data: {
+                    data: [
+                        { name: 'Thrall', avatarUrl: 'https://example.com/thrall.jpg' },
+                    ],
+                },
+                isLoading: false,
+            } as any);
+
+            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
+
+            // Find and click the character thumbnail (after Discord)
+            const thumbnailButtons = container.querySelectorAll('button.relative.group');
+            // Discord is index 0, Thrall is index 1
+            if (thumbnailButtons.length > 1) {
+                fireEvent.click(thumbnailButtons[1]);
+                expect(apiClient.updatePreference).toHaveBeenCalledWith(
+                    'avatarPreference',
+                    { type: 'character', characterName: 'Thrall' },
+                );
+            }
+        });
+
+        it('renders active ring on the current resolved avatar', () => {
+            const user = {
+                ...mockUser,
+                customAvatarUrl: '/custom/avatar.jpg',
+            };
+            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
+                user,
+                isAuthenticated: true,
+                refetch: mockRefetch,
+            } as any);
+
+            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
+            const selectedButton = container.querySelector('.ring-2.ring-emerald-500');
+            expect(selectedButton).toBeInTheDocument();
         });
     });
 

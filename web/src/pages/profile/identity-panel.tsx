@@ -1,28 +1,29 @@
 import { useCallback, useMemo, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { API_BASE_URL } from '../../lib/config';
-import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
+import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import type { AvatarType } from '../../lib/avatar';
 import { RoleBadge } from '../../components/ui/role-badge';
 import { toast } from '../../lib/toast';
 import { AvatarSelectorModal } from '../../components/profile/AvatarSelectorModal';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
-
-const AVATAR_PREF_KEY = 'raid-ledger:avatar-preference';
+import { updatePreference } from '../../lib/api-client';
 
 function buildAvatarOptions(user: { discordId: string | null; avatar: string | null; customAvatarUrl: string | null }, characters: { avatarUrl: string | null; name: string }[]) {
-    const options: { url: string; label: string }[] = [];
+    const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
     if (user.customAvatarUrl) {
-        options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom' });
+        options.push({ url: `${API_BASE_URL}${user.customAvatarUrl}`, label: 'Custom', type: 'custom' });
     }
     const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     if (hasDiscordLinked && discordUrl) {
-        options.push({ url: discordUrl, label: 'Discord' });
+        options.push({ url: discordUrl, label: 'Discord', type: 'discord' });
     }
     for (const char of characters) {
         if (char.avatarUrl) {
-            options.push({ url: char.avatarUrl, label: char.name });
+            options.push({ url: char.avatarUrl, label: char.name, type: 'character', characterName: char.name });
         }
     }
     return options;
@@ -30,14 +31,10 @@ function buildAvatarOptions(user: { discordId: string | null; avatar: string | n
 
 export function IdentityPanel() {
     const { user, isAuthenticated, refetch } = useAuth();
+    const queryClient = useQueryClient();
     const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const [showAvatarModal, setShowAvatarModal] = useState(false);
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
-
-    const [avatarIndex, setAvatarIndex] = useState(() => {
-        const stored = localStorage.getItem(AVATAR_PREF_KEY);
-        return stored ? parseInt(stored, 10) : 0;
-    });
 
     const handleUpload = useCallback((file: File) => {
         uploadAvatarFile(file, {
@@ -59,16 +56,37 @@ export function IdentityPanel() {
         [user, characters],
     );
 
+    // Optimistic selection so the UI responds immediately to clicks (ROK-352)
+    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
+
     const handleAvatarSelect = useCallback((url: string) => {
-        const idx = avatarOptions.findIndex(o => o.url === url);
-        if (idx >= 0) { setAvatarIndex(idx); localStorage.setItem(AVATAR_PREF_KEY, String(idx)); }
-    }, [avatarOptions]);
+        const option = avatarOptions.find(o => o.url === url);
+        if (!option) return;
+
+        // Show selection ring immediately
+        setOptimisticUrl(url);
+
+        const pref = option.type === 'character'
+            ? { type: option.type, characterName: option.characterName }
+            : { type: option.type };
+        updatePreference('avatarPreference', pref)
+            .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+                setOptimisticUrl(null); // Clear after server confirms
+            })
+            .catch(() => {
+                toast.error('Failed to save avatar preference');
+                setOptimisticUrl(null); // Revert on error
+            });
+    }, [avatarOptions, queryClient]);
 
     if (!user) return null;
 
-    const currentAvatarUrl = avatarOptions.length > 0 && avatarIndex >= 0 && avatarIndex < avatarOptions.length
-        ? avatarOptions[avatarIndex].url
-        : buildDiscordAvatarUrl(user.discordId, user.avatar) ?? '/default-avatar.svg';
+    const avatarUser = toAvatarUser({ ...user, characters });
+    const resolved = resolveAvatar(avatarUser);
+    const resolvedAvatarUrl = resolved.url ?? '/default-avatar.svg';
+    // Use optimistic URL when a selection is pending, otherwise use resolved
+    const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
 
     return (
         <div className="space-y-6">

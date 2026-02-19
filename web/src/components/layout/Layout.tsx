@@ -7,6 +7,7 @@ import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
+import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
 
@@ -40,6 +41,7 @@ export function Layout({ children }: LayoutProps) {
 
     return (
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
+            <CurrentUserAvatarSync />
             <SpaceEffects />
             <ImpersonationBanner />
             <Header onMenuClick={openMoreDrawer} />
