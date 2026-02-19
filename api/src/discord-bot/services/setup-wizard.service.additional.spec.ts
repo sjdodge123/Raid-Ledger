@@ -231,7 +231,9 @@ describe('SetupWizardService (additional edge cases)', () => {
       const mockRemoveListener = jest.fn();
       const mockClient = { on: mockOn, removeListener: mockRemoveListener };
 
-      jest.spyOn(clientService, 'getClient').mockReturnValue(mockClient as never);
+      jest
+        .spyOn(clientService, 'getClient')
+        .mockReturnValue(mockClient as never);
       jest
         .spyOn(settingsService, 'isDiscordBotSetupCompleted')
         .mockResolvedValue(true);
@@ -252,7 +254,9 @@ describe('SetupWizardService (additional edge cases)', () => {
         removeListener: mockRemoveListener,
       };
 
-      jest.spyOn(clientService, 'getClient').mockReturnValue(mockClient as never);
+      jest
+        .spyOn(clientService, 'getClient')
+        .mockReturnValue(mockClient as never);
       jest
         .spyOn(settingsService, 'isDiscordBotSetupCompleted')
         .mockResolvedValue(true);
@@ -336,9 +340,9 @@ describe('SetupWizardService (additional edge cases)', () => {
 
       await service.sendSetupWizardToAdmin();
 
-      const [, embedArg, rowArg] = (
-        clientService.sendEmbedDM as jest.Mock
-      ).mock.calls[0];
+      const calls = (clientService.sendEmbedDM as jest.Mock).mock
+        .calls as unknown[][];
+      const [, embedArg, rowArg] = calls[0];
       // Both should be defined objects (EmbedBuilder and ActionRowBuilder instances)
       expect(embedArg).toBeDefined();
       expect(rowArg).toBeDefined();

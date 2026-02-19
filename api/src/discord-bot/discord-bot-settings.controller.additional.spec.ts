@@ -14,7 +14,6 @@ import { SettingsService } from '../settings/settings.service';
 
 describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
   let controller: DiscordBotSettingsController;
-  let discordBotClientService: DiscordBotClientService;
   let setupWizardService: SetupWizardService;
 
   const makeMockModule = async (isConnected = true) => {
@@ -306,9 +305,9 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
         DiscordBotSettingsController,
       );
 
-      await expect(controller.updateConfig('string' as unknown)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        controller.updateConfig('string' as unknown),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -349,9 +348,9 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(settingsServiceRef.setDiscordBotDefaultChannel).toHaveBeenCalledWith(
-        '987654321',
-      );
+      expect(
+        settingsServiceRef.setDiscordBotDefaultChannel,
+      ).toHaveBeenCalledWith('987654321');
     });
   });
 

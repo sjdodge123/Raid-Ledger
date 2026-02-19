@@ -127,7 +127,9 @@ describe('SettingsService — ROK-349 setup wizard methods', () => {
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
       // Verify it calls set() with the correct key via the DB insert
-      const valuesCall = mockDb._insertChain.values.mock.calls[0][0];
+      const valuesCall = (
+        mockDb._insertChain.values.mock.calls as { key: string }[][]
+      )[0][0];
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED);
     });
 
@@ -191,7 +193,9 @@ describe('SettingsService — ROK-349 setup wizard methods', () => {
       await service.setDiscordBotCommunityName('My Raid Community');
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const valuesCall = mockDb._insertChain.values.mock.calls[0][0];
+      const valuesCall = (
+        mockDb._insertChain.values.mock.calls as { key: string }[][]
+      )[0][0];
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME);
     });
 
@@ -266,7 +270,9 @@ describe('SettingsService — ROK-349 setup wizard methods', () => {
       await service.setDiscordBotTimezone('Asia/Tokyo');
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const valuesCall = mockDb._insertChain.values.mock.calls[0][0];
+      const valuesCall = (
+        mockDb._insertChain.values.mock.calls as { key: string }[][]
+      )[0][0];
       expect(valuesCall.key).toBe(SETTING_KEYS.DISCORD_BOT_TIMEZONE);
     });
 
