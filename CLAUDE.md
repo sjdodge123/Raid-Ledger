@@ -78,7 +78,7 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 
 ## Critical Rules
 
-- **Branch-per-story + PR workflow** — Multiple agents may work in this repo concurrently via git worktrees. **Always** create a branch from `main` for each story (e.g., `rok-123-feature-name`). Dev teammates commit to their feature branch but do **not** push or create PRs — the lead handles all GitHub operations. When complete, the lead pushes the branch, creates a GitHub PR (`gh pr create --base main`), enables auto-merge (`gh pr merge --auto --squash`), and merges it into the `staging` branch for manual testing. The PR auto-merges to `main` once CI passes. Never commit directly to `main` for story/feature work. Clean up worktrees and branches immediately after PR merge.
+- **Branch-per-story + PR workflow** — Multiple agents may work in this repo concurrently via git worktrees. **Always** create a branch from `main` for each story (e.g., `rok-123-feature-name`). Dev teammates commit to their feature branch but do **not** push or create PRs — the lead handles all GitHub operations. The operator tests locally on the feature branch with `deploy_dev.sh` before pushing. When ready, the lead pushes the branch, creates a GitHub PR (`gh pr create --base main`), and enables auto-merge (`gh pr merge --auto --squash`). The PR auto-merges to `main` once CI passes. Never commit directly to `main` for story/feature work. Clean up worktrees and branches immediately after PR merge.
 - **Zod-first validation** — All data validation uses Zod schemas from the contract package
 - **TypeScript strict mode** — No `any` allowed in either api or web
 - **Naming conventions** — Files: `kebab-case`, Classes: `PascalCase`, Variables: `camelCase`, DB columns: `snake_case` (mapped in Drizzle)
@@ -89,29 +89,19 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 
 ## GitHub Branch Protection
 
-GitHub branch protection rules are enforced on `main` and `staging` branches to prevent destructive operations and ensure code quality.
+GitHub branch protection rules are enforced on `main` to prevent destructive operations and ensure code quality.
 
-### Main Branch Protection (Production)
+### Main Branch Protection
 
-The `main` branch has the following protections active:
 - ✅ **Requires Pull Request** — No direct commits allowed, all changes via PR
-- ✅ **Requires 1 approval** — Lead/maintainer must approve before merge
-- ✅ **Requires CI checks to pass** — Both `build-lint-test` and `build-and-push` workflows must succeed
+- ✅ **Requires CI checks to pass** — `build-lint-test` and `merge` workflows must succeed
 - ✅ **Requires conversation resolution** — All PR comments must be resolved
-- ✅ **Dismisses stale reviews** — New commits invalidate previous approvals (forces re-review)
 - ✅ **Blocks force pushes** — Protects git history from being rewritten
 - ✅ **Blocks branch deletion** — Prevents accidental removal
 - ✅ **Enforces on admins** — Rules apply to everyone, no bypassing
+- ✅ **Auto-merge enabled** — PRs auto-merge (squash) once CI passes
 
-**Impact:** GitHub UI will block merge until CI passes (green checkmarks), 1 approval received, and all conversations resolved. Direct pushes to `main` will be rejected.
-
-### Staging Branch Protection (Testing)
-
-The `staging` branch has relaxed protections for testing flexibility:
-- ✅ **Allows force pushes** — Enables `git reset --hard main` during `/dispatch` workflow
-- ✅ **Blocks branch deletion** — Prevents accidental removal
-- ❌ **No required CI checks** — Branches already validated on their PR to main
-- ❌ **No required approvals** — Lead merges directly for rapid testing iteration
+**Impact:** PRs auto-merge once CI passes and all conversations are resolved. Direct pushes to `main` will be rejected.
 
 ### Managing Branch Protection
 
@@ -120,9 +110,7 @@ Update or restore branch protection rules anytime:
 ./scripts/setup-branch-protection.sh
 ```
 
-The script is idempotent and safe to run multiple times. It configures both `main` and `staging` protection via GitHub API.
-
-**Documentation:** See `implementation-artifacts/branch-protection-setup.md` for full configuration details, verification steps, and rollback instructions.
+The script is idempotent and safe to run multiple times. It configures `main` branch protection and enables auto-merge via GitHub API.
 
 ## Deploy Scripts
 
@@ -133,7 +121,7 @@ Runs native API (watch mode) + Vite dev server against Docker DB + Redis:
 ```bash
 ./scripts/deploy_dev.sh                  # Start dev environment
 ./scripts/deploy_dev.sh --rebuild        # Rebuild contract package, then start
-./scripts/deploy_dev.sh --branch staging # Switch to staging, rebuild, then start
+./scripts/deploy_dev.sh --branch rok-123 # Switch to feature branch, rebuild, then start
 ./scripts/deploy_dev.sh --fresh          # Reset DB, new admin password, restart
 ./scripts/deploy_dev.sh --reset-password # Reset admin password (no data loss)
 ./scripts/deploy_dev.sh --down           # Stop everything
@@ -141,7 +129,7 @@ Runs native API (watch mode) + Vite dev server against Docker DB + Redis:
 ./scripts/deploy_dev.sh --logs           # Tail API + web logs
 ```
 
-**Branch Safety**: The script warns if deploying from a branch other than `staging` or `main` (gives 5-second cancel window). Use `--branch <name>` to automatically switch branches before deploying. The current branch is displayed in startup and ready headers to prevent confusion.
+**Branch Safety**: The script warns if deploying from a branch other than `main` (gives 5-second cancel window). Use `--branch <name>` to automatically switch branches before deploying. The current branch is displayed in startup and ready headers to prevent confusion.
 
 ### Production Docker stack (`deploy_prod.sh`)
 Runs the full Docker stack (API + Web + DB + Redis) on http://localhost:80:
@@ -198,9 +186,9 @@ When code is committed:
 ### On Story Completion
 When a story (ROK-XXX) is finished — all ACs met, code committed:
 1. **Dev teammate** messages the lead that implementation is complete
-2. **Lead** pushes the branch, creates a GitHub PR (`gh pr create --base main`), and enables auto-merge (`gh pr merge --auto --squash`)
-3. **Lead** merges branch into `staging` for manual testing, updates Linear → "In Review"
-4. **Lead** posts PR URL as a Linear comment on the issue
+2. **Operator** tests locally on the feature branch with `deploy_dev.sh --branch rok-XXX`
+3. **Lead** pushes the branch, creates a GitHub PR (`gh pr create --base main`), and enables auto-merge (`gh pr merge --auto --squash`)
+4. **Lead** posts PR URL as a Linear comment on the issue, updates Linear → "In Review"
 5. CI passes → PR auto-merges to `main`
 6. **Lead** updates Linear → "Done" with a summary comment:
    - Key files changed
@@ -224,19 +212,19 @@ Before a session is cleared with `/clear`, you MUST:
 | `[ ]` | Todo | `ready-for-dev` | Ready for dispatch |
 | `[ ]` | Dispatch Ready | `dispatch-ready` | Spec complete, queued |
 | *(not listed)* | Backlog | `backlog` | Not yet planned |
-| *(not listed)* | In Review | `review` | On staging, awaiting operator testing |
+| *(not listed)* | In Review | `review` | PR created, awaiting CI + operator approval |
 | *(not listed)* | Code Review | `code-review` | Operator approved, awaiting code review agent |
 | *(not listed)* | Changes Requested | `changes-requested` | Operator or reviewer found issues |
 | *(not listed)* | Canceled | `deprecated` | Dropped |
 
 ### Status Flow
 ```
-Dispatch Ready → In Progress → In Review (on staging)
-  → operator tests →
+Dispatch Ready → In Progress → In Review (PR created, auto-merge enabled)
+  → operator tests locally on feature branch →
     Changes Requested (issues found) → In Progress (dev fixes) → In Review
     Code Review (operator approved) → reviewer agent reviews →
       Changes Requested (reviewer issues) → In Progress → In Review
-      Done (PR merged to main)
+      Done (CI passes, PR auto-merges to main)
 ```
 
 ## Agent Teams (Parallel Development)
@@ -257,7 +245,7 @@ Operator (human)
 
 | Role | Model | Working Directory | Responsibilities |
 |------|-------|-------------------|------------------|
-| **Lead** | Opus 4.6 | `Raid-Ledger/` (main) | Orchestrate, create PRs, merge to staging, sync Linear |
+| **Lead** | Opus 4.6 | `Raid-Ledger/` (main) | Orchestrate, create PRs with auto-merge, sync Linear |
 | **Dev 1-3** | Opus 4.6 | `Raid-Ledger--rok-*/` | Implement stories, commit, message lead |
 | **Reviewer** | Sonnet 4.5 | `Raid-Ledger/` (main) | Code-review PRs via `gh`, approve/request changes |
 
@@ -292,26 +280,12 @@ git branch -d rok-<num>-<short-name>
 
 ```
 1. Teammate completes story → messages lead
-2. Lead pushes branch → creates PR + enables auto-merge (Linear → "In Review")
-3. Lead merges branch into staging → deploys for operator testing
-4. Operator manually tests on staging
+2. Build agent validates CI locally → pushes branch
+3. Lead creates PR with auto-merge enabled (Linear → "In Review")
+4. Operator tests locally: deploy_dev.sh --branch rok-<num>-<short-name>
 5. Reviewer code-reviews PR via gh pr review
 6. CI passes → PR auto-merges to main → Linear → "Done"
    OR changes requested → Linear → "Changes Requested" → teammate fixes
-```
-
-### Staging Branch
-
-A persistent `staging` branch accumulates in-progress PRs for operator testing:
-```bash
-# Reset staging at dispatch start
-git checkout staging && git reset --hard main && git push --force origin staging
-
-# After each PR is created, merge PR branch into staging
-git checkout staging && git merge rok-<num>-<short-name> && git push origin staging
-
-# Deploy staging for testing
-./scripts/deploy_dev.sh --rebuild
 ```
 
 ### Parallelism Safety

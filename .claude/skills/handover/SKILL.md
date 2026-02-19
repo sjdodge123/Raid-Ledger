@@ -90,25 +90,13 @@ Options: (1) I create a PR now, (2) Leave for next session, (3) Remove worktree 
 ### Clean up merged branches:
 
 ```bash
-git branch --merged main | grep -v 'main\|staging'
+git branch --merged main | grep -v 'main'
 ```
 Delete any found with `git branch -d`.
 
 ---
 
-## Step 4: Reset Staging Branch
-
-Reset staging to match current main:
-```bash
-git checkout staging
-git reset --hard main
-git push --force origin staging
-git checkout main
-```
-
----
-
-## Step 5: Sync Linear
+## Step 4: Sync Linear
 
 For each story identified in Step 2:
 1. `mcp__linear__get_issue` — check current status
@@ -119,7 +107,7 @@ Agents should have already posted summary comments during their work. If a story
 
 ---
 
-## Step 6: Rebuild for Testing
+## Step 5: Rebuild for Testing
 
 Run the dev server rebuild so the operator can manually test:
 ```bash
@@ -141,7 +129,7 @@ Admin login: check .env ADMIN_PASSWORD
 
 ---
 
-## Step 7: Capture Session Notes
+## Step 6: Capture Session Notes
 
 Write `planning-artifacts/session-notes.md` — this file is read by the next `/init` to preserve cross-session context.
 
@@ -188,7 +176,7 @@ Populate from conversation context, git log, and PR list. The "Key Decisions", "
 
 ---
 
-## Step 8: Report
+## Step 7: Report
 
 ```
 === Handover ===
@@ -196,7 +184,6 @@ Branch: main @ <sha>
 PRs merged: N (list PR numbers)
 PRs open: N (list PR numbers + status)
 Worktrees: N active, M cleaned up
-Staging: reset to main
 Linear: X synced, Y already correct, Z flagged
 Rebuild: started (or "failed — <reason>")
 Session notes: written to planning-artifacts/session-notes.md

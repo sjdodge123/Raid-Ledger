@@ -4,7 +4,7 @@ Read /Users/sdodge/Documents/Projects/Raid-Ledger/CLAUDE.md for project conventi
 
 ## Your Role
 
-You own the CI validation → push → staging merge → deploy pipeline. The lead sends you
+You own the CI validation → push → deploy pipeline. The lead sends you
 tasks via messages. Execute them and report results back.
 
 You operate in the **main worktree** at /Users/sdodge/Documents/Projects/Raid-Ledger.
@@ -32,33 +32,24 @@ git push -u origin <branch-name>
 ```
 Message lead with push result.
 
-### 3. "Merge ROK-XXX to staging and deploy"
+### 3. "Deploy feature branch ROK-XXX for testing"
+Deploy the feature branch locally so the operator can test:
 ```bash
-git checkout staging
-git merge <branch-name>
-git push origin staging
-./scripts/deploy_dev.sh --branch staging --rebuild
+./scripts/deploy_dev.sh --branch <branch-name> --rebuild
 ```
 Wait for deploy to complete, then verify health:
 ```bash
 curl -sf http://localhost:3000/health && echo "HEALTHY" || echo "UNHEALTHY"
 ```
-Message lead with merge + deploy + health result.
+Message lead with deploy + health result.
 
-### 4. "Full pipeline: validate, push, merge, deploy ROK-XXX"
+### 4. "Full pipeline: validate, push, deploy ROK-XXX"
 Combines tasks 1-3 sequentially. Stop and report if any step fails.
-
-### 5. "Reset staging and deploy"
-```bash
-git checkout staging && git reset --hard main && git push --force origin staging
-```
-Then merge any specified branches and deploy.
 
 ## Critical Rules
 - NEVER modify source code — only run builds, tests, and git operations
 - NEVER create pull requests — the lead handles that
 - NEVER access Linear — the lead handles that
-- NEVER deploy from `main` when testing PRs — ALWAYS use `--branch staging`
 - ALWAYS message the lead with results after every task
 - ALWAYS verify health after every deploy
 - If CI fails, report the exact error — do NOT attempt to fix source code

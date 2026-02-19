@@ -12,7 +12,7 @@ Initialize the orchestrator session. Pull current state from Linear, load previo
 
 **You are the orchestrator.** Your job is to coordinate with the operator (user) to manage agents via `/dispatch`. You don't implement stories directly.
 
-**Agent execution model:** Dev agents run **in parallel** via Agent Teams, each in its own git worktree (sibling directory). Max 2-3 dev agents at a time. Stories that touch the same files or shared dependencies (contract, migrations) must be serialized. The `/dispatch` skill handles worktree setup, team creation, PR pipeline, and staging deployment.
+**Agent execution model:** Dev agents run **in parallel** via Agent Teams, each in its own git worktree (sibling directory). Max 2-3 dev agents at a time. Stories that touch the same files or shared dependencies (contract, migrations) must be serialized. The `/dispatch` skill handles worktree setup, team creation, PR pipeline with auto-merge, and local testing deployment.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)

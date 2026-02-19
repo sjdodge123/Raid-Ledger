@@ -22,7 +22,7 @@ Dev agents run **in parallel**, each in its own git worktree (sibling directory)
 Lead (main worktree — orchestrates, creates PRs, syncs Linear)
   ├─ Dev Teammate 1 (worktree ../Raid-Ledger--rok-XXX)
   ├─ Dev Teammate 2 (worktree ../Raid-Ledger--rok-YYY)
-  ├─ Build Teammate (main worktree — CI validation, staging merges, deploys)
+  ├─ Build Teammate (main worktree — CI validation, push, deploys)
   └─ Reviewer Teammate (main worktree — code-reviews PRs)
 ```
 
@@ -39,7 +39,7 @@ Lead (main worktree — orchestrates, creates PRs, syncs Linear)
 - Stories generating database migrations (migration number collision)
 - Stories touching the same files (merge conflict risk)
 
-**The dispatch flow is:** plan in parallel → present batch → create worktrees → spawn parallel team → lead manages PR pipeline → reviewer reviews → merge approved PRs.
+**The dispatch flow is:** plan in parallel → present batch → create worktrees → spawn parallel team → lead manages PR pipeline with auto-merge → reviewer reviews → PRs auto-merge to main.
 
 ---
 
@@ -275,18 +275,12 @@ Process stories in the confirmed batch order. For each batch:
 
 ### 7a. Setup Infrastructure
 
-1. **Reset staging branch:**
-   ```bash
-   git checkout staging && git reset --hard main && git push --force origin staging
-   git checkout main
-   ```
-
-2. **Create worktrees** for each story in the batch:
+1. **Create worktrees** for each story in the batch:
    ```bash
    git worktree add ../Raid-Ledger--rok-<num> -b rok-<num>-<short-name> main
    ```
 
-3. **Install dependencies** in each worktree:
+2. **Install dependencies** in each worktree:
    ```bash
    cd ../Raid-Ledger--rok-<num> && npm install --legacy-peer-deps && npm run build -w packages/contract
    ```
@@ -312,7 +306,7 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
 
 ### 7d. Spawn Build Teammate
 
-Spawn one build/deploy teammate for the batch. This agent owns the CI validation, push, staging merge, and deploy pipeline:
+Spawn one build/deploy teammate for the batch. This agent owns the CI validation, push, and deploy pipeline:
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
      name: "build-agent", model: "sonnet", mode: "bypassPermissions",
@@ -322,16 +316,13 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
 The build agent stays alive for the entire batch. It handles:
 - Local CI validation (build/lint/test) in feature worktrees
 - Pushing branches to remote
-- Merging branches into staging
-- Deploying from staging with proper branch safety (`--branch staging`)
+- Deploying feature branches locally for operator testing
 - Health verification after deploys
-
-**Why a dedicated agent?** The lead previously handled deploys inline and accidentally served `main` branch code instead of `staging` (Vite HMR + NestJS watch mode silently switch when files change). The build agent uses `--branch staging` flag consistently, preventing this class of bug.
 
 ### 7e. Reviewer Teammate — DO NOT SPAWN YET
 
 **Do NOT spawn the reviewer at dispatch time.** The reviewer has no work until PRs exist
-and the operator has tested them on staging (moved to "Code Review" in Linear). Spawning
+and the operator has tested them locally (moved to "Code Review" in Linear). Spawning
 early wastes RAM and tokens.
 
 **When to spawn the reviewer:** In Step 9c, when the first story is moved to "Code Review"
@@ -347,7 +338,7 @@ After spawning all teammates, the lead:
 
 ---
 
-## Step 8: PR + Staging Pipeline (as teammates complete)
+## Step 8: PR + Auto-Merge Pipeline (as teammates complete)
 
 **⚠️ This step is EVENT-DRIVEN, not sequential. The lead reacts to messages from teammates — it does NOT synchronously wait or block on any agent. Stay responsive to the operator and other teammates at all times.**
 
@@ -390,7 +381,7 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
 ```
 After fixes, ask the build agent to re-validate. Repeat until CI passes.
 
-**2. After build agent confirms push — create PR (lead does this):**
+**2. After build agent confirms push — create PR with auto-merge (lead does this):**
 ```bash
 gh pr create \
   --title "ROK-<num>: <story title>" \
@@ -408,22 +399,24 @@ gh pr create \
 - [ ] TypeScript compiles clean
 - [ ] Lint passes
 - [ ] Unit tests pass
-- [ ] Manual smoke test on staging
+- [ ] Manual smoke test locally
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 EOF
 )" \
   --base main \
   --head rok-<num>-<short-name>
+
+gh pr merge --auto --squash
 ```
 
 **3. Update Linear IMMEDIATELY (MANDATORY — do not defer):**
 ```
 mcp__linear__update_issue(id: <issue_id>, state: "In Review")
-mcp__linear__create_comment(issueId: <issue_id>, body: "PR created: <PR URL>\nMerged to staging for manual testing.")
+mcp__linear__create_comment(issueId: <issue_id>, body: "PR created: <PR URL>\nAuto-merge enabled. Test locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
 ```
 
-**⚠️ The operator uses Linear "In Review" to know what's on staging and needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
+**⚠️ The operator uses Linear "In Review" to know what needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
 
 **4. Spawn QA Test Case Agent (runs in background — do not wait):**
 
@@ -434,17 +427,6 @@ Task(subagent_type: "general-purpose", model: "sonnet", run_in_background: true,
 ```
 
 This runs in the background while other stories are being processed. It posts a testing checklist as a Linear comment so the operator sees it when they open the story.
-
-**5. Delegate staging merge to the build agent:**
-
-Message the build agent to merge and prepare staging:
-```
-SendMessage(type: "message", recipient: "build-agent",
-  content: "Merge rok-<num>-<short-name> to staging (push but do NOT deploy yet — wait for all stories)",
-  summary: "Merge ROK-<num> to staging")
-```
-
-The build agent will merge the branch into staging and push, but NOT deploy yet (deploy happens in Step 8e after all stories are merged).
 
 ### 8c. Shut Down Dev + Test Teammates for This Story
 
@@ -460,31 +442,26 @@ Do NOT wait until batch completion — shut them down as soon as their PR is pus
 ### 8d. Keep Review Tasks Blocked
 
 DO NOT unblock review tasks yet. Review tasks remain blocked until the operator
-completes manual testing on staging and approves the story (moves to "Code Review"
+completes manual testing locally and approves the story (moves to "Code Review"
 status in Linear).
 
 The lead will unblock review tasks in Step 9c after polling detects operator approval.
 
-### 8e. Auto-Deploy Staging (after all batch stories have PRs)
+### 8e. Deploy for Operator Testing (after all batch stories have PRs)
 
-Once ALL stories in the current batch have PRs created, Linear updated, and staging merged, **delegate the deploy to the build agent** — do NOT ask the operator:
+Once ALL stories in the current batch have PRs created and Linear updated, **delegate the deploy to the build agent**. Deploy the first story's feature branch for testing:
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
-  content: "Deploy staging now. All stories are merged to staging.",
-  summary: "Deploy staging for operator testing")
+  content: "Deploy feature branch rok-<num>-<short-name> for operator testing.",
+  summary: "Deploy ROK-<num> for operator testing")
 ```
 
-The build agent will use `./scripts/deploy_dev.sh --branch staging --rebuild` which ensures:
-- The deploy script itself switches to the staging branch
-- Watch-mode processes (Vite HMR + NestJS) start on the staging branch
-- Health check is verified after deploy
-
-**⚠️ The lead does NOT run deploy commands directly. The build agent owns all deploys to prevent the branch mismatch bug (deploying from `main` instead of `staging`).**
+The build agent will use `./scripts/deploy_dev.sh --branch rok-<num>-<short-name> --rebuild` to deploy the feature branch locally. The operator can switch between feature branches for testing using `deploy_dev.sh --branch <branch-name>`.
 
 ### 8f. Spawn Playwright Testing Agent (non-blocking)
 
-After staging is deployed, spawn a Playwright testing agent as a teammate to run automated browser tests and capture screenshots for operator review:
+After the feature branch is deployed, spawn a Playwright testing agent as a teammate to run automated browser tests and capture screenshots for operator review:
 
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
@@ -493,7 +470,7 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
 ```
 
 The Playwright agent runs independently — do NOT wait for it. It will:
-1. Navigate the staging app using Playwright MCP tools
+1. Navigate the locally deployed app using Playwright MCP tools
 2. Test each story's acceptance criteria in the browser
 3. Capture screenshots at key states
 4. Post results + screenshots to each story in Linear
@@ -504,8 +481,8 @@ The Playwright agent runs independently — do NOT wait for it. It will:
 **Notify the operator — do NOT ask for test results in the terminal:**
 
 ```
-## Batch N — Staging Deployed
-All N stories are on staging at localhost:5173.
+## Batch N — Ready for Testing
+All N stories have PRs with auto-merge enabled.
 All stories moved to "In Review" in Linear.
 
 Automated Playwright tests are running — results and screenshots will be
@@ -516,7 +493,8 @@ Ready for testing:
 - ROK-YYY: PR #<num> — <title> (Linear: In Review ✓)
 
 Testing checklists have been posted to each story in Linear.
-Test each story on staging. Update each story's status in Linear when done:
+Test each story locally with: deploy_dev.sh --branch <branch-name>
+Update each story's status in Linear when done:
   → "Code Review" = testing passed, ready for code review agent
   → "Changes Requested" (add comments explaining issues) = testing failed
 ```
@@ -568,16 +546,16 @@ must pass operator testing before code review can begin.
 3. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
 4. Dev teammate runs all tests to verify they pass, messages lead when done
 5. **Shut down dev teammate** after fixes are committed
-6. **Delegate CI validation, push, merge, and deploy to the build agent:**
+6. **Delegate CI validation, push, and deploy to the build agent:**
    ```
    SendMessage(type: "message", recipient: "build-agent",
-     content: "Full pipeline: validate, push, merge, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+     content: "Full pipeline: validate, push, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
      summary: "Full pipeline ROK-<num> rework")
    ```
-   The build agent will: run CI → push → merge to staging → deploy with `--branch staging` → verify health → message lead with results.
+   The build agent will: run CI → push → deploy feature branch → verify health → message lead with results.
    If CI fails, the build agent messages back with errors — re-spawn the dev teammate to fix.
 7. Lead moves Linear back to "In Review"
-8. Notify operator: "ROK-XXX fixed and re-deployed to staging for re-test"
+8. Notify operator: "ROK-XXX fixed and re-deployed for re-test. Use: deploy_dev.sh --branch rok-<num>-<short-name>"
 9. **Review task stays BLOCKED** — cycle repeats from Step 9a (operator re-tests)
 
 ### 9c. Unblock Review Tasks & Dispatch Code Review (for "Code Review" stories)
@@ -605,10 +583,8 @@ For stories the operator moved to "Code Review" (operator approved):
 
 ### If reviewer approves:
 
-1. Lead merges PR:
-   ```bash
-   gh pr merge <number> --merge --delete-branch
-   ```
+1. PR auto-merges to main once CI passes (auto-merge was enabled at PR creation).
+   If auto-merge is not yet enabled: `gh pr merge <number> --auto --squash`
 2. Lead updates Linear → "Done", posts summary comment:
    - Key files changed, commit SHA(s), PR number
    - Notable decisions or deviations
@@ -636,16 +612,16 @@ For stories the operator moved to "Code Review" (operator approved):
 4. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
 5. Dev teammate runs all tests to verify they pass, messages lead when done
 6. **Shut down dev teammate** after fixes are committed
-7. **Delegate CI validation, push, merge, and deploy to the build agent:**
+7. **Delegate CI validation, push, and deploy to the build agent:**
    ```
    SendMessage(type: "message", recipient: "build-agent",
-     content: "Full pipeline: validate, push, merge, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+     content: "Full pipeline: validate, push, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
      summary: "Full pipeline ROK-<num> reviewer fixes")
    ```
-   The build agent will: run CI → push → merge to staging → deploy with `--branch staging` → verify health → message lead with results.
+   The build agent will: run CI → push → deploy feature branch → verify health → message lead with results.
    If CI fails, the build agent messages back with errors — re-spawn the dev teammate to fix.
 8. Lead moves Linear → "In Review"
-9. Notify operator: "ROK-XXX has reviewer fixes re-deployed to staging for re-test"
+9. Notify operator: "ROK-XXX has reviewer fixes re-deployed for re-test. Use: deploy_dev.sh --branch rok-<num>-<short-name>"
 10. **Review task stays BLOCKED** — cycle repeats from Step 9a (operator re-tests)
 
 ---
@@ -703,9 +679,8 @@ After ALL batches have completed:
 | 1 | ROK-YYY | dev-rok-yyy | #2 | approved | Done |
 | 2 | ROK-ZZZ | dev-rok-zzz | #3 | approved | Done |
 
-All PRs merged to main.
-Staging reset to main.
-Run `deploy_dev.sh --rebuild` to test all changes.
+All PRs auto-merged to main.
+Run `deploy_dev.sh --rebuild` to test all changes on main.
 ```
 
 ---
@@ -894,7 +869,7 @@ gh pr diff <PR_NUMBER>
 
 ### Your Job
 Generate a manual testing checklist that the operator can follow to verify
-this story works correctly on staging (localhost:5173).
+this story works correctly locally (localhost:5173).
 
 ### Guidelines
 - Read the story's acceptance criteria carefully — each AC should map to at least one test step
@@ -916,7 +891,7 @@ Use this format for the comment body:
 ## Manual Testing Checklist
 
 ### Setup
-- [ ] Staging deployed at localhost:5173
+- [ ] Feature branch deployed at localhost:5173
 - [ ] Logged in as admin (password in .env ADMIN_PASSWORD)
 
 ### Acceptance Criteria Tests
@@ -1005,7 +980,7 @@ You are an automated QA tester for the Raid Ledger project using Playwright MCP 
   <paste ACs from the story spec>
 
 ## Your Job
-Run automated browser tests against the staging deployment at http://localhost:5173.
+Run automated browser tests against the local deployment at http://localhost:5173.
 For each story, navigate the app, verify acceptance criteria, and capture screenshots
 at key states. Post your results and screenshots directly to each story in Linear.
 
@@ -1113,7 +1088,7 @@ Read /Users/sdodge/Documents/Projects/Raid-Ledger/CLAUDE.md for project conventi
 
 ## Your Role
 
-You own the CI validation → push → staging merge → deploy pipeline. The lead sends you
+You own the CI validation → push → deploy pipeline. The lead sends you
 tasks via messages. Execute them and report results back.
 
 You operate in the **main worktree** at /Users/sdodge/Documents/Projects/Raid-Ledger.
@@ -1141,33 +1116,24 @@ git push -u origin <branch-name>
 ```
 Message lead with push result.
 
-### 3. "Merge ROK-XXX to staging and deploy"
+### 3. "Deploy feature branch ROK-XXX for testing"
+Deploy the feature branch locally so the operator can test:
 ```bash
-git checkout staging
-git merge <branch-name>
-git push origin staging
-./scripts/deploy_dev.sh --branch staging --rebuild
+./scripts/deploy_dev.sh --branch <branch-name> --rebuild
 ```
 Wait for deploy to complete, then verify health:
 ```bash
 curl -sf http://localhost:3000/health && echo "HEALTHY" || echo "UNHEALTHY"
 ```
-Message lead with merge + deploy + health result.
+Message lead with deploy + health result.
 
-### 4. "Full pipeline: validate, push, merge, deploy ROK-XXX"
+### 4. "Full pipeline: validate, push, deploy ROK-XXX"
 Combines tasks 1-3 sequentially. Stop and report if any step fails.
-
-### 5. "Reset staging and deploy"
-```bash
-git checkout staging && git reset --hard main && git push --force origin staging
-```
-Then merge any specified branches and deploy.
 
 ## Critical Rules
 - NEVER modify source code — only run builds, tests, and git operations
 - NEVER create pull requests — the lead handles that
 - NEVER access Linear — the lead handles that
-- NEVER deploy from `main` when testing PRs — ALWAYS use `--branch staging`
 - ALWAYS message the lead with results after every task
 - ALWAYS verify health after every deploy
 - If CI fails, report the exact error — do NOT attempt to fix source code

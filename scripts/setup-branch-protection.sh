@@ -26,27 +26,8 @@ gh api repos/$REPO/branches/main/protection \
   --method PUT \
   --input /tmp/main-protection.json
 
-echo "🧪 Configuring branch protection for staging..."
-
-# Create JSON payload for staging branch protection
-cat > /tmp/staging-protection.json << 'EOF'
-{
-  "required_status_checks": null,
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null,
-  "required_conversation_resolution": false,
-  "allow_force_pushes": true,
-  "allow_deletions": false
-}
-EOF
-
-gh api repos/$REPO/branches/staging/protection \
-  --method PUT \
-  --input /tmp/staging-protection.json
-
 # Cleanup temp files
-rm /tmp/main-protection.json /tmp/staging-protection.json
+rm /tmp/main-protection.json
 
 echo "🔄 Enabling auto-merge on repository..."
 
@@ -58,11 +39,6 @@ echo "Main branch protection:"
 echo "  - Requires status checks: build-lint-test, merge"
 echo "  - Requires conversation resolution"
 echo "  - Blocks force pushes and deletions"
-echo ""
-echo "Staging branch protection:"
-echo "  - Allows force pushes (for reset during dispatch)"
-echo "  - Blocks deletions"
-echo "  - No required reviews or status checks"
 echo ""
 echo "Repository settings:"
 echo "  - Auto-merge enabled (use 'gh pr merge --auto --squash' after creating PRs)"

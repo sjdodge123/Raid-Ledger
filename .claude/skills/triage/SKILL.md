@@ -383,7 +383,7 @@ The `/dispatch` skill handles ongoing status sync from Linear back to GitHub. Wh
 |---|---|
 | Backlog (created by /triage) | Comment: "Triaged — queued for development" |
 | In Progress | Comment: "A developer is actively working on a fix" |
-| In Review | Comment: "Fix submitted, testing on staging" |
+| In Review | Comment: "Fix submitted, PR created with auto-merge" |
 | Changes Requested | Comment: "Issues found, fix being revised" |
 | Done | Close issue with resolution comment |
 
