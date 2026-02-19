@@ -2,10 +2,16 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DrizzleAsyncProvider } from './drizzle/drizzle.module';
+import { REDIS_CLIENT } from './redis/redis.module';
 
 // Mock database for testing
 const mockDb = {
   execute: jest.fn().mockResolvedValue([{ '1': 1 }]),
+};
+
+// Mock Redis client for testing
+const mockRedis = {
+  ping: jest.fn().mockResolvedValue('PONG'),
 };
 
 describe('AppController', () => {
@@ -20,6 +26,10 @@ describe('AppController', () => {
           provide: DrizzleAsyncProvider,
           useValue: mockDb,
         },
+        {
+          provide: REDIS_CLIENT,
+          useValue: mockRedis,
+        },
       ],
     }).compile();
 
@@ -33,7 +43,7 @@ describe('AppController', () => {
   });
 
   describe('health', () => {
-    it('should return healthy status when database is connected', async () => {
+    it('should return healthy status when database and redis are connected', async () => {
       const mockRes = {
         status: jest.fn().mockReturnThis(),
         json: jest.fn(),
@@ -48,6 +58,7 @@ describe('AppController', () => {
         expect.objectContaining({
           status: 'ok',
           db: expect.objectContaining({ connected: true }) as unknown,
+          redis: expect.objectContaining({ connected: true }) as unknown,
         }),
       );
     });
