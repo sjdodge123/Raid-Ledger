@@ -11,4 +11,4 @@
 - [ ] TypeScript compiles clean (`npx tsc --noEmit`)
 - [ ] Lint passes (`npm run lint`)
 - [ ] Unit tests pass (`npm run test`)
-- [ ] Manual smoke test on staging
+- [ ] Manual smoke test (`deploy_dev.sh --branch <feature-branch>`)

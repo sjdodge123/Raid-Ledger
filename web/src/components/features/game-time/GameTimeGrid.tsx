@@ -62,11 +62,14 @@ export interface GameTimeGridProps {
     fullDayNames?: boolean;
     /** Compact mode — shorter cell height for space-constrained layouts (e.g. onboarding wizard) */
     compact?: boolean;
+    /** Disable the top-16 sticky offset on day headers (use top-0). For use inside modals. */
+    noStickyOffset?: boolean;
 }
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
+const CELL_GAP = 1; // gap-px = 1px between grid cells
 
 function formatHour(hour: number): string {
     if (hour === 0 || hour === 24) return '12 AM';
@@ -243,6 +246,7 @@ export function GameTimeGrid({
     onCellClick,
     fullDayNames,
     compact,
+    noStickyOffset,
 }: GameTimeGridProps) {
     const [rangeStart, rangeEnd] = hourRange ?? [0, 24];
     const HOURS = useMemo(() => ALL_HOURS.filter((h) => h >= rangeStart && h < rangeEnd), [rangeStart, rangeEnd]);
@@ -284,6 +288,7 @@ export function GameTimeGrid({
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const dragging = useRef(false);
     const paintMode = useRef<'paint' | 'erase'>('paint');
+    const wrapperRef = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const [gridDims, setGridDims] = useState<{ colWidth: number; rowHeight: number; headerHeight: number; colStartLeft: number } | null>(null);
 
@@ -318,36 +323,40 @@ export function GameTimeGrid({
         return [d, h];
     }, [hoveredCell]);
 
-    // Measure grid dimensions for absolute positioning of overlays + hover effects
+    // Measure grid dimensions for absolute positioning of overlays + hover effects.
+    // Measure grid layout using offsetTop/offsetLeft — these give position relative to the
+    // offsetParent (the wrapper with position:relative), which matches how position:absolute
+    // works. Unlike getBoundingClientRect(), unaffected by scroll or CSS transforms.
     const needsMeasurement = (events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || todayIndex !== undefined || isInteractive;
     useEffect(() => {
         const el = gridRef.current;
-        if (!el || !needsMeasurement) return;
+        const wrapper = wrapperRef.current;
+        if (!el || !wrapper || !needsMeasurement) return;
 
         const measure = () => {
-            const firstCell = el.querySelector('[data-testid="cell-0-0"]') ??
+            const firstCell = el.querySelector(`[data-testid="cell-0-${rangeStart}"]`) ??
                 el.querySelector(`[data-testid^="cell-0-"]`);
-            const dayHeader = el.querySelector('[data-testid="day-header-0"]');
-            if (!firstCell || !dayHeader) return;
+            if (!firstCell || !(firstCell instanceof HTMLElement)) return;
 
-            const firstRect = firstCell.getBoundingClientRect();
-            const gridRect = el.getBoundingClientRect();
-            const headerRect = dayHeader.getBoundingClientRect();
+            // Grid's offset within the wrapper (grid is the only flow child, usually 0)
+            const gridOffsetTop = el.offsetTop;
+            const gridOffsetLeft = el.offsetLeft;
 
-            // Find the actual first two visible hour cells to measure row height
             const allCells = el.querySelectorAll('[data-testid^="cell-0-"]');
-            let rowHeight = 20; // fallback
+            let rowHeight = firstCell.offsetHeight + CELL_GAP;
             if (allCells.length >= 2) {
-                const r1 = allCells[0].getBoundingClientRect();
-                const r2 = allCells[1].getBoundingClientRect();
-                rowHeight = r2.top - r1.top;
+                const c0 = allCells[0] as HTMLElement;
+                const c1 = allCells[1] as HTMLElement;
+                rowHeight = c1.offsetTop - c0.offsetTop;
             }
 
+            // offsetTop/Left are relative to offsetParent (the grid).
+            // Add gridOffset to get position relative to the wrapper.
             setGridDims({
-                colWidth: firstRect.width,
+                colWidth: firstCell.offsetWidth,
                 rowHeight,
-                headerHeight: headerRect.bottom - gridRect.top,
-                colStartLeft: firstRect.left - gridRect.left,
+                headerHeight: gridOffsetTop + firstCell.offsetTop,
+                colStartLeft: gridOffsetLeft + firstCell.offsetLeft,
             });
         };
 
@@ -425,9 +434,6 @@ export function GameTimeGrid({
         dragging.current = false;
     }, []);
 
-    // Gap between grid cells (gap-px = 1px)
-    const gap = 1;
-
     // Compute date labels for day headers
     // weekStart may be ISO datetime ("2026-02-08T00:00:00.000Z") or date-only ("2026-02-08")
     const dayDates = useMemo(() => {
@@ -500,13 +506,13 @@ export function GameTimeGrid({
     // Radial gradient centered on hovered cell — shows through grid gaps as feathered grid lines
     const gridLineBackground = useMemo(() => {
         if (hoverDay < 0 || !gridDims || !isInteractive) return undefined;
-        const x = gridDims.colStartLeft + hoverDay * (gridDims.colWidth + gap) + gridDims.colWidth / 2;
+        const x = gridDims.colStartLeft + hoverDay * (gridDims.colWidth + CELL_GAP) + gridDims.colWidth / 2;
         const y = gridDims.headerHeight + (hoverHour - rangeStart) * gridDims.rowHeight + gridDims.rowHeight / 2;
         return `radial-gradient(circle 100px at ${x}px ${y}px, var(--gt-hover-glow), transparent 80%)`;
     }, [hoverDay, hoverHour, gridDims, isInteractive, rangeStart]);
 
     return (
-        <div className={`relative overflow-hidden ${className ?? ''}`}>
+        <div ref={wrapperRef} className={`relative overflow-hidden ${className ?? ''}`}>
             {/* Tooltip */}
             {hoveredCell && (
                 <div className="absolute z-30 px-2 py-1 bg-overlay text-foreground text-xs rounded whitespace-nowrap pointer-events-none" style={{ top: 0, right: 0 }}>
@@ -538,8 +544,8 @@ export function GameTimeGrid({
             >
                 {/* Header row: timezone label corner + day labels */}
                 <div
-                    className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
-                    style={{ transition: 'top 300ms ease-in-out' }}
+                    className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 bg-surface flex items-center justify-center`}
+                    style={{ transition: noStickyOffset ? undefined : 'top 300ms ease-in-out' }}
                 >
                     {tzLabel && (
                         <span className="text-[10px] text-dim font-medium">{tzLabel}</span>
@@ -555,7 +561,7 @@ export function GameTimeGrid({
                     return (
                         <div
                             key={day}
-                            className={`sticky ${isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${isTodaySplit
+                            className={`sticky ${noStickyOffset ? 'top-0' : isHeaderHidden ? 'top-0' : 'top-16'} z-10 text-center text-xs font-medium py-1 ${isTodaySplit
                                     ? 'text-secondary'
                                     : isToday
                                         ? 'bg-emerald-500/15 text-emerald-300'
@@ -708,8 +714,8 @@ export function GameTimeGrid({
                 const totalHeight = HOURS.length * gridDims.rowHeight;
                 const relativeHour = currentHour - rangeStart;
                 const redLineY = Math.max(0, Math.min(totalHeight, relativeHour * gridDims.rowHeight));
-                const todayLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
-                const todayRight = todayLeft + gridDims.colWidth + gap;
+                const todayLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
+                const todayRight = todayLeft + gridDims.colWidth + CELL_GAP;
 
                 return (
                     <>
@@ -734,7 +740,7 @@ export function GameTimeGrid({
                                 style={{
                                     top: gridDims.headerHeight + redLineY,
                                     left: todayIndex > 0 ? todayLeft - 1 : todayLeft,
-                                    width: todayIndex > 0 ? todayRight - todayLeft : gridDims.colWidth + gap,
+                                    width: todayIndex > 0 ? todayRight - todayLeft : gridDims.colWidth + CELL_GAP,
                                     height: 0,
                                     borderTop: borderStyle,
                                 }}
@@ -761,7 +767,7 @@ export function GameTimeGrid({
 
             {/* Today column highlight — split: grey above red line, green below */}
             {todayIndex !== undefined && gridDims && (() => {
-                const colLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
+                const colLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
                 const totalHeight = HOURS.length * gridDims.rowHeight;
 
                 // If rolling week is active and currentHour is known, split the column
@@ -825,7 +831,7 @@ export function GameTimeGrid({
                     const relativeHour = currentHour - rangeStart;
                     if (relativeHour < 0 || relativeHour > rangeEnd - rangeStart) return null;
                     const top = gridDims.headerHeight + relativeHour * gridDims.rowHeight;
-                    const left = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
+                    const left = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
 
                     return (
                         <div
@@ -886,7 +892,7 @@ export function GameTimeGrid({
                     dayEventCounts.set(dayKey, stackIndex + 1);
                     const stackOffset = stackIndex * 2;
 
-                    const left = gridDims.colStartLeft + ev.dayOfWeek * (gridDims.colWidth + gap) + stackOffset;
+                    const left = gridDims.colStartLeft + ev.dayOfWeek * (gridDims.colWidth + CELL_GAP) + stackOffset;
                     const width = gridDims.colWidth - stackOffset;
 
                     return (
@@ -938,7 +944,7 @@ export function GameTimeGrid({
                     const spanHours = visEnd - visStart;
                     const top = gridDims.headerHeight + (visStart - rangeStart) * gridDims.rowHeight;
                     const height = spanHours * gridDims.rowHeight - 1;
-                    const left = gridDims.colStartLeft + block.dayOfWeek * (gridDims.colWidth + gap);
+                    const left = gridDims.colStartLeft + block.dayOfWeek * (gridDims.colWidth + CELL_GAP);
                     const width = gridDims.colWidth;
 
                     // Check if an event block already covers this position — if so, border only

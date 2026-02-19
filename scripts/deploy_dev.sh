@@ -10,7 +10,7 @@
 #   ./scripts/deploy_dev.sh --rebuild        # Rebuild contract package, then start
 #   ./scripts/deploy_dev.sh --fresh          # Reset DB, new admin password, restart
 #   ./scripts/deploy_dev.sh --reset-password # Reset admin password (no data loss)
-#   ./scripts/deploy_dev.sh --branch staging # Switch to staging branch, then start
+#   ./scripts/deploy_dev.sh --branch rok-123 # Switch to feature branch, then start
 #   ./scripts/deploy_dev.sh --down           # Stop everything
 #   ./scripts/deploy_dev.sh --status         # Show process/container status
 #   ./scripts/deploy_dev.sh --logs           # Tail API and web logs
@@ -62,10 +62,9 @@ check_branch_for_testing() {
     local current_branch
     current_branch=$(get_current_branch)
 
-    # Warn if not on staging or main (common testing branches)
-    if [ "$current_branch" != "staging" ] && [ "$current_branch" != "main" ]; then
+    # Warn if not on main (feature branches are fine for testing)
+    if [ "$current_branch" != "main" ]; then
         print_warning "⚠️  BRANCH WARNING: Deploying from branch '$current_branch'"
-        print_warning "    For operator testing, you usually want 'staging'"
         print_warning "    For post-merge verification, you usually want 'main'"
         echo ""
         echo -e "  ${YELLOW}Press Ctrl+C to cancel, or wait 5 seconds to continue...${NC}"
@@ -372,7 +371,7 @@ case "${1:-}" in
         echo "  --help            Show this help message"
         echo ""
         echo "Examples:"
-        echo "  $0 --branch staging    # Switch to staging and deploy"
+        echo "  $0 --branch rok-123    # Switch to feature branch and deploy"
         echo "  $0 --rebuild           # Rebuild contract and start"
         ;;
     *)
