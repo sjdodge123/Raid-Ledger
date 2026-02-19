@@ -58,7 +58,9 @@ const defaultProps = {
     eventTitle: 'Raid Night',
 };
 
-function renderModal(overrides: Partial<typeof defaultProps> = {}) {
+type RescheduleModalProps = React.ComponentProps<typeof RescheduleModal>;
+
+function renderModal(overrides: Partial<RescheduleModalProps> = {}) {
     const props = { ...defaultProps, ...overrides };
     return render(<RescheduleModal {...props} />, { wrapper: createWrapper() });
 }
@@ -203,7 +205,7 @@ describe('RescheduleModal', () => {
             // Default event is 2 hours — find the 2h button (not the DurationBadge span)
             renderModal();
             const buttons = screen.getAllByRole('button');
-            const btn2h = buttons.find(b => b.textContent?.trim() === '2h' && b.type === 'button');
+            const btn2h = buttons.find(b => b.textContent?.trim() === '2h' && (b as HTMLButtonElement).type === 'button');
             expect(btn2h).toBeDefined();
             expect(btn2h!.className).toContain('bg-emerald-600');
         });
@@ -260,7 +262,6 @@ describe('RescheduleModal', () => {
     describe('game metadata passthrough', () => {
         it('passes game metadata to current event blocks', () => {
             renderModal({
-                ...defaultProps,
                 gameSlug: 'wow',
                 gameName: 'World of Warcraft',
             });
