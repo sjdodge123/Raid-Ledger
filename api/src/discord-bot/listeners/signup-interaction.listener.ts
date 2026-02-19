@@ -248,7 +248,10 @@ export class SignupInteractionListener {
               unknown
             > | null;
             if (slotConfig?.type === 'mmo') {
-              await this.showRoleSelect(interaction, eventId, char.id);
+              await this.showRoleSelect(interaction, eventId, char.id, {
+                name: char.name,
+                role: char.roleOverride ?? char.role ?? null,
+              });
               return;
             }
 
@@ -557,31 +560,41 @@ export class SignupInteractionListener {
    * When `characterId` is provided, it is appended to the customId so the
    * role select handler can complete a linked-user signup with both character
    * and role: `role_select:<eventId>:<characterId>`
+   *
+   * When `characterInfo` is provided (linked user), the character name is shown
+   * in the message and the role dropdown pre-selects based on the character's role.
    */
   private async showRoleSelect(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
     eventId: number,
     characterId?: string,
+    characterInfo?: { name: string; role: string | null },
   ): Promise<void> {
     const customId = characterId
       ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
       : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
 
+    const defaultRole = characterInfo?.role ?? null;
+
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(customId)
       .setPlaceholder('Select your role')
       .addOptions([
-        { label: 'Tank', value: 'tank', emoji: '🛡️' },
-        { label: 'Healer', value: 'healer', emoji: '💚' },
-        { label: 'DPS', value: 'dps', emoji: '⚔️' },
+        { label: 'Tank', value: 'tank', emoji: '🛡️', default: defaultRole === 'tank' },
+        { label: 'Healer', value: 'healer', emoji: '💚', default: defaultRole === 'healer' },
+        { label: 'DPS', value: 'dps', emoji: '⚔️', default: defaultRole === 'dps' },
       ]);
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       selectMenu,
     );
 
+    const content = characterInfo
+      ? `Signing up as **${characterInfo.name}** — select your role:`
+      : 'Select your role:';
+
     await interaction.editReply({
-      content: 'Select your role:',
+      content,
       components: [row],
     });
   }
@@ -786,7 +799,14 @@ export class SignupInteractionListener {
       if (event) {
         const slotConfig = event.slotConfig as Record<string, unknown> | null;
         if (slotConfig?.type === 'mmo') {
-          await this.showRoleSelect(interaction, eventId, characterId);
+          const character = await this.charactersService.findOne(
+            linkedUser.id,
+            characterId,
+          );
+          await this.showRoleSelect(interaction, eventId, characterId, {
+            name: character.name,
+            role: character.roleOverride ?? character.role ?? null,
+          });
           return;
         }
       }
