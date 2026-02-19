@@ -69,3 +69,6 @@ export * from './version.schema.js';
 
 // Discord Bot (ROK-117)
 export * from './discord-bot.schema.js';
+
+// Channel Bindings (ROK-348)
+export * from './channel-bindings.schema.js';

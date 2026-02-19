@@ -54,6 +54,7 @@ const PluginsPanel = lazy(() => import('./pages/admin/plugins-panel').then(m => 
 const BrandingPanel = lazy(() => import('./pages/admin/branding-panel').then(m => ({ default: m.BrandingPanel })));
 const PluginIntegrationPanel = lazy(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
 const CronJobsPanel = lazy(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
+const DiscordBindingsPanel = lazy(() => import('./pages/admin/discord-bindings-panel').then(m => ({ default: m.DiscordBindingsPanel })));
 
 import './plugins/wow/register';
 import './App.css';
@@ -131,6 +132,7 @@ function App() {
                   <Route path="integrations" element={<DiscordPanel />} />
                   <Route path="integrations/igdb" element={<IgdbPanel />} />
                   <Route path="integrations/discord-bot" element={<DiscordBotPanel />} />
+                  <Route path="integrations/channel-bindings" element={<DiscordBindingsPanel />} />
                   <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
                   <Route path="plugins" element={<PluginsPanel />} />
                   <Route path="appearance" element={<BrandingPanel />} />

@@ -11,6 +11,9 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { EventCreateCommand } from '../commands/event-create.command';
 import { EventsListCommand } from '../commands/events-list.command';
 import { RosterViewCommand } from '../commands/roster-view.command';
+import { BindCommand } from '../commands/bind.command';
+import { UnbindCommand } from '../commands/unbind.command';
+import { BindingsCommand } from '../commands/bindings.command';
 
 /**
  * Describes a command that can handle slash command interactions.
@@ -35,6 +38,9 @@ export class InteractionListener {
     private readonly eventCreateCommand: EventCreateCommand,
     private readonly eventsListCommand: EventsListCommand,
     private readonly rosterViewCommand: RosterViewCommand,
+    private readonly bindCommand: BindCommand,
+    private readonly unbindCommand: UnbindCommand,
+    private readonly bindingsCommand: BindingsCommand,
   ) {}
 
   private getHandlers(): CommandInteractionHandler[] {
@@ -42,6 +48,9 @@ export class InteractionListener {
       this.eventCreateCommand,
       this.eventsListCommand,
       this.rosterViewCommand,
+      this.bindCommand,
+      this.unbindCommand,
+      this.bindingsCommand,
     ];
   }
 
