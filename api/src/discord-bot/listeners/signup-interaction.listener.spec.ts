@@ -21,17 +21,24 @@ function makeButtonInteraction(
   username: string = 'TestUser',
   avatar: string | null = 'avatar-hash',
 ) {
-  return {
+  const interaction = {
     isButton: () => true,
     isStringSelectMenu: () => false,
     customId,
     user: { id: userId, username, avatar },
     replied: false,
     deferred: false,
-    deferReply: jest.fn().mockResolvedValue(undefined),
+    deferReply: jest.fn().mockImplementation(() => {
+      interaction.deferred = true;
+      return Promise.resolve(undefined);
+    }),
     editReply: jest.fn().mockResolvedValue(undefined),
-    reply: jest.fn().mockResolvedValue(undefined),
+    reply: jest.fn().mockImplementation(() => {
+      interaction.replied = true;
+      return Promise.resolve(undefined);
+    }),
   };
+  return interaction;
 }
 
 /** Create a minimal StringSelectMenuInteraction mock */
@@ -408,10 +415,11 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleButtonInteraction(interaction2);
 
-      expect(interaction2.reply).toHaveBeenCalledWith(
+      // After ROK-376: deferReply is called first, then cooldown uses editReply
+      expect(interaction2.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction2.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.stringContaining('Please wait'),
-          ephemeral: true,
         }),
       );
     });
@@ -1322,7 +1330,7 @@ describe('SignupInteractionListener', () => {
   // ============================================================
 
   describe('error handling', () => {
-    it('should reply with error message when handler throws and not yet replied', async () => {
+    it('should reply with error message when handler throws', async () => {
       const userId = 'user-error-1';
       mockSignupsService.findByDiscordUser.mockRejectedValueOnce(
         new Error('DB connection failed'),
@@ -1332,15 +1340,14 @@ describe('SignupInteractionListener', () => {
         `${SIGNUP_BUTTON_IDS.SIGNUP}:701`,
         userId,
       );
-      interaction.replied = false;
-      interaction.deferred = false;
 
       await listener.handleButtonInteraction(interaction);
 
-      expect(interaction.reply).toHaveBeenCalledWith(
+      // After ROK-376: deferReply is called first, so error path uses editReply via safeReply
+      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.stringContaining('Something went wrong'),
-          ephemeral: true,
         }),
       );
     });
@@ -1358,6 +1365,175 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleButtonInteraction(interaction);
       expect(interaction.deferReply).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // ROK-376: Discord interaction race condition handling
+  // ============================================================
+
+  describe('ROK-376 — interaction race condition handling', () => {
+    it('should defer reply immediately before any async work', async () => {
+      const userId = 'user-race-defer-1';
+      mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
+
+      // Linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // Event
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 2001, title: 'Race Test', registryGameId: null },
+              ]),
+          }),
+        }),
+      });
+
+      // updateEmbedSignupCount
+      mockSignupsService.getRoster.mockResolvedValueOnce({
+        eventId: 2001,
+        signups: [],
+        count: 0,
+      });
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2001`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      // deferReply should be called exactly once at the top of handleButtonInteraction
+      expect(interaction.deferReply).toHaveBeenCalledTimes(1);
+      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    });
+
+    it('should gracefully handle already-acknowledged interaction (code 40060) in error path', async () => {
+      const userId = 'user-race-40060';
+      mockSignupsService.findByDiscordUser.mockRejectedValueOnce(
+        new Error('DB error'),
+      );
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2002`,
+        userId,
+      );
+
+      // Simulate: deferReply succeeds, but editReply throws 40060
+      // because another concurrent handler already acknowledged
+      const discordError = new Error(
+        'Interaction has already been acknowledged.',
+      );
+      (discordError as unknown as { code: number }).code = 40060;
+      interaction.editReply.mockRejectedValueOnce(discordError);
+
+      // Should not throw
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).resolves.not.toThrow();
+    });
+
+    it('should gracefully handle expired interaction (code 10062) in error path', async () => {
+      const userId = 'user-race-10062';
+      mockSignupsService.findByDiscordUser.mockRejectedValueOnce(
+        new Error('DB error'),
+      );
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2003`,
+        userId,
+      );
+
+      // Simulate: interaction token expired
+      const discordError = new Error('Unknown interaction');
+      (discordError as unknown as { code: number }).code = 10062;
+      interaction.editReply.mockRejectedValueOnce(discordError);
+
+      // Should not throw
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).resolves.not.toThrow();
+    });
+
+    it('should re-throw non-Discord errors from safeEditReply', async () => {
+      const userId = 'user-race-rethrow';
+      mockSignupsService.findByDiscordUser.mockRejectedValueOnce(
+        new Error('DB error'),
+      );
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2004`,
+        userId,
+      );
+
+      // Simulate: editReply throws a non-Discord error (e.g., network failure)
+      interaction.editReply.mockRejectedValueOnce(new Error('Network failure'));
+
+      // Should propagate the non-Discord error
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).rejects.toThrow('Network failure');
+    });
+
+    it('should handle already-acknowledged error in select menu error path', async () => {
+      const userId = 'user-race-select-40060';
+
+      // Linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // Event lookup — non-MMO
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 2005, title: 'Test', slotConfig: null },
+              ]),
+          }),
+        }),
+      });
+
+      // signup throws to trigger error path
+      mockSignupsService.signup.mockRejectedValueOnce(
+        new Error('Event cancelled'),
+      );
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:2005`,
+        ['char-1'],
+        userId,
+      );
+
+      // Simulate: editReply in catch block fails with 40060
+      const discordError = new Error(
+        'Interaction has already been acknowledged.',
+      );
+      (discordError as unknown as { code: number }).code = 40060;
+      // First editReply call (in catch block) should fail with Discord error
+      interaction.editReply.mockRejectedValueOnce(discordError);
+
+      // Should not throw — safeEditReply handles it
+      await expect(
+        listener.handleSelectMenuInteraction(interaction),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -1787,11 +1963,11 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleButtonInteraction(interaction2);
 
-      // Rate limiting should kick in — reply (not editReply) with "Please wait"
-      expect(interaction2.reply).toHaveBeenCalledWith(
+      // After ROK-376: deferReply is called first, then cooldown uses editReply
+      expect(interaction2.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction2.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.stringContaining('Please wait'),
-          ephemeral: true,
         }),
       );
       // No additional signup attempts
@@ -2258,10 +2434,11 @@ describe('SignupInteractionListener', () => {
         listener.handleButtonInteraction(interaction),
       ).resolves.not.toThrow();
 
-      expect(interaction.reply).toHaveBeenCalledWith(
+      // After ROK-376: deferReply is called first, so error path uses editReply via safeReply
+      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
           content: expect.stringContaining('Something went wrong'),
-          ephemeral: true,
         }),
       );
     });
