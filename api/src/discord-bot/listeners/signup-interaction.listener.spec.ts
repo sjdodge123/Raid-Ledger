@@ -712,6 +712,105 @@ describe('SignupInteractionListener', () => {
       await listener.handleSelectMenuInteraction(interaction);
       expect(mockSignupsService.signupDiscord).not.toHaveBeenCalled();
     });
+
+    it('should create linked-user signup with role + character when characterId is in customId (ROK-138)', async () => {
+      const userId = 'user-roleselect-linked-1';
+
+      // Linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      mockSignupsService.signup.mockResolvedValueOnce({
+        id: 10,
+        eventId: 700,
+      });
+      mockSignupsService.confirmSignup.mockResolvedValueOnce({ id: 10 });
+      mockCharactersService.findOne.mockResolvedValueOnce({
+        id: 'char-linked-role',
+        name: 'Thrall',
+      });
+
+      // updateEmbedSignupCount
+      mockSignupsService.getRoster.mockResolvedValueOnce({
+        eventId: 700,
+        signups: [],
+        count: 0,
+      });
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:700:char-linked-role`,
+        ['tank'],
+        userId,
+      );
+      await listener.handleSelectMenuInteraction(interaction);
+
+      // Should NOT call signupDiscord (anonymous path)
+      expect(mockSignupsService.signupDiscord).not.toHaveBeenCalled();
+
+      // Should call signup with slotRole
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(700, 42, {
+        slotRole: 'tank',
+      });
+
+      // Should confirm with character
+      expect(mockSignupsService.confirmSignup).toHaveBeenCalledWith(
+        700,
+        10,
+        42,
+        { characterId: 'char-linked-role' },
+      );
+
+      // Should include character name and role in confirmation
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('Thrall'),
+          components: [],
+        }),
+      );
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('tank'),
+        }),
+      );
+    });
+
+    it('should show error when linked user not found during role select with characterId (ROK-138)', async () => {
+      const userId = 'user-roleselect-linked-noaccount';
+
+      // No linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:701:char-orphan`,
+        ['healer'],
+        userId,
+      );
+      await listener.handleSelectMenuInteraction(interaction);
+
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining(
+            'Could not find your linked account',
+          ),
+          components: [],
+        }),
+      );
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+      expect(mockSignupsService.signupDiscord).not.toHaveBeenCalled();
+    });
   });
 
   // ============================================================
@@ -979,6 +1078,99 @@ describe('SignupInteractionListener', () => {
       );
       expect(mockCharactersService.findAllForUser).not.toHaveBeenCalled();
     });
+
+    it('should show role select (not immediate signup) for single character on MMO event', async () => {
+      const userId = 'user-charselect-single-mmo';
+      const event = {
+        id: 810,
+        title: 'Mythic Raid',
+        registryGameId: 'game-uuid-1',
+        slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'char-mmo-solo',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+        ],
+        meta: { total: 1 },
+      });
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:810`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      // Should show role select with characterId encoded, NOT sign up immediately
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+      expect(mockSignupsService.confirmSignup).not.toHaveBeenCalled();
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('role'),
+          components: expect.arrayContaining([expect.anything()]),
+        }),
+      );
+    });
+
+    it('should show character select dropdown for multiple characters on MMO event', async () => {
+      const userId = 'user-charselect-multi-mmo';
+      const event = {
+        id: 811,
+        title: 'Mythic Prog',
+        registryGameId: 'game-uuid-1',
+        slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'char-mmo-1',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+          {
+            id: 'char-mmo-2',
+            name: 'Jaina',
+            class: 'Mage',
+            spec: 'Frost',
+            level: 60,
+            isMain: false,
+          },
+        ],
+        meta: { total: 2 },
+      });
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:811`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      // Should show character dropdown first (role select comes after character choice)
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('Pick a character'),
+          components: expect.arrayContaining([expect.anything()]),
+        }),
+      );
+    });
   });
 
   // ============================================================
@@ -994,6 +1186,19 @@ describe('SignupInteractionListener', () => {
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
             limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // ROK-138: event lookup to check if MMO (non-MMO → skip role select)
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([
+                { id: 900, title: 'Raid Night', slotConfig: null },
+              ]),
           }),
         }),
       });
@@ -1062,6 +1267,53 @@ describe('SignupInteractionListener', () => {
         }),
       );
       expect(mockSignupsService.signup).not.toHaveBeenCalled();
+    });
+
+    it('should show role select after character dropdown on MMO event (ROK-138)', async () => {
+      const userId = 'user-charselect-menu-mmo';
+
+      // Linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // Event lookup — MMO event
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([
+              {
+                id: 902,
+                title: 'Mythic Raid',
+                slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+              },
+            ]),
+          }),
+        }),
+      });
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:902`,
+        ['char-mmo-pick'],
+        userId,
+      );
+      await listener.handleSelectMenuInteraction(interaction);
+
+      // Should NOT sign up yet — should show role select
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+      expect(mockSignupsService.confirmSignup).not.toHaveBeenCalled();
+
+      // Should show role select dropdown with characterId encoded
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('role'),
+          components: expect.arrayContaining([expect.anything()]),
+        }),
+      );
     });
   });
 
@@ -1217,7 +1469,9 @@ describe('SignupInteractionListener', () => {
       // (since deferReply was called first, editReply is used for the error)
       // The interaction was deferred so the error path uses editReply
       expect(interaction.reply).not.toHaveBeenCalledWith(
-        expect.objectContaining({ content: expect.stringContaining('Pick a character') }),
+        expect.objectContaining({
+          content: expect.stringContaining('Pick a character'),
+        }),
       );
     });
 
@@ -1432,15 +1686,29 @@ describe('SignupInteractionListener', () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // ROK-138: event lookup to check if MMO (non-MMO → skip role select)
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
             limit: jest
               .fn()
-              .mockResolvedValue([{ id: 42, discordId: userId }]),
+              .mockResolvedValue([
+                { id: 1005, title: 'Test Event', slotConfig: null },
+              ]),
           }),
         }),
       });
 
       // signup succeeds
-      mockSignupsService.signup.mockResolvedValueOnce({ id: 99, eventId: 1005 });
+      mockSignupsService.signup.mockResolvedValueOnce({
+        id: 99,
+        eventId: 1005,
+      });
       // confirmSignup throws (character not found or deleted)
       mockSignupsService.confirmSignup.mockRejectedValueOnce(
         new Error('Character not found'),
@@ -1480,8 +1748,22 @@ describe('SignupInteractionListener', () => {
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
-          { id: 'char-a', name: 'Char A', class: 'Mage', spec: null, level: 60, isMain: false },
-          { id: 'char-b', name: 'Char B', class: 'Rogue', spec: null, level: 60, isMain: false },
+          {
+            id: 'char-a',
+            name: 'Char A',
+            class: 'Mage',
+            spec: null,
+            level: 60,
+            isMain: false,
+          },
+          {
+            id: 'char-b',
+            name: 'Char B',
+            class: 'Rogue',
+            spec: null,
+            level: 60,
+            isMain: false,
+          },
         ],
         meta: { total: 2 },
       });
@@ -1527,9 +1809,20 @@ describe('SignupInteractionListener', () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // ROK-138: event lookup to check if MMO (non-MMO → skip role select)
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
             limit: jest
               .fn()
-              .mockResolvedValue([{ id: 42, discordId: userId }]),
+              .mockResolvedValue([
+                { id: 1008, title: 'Cancelled Event', slotConfig: null },
+              ]),
           }),
         }),
       });
@@ -1719,8 +2012,22 @@ describe('SignupInteractionListener', () => {
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
-          { id: 'char-alt-1', name: 'Alt One', class: 'Mage', spec: null, level: 50, isMain: false },
-          { id: 'char-alt-2', name: 'Alt Two', class: 'Rogue', spec: null, level: 55, isMain: false },
+          {
+            id: 'char-alt-1',
+            name: 'Alt One',
+            class: 'Mage',
+            spec: null,
+            level: 50,
+            isMain: false,
+          },
+          {
+            id: 'char-alt-2',
+            name: 'Alt Two',
+            class: 'Rogue',
+            spec: null,
+            level: 55,
+            isMain: false,
+          },
         ],
         meta: { total: 2 },
       });
@@ -1758,8 +2065,22 @@ describe('SignupInteractionListener', () => {
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
-          { id: 'char-main', name: 'Main Char', class: 'Warrior', spec: 'Fury', level: 60, isMain: true },
-          { id: 'char-alt', name: 'Alt Char', class: 'Mage', spec: null, level: 40, isMain: false },
+          {
+            id: 'char-main',
+            name: 'Main Char',
+            class: 'Warrior',
+            spec: 'Fury',
+            level: 60,
+            isMain: true,
+          },
+          {
+            id: 'char-alt',
+            name: 'Alt Char',
+            class: 'Mage',
+            spec: null,
+            level: 40,
+            isMain: false,
+          },
         ],
         meta: { total: 2 },
       });
@@ -1790,14 +2111,30 @@ describe('SignupInteractionListener', () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValue([{ id: 77, discordId: userId }]),
+            limit: jest.fn().mockResolvedValue([{ id: 77, discordId: userId }]),
           }),
         }),
       });
 
-      mockSignupsService.signup.mockResolvedValueOnce({ id: 55, eventId: 1015 });
+      // ROK-138: event lookup to check if MMO (non-MMO event → skip role select)
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([
+              {
+                id: 1015,
+                title: 'Embed Update Event',
+                slotConfig: null,
+              },
+            ]),
+          }),
+        }),
+      });
+
+      mockSignupsService.signup.mockResolvedValueOnce({
+        id: 55,
+        eventId: 1015,
+      });
       mockSignupsService.confirmSignup.mockResolvedValueOnce({ id: 55 });
       mockCharactersService.findOne.mockResolvedValueOnce({
         id: 'char-embed-test',
@@ -1820,7 +2157,10 @@ describe('SignupInteractionListener', () => {
                 id: 1015,
                 title: 'Embed Update Event',
                 description: null,
-                duration: [new Date('2026-03-01T20:00:00Z'), new Date('2026-03-01T23:00:00Z')],
+                duration: [
+                  new Date('2026-03-01T20:00:00Z'),
+                  new Date('2026-03-01T23:00:00Z'),
+                ],
                 maxAttendees: null,
                 slotConfig: null,
                 gameId: null,
@@ -1939,9 +2279,7 @@ describe('SignupInteractionListener', () => {
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockReturnValue({
-            limit: jest
-              .fn()
-              .mockResolvedValue([{ id: 42, discordId: userId }]),
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
           }),
         }),
       });

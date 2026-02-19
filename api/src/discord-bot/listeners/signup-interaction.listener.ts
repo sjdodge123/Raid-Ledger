@@ -240,8 +240,19 @@ export class SignupInteractionListener {
           }
 
           if (characters.length === 1) {
-            // Single character — auto-select and sign up
             const char = characters[0];
+
+            // ROK-138: For MMO events, show role select before signing up
+            const slotConfig = event.slotConfig as Record<
+              string,
+              unknown
+            > | null;
+            if (slotConfig?.type === 'mmo') {
+              await this.showRoleSelect(interaction, eventId, char.id);
+              return;
+            }
+
+            // Non-MMO: auto-select character and sign up immediately
             const signupResult = await this.signupsService.signup(
               eventId,
               linkedUser.id,
@@ -540,14 +551,24 @@ export class SignupInteractionListener {
   }
 
   /**
-   * Show role selection dropdown for anonymous participants (Path B with roles).
+   * Show role selection dropdown for signup flows that require a role.
+   * Used by both anonymous (Path B) and linked-user character flows (ROK-138).
+   *
+   * When `characterId` is provided, it is appended to the customId so the
+   * role select handler can complete a linked-user signup with both character
+   * and role: `role_select:<eventId>:<characterId>`
    */
   private async showRoleSelect(
-    interaction: ButtonInteraction,
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
     eventId: number,
+    characterId?: string,
   ): Promise<void> {
+    const customId = characterId
+      ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
+      : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
+
     const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(`${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`)
+      .setCustomId(customId)
       .setPlaceholder('Select your role')
       .addOptions([
         { label: 'Tank', value: 'tank', emoji: '🛡️' },
@@ -620,31 +641,83 @@ export class SignupInteractionListener {
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = interaction.customId.split(':');
-    if (parts.length !== 2) return;
+    if (parts.length < 2 || parts.length > 3) return;
 
     const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
     if (isNaN(eventId)) return;
 
     if (action === SIGNUP_BUTTON_IDS.ROLE_SELECT) {
-      await this.handleRoleSelectMenu(interaction, eventId);
+      // Optional 3rd segment is characterId (linked user role select after character)
+      const characterId = parts.length === 3 ? parts[2] : undefined;
+      await this.handleRoleSelectMenu(interaction, eventId, characterId);
     } else if (action === SIGNUP_BUTTON_IDS.CHARACTER_SELECT) {
       await this.handleCharacterSelectMenu(interaction, eventId);
     }
   }
 
   /**
-   * Handle role selection for anonymous signup (ROK-137).
+   * Handle role selection for signup flows (ROK-137 anonymous, ROK-138 linked).
+   *
+   * When `characterId` is provided (linked user), creates a linked signup with
+   * both the selected role and character. Otherwise falls back to anonymous signup.
    */
   private async handleRoleSelectMenu(
     interaction: StringSelectMenuInteraction,
     eventId: number,
+    characterId?: string,
   ): Promise<void> {
     await interaction.deferUpdate();
 
     const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
 
     try {
+      // ROK-138: Linked user with character — signup with role + character
+      if (characterId) {
+        const discordUserId = interaction.user.id;
+        const [linkedUser] = await this.db
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.discordId, discordUserId))
+          .limit(1);
+
+        if (!linkedUser) {
+          await interaction.editReply({
+            content: 'Could not find your linked account. Please try again.',
+            components: [],
+          });
+          return;
+        }
+
+        // slotPosition intentionally omitted — service auto-calculates next
+        // available position when slotPosition is undefined/0.
+        const signupResult = await this.signupsService.signup(
+          eventId,
+          linkedUser.id,
+          { slotRole: selectedRole },
+        );
+        await this.signupsService.confirmSignup(
+          eventId,
+          signupResult.id,
+          linkedUser.id,
+          { characterId },
+        );
+
+        const character = await this.charactersService.findOne(
+          linkedUser.id,
+          characterId,
+        );
+
+        await interaction.editReply({
+          content: `Signed up as **${character.name}** (${selectedRole})!`,
+          components: [],
+        });
+
+        await this.updateEmbedSignupCount(eventId);
+        return;
+      }
+
+      // Anonymous (unlinked) user — existing Path B behavior
       await this.signupsService.signupDiscord(eventId, {
         discordUserId: interaction.user.id,
         discordUsername: interaction.user.username,
@@ -703,7 +776,22 @@ export class SignupInteractionListener {
         return;
       }
 
-      // Sign up and confirm with selected character
+      // ROK-138: Check if event is MMO — if so, show role select before signing up
+      const [event] = await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (event) {
+        const slotConfig = event.slotConfig as Record<string, unknown> | null;
+        if (slotConfig?.type === 'mmo') {
+          await this.showRoleSelect(interaction, eventId, characterId);
+          return;
+        }
+      }
+
+      // Non-MMO: Sign up and confirm with selected character immediately
       const signupResult = await this.signupsService.signup(
         eventId,
         linkedUser.id,
