@@ -65,6 +65,10 @@ export const events = pgTable('events', {
   recurrenceRule: jsonb('recurrence_rule'),
   /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
   contentInstances: jsonb('content_instances'),
+  /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
+  cancelledAt: timestamp('cancelled_at'),
+  /** Optional reason provided when the event was cancelled (ROK-374). */
+  cancellationReason: text('cancellation_reason'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });

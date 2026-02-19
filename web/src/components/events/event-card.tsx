@@ -12,7 +12,7 @@ interface EventCardProps {
     matchesGameTime?: boolean;
 }
 
-type EventStatus = 'upcoming' | 'live' | 'ended';
+type EventStatus = 'upcoming' | 'live' | 'ended' | 'cancelled';
 
 /**
  * Status badge component with color coding
@@ -22,12 +22,14 @@ function StatusBadge({ status }: { status: EventStatus }) {
         upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
         live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
         ended: 'bg-dim/20 text-muted border-dim/30',
+        cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
     };
 
     const labels: Record<EventStatus, string> = {
         upcoming: 'Upcoming',
         live: 'Live',
         ended: 'Ended',
+        cancelled: 'Cancelled',
     };
 
     return (
@@ -91,7 +93,8 @@ function getPlaceholderPath(slug: string | undefined): string {
 export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const gameCoverUrl = event.game?.coverUrl || null;
-    const status = getEventStatus(event.startTime, event.endTime);
+    const isCancelled = !!event.cancelledAt;
+    const status: EventStatus = isCancelled ? 'cancelled' : getEventStatus(event.startTime, event.endTime);
     const relativeTime = getRelativeTime(event.startTime, event.endTime);
     const placeholderPath = getPlaceholderPath(event.game?.slug);
 
@@ -114,7 +117,7 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
             }}
             role="button"
             tabIndex={0}
-            className="group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl hover:shadow-emerald-500/10 focus:border-emerald-500 focus:outline-none transition-all duration-200"
+            className={`group cursor-pointer bg-surface rounded-lg border border-edge overflow-hidden hover:border-dim hover:shadow-xl focus:outline-none transition-all duration-200 ${isCancelled ? 'opacity-60 hover:shadow-red-500/10 focus:border-red-500' : 'hover:shadow-emerald-500/10 focus:border-emerald-500'}`}
         >
             {/* Game Cover */}
             <div className="aspect-[3/4] relative overflow-hidden bg-panel">
@@ -158,7 +161,7 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
 
             {/* Event Info */}
             <div className="p-4">
-                <h3 className="font-semibold text-foreground text-lg mb-2 line-clamp-2">
+                <h3 className={`font-semibold text-foreground text-lg mb-2 line-clamp-2 ${isCancelled ? 'line-through text-muted' : ''}`}>
                     {event.title}
                 </h3>
 

@@ -26,6 +26,7 @@ import {
   ConfirmSignupSchema,
   UpdateSignupStatusSchema,
   RescheduleEventSchema,
+  CancelEventSchema,
   CreatePugSlotSchema,
   UpdatePugSlotSchema,
   EventResponseDto,
@@ -209,6 +210,31 @@ export class EventsController {
     try {
       const dto = RescheduleEventSchema.parse(body);
       return this.eventsService.reschedule(
+        id,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Soft-cancel an event (ROK-374).
+   * Requires authentication. Only creator, operator, or admin can cancel.
+   * Notifies all signed-up users and updates Discord embed.
+   */
+  @Patch(':id/cancel')
+  @UseGuards(AuthGuard('jwt'))
+  async cancel(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<EventResponseDto> {
+    try {
+      const dto = CancelEventSchema.parse(body ?? {});
+      return this.eventsService.cancel(
         id,
         req.user.id,
         isOperatorOrAdmin(req.user.role),

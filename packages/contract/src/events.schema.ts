@@ -118,6 +118,8 @@ export const EventResponseSchema = z.object({
     autoUnbench: z.boolean().optional(),
     contentInstances: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
     recurrenceGroupId: z.string().uuid().nullable().optional(),
+    cancelledAt: z.string().datetime().nullable().optional(),
+    cancellationReason: z.string().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
@@ -231,4 +233,11 @@ export const RescheduleEventSchema = z.object({
 );
 
 export type RescheduleEventDto = z.infer<typeof RescheduleEventSchema>;
+
+/** Schema for cancelling an event (ROK-374) */
+export const CancelEventSchema = z.object({
+    reason: z.string().max(500).optional(),
+});
+
+export type CancelEventDto = z.infer<typeof CancelEventSchema>;
 
