@@ -774,13 +774,14 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
     });
 
-    it('does NOT overlay customAvatarUrl when caller explicitly passes null', () => {
+    it('overlay wins over caller customAvatarUrl for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             customAvatarUrl: '/avatars/current-user.webp',
         });
 
-        // Auth response explicitly says no custom avatar
+        // Even when caller explicitly passes null, overlay wins because
+        // auth data is more authoritative for the current user
         const result = toAvatarUser({
             id: 42,
             avatar: null,
@@ -788,7 +789,7 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             customAvatarUrl: null,
         });
 
-        expect(result.customAvatarUrl).toBeNull();
+        expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
     });
 
     it('does NOT overlay when user id does not match current user', () => {
@@ -836,7 +837,7 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.avatarPreference).toBeUndefined();
     });
 
-    it('prefers caller data over overlay when caller provides explicit avatarPreference', () => {
+    it('overlay wins over caller avatarPreference for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -849,12 +850,11 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             avatarPreference: { type: 'custom' },
         });
 
-        // Caller's explicit preference wins — this is critical for the profile
-        // page where useAuth() has fresher data than the module-level cache
-        expect(result.avatarPreference).toEqual({ type: 'custom' });
+        // Overlay (auth data) is always more authoritative for the current user
+        expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
-    it('prefers caller data over overlay even when caller value is null', () => {
+    it('overlay wins over caller null avatarPreference for current user', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -867,8 +867,8 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             avatarPreference: null,
         });
 
-        // Explicit null from caller means "no preference" — should NOT use overlay
-        expect(result.avatarPreference).toBeNull();
+        // Overlay (auth data) wins even when caller explicitly passes null
+        expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
     it('end-to-end: current user discord preference honored in resolveAvatar', () => {
@@ -910,6 +910,33 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         });
         const result = resolveAvatar(avatarUser);
 
+        expect(result.type).toBe('character');
+        expect(result.url).toBe('https://example.com/thrall.png');
+    });
+
+    it('end-to-end: overlay characters with names fix signupsPreview without names', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'character', characterName: 'Thrall' },
+            characters: [
+                { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+            ],
+        });
+
+        // Simulates signupsPreview DTO — has characters but WITHOUT name field
+        const avatarUser = toAvatarUser({
+            id: 42,
+            avatar: 'abc123',
+            discordId: '111222333',
+            customAvatarUrl: null,
+            characters: [
+                { gameId: 'wow', avatarUrl: 'https://example.com/thrall.png' },
+            ],
+        });
+        const result = resolveAvatar(avatarUser);
+
+        // Without fix: API characters (no name) would win, character lookup fails, falls to discord
+        // With fix: overlay characters (with name) win, character lookup succeeds
         expect(result.type).toBe('character');
         expect(result.url).toBe('https://example.com/thrall.png');
     });

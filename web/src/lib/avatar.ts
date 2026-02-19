@@ -128,13 +128,26 @@ export function toAvatarUser(user: {
         ? _currentUserAvatarData
         : null;
 
+    const avatar = buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null);
+
+    // ROK-352: When overlay is active (current user), overlay data is always more
+    // authoritative than partial DTOs (e.g. signupsPreview characters lack `name`,
+    // breaking character-preference lookup). Auth data is the source of truth for
+    // the current user's own preference, characters, and custom avatar.
+    if (overlay) {
+        return {
+            avatar,
+            customAvatarUrl: overlay.customAvatarUrl !== undefined ? overlay.customAvatarUrl : user.customAvatarUrl,
+            characters: overlay.characters !== undefined ? overlay.characters : user.characters,
+            avatarPreference: overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference,
+        };
+    }
+
     return {
-        avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null),
-        // Prefer caller's data when explicitly provided (even if null);
-        // fall back to overlay only when the field is undefined (not in the DTO).
-        customAvatarUrl: user.customAvatarUrl !== undefined ? user.customAvatarUrl : overlay?.customAvatarUrl,
-        characters: user.characters !== undefined ? user.characters : overlay?.characters,
-        avatarPreference: user.avatarPreference !== undefined ? user.avatarPreference : overlay?.avatarPreference,
+        avatar,
+        customAvatarUrl: user.customAvatarUrl,
+        characters: user.characters,
+        avatarPreference: user.avatarPreference,
     };
 }
 
