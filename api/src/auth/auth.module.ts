@@ -37,7 +37,7 @@ import { CharactersModule } from '../characters/characters.module';
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '7d' },
+        signOptions: { expiresIn: '24h' },
       }),
       inject: [ConfigService],
     }),
@@ -59,4 +59,4 @@ import { CharactersModule } from '../characters/characters.module';
     DynamicDiscordStrategy,
   ],
 })
-export class AuthModule {}
+export class AuthModule { }

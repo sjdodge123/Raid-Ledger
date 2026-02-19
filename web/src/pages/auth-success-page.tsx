@@ -6,11 +6,11 @@ import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
 
 /**
- * Handles OAuth callback - extracts token from URL and logs user in.
+ * Handles OAuth callback - exchanges one-time auth code for JWT token.
  * This page is redirected to by the API after successful Discord OAuth.
  *
  * Supports:
- * - ?token=xyz → successful login
+ * - ?code=xyz → exchange for JWT via POST /auth/exchange-code
  * - ?error=xyz → OAuth error (denied, expired, etc.)
  */
 export function AuthSuccessPage() {
@@ -23,7 +23,7 @@ export function AuthSuccessPage() {
         // Prevent duplicate processing in React Strict Mode
         if (hasProcessedRef.current) return;
 
-        const token = searchParams.get('token');
+        const code = searchParams.get('code');
         const error = searchParams.get('error');
 
         if (error) {
@@ -40,10 +40,23 @@ export function AuthSuccessPage() {
             return;
         }
 
-        if (token) {
+        if (code) {
             hasProcessedRef.current = true;
             (async () => {
                 try {
+                    // Exchange one-time code for JWT token
+                    const exchangeResponse = await fetch(`${API_BASE_URL}/auth/exchange-code`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ code }),
+                    });
+
+                    if (!exchangeResponse.ok) {
+                        throw new Error('Failed to exchange auth code');
+                    }
+
+                    const { access_token: token } = await exchangeResponse.json() as { access_token: string };
+
                     // Store token and wait for auth state to update (refetchQueries awaits)
                     const success = await login(token);
 
@@ -90,7 +103,7 @@ export function AuthSuccessPage() {
             })();
         } else {
             hasProcessedRef.current = true;
-            // No token and no error - unexpected, redirect home
+            // No code and no error - unexpected, redirect home
             toast.error('Something went wrong. Please try again.');
             navigate('/', { replace: true });
         }

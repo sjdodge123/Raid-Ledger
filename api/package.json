@@ -44,6 +44,7 @@
     "discord.js": "^14.25.1",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
+    "helmet": "^8.1.0",
     "ioredis": "^5.9.2",
     "passport": "^0.7.0",
     "passport-discord": "^0.1.4",

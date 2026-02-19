@@ -5,6 +5,7 @@ import './sentry/instrument';
 import { NestFactory } from '@nestjs/core';
 import type { LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import helmet from 'helmet';
 import * as path from 'path';
 import { AppModule } from './app.module';
 import { SentryExceptionFilter } from './sentry/sentry-exception.filter';
@@ -25,6 +26,9 @@ async function bootstrap() {
   // Increase body parser limit (default 100kb is too small for screenshot payloads)
   app.useBodyParser('json', { limit: '8mb' });
 
+  // Security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.)
+  app.use(helmet());
+
   // CORS configuration with environment validation
   const isProduction = process.env.NODE_ENV === 'production';
   const corsOrigin = process.env.CORS_ORIGIN;
@@ -32,6 +36,13 @@ async function bootstrap() {
   if (isProduction && !corsOrigin) {
     throw new Error(
       'CORS_ORIGIN environment variable must be set in production',
+    );
+  }
+
+  // Reject wildcard CORS in production — credentials: true + '*' is dangerous
+  if (isProduction && corsOrigin === '*') {
+    throw new Error(
+      'CORS_ORIGIN=* is not allowed in production. Set a specific origin.',
     );
   }
 
@@ -43,16 +54,18 @@ async function bootstrap() {
       // Allow requests with no origin (like mobile apps or curl requests)
       if (!origin) return callback(null, true);
 
-      // Wildcard allows all origins (used for all-in-one Docker image)
+      // Wildcard allows all origins (used for all-in-one Docker image in dev)
       if (corsOrigin === '*') return callback(null, true);
 
-      // Allowed origins
-      const allowedOrigins = [
-        'http://localhost',
-        'http://localhost:80',
-        'http://localhost:5173',
-        corsOrigin,
-      ].filter(Boolean);
+      // Build allowed origins list — only include localhost in development
+      const allowedOrigins: string[] = [corsOrigin].filter(Boolean) as string[];
+      if (!isProduction) {
+        allowedOrigins.push(
+          'http://localhost',
+          'http://localhost:80',
+          'http://localhost:5173',
+        );
+      }
 
       if (allowedOrigins.includes(origin)) {
         callback(null, true);
