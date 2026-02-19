@@ -584,17 +584,18 @@ export class SignupInteractionListener {
       .setCustomId(customId)
       .setPlaceholder('Select your role')
       .addOptions([
-        { label: 'Tank', value: 'tank', emoji: '🛡️', default: defaultRole === 'tank' },
-        { label: 'Healer', value: 'healer', emoji: '💚', default: defaultRole === 'healer' },
-        { label: 'DPS', value: 'dps', emoji: '⚔️', default: defaultRole === 'dps' },
+        { label: 'Tank', value: 'tank', emoji: '🛡️' },
+        { label: 'Healer', value: 'healer', emoji: '💚' },
+        { label: 'DPS', value: 'dps', emoji: '⚔️' },
       ]);
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       selectMenu,
     );
 
+    const roleHint = characterInfo?.role ? ` (current: ${characterInfo.role})` : '';
     const content = characterInfo
-      ? `Signing up as **${characterInfo.name}** — select your role:`
+      ? `Signing up as **${characterInfo.name}**${roleHint} — select your role:`
       : 'Select your role:';
 
     await interaction.editReply({
