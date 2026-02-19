@@ -45,6 +45,31 @@ describe('IgdbService', () => {
     },
   ];
 
+  /** Expected output after mapDbRowToDetail() transforms a mockGames row */
+  const mockGameDetails = [
+    {
+      id: 1,
+      igdbId: 1234,
+      name: 'Valheim',
+      slug: 'valheim',
+      coverUrl: 'https://example.com/cover.jpg',
+      genres: [],
+      summary: undefined,
+      rating: undefined,
+      aggregatedRating: undefined,
+      popularity: undefined,
+      gameModes: [],
+      themes: [],
+      platforms: [],
+      screenshots: [],
+      videos: [],
+      firstReleaseDate: null,
+      playerCount: undefined,
+      twitchGameId: undefined,
+      crossplay: null,
+    },
+  ];
+
   beforeEach(async () => {
     // Default select results — tests can override selectResults before calling service
     selectResults = mockGames;
@@ -136,7 +161,7 @@ describe('IgdbService', () => {
 
       expect(result.cached).toBe(true);
       expect(result.source).toBe('redis');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
       expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheim');
     });
 
@@ -148,7 +173,7 @@ describe('IgdbService', () => {
 
       expect(result.cached).toBe(true);
       expect(result.source).toBe('database');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
       // Should cache to Redis after DB hit
       expect(mockRedis.setex).toHaveBeenCalled();
     });
@@ -291,7 +316,7 @@ describe('IgdbService', () => {
       const result = await searchPromise;
 
       expect(result.source).toBe('local');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
 
       jest.useRealTimers();
     });
@@ -387,7 +412,7 @@ describe('IgdbService', () => {
 
       expect(result.source).toBe('local');
       expect(result.cached).toBe(true);
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
     });
   });
 
