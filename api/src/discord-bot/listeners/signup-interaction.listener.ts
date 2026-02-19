@@ -631,7 +631,10 @@ export class SignupInteractionListener {
         label: char.name,
         value: char.id,
         description: parts.join(' \u2014 ') || undefined,
-        default: mainChar?.id === char.id,
+        // Only pre-select main when there are multiple characters.
+        // With 1 character, pre-selecting prevents Discord from firing
+        // the interaction (no "change" detected on click).
+        default: characters.length > 1 && mainChar?.id === char.id,
       };
     });
 
