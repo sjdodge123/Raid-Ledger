@@ -15,32 +15,42 @@ When a dev teammate messages the lead that their story is complete:
 2. **Immediately return to delegate mode** — handle other messages, respond to the operator
 3. The test agent runs independently in the dev's worktree, writes tests, and messages the lead when done
 
-## 6b. When a Test Agent Completes -> Validate CI -> Update Linear (NO PR YET)
+## 6b. When a Test Agent Completes -> Validate CI -> Push + PR -> Update Linear
 
-When a test agent messages the lead that tests are written and passing, **run the full CI pipeline locally**. Individual PRs are NOT created — all stories in the batch will be combined into a single PR later (Step 8).
+When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and create a PR**. Each story gets its own individual PR.
 
-**1. Delegate CI validation to the build agent:**
+**1. Delegate push pipeline to the build agent:**
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
-  content: "Validate ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
-  summary: "Validate ROK-<num>")
+  content: "Push ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+  summary: "Push ROK-<num>")
 ```
 
-The build agent will run full CI (build/lint/test) in the worktree and message back with pass/fail.
+The build agent will: sync with origin/main (fetch + rebase) -> re-run full CI (build/lint/test) -> push. This sync step is critical — other stories may have already merged to main, and pushing a stale branch causes duplicate CI runs on GitHub.
 
-**If CI fails:** The build agent messages back with errors. Re-spawn the dev teammate to fix:
+**If rebase conflicts:** The build agent will message back. Re-spawn the dev teammate to resolve conflicts and re-commit.
+
+**If CI fails after rebase:** The build agent messages back with errors. Re-spawn the dev teammate to fix:
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
      name: "dev-rok-<num>", mode: "bypassPermissions",
      prompt: <rework prompt with build/lint/test errors>)
 ```
-After fixes, ask the build agent to re-validate. Repeat until CI passes.
+After fixes, ask the build agent to push again. Repeat until CI passes and push succeeds.
 
-**2. After build agent confirms CI passes — update Linear (MANDATORY):**
+**2. After build agent confirms push succeeded — create PR and update Linear (MANDATORY):**
+
+```bash
+gh pr create --base main --head rok-<num>-<short-name> \
+  --title "feat(ROK-<num>): <short description>" \
+  --body "<summary of changes>"
+gh pr merge <number> --auto --squash
+```
+
 ```
 mcp__linear__update_issue(id: <issue_id>, state: "In Review")
-mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing locally.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
+mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing. PR #<num> created.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
 ```
 
 **The operator uses Linear "In Review" to know what needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**
@@ -54,8 +64,6 @@ Read `templates/qa-test-cases.md` for the prompt template.
 Task(subagent_type: "general-purpose", model: "sonnet", run_in_background: true,
      prompt: <read and fill templates/qa-test-cases.md>)
 ```
-
-**No PR is created at this point. The branch stays local (or pushed for backup) but no GitHub PR exists yet. The single batch PR is created in Step 8 after all stories pass code review.**
 
 ## 6c. Shut Down Dev + Test Teammates for This Story
 
@@ -74,21 +82,23 @@ Review tasks remain blocked until the operator tests locally and moves the story
 to "Code Review" status in Linear. The lead unblocks and spawns review agents
 in Step 7c after polling detects operator approval.
 
-## 6e. Deploy for Operator Testing (after all batch stories pass CI)
+## 6e. Build & Run Locally for Operator Testing (MANDATORY — after all batch stories pass CI)
 
-Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **delegate the deploy to the build agent**:
+**The operator cannot test without the feature branch running locally. This is NOT optional — do it automatically.** This does NOT push to origin — it switches the local dev environment (`localhost:5173`) to the feature branch so the operator can test.
+
+Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **immediately tell the build agent to switch the local environment**:
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
-  content: "Deploy feature branch rok-<num>-<short-name> for operator testing.",
-  summary: "Deploy ROK-<num> for operator testing")
+  content: "Run feature branch rok-<num>-<short-name> locally for operator testing.",
+  summary: "Build ROK-<num> locally for testing")
 ```
 
-The build agent will use `deploy_dev.sh --branch rok-<num>-<short-name> --rebuild` to deploy. The operator can switch between feature branches for testing.
+The build agent will use `deploy_dev.sh --branch rok-<num>-<short-name> --rebuild` to switch the local dev environment to that feature branch. The operator can switch between branches with `deploy_dev.sh --branch <other-branch>`.
 
 ## 6f. Spawn Playwright Testing Agent (non-blocking)
 
-After the feature branch is deployed, spawn a Playwright testing agent using `templates/playwright-tester.md`:
+After the feature branch is running locally, spawn a Playwright testing agent using `templates/playwright-tester.md`:
 
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
@@ -103,20 +113,18 @@ The Playwright agent runs independently — do NOT wait for it.
 **Notify the operator — do NOT ask for test results in the terminal:**
 
 ```
-## Batch N — Ready for Testing
-All N stories have passed CI locally and are moved to "In Review" in Linear.
-No PRs created yet — a single batch PR will be created after code review.
+## Batch N — Built & Ready for Testing
+All N stories have passed CI. Local dev environment running at localhost:5173.
+Currently on branch: rok-<num>-<short-name> (ROK-XXX)
 
-Automated Playwright tests are running — results and screenshots will be
-posted to each story in Linear shortly.
-
-Ready for testing:
-- ROK-XXX: <title> — deploy_dev.sh --branch rok-<num>-<short-name> (Linear: In Review)
-- ROK-YYY: <title> — deploy_dev.sh --branch rok-<num>-<short-name> (Linear: In Review)
+Stories to test (all in "In Review" in Linear):
+- ROK-XXX: <title> — RUNNING NOW at localhost:5173
+- ROK-YYY: <title> — switch with: deploy_dev.sh --branch rok-<num>-<short-name>
 
 Testing checklists have been posted to each story in Linear.
-Test each story locally with: deploy_dev.sh --branch <branch-name>
-Update each story's status in Linear when done:
+Automated Playwright tests are running — results will be posted to Linear shortly.
+
+When done testing each story, update its status in Linear:
   -> "Code Review" = testing passed, ready for code review agent
   -> "Changes Requested" (add comments explaining issues) = testing failed
 ```

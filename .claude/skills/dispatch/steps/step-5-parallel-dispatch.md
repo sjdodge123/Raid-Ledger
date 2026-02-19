@@ -23,7 +23,7 @@ TeamCreate(team_name: "dispatch-batch-N")
 Create tasks in the shared task list:
 - One **implementation task** per story (assigned to dev teammates)
 - One **review task** per story (blocked by implementation — review agents spawn per-story after operator approval)
-- One **batch PR task** (blocked by ALL review tasks — creates the single combined PR after all stories are reviewed)
+- PRs are created individually per story after CI passes and the branch is pushed (Step 6b)
 
 ## 5c. Spawn Dev Teammates
 
