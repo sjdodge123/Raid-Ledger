@@ -253,6 +253,23 @@ export async function updateEvent(id: number, dto: UpdateEventDto): Promise<Even
 }
 
 /**
+ * Cancel an event (soft-cancel) (ROK-374)
+ */
+export async function cancelEvent(
+    eventId: number,
+    reason?: string,
+): Promise<EventResponseDto> {
+    return fetchApi(
+        `/events/${eventId}/cancel`,
+        {
+            method: 'PATCH',
+            body: JSON.stringify({ reason }),
+        },
+        EventResponseSchema,
+    );
+}
+
+/**
  * Fetch organizer dashboard data (ROK-213)
  */
 export async function getMyDashboard(): Promise<DashboardResponseDto> {

@@ -1,5 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
-import { getEvents, getEvent, getEventRoster } from '../lib/api-client';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getEvents, getEvent, getEventRoster, cancelEvent } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
 import type { EventResponseDto } from '@raid-ledger/contract';
@@ -49,5 +49,20 @@ export function useEventRoster(eventId: number) {
         queryKey: ['events', eventId, 'roster'],
         queryFn: () => getEventRoster(eventId),
         enabled: !!eventId,
+    });
+}
+
+/**
+ * Hook to cancel an event (ROK-374)
+ */
+export function useCancelEvent(eventId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: (reason?: string) => cancelEvent(eventId, reason),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['events', eventId] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
     });
 }
