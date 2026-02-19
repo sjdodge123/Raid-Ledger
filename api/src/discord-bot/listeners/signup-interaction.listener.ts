@@ -228,10 +228,7 @@ export class SignupInteractionListener {
           );
           const characters = characterList.data;
 
-          const slotConfig = event.slotConfig as Record<
-            string,
-            unknown
-          > | null;
+          const slotConfig = event.slotConfig as Record<string, unknown> | null;
 
           // ROK-138: For MMO events, always show character select (even with 1 char)
           // so users can see and change their character before role selection
@@ -578,8 +575,6 @@ export class SignupInteractionListener {
       ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
       : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
 
-    const defaultRole = characterInfo?.role ?? null;
-
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(customId)
       .setPlaceholder('Select your role')
@@ -593,7 +588,9 @@ export class SignupInteractionListener {
       selectMenu,
     );
 
-    const roleHint = characterInfo?.role ? ` (current: ${characterInfo.role})` : '';
+    const roleHint = characterInfo?.role
+      ? ` (current: ${characterInfo.role})`
+      : '';
     const content = characterInfo
       ? `Signing up as **${characterInfo.name}**${roleHint} — select your role:`
       : 'Select your role:';
