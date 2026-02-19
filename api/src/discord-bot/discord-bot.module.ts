@@ -3,6 +3,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
+import { CharactersModule } from '../characters/characters.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -22,6 +23,7 @@ import { RosterViewCommand } from './commands/roster-view.command';
     forwardRef(() => UsersModule),
     forwardRef(() => EventsModule),
     forwardRef(() => AuthModule),
+    CharactersModule,
   ],
   controllers: [DiscordBotSettingsController],
   providers: [

@@ -15,17 +15,26 @@ export class AppController {
   @SkipThrottle()
   @Get('health')
   async getHealth(@Res() res: Response): Promise<void> {
-    const dbHealth = await this.appService.checkDatabaseHealth();
+    const [dbHealth, redisHealth] = await Promise.all([
+      this.appService.checkDatabaseHealth(),
+      this.appService.checkRedisHealth(),
+    ]);
+
+    const allHealthy = dbHealth.connected && redisHealth.connected;
 
     const health = {
-      status: dbHealth.connected ? 'ok' : 'unhealthy',
+      status: allHealthy ? 'ok' : 'unhealthy',
       timestamp: new Date().toISOString(),
       db: {
         connected: dbHealth.connected,
         latencyMs: dbHealth.latencyMs,
       },
+      redis: {
+        connected: redisHealth.connected,
+        latencyMs: redisHealth.latencyMs,
+      },
     };
 
-    res.status(dbHealth.connected ? 200 : 503).json(health);
+    res.status(allHealthy ? 200 : 503).json(health);
   }
 }

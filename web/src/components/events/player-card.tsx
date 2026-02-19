@@ -35,6 +35,7 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
     gameId: string | undefined;
 } {
     const base = toAvatarUser({
+        id: player.userId,
         avatar: player.avatar,
         discordId: player.discordId,
         customAvatarUrl: player.customAvatarUrl,
