@@ -66,6 +66,15 @@ export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
  * Custom IDs for signup interaction buttons (ROK-137).
  * Format: `{action}:{eventId}` — e.g. `signup:42`
  */
+/**
+ * Custom IDs for PUG invite interaction buttons (ROK-292).
+ * Format: `{action}:{pugSlotId}` — e.g. `pug_accept:uuid`
+ */
+export const PUG_BUTTON_IDS = {
+  ACCEPT: 'pug_accept',
+  DECLINE: 'pug_decline',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

@@ -5,7 +5,7 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, PugRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
@@ -18,6 +18,7 @@ import { useGameRegistry } from '../hooks/use-game-registry';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { PugSection } from '../components/pugs';
+import { useCreatePug } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -103,6 +104,7 @@ export function EventDetailPage() {
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
+    const createPug = useCreatePug(eventId);
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -164,6 +166,21 @@ export function EventDetailPage() {
             });
         } catch (err) {
             toast.error('Failed to leave slot', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-292: Handle inline PUG add from assign modal
+    const handleAddPug = async (discordUsername: string, role: RosterRole) => {
+        try {
+            await createPug.mutateAsync({
+                discordUsername,
+                role: role as PugRole,
+            });
+            toast.success(`PUG "${discordUsername}" added as ${role}`);
+        } catch (err) {
+            toast.error('Failed to add PUG', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -466,6 +483,7 @@ export function EventDetailPage() {
                         canJoin={canJoinSlot}
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
+                        onAddPug={canManageRoster && isMMOGame ? handleAddPug : undefined}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}

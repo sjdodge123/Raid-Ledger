@@ -263,9 +263,10 @@ describe('PugInviteService', () => {
         }),
       );
 
-      // Should have sent DM
+      // Should have sent DM with embed and action row (Accept/Decline buttons)
       expect(clientService.sendEmbedDM).toHaveBeenCalledWith(
         'discord-user-123',
+        expect.anything(),
         expect.anything(),
       );
     });

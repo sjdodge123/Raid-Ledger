@@ -1,13 +1,18 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { eq, and, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { EmbedBuilder } from 'discord.js';
+import {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+} from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
-import { EMBED_COLORS } from '../discord-bot.constants';
+import { EMBED_COLORS, PUG_BUTTON_IDS } from '../discord-bot.constants';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -150,6 +155,7 @@ export class PugInviteService {
 
         // Send DM
         await this.sendPugInviteDm(
+          slot.id,
           discordUserId,
           slot.eventId,
           slot.role,
@@ -278,7 +284,7 @@ export class PugInviteService {
     if (!slot) return;
 
     // Send invite DM
-    await this.sendPugInviteDm(member.id, eventId, slot.role, event);
+    await this.sendPugInviteDm(pugSlotId, member.id, eventId, slot.role, event);
 
     this.logger.log(
       'PUG %s found in server, invited for event %d',
@@ -314,9 +320,10 @@ export class PugInviteService {
   }
 
   /**
-   * Send a PUG invite DM with event details embed.
+   * Send a PUG invite DM with event details embed and Accept/Decline buttons.
    */
   private async sendPugInviteDm(
+    pugSlotId: string,
     discordUserId: string,
     eventId: number,
     role: string,
@@ -376,8 +383,20 @@ export class PugInviteService {
       });
     }
 
+    // ROK-292: Accept / Decline action buttons
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${PUG_BUTTON_IDS.ACCEPT}:${pugSlotId}`)
+        .setLabel('Accept')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`${PUG_BUTTON_IDS.DECLINE}:${pugSlotId}`)
+        .setLabel('Decline')
+        .setStyle(ButtonStyle.Danger),
+    );
+
     try {
-      await this.clientService.sendEmbedDM(discordUserId, embed);
+      await this.clientService.sendEmbedDM(discordUserId, embed, row);
     } catch (error) {
       this.logger.warn(
         'Failed to send PUG invite DM to %s: %s',

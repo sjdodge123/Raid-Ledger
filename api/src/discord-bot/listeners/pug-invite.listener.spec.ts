@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PugInviteListener } from './pug-invite.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { PugInviteService } from '../services/pug-invite.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { PugSlotCreatedPayload } from '../../events/pugs.service';
 import type { DiscordLoginPayload } from '../../auth/auth.service';
 import { Events } from 'discord.js';
@@ -17,6 +18,18 @@ describe('PugInviteListener', () => {
     module = await Test.createTestingModule({
       providers: [
         PugInviteListener,
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: {
+            select: jest.fn().mockReturnThis(),
+            from: jest.fn().mockReturnThis(),
+            where: jest.fn().mockReturnThis(),
+            limit: jest.fn().mockResolvedValue([]),
+            update: jest.fn().mockReturnThis(),
+            set: jest.fn().mockReturnThis(),
+            delete: jest.fn().mockReturnThis(),
+          },
+        },
         {
           provide: DiscordBotClientService,
           useValue: {
@@ -94,9 +107,10 @@ describe('PugInviteListener', () => {
   });
 
   describe('handleBotConnected', () => {
-    it('should register guildMemberAdd listener on the client', () => {
+    it('should register guildMemberAdd and interactionCreate listeners on the client', () => {
       const mockOn = jest.fn();
-      const mockClient = { on: mockOn };
+      const mockRemoveListener = jest.fn();
+      const mockClient = { on: mockOn, removeListener: mockRemoveListener };
       clientService.getClient.mockReturnValue(mockClient as never);
 
       listener.handleBotConnected();
@@ -105,18 +119,26 @@ describe('PugInviteListener', () => {
         Events.GuildMemberAdd,
         expect.any(Function),
       );
+      expect(mockOn).toHaveBeenCalledWith(
+        'interactionCreate',
+        expect.any(Function),
+      );
     });
 
-    it('should not register twice on repeated connect events', () => {
+    it('should not register guildMemberAdd twice on repeated connect events', () => {
       const mockOn = jest.fn();
-      const mockClient = { on: mockOn };
+      const mockRemoveListener = jest.fn();
+      const mockClient = { on: mockOn, removeListener: mockRemoveListener };
       clientService.getClient.mockReturnValue(mockClient as never);
 
       listener.handleBotConnected();
       listener.handleBotConnected();
 
-      // Should only be called once
-      expect(mockOn).toHaveBeenCalledTimes(1);
+      // guildMemberAdd registered once, interactionCreate re-registered each time
+      const guildMemberCalls = mockOn.mock.calls.filter(
+        ([event]: [string]) => event === Events.GuildMemberAdd,
+      );
+      expect(guildMemberCalls).toHaveLength(1);
     });
 
     it('should skip when client is null', () => {
@@ -130,13 +152,17 @@ describe('PugInviteListener', () => {
 
     it('should call handleNewGuildMember when guildMemberAdd fires', async () => {
       const mockOn = jest.fn();
-      const mockClient = { on: mockOn };
+      const mockRemoveListener = jest.fn();
+      const mockClient = { on: mockOn, removeListener: mockRemoveListener };
       clientService.getClient.mockReturnValue(mockClient as never);
 
       listener.handleBotConnected();
 
       // Get the callback registered on guildMemberAdd
-      const [, callback] = mockOn.mock.calls[0] as [string, (member: unknown) => Promise<void>];
+      const guildMemberCall = mockOn.mock.calls.find(
+        ([event]: [string]) => event === Events.GuildMemberAdd,
+      );
+      const [, callback] = guildMemberCall as [string, (member: unknown) => Promise<void>];
       const mockMember = {
         user: {
           id: 'new-user-id',
@@ -156,17 +182,21 @@ describe('PugInviteListener', () => {
   });
 
   describe('handleBotDisconnected', () => {
-    it('should allow re-registration after disconnect', () => {
+    it('should allow guildMemberAdd re-registration after disconnect', () => {
       const mockOn = jest.fn();
-      const mockClient = { on: mockOn };
+      const mockRemoveListener = jest.fn();
+      const mockClient = { on: mockOn, removeListener: mockRemoveListener };
       clientService.getClient.mockReturnValue(mockClient as never);
 
       listener.handleBotConnected();
       listener.handleBotDisconnected();
       listener.handleBotConnected();
 
-      // Should be called twice (once per connect)
-      expect(mockOn).toHaveBeenCalledTimes(2);
+      // guildMemberAdd should be registered twice (once per connect after disconnect reset)
+      const guildMemberCalls = mockOn.mock.calls.filter(
+        ([event]: [string]) => event === Events.GuildMemberAdd,
+      );
+      expect(guildMemberCalls).toHaveLength(2);
     });
   });
 });

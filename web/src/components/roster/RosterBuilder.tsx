@@ -41,6 +41,8 @@ interface RosterBuilderProps {
     onSelfRemove?: () => void;
     /** Optional extra content rendered alongside the UnassignedBar in a shared sticky row */
     stickyExtra?: React.ReactNode;
+    /** ROK-292: Called when admin adds a PUG from the assign modal */
+    onAddPug?: (discordUsername: string, role: RosterRole) => void;
 }
 
 // MMO-style role slots
@@ -76,6 +78,7 @@ export const RosterBuilder = memo(function RosterBuilder({
     currentUserId,
     onSelfRemove,
     stickyExtra,
+    onAddPug,
 }: RosterBuilderProps) {
     const { announce } = useAriaLive();
 
@@ -466,6 +469,9 @@ export const RosterBuilder = memo(function RosterBuilder({
                 onSelfAssign={canSelfAssign ? handleSelfAssign : undefined}
                 availableSlots={availableSlots}
                 onAssignToSlot={handleAssignToSlot}
+                onAddPug={onAddPug && assignmentTarget ? (username) => {
+                    onAddPug(username, assignmentTarget.role);
+                } : undefined}
             />
         </div>
     );

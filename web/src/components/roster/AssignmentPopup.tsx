@@ -5,6 +5,9 @@ import { PlayerCard } from '../events/player-card';
 import { ROLE_EMOJI, ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
 import './AssignmentPopup.css';
 
+/** PUG-eligible roles (only MMO combat roles map to PugRole) */
+const PUG_ELIGIBLE_ROLES = new Set<RosterRole>(['tank', 'healer', 'dps']);
+
 /** A single slot for the slot picker (may be empty or occupied) */
 export interface AvailableSlot {
     role: RosterRole;
@@ -36,6 +39,8 @@ interface AssignmentPopupProps {
     availableSlots?: AvailableSlot[];
     /** Called when admin picks a slot for a player (browse-all mode) */
     onAssignToSlot?: (signupId: number, role: RosterRole, position: number) => void;
+    /** Called when admin adds a PUG via inline form (targeted mode only) */
+    onAddPug?: (discordUsername: string) => void;
 }
 
 
@@ -57,10 +62,14 @@ export function AssignmentPopup({
     onSelfAssign,
     availableSlots,
     onAssignToSlot,
+    onAddPug,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
     const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+    // Inline PUG form state
+    const [showPugForm, setShowPugForm] = useState(false);
+    const [pugUsername, setPugUsername] = useState('');
 
     const isBrowseAll = slotRole === null;
     const selectedPlayer = selectedPlayerId != null
@@ -134,7 +143,21 @@ export function AssignmentPopup({
     const handleClose = () => {
         setSelectedPlayerId(null);
         setSearch('');
+        setShowPugForm(false);
+        setPugUsername('');
         onClose();
+    };
+
+    // Whether the Add PUG option should be shown (targeted mode + MMO combat role)
+    const canAddPug = !isBrowseAll && slotRole !== null && PUG_ELIGIBLE_ROLES.has(slotRole) && !!onAddPug;
+
+    const handlePugSubmit = () => {
+        const trimmed = pugUsername.trim();
+        if (!trimmed || !onAddPug) return;
+        onAddPug(trimmed);
+        setPugUsername('');
+        setShowPugForm(false);
+        handleClose();
     };
 
     // Slot picker view: shown when a player is selected in browse-all mode
@@ -298,6 +321,53 @@ export function AssignmentPopup({
                         {search
                             ? 'No players match your search.'
                             : 'All players are assigned to slots \u2713'}
+                    </div>
+                )}
+
+                {/* ROK-292: Inline Add PUG option (targeted mode, MMO roles only) */}
+                {canAddPug && (
+                    <div className="assignment-popup__section">
+                        <h4 className="assignment-popup__section-title assignment-popup__section-title--pug">
+                            Guest Player (PUG)
+                        </h4>
+                        {showPugForm ? (
+                            <div className="assignment-popup__pug-form">
+                                <input
+                                    type="text"
+                                    value={pugUsername}
+                                    onChange={(e) => setPugUsername(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === 'Enter') handlePugSubmit(); }}
+                                    placeholder="Discord username"
+                                    className="assignment-popup__search"
+                                    autoFocus
+                                />
+                                <div className="assignment-popup__pug-form-actions">
+                                    <button
+                                        type="button"
+                                        onClick={() => { setShowPugForm(false); setPugUsername(''); }}
+                                        className="assignment-popup__remove-btn"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={handlePugSubmit}
+                                        disabled={!pugUsername.trim()}
+                                        className="assignment-popup__assign-btn"
+                                    >
+                                        Add PUG
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <button
+                                type="button"
+                                onClick={() => setShowPugForm(true)}
+                                className="assignment-popup__add-pug-btn"
+                            >
+                                + Add PUG to {formatRole(slotRole!)} {slotPosition}
+                            </button>
+                        )}
                     </div>
                 )}
             </div>

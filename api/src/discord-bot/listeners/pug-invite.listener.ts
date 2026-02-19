@@ -1,9 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Events, type GuildMember } from 'discord.js';
+import {
+  Events,
+  EmbedBuilder,
+  type GuildMember,
+  type ButtonInteraction,
+} from 'discord.js';
+import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { PugInviteService } from '../services/pug-invite.service';
-import { DISCORD_BOT_EVENTS, PUG_SLOT_EVENTS } from '../discord-bot.constants';
+import {
+  DISCORD_BOT_EVENTS,
+  PUG_SLOT_EVENTS,
+  PUG_BUTTON_IDS,
+  EMBED_COLORS,
+} from '../discord-bot.constants';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 import type { PugSlotCreatedPayload } from '../../events/pugs.service';
 
@@ -19,8 +33,13 @@ import type { PugSlotCreatedPayload } from '../../events/pugs.service';
 export class PugInviteListener {
   private readonly logger = new Logger(PugInviteListener.name);
   private guildMemberAddRegistered = false;
+  private boundInteractionHandler:
+    | ((interaction: import('discord.js').Interaction) => void)
+    | null = null;
 
   constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly pugInviteService: PugInviteService,
   ) {}
@@ -31,20 +50,40 @@ export class PugInviteListener {
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   handleBotConnected(): void {
     const client = this.clientService.getClient();
-    if (!client || this.guildMemberAddRegistered) return;
+    if (!client) return;
 
-    client.on(Events.GuildMemberAdd, (member: GuildMember) => {
-      this.handleGuildMemberAdd(member).catch((err: unknown) => {
-        this.logger.error(
-          'Error handling guildMemberAdd for %s:',
-          member.user.username,
-          err,
-        );
+    // Register guildMemberAdd for new member matching
+    if (!this.guildMemberAddRegistered) {
+      client.on(Events.GuildMemberAdd, (member: GuildMember) => {
+        this.handleGuildMemberAdd(member).catch((err: unknown) => {
+          this.logger.error(
+            'Error handling guildMemberAdd for %s:',
+            member.user.username,
+            err,
+          );
+        });
       });
-    });
+      this.guildMemberAddRegistered = true;
+      this.logger.log(
+        'Registered guildMemberAdd listener for PUG invite flow',
+      );
+    }
 
-    this.guildMemberAddRegistered = true;
-    this.logger.log('Registered guildMemberAdd listener for PUG invite flow');
+    // ROK-292: Register interaction handler for PUG accept/decline buttons
+    if (this.boundInteractionHandler) {
+      client.removeListener('interactionCreate', this.boundInteractionHandler);
+    }
+
+    this.boundInteractionHandler = (
+      interaction: import('discord.js').Interaction,
+    ) => {
+      if (interaction.isButton()) {
+        void this.handleButtonInteraction(interaction);
+      }
+    };
+
+    client.on('interactionCreate', this.boundInteractionHandler);
+    this.logger.log('Registered PUG button interaction handler');
   }
 
   /**
@@ -110,6 +149,162 @@ export class PugInviteListener {
       member.user.id,
       member.user.username,
       member.user.avatar,
+    );
+  }
+
+  /**
+   * ROK-292: Handle PUG accept/decline button interactions on DMs.
+   */
+  private async handleButtonInteraction(
+    interaction: ButtonInteraction,
+  ): Promise<void> {
+    const customId = interaction.customId;
+    const parts = customId.split(':');
+    if (parts.length !== 2) return;
+
+    const [action, pugSlotId] = parts;
+
+    // Only handle PUG buttons
+    if (
+      action !== PUG_BUTTON_IDS.ACCEPT &&
+      action !== PUG_BUTTON_IDS.DECLINE
+    ) {
+      return;
+    }
+
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      // Look up the PUG slot
+      const [slot] = await this.db
+        .select()
+        .from(schema.pugSlots)
+        .where(eq(schema.pugSlots.id, pugSlotId))
+        .limit(1);
+
+      if (!slot) {
+        await interaction.editReply({
+          content: 'This invite is no longer valid.',
+        });
+        return;
+      }
+
+      // Verify the interaction user matches the invited Discord user
+      if (slot.discordUserId && slot.discordUserId !== interaction.user.id) {
+        await interaction.editReply({
+          content: 'This invite is not for you.',
+        });
+        return;
+      }
+
+      if (action === PUG_BUTTON_IDS.ACCEPT) {
+        await this.handlePugAccept(interaction, slot);
+      } else {
+        await this.handlePugDecline(interaction, slot);
+      }
+    } catch (error) {
+      this.logger.error(
+        'Error handling PUG button interaction for slot %s:',
+        pugSlotId,
+        error,
+      );
+      try {
+        await interaction.editReply({
+          content: 'Something went wrong. Please try again.',
+        });
+      } catch {
+        // Interaction may have expired
+      }
+    }
+  }
+
+  /**
+   * Handle PUG accept button: update status to 'accepted', confirm in DM.
+   */
+  private async handlePugAccept(
+    interaction: ButtonInteraction,
+    slot: typeof schema.pugSlots.$inferSelect,
+  ): Promise<void> {
+    if (slot.status === 'accepted' || slot.status === 'claimed') {
+      await interaction.editReply({
+        content: "You've already accepted this invite!",
+      });
+      return;
+    }
+
+    await this.db
+      .update(schema.pugSlots)
+      .set({
+        status: 'accepted',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.pugSlots.id, slot.id));
+
+    // Edit the original DM to show accepted state (remove buttons)
+    const acceptedEmbed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
+      .setTitle('Invite Accepted!')
+      .setDescription(
+        `You accepted the invite for **${slot.role}** slot. See you at the raid!`,
+      )
+      .setTimestamp();
+
+    try {
+      await interaction.message.edit({
+        embeds: [acceptedEmbed],
+        components: [],
+      });
+    } catch {
+      // DM edit may fail if message was deleted
+    }
+
+    await interaction.editReply({ content: 'Accepted!' });
+
+    this.logger.log(
+      'PUG %s accepted invite for event %d (slot: %s)',
+      slot.discordUsername,
+      slot.eventId,
+      slot.id,
+    );
+  }
+
+  /**
+   * Handle PUG decline button: delete the slot, confirm in DM.
+   */
+  private async handlePugDecline(
+    interaction: ButtonInteraction,
+    slot: typeof schema.pugSlots.$inferSelect,
+  ): Promise<void> {
+    // Delete the PUG slot
+    await this.db
+      .delete(schema.pugSlots)
+      .where(eq(schema.pugSlots.id, slot.id));
+
+    // Edit the original DM to show declined state (remove buttons)
+    const declinedEmbed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.ERROR)
+      .setTitle('Invite Declined')
+      .setDescription(
+        `You declined the invite for **${slot.role}** slot. No worries!`,
+      )
+      .setTimestamp();
+
+    try {
+      await interaction.message.edit({
+        embeds: [declinedEmbed],
+        components: [],
+      });
+    } catch {
+      // DM edit may fail if message was deleted
+    }
+
+    await interaction.editReply({ content: 'Declined.' });
+
+    this.logger.log(
+      'PUG %s declined invite for event %d (slot: %s)',
+      slot.discordUsername,
+      slot.eventId,
+      slot.id,
     );
   }
 }

@@ -285,6 +285,42 @@
     max-width: 100%;
 }
 
+/* ROK-292: Add PUG inline form */
+.assignment-popup__section-title--pug {
+    color: #f59e0b;
+}
+
+.assignment-popup__add-pug-btn {
+    width: 100%;
+    padding: 0.625rem 1rem;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(217, 119, 6, 0.12));
+    border: 1px dashed rgba(245, 158, 11, 0.4);
+    border-radius: 0.5rem;
+    color: #fbbf24;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.assignment-popup__add-pug-btn:hover {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(217, 119, 6, 0.2));
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #fcd34d;
+}
+
+.assignment-popup__pug-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.assignment-popup__pug-form-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
 /* ============================================
    Light Theme Overrides (ROK-124)
    ============================================ */
@@ -353,6 +389,22 @@
 
 [data-scheme="light"] .assignment-popup__back-btn:hover {
     color: #0f172a;
+}
+
+[data-scheme="light"] .assignment-popup__section-title--pug {
+    color: #d97706;
+}
+
+[data-scheme="light"] .assignment-popup__add-pug-btn {
+    color: #b45309;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.08));
+    border-color: rgba(217, 119, 6, 0.35);
+}
+
+[data-scheme="light"] .assignment-popup__add-pug-btn:hover {
+    color: #92400e;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.15));
+    border-color: rgba(217, 119, 6, 0.5);
 }
 
 [data-scheme="light"] .assignment-popup__selected-player {
