@@ -15,7 +15,6 @@ import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { toast } from "../lib/toast";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
-import type { GameDetailDto } from "@raid-ledger/contract";
 
 /** Compound genre filter — supports multi-genre matching (e.g. MMORPG = RPG + Online) */
 interface GenreFilterDef {
@@ -71,26 +70,9 @@ export function GamesPage() {
     }))
     .filter((row) => row.games.length > 0);
 
-  // Map search results to GameDetailDto format for the grid
-  const searchResults: GameDetailDto[] | undefined = searchData?.data?.map(
-    (g) => ({
-      ...g,
-      genres: [],
-      summary: null,
-      rating: null,
-      aggregatedRating: null,
-      popularity: null,
-      gameModes: [],
-      themes: [],
-      platforms: [],
-      screenshots: [],
-      videos: [],
-      firstReleaseDate: null,
-      playerCount: null,
-      twitchGameId: null,
-      crossplay: null,
-    }),
-  );
+  // Search results are now full GameDetailDto from the API (ROK-375)
+  const searchResults = searchData?.data;
+  const searchSource = searchData?.meta?.source;
 
   // ROK-362: Collect all visible game IDs for batch interest check
   const allGameIds = useMemo(() => {
@@ -172,7 +154,7 @@ export function GamesPage() {
           <WantToPlayProvider gameIds={allGameIds}>
             {/* Sticky Search Bar */}
             <div
-              className="sticky z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1 md:relative md:z-auto md:bg-transparent md:backdrop-blur-none md:pb-0 md:mx-0 md:px-0 mb-6"
+              className="sticky z-10 bg-surface/95 backdrop-blur-sm pb-4 -mx-1 px-1 md:static md:z-auto md:bg-transparent md:backdrop-blur-none md:pb-0 md:mx-0 md:px-0 mb-6"
               style={{
                 top: isHeaderHidden ? 75 : 140,
                 transition: 'top 300ms ease-in-out',
@@ -281,6 +263,14 @@ export function GamesPage() {
                   </div>
                 ) : searchResults && searchResults.length > 0 ? (
                   <>
+                    {searchSource === 'local' && (
+                      <div className="flex items-center gap-2 px-4 py-2.5 mb-4 rounded-lg bg-yellow-900/30 border border-yellow-700/40 text-yellow-500 text-sm font-medium">
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Showing local results (external search unavailable)
+                      </div>
+                    )}
                     {/* Desktop grid */}
                     <div className="hidden md:grid md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                       {searchResults.map((game) => (
