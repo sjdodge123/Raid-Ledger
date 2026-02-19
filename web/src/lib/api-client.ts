@@ -871,3 +871,25 @@ export async function deletePugSlot(
         method: 'DELETE',
     });
 }
+
+// ============================================================
+// Discord Member Search (ROK-292)
+// ============================================================
+
+export interface DiscordMemberSearchResult {
+    discordId: string;
+    username: string;
+    avatar: string | null;
+}
+
+/**
+ * Search Discord server members by username query.
+ * Requires admin/operator auth.
+ */
+export async function searchDiscordMembers(
+    query: string,
+): Promise<DiscordMemberSearchResult[]> {
+    return fetchApi(
+        `/admin/settings/discord-bot/members/search?q=${encodeURIComponent(query)}`,
+    );
+}

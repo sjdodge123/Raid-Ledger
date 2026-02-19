@@ -26,6 +26,7 @@ import './event-detail-page.css';
 const SignupConfirmationModal = lazy(() => import('../components/events/signup-confirmation-modal').then(m => ({ default: m.SignupConfirmationModal })));
 const RescheduleModal = lazy(() => import('../components/events/RescheduleModal').then(m => ({ default: m.RescheduleModal })));
 const CancelEventModal = lazy(() => import('../components/events/cancel-event-modal').then(m => ({ default: m.CancelEventModal })));
+const InviteModal = lazy(() => import('../components/events/invite-modal').then(m => ({ default: m.InviteModal })));
 
 /**
  * Event Detail Page - ROK-184 Redesign
@@ -86,6 +87,7 @@ export function EventDetailPage() {
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showInviteModal, setShowInviteModal] = useState(false);
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
@@ -268,6 +270,12 @@ export function EventDetailPage() {
 
                 {canManageRoster && !isCancelled && (
                     <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowInviteModal(true)}
+                            className="btn btn-primary btn-sm"
+                        >
+                            Invite
+                        </button>
                         <button
                             onClick={() => setShowRescheduleModal(true)}
                             className="btn btn-secondary btn-sm"
@@ -689,6 +697,18 @@ export function EventDetailPage() {
                         description={event.description}
                         creatorUsername={event.creator?.username}
                         signupCount={event.signupCount}
+                    />
+                </Suspense>
+            )}
+
+            {/* ROK-292: Invite Modal */}
+            {showInviteModal && (
+                <Suspense fallback={null}>
+                    <InviteModal
+                        isOpen={showInviteModal}
+                        onClose={() => setShowInviteModal(false)}
+                        eventId={eventId}
+                        isMMOGame={isMMOGame}
                     />
                 </Suspense>
             )}

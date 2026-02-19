@@ -4,6 +4,7 @@ import {
   Put,
   Post,
   Body,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -195,5 +196,26 @@ export class DiscordBotSettingsController {
       success: true,
       message: 'Setup wizard DM sent to admin.',
     };
+  }
+
+  /**
+   * ROK-292: Search Discord server members by username.
+   * Used by the Invite modal to pick from real server members.
+   */
+  @Get('members/search')
+  async searchMembers(
+    @Query('q') query: string,
+  ): Promise<
+    { discordId: string; username: string; avatar: string | null }[]
+  > {
+    if (!query || query.trim().length < 1) {
+      return [];
+    }
+
+    if (!this.discordBotClientService.isConnected()) {
+      return [];
+    }
+
+    return this.discordBotClientService.searchGuildMembers(query.trim());
   }
 }

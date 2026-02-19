@@ -339,6 +339,41 @@ export class DiscordBotClientService {
   }
 
   /**
+   * ROK-292: Search guild members by username query.
+   * Returns up to 10 matching members with id, username, and avatar hash.
+   */
+  async searchGuildMembers(
+    query: string,
+  ): Promise<
+    { discordId: string; username: string; avatar: string | null }[]
+  > {
+    if (!this.client?.isReady()) return [];
+
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return [];
+
+    try {
+      const members = await guild.members.fetch({
+        query,
+        limit: 10,
+      });
+
+      return members.map((m) => ({
+        discordId: m.user.id,
+        username: m.user.username,
+        avatar: m.user.avatar,
+      }));
+    } catch (error) {
+      this.logger.warn(
+        'Failed to search guild members for "%s": %s',
+        query,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return [];
+    }
+  }
+
+  /**
    * Check whether the bot has every required permission in its guild.
    */
   checkPermissions(): PermissionCheckResult[] {
