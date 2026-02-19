@@ -12,6 +12,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import type { UserRole } from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
@@ -128,6 +129,7 @@ describe('AuthController — redeemIntent', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        { provide: REDIS_CLIENT, useValue: { get: jest.fn(), set: jest.fn(), setex: jest.fn(), del: jest.fn() } },
       ],
     }).compile();
 
@@ -348,6 +350,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        { provide: REDIS_CLIENT, useValue: { get: jest.fn(), set: jest.fn(), setex: jest.fn(), del: jest.fn() } },
       ],
     }).compile();
     return module.get<AuthController>(AuthController);

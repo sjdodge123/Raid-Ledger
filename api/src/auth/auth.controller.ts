@@ -26,13 +26,15 @@ import { RateLimit } from '../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import { CharactersService } from '../characters/characters.service';
 import { discordFetch } from './discord-http.util';
+import { REDIS_CLIENT } from '../redis/redis.module';
 import * as crypto from 'crypto';
+import type Redis from 'ioredis';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
 import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
-class DiscordAuthGuard extends AuthGuard('discord') {}
+class DiscordAuthGuard extends AuthGuard('discord') { }
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -62,7 +64,8 @@ export class AuthController {
     @Inject(DiscordNotificationService)
     private discordNotificationService: DiscordNotificationService | null,
     private charactersService: CharactersService,
-  ) {}
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) { }
 
   /**
    * Sign OAuth state parameter to prevent tampering
@@ -82,7 +85,7 @@ export class AuthController {
    */
   private verifyState(
     state: string,
-  ): { userId: number; action: string } | null {
+  ): { userId: number; action: string; timestamp: number } | null {
     try {
       const { data, signature } = JSON.parse(
         Buffer.from(state, 'base64').toString(),
@@ -102,7 +105,20 @@ export class AuthController {
         return null; // Signature mismatch - state was tampered with
       }
 
-      return JSON.parse(data) as { userId: number; action: string };
+      const parsed = JSON.parse(data) as {
+        userId: number;
+        action: string;
+        timestamp: number;
+      };
+
+      // Enforce 10-minute expiry on state parameter to prevent replay attacks
+      const MAX_STATE_AGE_MS = 10 * 60 * 1000;
+      if (!parsed.timestamp || Date.now() - parsed.timestamp > MAX_STATE_AGE_MS) {
+        this.logger.warn('OAuth state parameter expired');
+        return null;
+      }
+
+      return parsed;
     } catch {
       return null;
     }
@@ -140,14 +156,44 @@ export class AuthController {
   @RateLimit('auth')
   @Get('discord/callback')
   @UseGuards(DiscordAuthGuard)
-  discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
+  async discordLoginCallback(@Req() req: RequestWithUser, @Res() res: Response) {
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
 
-    // Redirect to frontend with token (auto-detect URL from request)
+    // Generate a one-time auth code and store it in Redis (30s TTL)
+    // This prevents JWT leakage through browser history, proxies, and Referer headers
+    const authCode = crypto.randomBytes(32).toString('hex');
+    await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
+
+    // Redirect to frontend with one-time code instead of JWT
     const clientUrl = this.getClientUrl(req);
-    // Using query param for simplicity in MVP. Secure httpOnly cookie is better for prod.
-    res.redirect(`${clientUrl}/auth/success?token=${access_token}`);
+    res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
+  }
+
+  /**
+   * POST /auth/exchange-code
+   * Exchanges a one-time auth code for a JWT access token.
+   * The code is consumed on first use (single-use, 30s TTL).
+   */
+  @RateLimit('auth')
+  @Post('exchange-code')
+  async exchangeCode(
+    @Body() body: { code: string },
+  ): Promise<{ access_token: string }> {
+    if (!body.code) {
+      throw new Error('Auth code is required');
+    }
+
+    const redisKey = `auth_code:${body.code}`;
+    const token = await this.redis.get(redisKey);
+    if (!token) {
+      throw new Error('Invalid or expired auth code');
+    }
+
+    // Consume the code (single-use)
+    await this.redis.del(redisKey);
+
+    return { access_token: token };
   }
 
   /**
@@ -396,7 +442,7 @@ export class AuthController {
   ): Promise<RedeemIntentResponseDto> {
     const dto = RedeemIntentSchema.parse(body);
 
-    const payload = this.intentTokenService.validate(dto.token);
+    const payload = await this.intentTokenService.validate(dto.token);
     if (!payload) {
       return {
         success: false,

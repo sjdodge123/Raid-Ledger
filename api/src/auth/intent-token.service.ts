@@ -1,5 +1,7 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { REDIS_CLIENT } from '../redis/redis.module';
+import type Redis from 'ioredis';
 import type { IntentTokenPayload } from '@raid-ledger/contract';
 
 /** Intent token TTL: 15 minutes (matches Discord interaction timeout) */
@@ -13,15 +15,17 @@ const INTENT_TOKEN_TTL = 15 * 60;
  * deferred signup flow where an unlinked Discord user creates an RL account
  * and auto-completes a signup.
  *
- * Shared infrastructure for ROK-137 and reusable by ROK-263 (Magic Invite Links).
+ * Single-use enforcement backed by Redis for correctness across restarts
+ * and multi-instance deployments.
  */
 @Injectable()
 export class IntentTokenService {
   private readonly logger = new Logger(IntentTokenService.name);
-  /** Track used tokens to enforce single-use (in-memory; sufficient for 15-min TTL) */
-  private readonly usedTokens = new Set<string>();
 
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    private readonly jwtService: JwtService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) { }
 
   /**
    * Generate a signed intent token for deferred signup.
@@ -41,26 +45,22 @@ export class IntentTokenService {
 
   /**
    * Validate and consume an intent token (single-use).
+   * Uses Redis SETNX for atomic single-use enforcement.
    * @param token - The JWT to validate
    * @returns The decoded payload, or null if invalid/expired/already used
    */
-  validate(token: string): IntentTokenPayload | null {
+  async validate(token: string): Promise<IntentTokenPayload | null> {
     try {
       const payload = this.jwtService.verify<IntentTokenPayload>(token);
 
-      // Enforce single-use
-      if (this.usedTokens.has(token)) {
+      // Atomic single-use check via Redis SETNX (set-if-not-exists)
+      // Key auto-expires after the token TTL to prevent unbounded growth
+      const redisKey = `intent_used:${token}`;
+      const wasSet = await this.redis.set(redisKey, '1', 'EX', INTENT_TOKEN_TTL, 'NX');
+
+      if (!wasSet) {
         this.logger.warn('Intent token already used');
         return null;
-      }
-
-      // Mark as used
-      this.usedTokens.add(token);
-
-      // Clean up expired tokens from the set periodically
-      // (lazy cleanup: only when set grows large)
-      if (this.usedTokens.size > 1000) {
-        this.cleanupExpiredTokens();
       }
 
       return payload;
@@ -69,23 +69,5 @@ export class IntentTokenService {
       return null;
     }
   }
-
-  /**
-   * Remove expired tokens from the used-tokens set.
-   */
-  private cleanupExpiredTokens(): void {
-    const now = Math.floor(Date.now() / 1000);
-    for (const token of this.usedTokens) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const decoded = this.jwtService.decode(token);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        if (decoded?.exp && decoded.exp < now) {
-          this.usedTokens.delete(token);
-        }
-      } catch {
-        this.usedTokens.delete(token);
-      }
-    }
-  }
 }
+
