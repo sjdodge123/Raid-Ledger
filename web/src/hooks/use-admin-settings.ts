@@ -57,6 +57,7 @@ interface DiscordBotStatusResponse {
     connecting?: boolean;
     guildName?: string;
     memberCount?: number;
+    setupCompleted?: boolean;
 }
 
 interface DiscordBotConfigDto {
@@ -560,6 +561,27 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Discord Bot Setup Wizard (ROK-349)
+    // ============================================================
+
+    const resendSetupWizard = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/resend-setup`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to send setup wizard' }));
+                throw new Error(error.message || 'Failed to send setup wizard');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -588,5 +610,6 @@ export function useAdminSettings() {
         discordChannels,
         discordDefaultChannel,
         setDiscordChannel,
+        resendSetupWizard,
     };
 }

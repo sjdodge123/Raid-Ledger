@@ -23,3 +23,4 @@ export * from './schema/pug-slots';
 export * from './schema/cron-jobs';
 export * from './schema/cron-job-executions';
 export * from './schema/discord-event-messages';
+export * from './schema/channel-bindings';

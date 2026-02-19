@@ -326,6 +326,19 @@ export class DiscordBotClientService {
   }
 
   /**
+   * List voice channels from the connected guild.
+   */
+  getVoiceChannels(): { id: string; name: string }[] {
+    if (!this.client?.isReady()) return [];
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return [];
+    return guild.channels.cache
+      .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
+      .map((ch) => ({ id: ch.id, name: ch.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  /**
    * Check whether the bot has every required permission in its guild.
    */
   checkPermissions(): PermissionCheckResult[] {

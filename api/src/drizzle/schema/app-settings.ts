@@ -43,6 +43,9 @@ export const SETTING_KEYS = {
   DISCORD_BOT_ENABLED: 'discord_bot_enabled',
   DISCORD_BOT_DEFAULT_CHANNEL: 'discord_bot_default_channel',
   IGDB_FILTER_ADULT: 'igdb_filter_adult',
+  DISCORD_BOT_SETUP_COMPLETED: 'discord_bot_setup_completed',
+  DISCORD_BOT_COMMUNITY_NAME: 'discord_bot_community_name',
+  DISCORD_BOT_TIMEZONE: 'discord_bot_timezone',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

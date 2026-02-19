@@ -15,7 +15,7 @@ const EyeIcon = (
 );
 
 export function DiscordBotForm() {
-    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions, discordChannels, discordDefaultChannel, setDiscordChannel } = useAdminSettings();
+    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions, discordChannels, discordDefaultChannel, setDiscordChannel, resendSetupWizard } = useAdminSettings();
 
     const [botToken, setBotToken] = useState('');
     const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
@@ -213,6 +213,36 @@ export function DiscordBotForm() {
                     )}
                 </div>
             </form>
+
+            {/* Setup Wizard Reminder Banner (ROK-349) */}
+            {discordBotStatus.data?.configured && discordBotStatus.data?.connected && discordBotStatus.data?.setupCompleted === false && (
+                <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg animate-[fadeIn_0.3s_ease-in]">
+                    <div className="flex items-start gap-3">
+                        <span className="text-amber-400 text-lg flex-shrink-0">&#9888;</span>
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold text-amber-300">Complete Discord Setup</p>
+                            <p className="text-xs text-secondary mt-1">
+                                The setup wizard has not been completed yet. Pick a default announcement channel and confirm your community name to get the most out of the Discord bot.
+                            </p>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    try {
+                                        const result = await resendSetupWizard.mutateAsync();
+                                        if (result.success) toast.success('Setup wizard DM sent! Check your Discord DMs.');
+                                    } catch {
+                                        toast.error('Failed to send setup wizard. Make sure the bot is connected and your Discord account is linked.');
+                                    }
+                                }}
+                                disabled={resendSetupWizard.isPending}
+                                className="mt-3 py-2 px-4 text-xs bg-amber-600 hover:bg-amber-500 disabled:bg-amber-800 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors"
+                            >
+                                {resendSetupWizard.isPending ? 'Sending...' : 'Complete Setup'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Bot Status (when configured) */}
             {discordBotStatus.data?.configured && (

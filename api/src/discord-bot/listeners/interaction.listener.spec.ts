@@ -5,6 +5,9 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EventCreateCommand } from '../commands/event-create.command';
 import { EventsListCommand } from '../commands/events-list.command';
 import { RosterViewCommand } from '../commands/roster-view.command';
+import { BindCommand } from '../commands/bind.command';
+import { UnbindCommand } from '../commands/unbind.command';
+import { BindingsCommand } from '../commands/bindings.command';
 import { Events } from 'discord.js';
 
 describe('InteractionListener', () => {
@@ -60,6 +63,28 @@ describe('InteractionListener', () => {
         {
           provide: RosterViewCommand,
           useValue: rosterViewCommand,
+        },
+        {
+          provide: BindCommand,
+          useValue: {
+            commandName: 'bind',
+            handleInteraction: jest.fn().mockResolvedValue(undefined),
+            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: UnbindCommand,
+          useValue: {
+            commandName: 'unbind',
+            handleInteraction: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: BindingsCommand,
+          useValue: {
+            commandName: 'bindings',
+            handleInteraction: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();

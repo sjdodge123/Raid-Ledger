@@ -93,6 +93,8 @@ export class DiscordBotService
     const connecting = this.clientService.isConnecting();
 
     const guildInfo = connected ? this.clientService.getGuildInfo() : null;
+    const setupCompleted =
+      await this.settingsService.isDiscordBotSetupCompleted();
 
     return {
       configured,
@@ -101,6 +103,7 @@ export class DiscordBotService
       connecting,
       guildName: guildInfo?.name,
       memberCount: guildInfo?.memberCount,
+      setupCompleted,
     };
   }
 

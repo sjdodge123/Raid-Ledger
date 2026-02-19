@@ -11,6 +11,9 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { EventCreateCommand } from './event-create.command';
 import { EventsListCommand } from './events-list.command';
 import { RosterViewCommand } from './roster-view.command';
+import { BindCommand } from './bind.command';
+import { UnbindCommand } from './unbind.command';
+import { BindingsCommand } from './bindings.command';
 
 /**
  * Describes a slash command handler that can be registered with Discord.
@@ -34,6 +37,9 @@ export class RegisterCommandsService {
     private readonly eventCreateCommand: EventCreateCommand,
     private readonly eventsListCommand: EventsListCommand,
     private readonly rosterViewCommand: RosterViewCommand,
+    private readonly bindCommand: BindCommand,
+    private readonly unbindCommand: UnbindCommand,
+    private readonly bindingsCommand: BindingsCommand,
   ) {}
 
   /**
@@ -44,6 +50,9 @@ export class RegisterCommandsService {
       this.eventCreateCommand,
       this.eventsListCommand,
       this.rosterViewCommand,
+      this.bindCommand,
+      this.unbindCommand,
+      this.bindingsCommand,
     ];
   }
 
