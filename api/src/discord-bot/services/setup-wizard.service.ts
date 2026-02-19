@@ -10,7 +10,7 @@ import {
   type ButtonInteraction,
   type ChannelSelectMenuInteraction,
 } from 'discord.js';
-import { eq } from 'drizzle-orm';
+import { eq, and, isNotNull, not, like } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -106,38 +106,39 @@ export class SetupWizardService {
    * Send the setup wizard DM to the Raid Ledger admin user.
    * Finds the admin via the users table (role = 'admin' with discordId).
    */
-  async sendSetupWizardToAdmin(): Promise<void> {
+  async sendSetupWizardToAdmin(): Promise<{
+    sent: boolean;
+    reason?: string;
+  }> {
     if (!this.clientService.isConnected()) {
       this.logger.warn('Cannot send setup wizard DM: bot is not connected');
-      return;
+      return { sent: false, reason: 'Bot is not connected' };
     }
 
     try {
-      // Find the RL admin user with a Discord account linked
+      // Find an admin user with a valid (linked) Discord account
       const adminUser = await this.db
         .select()
         .from(schema.users)
-        .where(eq(schema.users.role, 'admin'))
+        .where(
+          and(
+            eq(schema.users.role, 'admin'),
+            isNotNull(schema.users.discordId),
+            not(like(schema.users.discordId, 'unlinked:%')),
+            not(like(schema.users.discordId, 'local:%')),
+          ),
+        )
         .limit(1);
 
       if (adminUser.length === 0 || !adminUser[0].discordId) {
-        this.logger.warn(
-          'No admin user with Discord ID found. ' +
-            'Setup wizard will be available via the web admin panel.',
-        );
-        return;
+        const reason =
+          'No admin user with a linked Discord account found. ' +
+          'Link your Discord account first, then try again.';
+        this.logger.warn(reason);
+        return { sent: false, reason };
       }
 
       const discordId = adminUser[0].discordId;
-
-      // Don't send DM to unlinked accounts
-      if (discordId.startsWith('unlinked:') || discordId.startsWith('local:')) {
-        this.logger.warn(
-          'Admin user does not have a linked Discord account. ' +
-            'Setup wizard available via web admin panel.',
-        );
-        return;
-      }
 
       const guildInfo = this.clientService.getGuildInfo();
       const serverName = guildInfo?.name ?? 'your server';
@@ -180,12 +181,18 @@ export class SetupWizardService {
       this.logger.log(
         `Setup wizard DM sent to admin (Discord ID: ${discordId})`,
       );
+      return { sent: true };
     } catch (error) {
       this.logger.error(
         'Failed to send setup wizard DM to admin. ' +
           'The wizard is available via the web admin panel.',
         error,
       );
+      return {
+        sent: false,
+        reason:
+          'Failed to send DM. The admin user may have DMs disabled or the bot lacks permissions.',
+      };
     }
   }
 

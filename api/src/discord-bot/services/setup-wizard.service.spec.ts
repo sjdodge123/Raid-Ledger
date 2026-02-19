@@ -88,21 +88,23 @@ describe('SetupWizardService', () => {
         { id: 1, role: 'admin', discordId: '123456789' },
       ]);
 
-      await service.sendSetupWizardToAdmin();
+      const result = await service.sendSetupWizardToAdmin();
 
       expect(clientService.sendEmbedDM).toHaveBeenCalledWith(
         '123456789',
         expect.objectContaining({}),
         expect.objectContaining({}),
       );
+      expect(result.sent).toBe(true);
     });
 
     it('should not send wizard DM when bot is not connected', async () => {
       jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
 
-      await service.sendSetupWizardToAdmin();
+      const result = await service.sendSetupWizardToAdmin();
 
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+      expect(result.sent).toBe(false);
     });
 
     it('should not send wizard DM when no admin found', async () => {
@@ -123,14 +125,15 @@ describe('SetupWizardService', () => {
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should not send wizard DM when admin has unlinked Discord ID', async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: 1, role: 'admin', discordId: 'unlinked:123456789' },
-      ]);
+    it('should not send wizard DM when admin has unlinked Discord ID (filtered by SQL)', async () => {
+      // SQL WHERE clause filters out unlinked:/local: prefixed IDs,
+      // so the query returns no matching rows
+      mockDb.limit.mockResolvedValueOnce([]);
 
-      await service.sendSetupWizardToAdmin();
+      const result = await service.sendSetupWizardToAdmin();
 
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+      expect(result.sent).toBe(false);
     });
 
     it('should handle DM send failure gracefully', async () => {
@@ -141,8 +144,10 @@ describe('SetupWizardService', () => {
         .spyOn(clientService, 'sendEmbedDM')
         .mockRejectedValueOnce(new Error('Cannot send DM'));
 
-      // Should not throw
-      await service.sendSetupWizardToAdmin();
+      // Should not throw, but indicate failure
+      const result = await service.sendSetupWizardToAdmin();
+      expect(result.sent).toBe(false);
+      expect(result.reason).toBeDefined();
     });
   });
 

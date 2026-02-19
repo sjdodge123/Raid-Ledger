@@ -181,7 +181,13 @@ export class DiscordBotSettingsController {
       );
     }
 
-    await this.setupWizardService.sendSetupWizardToAdmin();
+    const result = await this.setupWizardService.sendSetupWizardToAdmin();
+
+    if (!result.sent) {
+      throw new BadRequestException(
+        result.reason ?? 'Failed to send setup wizard DM',
+      );
+    }
 
     this.logger.log('Setup wizard DM re-sent via admin UI');
 

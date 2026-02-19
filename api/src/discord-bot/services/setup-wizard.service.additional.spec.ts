@@ -90,14 +90,15 @@ describe('SetupWizardService (additional edge cases)', () => {
   // ── sendSetupWizardToAdmin: Additional edge cases ─────────────────────
 
   describe('sendSetupWizardToAdmin — edge cases', () => {
-    it('should not send DM when admin has local: prefixed Discord ID', async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: 1, role: 'admin', discordId: 'local:someuser' },
-      ]);
+    it('should not send DM when admin has local: prefixed Discord ID (filtered by SQL)', async () => {
+      // SQL WHERE clause filters out local: prefixed IDs,
+      // so the query returns no matching rows
+      mockDb.limit.mockResolvedValueOnce([]);
 
-      await service.sendSetupWizardToAdmin();
+      const result = await service.sendSetupWizardToAdmin();
 
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+      expect(result.sent).toBe(false);
     });
 
     it('should use guild server name in wizard embed when guild info available', async () => {

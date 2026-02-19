@@ -38,7 +38,7 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
         {
           provide: SetupWizardService,
           useValue: {
-            sendSetupWizardToAdmin: jest.fn().mockResolvedValue(undefined),
+            sendSetupWizardToAdmin: jest.fn().mockResolvedValue({ sent: true }),
           },
         },
         {
