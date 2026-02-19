@@ -6,16 +6,27 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { PUG_SLOT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type {
   CreatePugSlotDto,
   UpdatePugSlotDto,
   PugSlotResponseDto,
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
+
+/**
+ * Payload emitted when a PUG slot is created (ROK-292).
+ */
+export interface PugSlotCreatedPayload {
+  pugSlotId: string;
+  eventId: number;
+  discordUsername: string;
+}
 
 /**
  * Service for managing PUG (Pick Up Group) slots on events (ROK-262).
@@ -29,6 +40,7 @@ export class PugsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -66,6 +78,13 @@ export class PugsService {
       this.logger.log(
         `PUG slot created: ${dto.discordUsername} as ${dto.role} for event ${eventId}`,
       );
+
+      // Emit event for Discord bot integration (ROK-292)
+      this.eventEmitter.emit(PUG_SLOT_EVENTS.CREATED, {
+        pugSlotId: inserted.id,
+        eventId,
+        discordUsername: dto.discordUsername,
+      } satisfies PugSlotCreatedPayload);
 
       return this.toPugSlotResponse(inserted);
     } catch (error: unknown) {
@@ -261,6 +280,7 @@ export class PugsService {
       spec: row.spec ?? null,
       notes: row.notes ?? null,
       status: row.status as 'pending' | 'invited' | 'accepted' | 'claimed',
+      serverInviteUrl: row.serverInviteUrl ?? null,
       claimedByUserId: row.claimedByUserId ?? null,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),

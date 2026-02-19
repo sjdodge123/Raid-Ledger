@@ -1,13 +1,26 @@
 import { Injectable, Inject } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import type { UserRole } from '@raid-ledger/contract';
+
+/** Event name emitted after Discord OAuth login/link (ROK-292). */
+export const AUTH_EVENTS = {
+  DISCORD_LOGIN: 'auth.discord-login',
+} as const;
+
+/** Payload for auth.discord-login event. */
+export interface DiscordLoginPayload {
+  userId: number;
+  discordId: string;
+}
 
 @Injectable()
 export class AuthService {
   constructor(
     @Inject(UsersService) private usersService: UsersService,
     @Inject(JwtService) private jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async validateDiscordUser(
@@ -26,6 +39,15 @@ export class AuthService {
         username,
         avatar,
       );
+
+      if (relinked) {
+        // Emit event for PUG slot claiming (ROK-292)
+        this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
+          userId: relinked.id,
+          discordId,
+        } satisfies DiscordLoginPayload);
+      }
+
       return relinked;
     }
 
@@ -34,6 +56,13 @@ export class AuthService {
       username,
       avatar: avatar || undefined,
     });
+
+    // Emit event for PUG slot claiming (ROK-292)
+    this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
+      userId: user.id,
+      discordId,
+    } satisfies DiscordLoginPayload);
+
     return user;
   }
 

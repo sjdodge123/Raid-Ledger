@@ -54,6 +54,7 @@ export const PugSlotResponseSchema = z.object({
     spec: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     status: PugSlotStatusSchema,
+    serverInviteUrl: z.string().nullable().optional(),
     claimedByUserId: z.number().nullable().optional(),
     createdBy: z.number(),
     createdAt: z.string().datetime(),

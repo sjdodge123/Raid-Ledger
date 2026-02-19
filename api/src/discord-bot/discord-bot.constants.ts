@@ -16,6 +16,14 @@ export const APP_EVENT_EVENTS = {
 } as const;
 
 /**
+ * Application-level event names for PUG slot lifecycle (ROK-292).
+ * Emitted by PugsService, consumed by PugInviteListener.
+ */
+export const PUG_SLOT_EVENTS = {
+  CREATED: 'pug-slot.created',
+} as const;
+
+/**
  * Accent colors for Discord embeds (design spec section 2.1).
  * Values are decimal representations of hex colors for discord.js.
  */
