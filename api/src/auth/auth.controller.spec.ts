@@ -11,6 +11,7 @@ import { SignupsService } from '../events/signups.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
+import { CharactersService } from '../characters/characters.service';
 import type { UserRole } from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
@@ -51,6 +52,9 @@ describe('AuthController — redeemIntent', () => {
     getUserPreference: jest.Mock;
     getUserPreferences: jest.Mock;
     setUserPreference: jest.Mock;
+  };
+  let mockCharactersService: {
+    findAllForUser: jest.Mock;
   };
 
   const mockUser = {
@@ -108,6 +112,9 @@ describe('AuthController — redeemIntent', () => {
       getUserPreferences: jest.fn().mockResolvedValue([]),
       setUserPreference: jest.fn().mockResolvedValue(undefined),
     };
+    mockCharactersService = {
+      findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -120,6 +127,7 @@ describe('AuthController — redeemIntent', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: CharactersService, useValue: mockCharactersService },
       ],
     }).compile();
 
@@ -289,16 +297,43 @@ describe('AuthController — redeemIntent', () => {
 
 describe('AuthController — getProfile (ROK-352)', () => {
   let controller: AuthController;
-  let mockUsersService: { findById: jest.Mock; findByDiscordIdIncludingUnlinked: jest.Mock; linkDiscord: jest.Mock; createOrUpdate: jest.Mock; relinkDiscord: jest.Mock };
-  let mockPreferencesService: { getUserPreference: jest.Mock; getUserPreferences: jest.Mock; setUserPreference: jest.Mock };
+  let mockUsersService: {
+    findById: jest.Mock;
+    findByDiscordIdIncludingUnlinked: jest.Mock;
+    linkDiscord: jest.Mock;
+    createOrUpdate: jest.Mock;
+    relinkDiscord: jest.Mock;
+  };
+  let mockPreferencesService: {
+    getUserPreference: jest.Mock;
+    getUserPreferences: jest.Mock;
+    setUserPreference: jest.Mock;
+  };
   let mockAuthService: { login: jest.Mock };
   let mockIntentTokenService: { generate: jest.Mock; validate: jest.Mock };
-  let mockSignupsService: { signup: jest.Mock; claimAnonymousSignups: jest.Mock; cancel: jest.Mock; getRoster: jest.Mock; findByDiscordUser: jest.Mock; signupDiscord: jest.Mock; updateStatus: jest.Mock; cancelByDiscordUser: jest.Mock };
+  let mockSignupsService: {
+    signup: jest.Mock;
+    claimAnonymousSignups: jest.Mock;
+    cancel: jest.Mock;
+    getRoster: jest.Mock;
+    findByDiscordUser: jest.Mock;
+    signupDiscord: jest.Mock;
+    updateStatus: jest.Mock;
+    cancelByDiscordUser: jest.Mock;
+  };
   let mockConfigService: { get: jest.Mock };
   let mockJwtService: { verify: jest.Mock; sign: jest.Mock };
-  let mockSettingsService: { getDiscordOAuthConfig: jest.Mock; getBranding: jest.Mock };
+  let mockSettingsService: {
+    getDiscordOAuthConfig: jest.Mock;
+    getBranding: jest.Mock;
+  };
+  let mockCharactersService: {
+    findAllForUser: jest.Mock;
+  };
 
-  const makeRequest = (userId: number) => ({ user: { id: userId, username: 'testuser', role: 'member' as UserRole } });
+  const makeRequest = (userId: number) => ({
+    user: { id: userId, username: 'testuser', role: 'member' as UserRole },
+  });
 
   const buildModule = async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -312,6 +347,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
         { provide: ConfigService, useValue: mockConfigService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
+        { provide: CharactersService, useValue: mockCharactersService },
       ],
     }).compile();
     return module.get<AuthController>(AuthController);
@@ -339,12 +375,34 @@ describe('AuthController — getProfile (ROK-352)', () => {
       getUserPreferences: jest.fn().mockResolvedValue([]),
       setUserPreference: jest.fn().mockResolvedValue(undefined),
     };
-    mockAuthService = { login: jest.fn().mockReturnValue({ access_token: 'tok' }) };
+    mockAuthService = {
+      login: jest.fn().mockReturnValue({ access_token: 'tok' }),
+    };
     mockIntentTokenService = { generate: jest.fn(), validate: jest.fn() };
-    mockSignupsService = { signup: jest.fn(), claimAnonymousSignups: jest.fn(), cancel: jest.fn(), getRoster: jest.fn(), findByDiscordUser: jest.fn(), signupDiscord: jest.fn(), updateStatus: jest.fn(), cancelByDiscordUser: jest.fn() };
-    mockConfigService = { get: jest.fn().mockReturnValue('http://localhost:3000') };
-    mockJwtService = { verify: jest.fn().mockReturnValue({ sub: 1 }), sign: jest.fn() };
-    mockSettingsService = { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() };
+    mockSignupsService = {
+      signup: jest.fn(),
+      claimAnonymousSignups: jest.fn(),
+      cancel: jest.fn(),
+      getRoster: jest.fn(),
+      findByDiscordUser: jest.fn(),
+      signupDiscord: jest.fn(),
+      updateStatus: jest.fn(),
+      cancelByDiscordUser: jest.fn(),
+    };
+    mockConfigService = {
+      get: jest.fn().mockReturnValue('http://localhost:3000'),
+    };
+    mockJwtService = {
+      verify: jest.fn().mockReturnValue({ sub: 1 }),
+      sign: jest.fn(),
+    };
+    mockSettingsService = {
+      getDiscordOAuthConfig: jest.fn(),
+      getBranding: jest.fn(),
+    };
+    mockCharactersService = {
+      findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+    };
   });
 
   it('includes avatarPreference: null in response when no preference stored', async () => {
@@ -358,7 +416,9 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
   it('includes avatarPreference value when stored preference exists', async () => {
     const pref = { type: 'discord' };
-    mockPreferencesService.getUserPreference.mockResolvedValueOnce({ value: pref });
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
     controller = await buildModule();
 
     const result = await controller.getProfile(makeRequest(1) as any);
@@ -368,17 +428,24 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
   it('includes character preference with characterName in response', async () => {
     const pref = { type: 'character', characterName: 'Thrall' };
-    mockPreferencesService.getUserPreference.mockResolvedValueOnce({ value: pref });
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
     controller = await buildModule();
 
     const result = await controller.getProfile(makeRequest(1) as any);
 
-    expect(result.avatarPreference).toEqual({ type: 'character', characterName: 'Thrall' });
+    expect(result.avatarPreference).toEqual({
+      type: 'character',
+      characterName: 'Thrall',
+    });
   });
 
   it('includes custom preference in response', async () => {
     const pref = { type: 'custom' };
-    mockPreferencesService.getUserPreference.mockResolvedValueOnce({ value: pref });
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
     controller = await buildModule();
 
     const result = await controller.getProfile(makeRequest(1) as any);
@@ -391,7 +458,10 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
     await controller.getProfile(makeRequest(42) as any);
 
-    expect(mockPreferencesService.getUserPreference).toHaveBeenCalledWith(42, 'avatarPreference');
+    expect(mockPreferencesService.getUserPreference).toHaveBeenCalledWith(
+      42,
+      'avatarPreference',
+    );
   });
 
   it('falls back to JWT payload when user not found in DB', async () => {
@@ -407,7 +477,9 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
   it('response includes all required user fields', async () => {
     const pref = { type: 'discord' };
-    mockPreferencesService.getUserPreference.mockResolvedValueOnce({ value: pref });
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
     controller = await buildModule();
 
     const result = await controller.getProfile(makeRequest(1) as any);
@@ -420,13 +492,44 @@ describe('AuthController — getProfile (ROK-352)', () => {
       customAvatarUrl: null,
       role: 'member',
       avatarPreference: pref,
+      characters: [],
     });
+  });
+
+  it('includes characters array in response', async () => {
+    mockCharactersService.findAllForUser.mockResolvedValueOnce({
+      data: [
+        {
+          gameId: 'wow',
+          name: 'Thrall',
+          avatarUrl: 'https://example.com/thrall.png',
+        },
+        { gameId: 'ffxiv', name: 'Yshtola', avatarUrl: null },
+      ],
+    });
+    controller = await buildModule();
+
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
+
+    expect(result).toHaveProperty('characters');
+    expect(result['characters']).toEqual([
+      {
+        gameId: 'wow',
+        name: 'Thrall',
+        avatarUrl: 'https://example.com/thrall.png',
+      },
+      { gameId: 'ffxiv', name: 'Yshtola', avatarUrl: null },
+    ]);
   });
 
   it('does not expose raw DB row columns not in the return shape', async () => {
     controller = await buildModule();
 
-    const result = await controller.getProfile(makeRequest(1) as any) as Record<string, unknown>;
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
 
     // These internal DB fields must not leak through
     expect(result['password']).toBeUndefined();
@@ -436,10 +539,14 @@ describe('AuthController — getProfile (ROK-352)', () => {
   });
 
   it('avatarPreference is null (not undefined) when preference record has null value', async () => {
-    mockPreferencesService.getUserPreference.mockResolvedValueOnce({ value: null });
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: null,
+    });
     controller = await buildModule();
 
-    const result = await controller.getProfile(makeRequest(1) as any) as Record<string, unknown>;
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
 
     // avatarPref?.value ?? null  → null when value is null
     expect(result['avatarPreference']).toBeNull();

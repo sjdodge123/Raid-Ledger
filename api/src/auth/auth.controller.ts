@@ -24,6 +24,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
+import { CharactersService } from '../characters/characters.service';
 import { discordFetch } from './discord-http.util';
 import * as crypto from 'crypto';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
@@ -60,6 +61,7 @@ export class AuthController {
     @Optional()
     @Inject(DiscordNotificationService)
     private discordNotificationService: DiscordNotificationService | null,
+    private charactersService: CharactersService,
   ) {}
 
   /**
@@ -352,11 +354,14 @@ export class AuthController {
       return req.user; // Fallback to JWT payload if user not found
     }
 
-    // Fetch avatar preference from user_preferences (ROK-352)
-    const avatarPref = await this.preferencesService.getUserPreference(
-      req.user.id,
-      'avatarPreference',
-    );
+    // Fetch avatar preference and characters for avatar resolution (ROK-352)
+    const [avatarPref, charactersResult] = await Promise.all([
+      this.preferencesService.getUserPreference(
+        req.user.id,
+        'avatarPreference',
+      ),
+      this.charactersService.findAllForUser(req.user.id),
+    ]);
 
     return {
       id: user.id,
@@ -368,6 +373,11 @@ export class AuthController {
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
       avatarPreference: avatarPref?.value ?? null,
+      characters: charactersResult.data.map((c) => ({
+        gameId: c.gameId,
+        name: c.name,
+        avatarUrl: c.avatarUrl,
+      })),
     };
   }
 

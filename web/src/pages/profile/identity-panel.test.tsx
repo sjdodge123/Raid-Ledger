@@ -397,7 +397,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
                 await waitFor(() => {
                     expect(apiClient.updatePreference).toHaveBeenCalledWith(
                         'avatarPreference',
-                        { type: 'character', characterName: 'Thrall', avatarUrl: 'https://example.com/thrall.jpg' },
+                        { type: 'character', characterName: 'Thrall' },
                     );
                 });
             }

@@ -28,7 +28,6 @@ export interface ResolvedAvatar {
 export interface AvatarPreference {
     type: AvatarType;
     characterName?: string;
-    avatarUrl?: string;
 }
 
 export interface AvatarUser {
@@ -117,17 +116,10 @@ export function resolveAvatar(
         if (pref.type === 'discord' && user.avatar) {
             return { url: user.avatar, type: 'discord' };
         }
-        if (pref.type === 'character') {
-            // Try characters array first (most up-to-date)
-            if (pref.characterName && user.characters) {
-                const character = user.characters.find(c => c.name === pref.characterName);
-                if (character?.avatarUrl) {
-                    return { url: character.avatarUrl, type: 'character' };
-                }
-            }
-            // Fall back to cached URL from preference (for contexts without characters data)
-            if (pref.avatarUrl) {
-                return { url: pref.avatarUrl, type: 'character' };
+        if (pref.type === 'character' && pref.characterName && user.characters) {
+            const character = user.characters.find(c => c.name === pref.characterName);
+            if (character?.avatarUrl) {
+                return { url: character.avatarUrl, type: 'character' };
             }
         }
         // Preferred source unavailable — fall through to default priority
