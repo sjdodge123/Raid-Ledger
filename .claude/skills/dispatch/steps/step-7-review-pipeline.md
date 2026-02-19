@@ -1,0 +1,75 @@
+# Step 7: Status-Driven Review Pipeline
+
+The operator controls the testing gate by moving stories in Linear. The lead polls Linear and reacts — **it does NOT ask the operator for results in the terminal.**
+
+## 7a. Poll for Operator Test Results
+
+**Polling loop:**
+1. Check Linear every 5 minutes for status updates to stories in "In Review"
+2. Detect status transitions:
+   - **"Code Review"** = operator approved, ready for code review
+   - **"Changes Requested"** = operator found issues during testing
+   - **"In Review"** (unchanged) = operator still testing, wait
+3. Continue polling until ALL stories have moved out of "In Review" status
+
+**Polling commands:**
+```
+mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
+mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
+```
+
+**Important:** Do NOT proceed to Step 7b/7c for a story until its Linear status
+has changed from "In Review". The operator approval gate is mandatory.
+
+**Edge case:** If stories remain in "In Review" for >24 hours, message the
+user to check on operator testing progress.
+
+## 7b. Handle Changes Requested (from operator testing)
+
+For stories the operator moved to "Changes Requested":
+
+**IMPORTANT:** Ensure the review task remains BLOCKED (do not unblock it). The story
+must pass operator testing before code review can begin.
+
+1. Fetch comments to get the operator's feedback: `mcp__linear__list_comments(issueId: <id>)`
+2. **Re-spawn the dev teammate** (it was shut down after CI passed in Step 6c):
+   ```
+   Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+        name: "dev-rok-<num>", mode: "bypassPermissions",
+        prompt: <rework prompt with operator feedback>)
+   ```
+3. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
+4. Dev teammate runs all tests to verify they pass, messages lead when done
+5. **Shut down dev teammate** after fixes are committed
+6. **Delegate CI validation, push, and deploy to the build agent:**
+   ```
+   SendMessage(type: "message", recipient: "build-agent",
+     content: "Full pipeline: validate, push, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+     summary: "Full pipeline ROK-<num> rework")
+   ```
+   The build agent will: run CI -> push -> deploy feature branch -> verify health -> message lead with results.
+   If CI fails, the build agent messages back with errors — re-spawn the dev teammate to fix.
+7. Lead moves Linear back to "In Review"
+8. Notify operator: "ROK-XXX fixed and re-deployed for re-test. Use: deploy_dev.sh --branch rok-<num>-<short-name>"
+9. **Review task stays BLOCKED** — cycle repeats from Step 7a (operator re-tests)
+
+## 7c. Unblock Review Tasks & Dispatch Code Review (for "Code Review" stories)
+
+For stories the operator moved to "Code Review" (operator approved):
+
+**1. Unblock the corresponding review task** in the shared task list (remove blocker).
+   This allows the reviewer to claim the task and begin code review.
+   Do NOT send a message to the reviewer (they will auto-poll the task list).
+
+**2. Reviewer claims operator-approved tasks** and for each PR:
+   - **VERIFY the story has "Code Review" status in Linear** (operator approved)
+   - If status is NOT "Code Review", DO NOT review — message lead about premature unblock
+   - Run `gh pr diff <number>` to see code changes
+   - Check: TypeScript strictness, Zod validation, security, error handling, patterns, naming
+   - Post review: `gh pr review <number> --approve` or `--request-changes --body "..."`
+   - Message the lead with verdict
+
+**Critical:** The reviewer should ONLY review stories that have been moved to
+"Code Review" status by the operator. Code review is gated on operator approval.
+
+See `templates/reviewer.md` for the full reviewer prompt template.

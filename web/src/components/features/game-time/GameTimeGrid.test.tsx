@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
-import type { GameTimeSlot } from './GameTimeGrid';
+import type { GameTimeSlot, GameTimePreviewBlock, HeatmapCell } from './GameTimeGrid';
 
 describe('GameTimeGrid', () => {
     it('renders 7 day headers (Sunday first)', () => {
@@ -263,6 +263,190 @@ describe('GameTimeGrid', () => {
             expect(header0).toHaveTextContent('Sunday');
             // Should also show the date (2/8)
             expect(header0).toHaveTextContent('2/8');
+        });
+    });
+
+    // === ROK-370: Fix reschedule modal grid click offset ===
+
+    describe('compact prop (ROK-370)', () => {
+        it('renders cells with h-5 height by default (non-compact)', () => {
+            render(<GameTimeGrid slots={[]} />);
+            const cell = screen.getByTestId('cell-0-0');
+            expect(cell.className).toContain('h-5');
+            expect(cell.className).not.toContain('h-4');
+        });
+
+        it('renders cells with h-4 height when compact is true', () => {
+            render(<GameTimeGrid slots={[]} compact />);
+            const cell = screen.getByTestId('cell-0-0');
+            expect(cell.className).toContain('h-4');
+            expect(cell.className).not.toContain('h-5');
+        });
+
+        it('applies compact height consistently across all visible cells', () => {
+            render(<GameTimeGrid slots={[]} compact hourRange={[10, 13]} />);
+            for (let day = 0; day < 7; day++) {
+                for (let hour = 10; hour < 13; hour++) {
+                    const cell = screen.getByTestId(`cell-${day}-${hour}`);
+                    expect(cell.className).toContain('h-4');
+                    expect(cell.className).not.toContain('h-5');
+                }
+            }
+        });
+
+        it('compact mode does not affect slot status rendering', () => {
+            const slots: GameTimeSlot[] = [
+                { dayOfWeek: 0, hour: 10, status: 'available' },
+                { dayOfWeek: 1, hour: 10, status: 'committed' },
+                { dayOfWeek: 2, hour: 10, status: 'blocked' },
+            ];
+            render(<GameTimeGrid slots={slots} compact />);
+            expect(screen.getByTestId('cell-0-10').dataset.status).toBe('available');
+            expect(screen.getByTestId('cell-1-10').dataset.status).toBe('committed');
+            expect(screen.getByTestId('cell-2-10').dataset.status).toBe('blocked');
+        });
+
+        it('compact mode does not affect drag-to-paint interaction', () => {
+            const onChange = vi.fn();
+            render(<GameTimeGrid slots={[]} compact onChange={onChange} />);
+            fireEvent.pointerDown(screen.getByTestId('cell-2-8'));
+            expect(onChange).toHaveBeenCalledTimes(1);
+            expect(onChange.mock.calls[0][0]).toEqual([{ dayOfWeek: 2, hour: 8, status: 'available' }]);
+        });
+
+        it('compact mode does not affect onCellClick', () => {
+            const onCellClick = vi.fn();
+            render(<GameTimeGrid slots={[]} compact onCellClick={onCellClick} />);
+            fireEvent.click(screen.getByTestId('cell-4-15'));
+            expect(onCellClick).toHaveBeenCalledWith(4, 15);
+        });
+    });
+
+    describe('wrapperRef measurement approach (ROK-370)', () => {
+        it('outer wrapper div has relative positioning for overlay measurement', () => {
+            const { container } = render(<GameTimeGrid slots={[]} events={[]} />);
+            const wrapper = container.firstElementChild as HTMLElement;
+            expect(wrapper.className).toContain('relative');
+            expect(wrapper.className).toContain('overflow-hidden');
+        });
+
+        it('grid element has data-testid for querySelector-based measurement', () => {
+            render(<GameTimeGrid slots={[]} />);
+            expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+        });
+
+        it('all day headers have data-testid attributes needed for measurement', () => {
+            render(<GameTimeGrid slots={[]} />);
+            for (let i = 0; i < 7; i++) {
+                expect(screen.getByTestId(`day-header-${i}`)).toBeInTheDocument();
+            }
+        });
+
+        it('all cells have data-testid attributes needed for measurement', () => {
+            render(<GameTimeGrid slots={[]} hourRange={[10, 12]} />);
+            for (let day = 0; day < 7; day++) {
+                for (let hour = 10; hour < 12; hour++) {
+                    expect(screen.getByTestId(`cell-${day}-${hour}`)).toBeInTheDocument();
+                }
+            }
+        });
+    });
+
+    describe('heatmap overlay with compact grid (ROK-370)', () => {
+        const heatmapCells: HeatmapCell[] = [
+            { dayOfWeek: 0, hour: 10, availableCount: 3, totalCount: 4 },
+            { dayOfWeek: 1, hour: 10, availableCount: 4, totalCount: 4 },
+            { dayOfWeek: 2, hour: 10, availableCount: 1, totalCount: 4 },
+        ];
+
+        it('heatmap cells get title attribute with availability info', () => {
+            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
+            expect(screen.getByTestId('cell-0-10').title).toBe('3 of 4 players available');
+            expect(screen.getByTestId('cell-1-10').title).toBe('4 of 4 players available');
+            expect(screen.getByTestId('cell-2-10').title).toBe('1 of 4 players available');
+        });
+
+        it('non-heatmap cells do not get title attribute', () => {
+            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
+            const cell = screen.getByTestId('cell-3-10');
+            expect(cell.title).toBeFalsy();
+        });
+
+        it('heatmap cells get inline backgroundColor style', () => {
+            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
+            const cell = screen.getByTestId('cell-0-10');
+            expect(cell.style.backgroundColor).toBeTruthy();
+        });
+
+        it('onCellClick works with heatmap overlay in compact mode', () => {
+            const onCellClick = vi.fn();
+            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} onCellClick={onCellClick} />);
+            fireEvent.click(screen.getByTestId('cell-0-10'));
+            expect(onCellClick).toHaveBeenCalledWith(0, 10);
+        });
+    });
+
+    describe('preview block variant styling (ROK-370)', () => {
+        it('selected variant uses solid border', () => {
+            const previewBlocks: GameTimePreviewBlock[] = [{
+                dayOfWeek: 5,
+                startHour: 10,
+                endHour: 12,
+                label: 'New Time',
+                variant: 'selected',
+            }];
+            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
+            const block = screen.getByTestId('preview-block-5-10');
+            expect(block.style.border).toContain('solid');
+        });
+
+        it('current variant uses dashed border', () => {
+            const previewBlocks: GameTimePreviewBlock[] = [{
+                dayOfWeek: 5,
+                startHour: 10,
+                endHour: 12,
+                label: 'Current',
+                variant: 'current',
+            }];
+            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
+            const block = screen.getByTestId('preview-block-5-10');
+            expect(block.style.border).toContain('dashed');
+        });
+
+        it('default variant (undefined) uses dashed border', () => {
+            const previewBlocks: GameTimePreviewBlock[] = [{
+                dayOfWeek: 5,
+                startHour: 10,
+                endHour: 12,
+            }];
+            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
+            const block = screen.getByTestId('preview-block-5-10');
+            expect(block.style.border).toContain('dashed');
+        });
+    });
+
+    describe('hourRange edge cases (ROK-370)', () => {
+        it('hourRange [6, 24] renders 18 hours per day', () => {
+            const { container } = render(<GameTimeGrid slots={[]} hourRange={[6, 24]} />);
+            const cells = container.querySelectorAll('[data-testid^="cell-"]');
+            expect(cells).toHaveLength(7 * 18);
+        });
+
+        it('hourRange [0, 6] renders only early morning hours', () => {
+            const { container } = render(<GameTimeGrid slots={[]} hourRange={[0, 6]} />);
+            const cells = container.querySelectorAll('[data-testid^="cell-"]');
+            expect(cells).toHaveLength(7 * 6);
+            expect(screen.getByTestId('cell-0-0')).toBeInTheDocument();
+            expect(screen.getByTestId('cell-0-5')).toBeInTheDocument();
+            expect(screen.queryByTestId('cell-0-6')).not.toBeInTheDocument();
+        });
+
+        it('hourRange [12, 18] renders afternoon hours only', () => {
+            render(<GameTimeGrid slots={[]} hourRange={[12, 18]} />);
+            expect(screen.getByTestId('cell-0-12')).toBeInTheDocument();
+            expect(screen.getByTestId('cell-0-17')).toBeInTheDocument();
+            expect(screen.queryByTestId('cell-0-11')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('cell-0-18')).not.toBeInTheDocument();
         });
     });
 });
