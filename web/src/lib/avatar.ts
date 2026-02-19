@@ -130,9 +130,11 @@ export function toAvatarUser(user: {
 
     return {
         avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null),
-        customAvatarUrl: overlay?.customAvatarUrl ?? user.customAvatarUrl,
-        characters: overlay?.characters ?? user.characters,
-        avatarPreference: overlay?.avatarPreference ?? user.avatarPreference,
+        // Prefer caller's data when explicitly provided (even if null);
+        // fall back to overlay only when the field is undefined (not in the DTO).
+        customAvatarUrl: user.customAvatarUrl !== undefined ? user.customAvatarUrl : overlay?.customAvatarUrl,
+        characters: user.characters !== undefined ? user.characters : overlay?.characters,
+        avatarPreference: user.avatarPreference !== undefined ? user.avatarPreference : overlay?.avatarPreference,
     };
 }
 

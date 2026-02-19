@@ -758,20 +758,37 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.characters).toBe(characters);
     });
 
-    it('overlays customAvatarUrl when user id matches current user', () => {
+    it('overlays customAvatarUrl when field is omitted from DTO', () => {
         setCurrentUserAvatarData({
             id: 42,
             customAvatarUrl: '/avatars/current-user.webp',
         });
 
+        // DTO from event API — no customAvatarUrl field (undefined)
         const result = toAvatarUser({
             id: 42,
             avatar: null,
             discordId: null,
-            customAvatarUrl: null, // API returns null
         });
 
         expect(result.customAvatarUrl).toBe('/avatars/current-user.webp');
+    });
+
+    it('does NOT overlay customAvatarUrl when caller explicitly passes null', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            customAvatarUrl: '/avatars/current-user.webp',
+        });
+
+        // Auth response explicitly says no custom avatar
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+            customAvatarUrl: null,
+        });
+
+        expect(result.customAvatarUrl).toBeNull();
     });
 
     it('does NOT overlay when user id does not match current user', () => {
@@ -819,7 +836,7 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.avatarPreference).toBeUndefined();
     });
 
-    it('preserves existing user avatarPreference when it is already set (no overlay needed)', () => {
+    it('prefers caller data over overlay when caller provides explicit avatarPreference', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
@@ -832,9 +849,26 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             avatarPreference: { type: 'custom' },
         });
 
-        // Overlay is applied but user already had preference — overlay wins
-        // because the current user data is more authoritative
-        expect(result.avatarPreference).toEqual({ type: 'discord' });
+        // Caller's explicit preference wins — this is critical for the profile
+        // page where useAuth() has fresher data than the module-level cache
+        expect(result.avatarPreference).toEqual({ type: 'custom' });
+    });
+
+    it('prefers caller data over overlay even when caller value is null', () => {
+        setCurrentUserAvatarData({
+            id: 42,
+            avatarPreference: { type: 'discord' },
+        });
+
+        const result = toAvatarUser({
+            id: 42,
+            avatar: null,
+            discordId: null,
+            avatarPreference: null,
+        });
+
+        // Explicit null from caller means "no preference" — should NOT use overlay
+        expect(result.avatarPreference).toBeNull();
     });
 
     it('end-to-end: current user discord preference honored in resolveAvatar', () => {

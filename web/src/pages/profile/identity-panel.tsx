@@ -56,22 +56,37 @@ export function IdentityPanel() {
         [user, characters],
     );
 
+    // Optimistic selection so the UI responds immediately to clicks (ROK-352)
+    const [optimisticUrl, setOptimisticUrl] = useState<string | null>(null);
+
     const handleAvatarSelect = useCallback((url: string) => {
         const option = avatarOptions.find(o => o.url === url);
         if (!option) return;
+
+        // Show selection ring immediately
+        setOptimisticUrl(url);
+
         const pref = option.type === 'character'
             ? { type: option.type, characterName: option.characterName }
             : { type: option.type };
         updatePreference('avatarPreference', pref)
-            .then(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }))
-            .catch(() => toast.error('Failed to save avatar preference'));
+            .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+                setOptimisticUrl(null); // Clear after server confirms
+            })
+            .catch(() => {
+                toast.error('Failed to save avatar preference');
+                setOptimisticUrl(null); // Revert on error
+            });
     }, [avatarOptions, queryClient]);
 
     if (!user) return null;
 
     const avatarUser = toAvatarUser({ ...user, characters });
     const resolved = resolveAvatar(avatarUser);
-    const currentAvatarUrl = resolved.url ?? '/default-avatar.svg';
+    const resolvedAvatarUrl = resolved.url ?? '/default-avatar.svg';
+    // Use optimistic URL when a selection is pending, otherwise use resolved
+    const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
 
     return (
         <div className="space-y-6">
