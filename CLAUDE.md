@@ -78,7 +78,7 @@ Pages in `src/pages/`, components organized by domain in `src/components/`. Cust
 
 ## Critical Rules
 
-- **Branch-per-story + PR workflow** — Multiple agents may work in this repo concurrently via git worktrees. **Always** create a branch from `main` for each story (e.g., `rok-123-feature-name`). Dev teammates commit to their feature branch but do **not** push or create PRs — the lead handles all GitHub operations. When complete, the lead pushes the branch, creates a GitHub PR (`gh pr create --base main`), and merges it into the `staging` branch for manual testing. After operator testing and code review approval, the PR is merged to `main`. Never commit directly to `main` for story/feature work. Clean up worktrees and branches immediately after PR merge.
+- **Branch-per-story + PR workflow** — Multiple agents may work in this repo concurrently via git worktrees. **Always** create a branch from `main` for each story (e.g., `rok-123-feature-name`). Dev teammates commit to their feature branch but do **not** push or create PRs — the lead handles all GitHub operations. When complete, the lead pushes the branch, creates a GitHub PR (`gh pr create --base main`), enables auto-merge (`gh pr merge --auto --squash`), and merges it into the `staging` branch for manual testing. The PR auto-merges to `main` once CI passes. Never commit directly to `main` for story/feature work. Clean up worktrees and branches immediately after PR merge.
 - **Zod-first validation** — All data validation uses Zod schemas from the contract package
 - **TypeScript strict mode** — No `any` allowed in either api or web
 - **Naming conventions** — Files: `kebab-case`, Classes: `PascalCase`, Variables: `camelCase`, DB columns: `snake_case` (mapped in Drizzle)
@@ -292,11 +292,11 @@ git branch -d rok-<num>-<short-name>
 
 ```
 1. Teammate completes story → messages lead
-2. Lead pushes branch → creates PR (Linear → "In Review")
+2. Lead pushes branch → creates PR + enables auto-merge (Linear → "In Review")
 3. Lead merges branch into staging → deploys for operator testing
 4. Operator manually tests on staging
 5. Reviewer code-reviews PR via gh pr review
-6. Approved → merge PR to main → Linear → "Done"
+6. CI passes → PR auto-merges to main → Linear → "Done"
    OR changes requested → Linear → "Changes Requested" → teammate fixes
 ```
 

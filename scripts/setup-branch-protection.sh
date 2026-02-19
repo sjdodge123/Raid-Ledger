@@ -48,7 +48,11 @@ gh api repos/$REPO/branches/staging/protection \
 # Cleanup temp files
 rm /tmp/main-protection.json /tmp/staging-protection.json
 
-echo "✅ Branch protection rules configured successfully"
+echo "🔄 Enabling auto-merge on repository..."
+
+gh api repos/$REPO --method PATCH -f allow_auto_merge=true --silent
+
+echo "✅ Repository configured successfully"
 echo ""
 echo "Main branch protection:"
 echo "  - Requires status checks: build-lint-test, merge"
@@ -59,3 +63,6 @@ echo "Staging branch protection:"
 echo "  - Allows force pushes (for reset during dispatch)"
 echo "  - Blocks deletions"
 echo "  - No required reviews or status checks"
+echo ""
+echo "Repository settings:"
+echo "  - Auto-merge enabled (use 'gh pr merge --auto --squash' after creating PRs)"
