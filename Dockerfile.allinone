@@ -198,14 +198,16 @@ done
 echo "✅ Redis is ready"
 
 # Auto-derive CORS_ORIGIN for all-in-one image if not explicitly set.
-# Render provides RENDER_EXTERNAL_URL; local Docker falls back to localhost.
-if [ -z "$CORS_ORIGIN" ] || [ "$CORS_ORIGIN" = "auto" ]; then
-  if [ -n "$RENDER_EXTERNAL_URL" ]; then
-    export CORS_ORIGIN="$RENDER_EXTERNAL_URL"
-  else
-    export CORS_ORIGIN="http://localhost:${NGINX_PORT:-80}"
-  fi
-  echo "🌐 CORS_ORIGIN auto-derived: $CORS_ORIGIN"
+# Render provides RENDER_EXTERNAL_URL; otherwise keep "auto" so the API
+# dynamically allows the request's own origin (works on any hostname).
+if [ -z "$CORS_ORIGIN" ]; then
+  export CORS_ORIGIN="auto"
+fi
+if [ "$CORS_ORIGIN" = "auto" ] && [ -n "$RENDER_EXTERNAL_URL" ]; then
+  export CORS_ORIGIN="$RENDER_EXTERNAL_URL"
+  echo "🌐 CORS_ORIGIN derived from Render: $CORS_ORIGIN"
+else
+  echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
 fi
 
 # Run entrypoint (migrations, admin bootstrap, seeding)
