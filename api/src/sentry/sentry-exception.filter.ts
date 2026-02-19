@@ -1,4 +1,9 @@
-import { Catch, ArgumentsHost, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Catch,
+  ArgumentsHost,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import type { ExceptionFilter } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
 import type { Response } from 'express';
@@ -38,9 +43,13 @@ export class SentryExceptionFilter implements ExceptionFilter {
           Sentry.captureException(exception);
         }
 
-        response.status(status).json(
-          typeof body === 'string' ? { statusCode: status, message: body } : body,
-        );
+        response
+          .status(status)
+          .json(
+            typeof body === 'string'
+              ? { statusCode: status, message: body }
+              : body,
+          );
       } else {
         // Unexpected non-HttpException — always report to Sentry
         Sentry.captureException(exception);

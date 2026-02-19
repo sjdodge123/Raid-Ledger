@@ -59,4 +59,4 @@ import { CharactersModule } from '../characters/characters.module';
     DynamicDiscordStrategy,
   ],
 })
-export class AuthModule { }
+export class AuthModule {}

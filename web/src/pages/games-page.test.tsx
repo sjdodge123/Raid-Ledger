@@ -477,3 +477,98 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
         });
     });
 });
+
+// ============================================================
+// ROK-375: Local source warning banner tests
+// ============================================================
+describe('GamesPage — ROK-375: local source warning banner', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        mockDiscover();
+    });
+
+    it('shows "external search unavailable" warning when search source is "local"', () => {
+        mockSearch(
+            {
+                data: [mockGame],
+                meta: { total: 1, cached: true, source: 'local' },
+            },
+        );
+
+        renderPage();
+        const searchInput = screen.getByPlaceholderText('Search games...');
+        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
+
+        expect(screen.getByText(/external search unavailable/i)).toBeInTheDocument();
+    });
+
+    it('does NOT show warning when search source is "igdb"', () => {
+        mockSearch(
+            {
+                data: [mockGame],
+                meta: { total: 1, cached: false, source: 'igdb' },
+            },
+        );
+
+        renderPage();
+        const searchInput = screen.getByPlaceholderText('Search games...');
+        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
+
+        expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+    });
+
+    it('does NOT show warning when search source is "database"', () => {
+        mockSearch(
+            {
+                data: [mockGame],
+                meta: { total: 1, cached: true, source: 'database' },
+            },
+        );
+
+        renderPage();
+        const searchInput = screen.getByPlaceholderText('Search games...');
+        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
+
+        expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+    });
+
+    it('does NOT show warning when search source is "redis"', () => {
+        mockSearch(
+            {
+                data: [mockGame],
+                meta: { total: 1, cached: true, source: 'redis' },
+            },
+        );
+
+        renderPage();
+        const searchInput = screen.getByPlaceholderText('Search games...');
+        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
+
+        expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+    });
+
+    it('does NOT show warning when not searching', () => {
+        mockSearch(null);
+
+        renderPage();
+
+        expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
+    });
+
+    it('warning has yellow styling for visibility', () => {
+        mockSearch(
+            {
+                data: [mockGame],
+                meta: { total: 1, cached: true, source: 'local' },
+            },
+        );
+
+        renderPage();
+        const searchInput = screen.getByPlaceholderText('Search games...');
+        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
+
+        const warning = screen.getByText(/external search unavailable/i).closest('div');
+        expect(warning).toHaveClass('bg-yellow-900/30');
+        expect(warning).toHaveClass('border-yellow-700/40');
+    });
+});

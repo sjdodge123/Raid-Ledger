@@ -45,6 +45,45 @@ describe('IgdbService', () => {
     },
   ];
 
+  /**
+   * A full page (SEARCH_LIMIT = 20) of mock games for testing the database-layer
+   * cache hit path. The DB layer only returns source='database' when it finds a
+   * full page of results (>= SEARCH_LIMIT), to avoid suppressing IGDB lookups for
+   * partial result sets.
+   */
+  const mockFullPageGames = Array.from({ length: 20 }, (_, i) => ({
+    id: i + 1,
+    igdbId: 1234 + i,
+    name: `Valheim ${i + 1}`,
+    slug: `valheim-${i + 1}`,
+    coverUrl: 'https://example.com/cover.jpg',
+  }));
+
+  /** Expected output after mapDbRowToDetail() transforms a mockGames row */
+  const mockGameDetails = [
+    {
+      id: 1,
+      igdbId: 1234,
+      name: 'Valheim',
+      slug: 'valheim',
+      coverUrl: 'https://example.com/cover.jpg',
+      genres: [],
+      summary: undefined,
+      rating: undefined,
+      aggregatedRating: undefined,
+      popularity: undefined,
+      gameModes: [],
+      themes: [],
+      platforms: [],
+      screenshots: [],
+      videos: [],
+      firstReleaseDate: null,
+      playerCount: undefined,
+      twitchGameId: undefined,
+      crossplay: null,
+    },
+  ];
+
   beforeEach(async () => {
     // Default select results — tests can override selectResults before calling service
     selectResults = mockGames;
@@ -136,19 +175,22 @@ describe('IgdbService', () => {
 
       expect(result.cached).toBe(true);
       expect(result.source).toBe('redis');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
       expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheim');
     });
 
     it('should return database-cached games when Redis misses', async () => {
-      // Redis miss, DB hit (selectResults defaults to mockGames)
+      // Redis miss, DB full-page hit — DB layer returns 'database' only when a full
+      // page (>= SEARCH_LIMIT) is available, to avoid suppressing IGDB lookups for
+      // partial result sets.
       mockRedis.get.mockResolvedValueOnce(null);
+      selectResults = mockFullPageGames;
 
       const result = await service.searchGames('valheim');
 
       expect(result.cached).toBe(true);
       expect(result.source).toBe('database');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games.length).toBe(20);
       // Should cache to Redis after DB hit
       expect(mockRedis.setex).toHaveBeenCalled();
     });
@@ -291,7 +333,7 @@ describe('IgdbService', () => {
       const result = await searchPromise;
 
       expect(result.source).toBe('local');
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
 
       jest.useRealTimers();
     });
@@ -315,8 +357,11 @@ describe('IgdbService', () => {
     });
 
     it('should handle Redis failures gracefully', async () => {
-      // Redis throws error
+      // Redis throws error — fall back to database layer.
+      // Use a full page of results so the DB layer returns 'database' source
+      // (DB cache hit requires >= SEARCH_LIMIT results to avoid hiding IGDB lookups).
       mockRedis.get.mockRejectedValueOnce(new Error('Redis connection failed'));
+      selectResults = mockFullPageGames;
 
       const result = await service.searchGames('valheim');
 
@@ -387,7 +432,7 @@ describe('IgdbService', () => {
 
       expect(result.source).toBe('local');
       expect(result.cached).toBe(true);
-      expect(result.games).toEqual(mockGames);
+      expect(result.games).toEqual(mockGameDetails);
     });
   });
 

@@ -25,7 +25,7 @@ export class IntentTokenService {
   constructor(
     private readonly jwtService: JwtService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) { }
+  ) {}
 
   /**
    * Generate a signed intent token for deferred signup.
@@ -56,7 +56,13 @@ export class IntentTokenService {
       // Atomic single-use check via Redis SETNX (set-if-not-exists)
       // Key auto-expires after the token TTL to prevent unbounded growth
       const redisKey = `intent_used:${token}`;
-      const wasSet = await this.redis.set(redisKey, '1', 'EX', INTENT_TOKEN_TTL, 'NX');
+      const wasSet = await this.redis.set(
+        redisKey,
+        '1',
+        'EX',
+        INTENT_TOKEN_TTL,
+        'NX',
+      );
 
       if (!wasSet) {
         this.logger.warn('Intent token already used');
@@ -70,4 +76,3 @@ export class IntentTokenService {
     }
   }
 }
-

@@ -32,8 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   async validate(payload: JwtPayload) {
     // Re-fetch role from database to prevent privilege persistence after role changes.
     // Falls back to JWT claim if user is not found (e.g., deleted user).
-    let role: UserRole =
-      payload.role ?? (payload.isAdmin ? 'admin' : 'member');
+    let role: UserRole = payload.role ?? (payload.isAdmin ? 'admin' : 'member');
 
     const [user] = await this.db
       .select({ role: schema.users.role })
@@ -42,7 +41,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       .limit(1);
 
     if (user) {
-      role = user.role as UserRole;
+      role = user.role;
     }
 
     return {

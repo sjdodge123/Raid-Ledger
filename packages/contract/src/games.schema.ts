@@ -18,18 +18,6 @@ export const IgdbGameSchema = z.object({
 
 export type IgdbGameDto = z.infer<typeof IgdbGameSchema>;
 
-// Response for game search endpoint
-export const GameSearchResponseSchema = z.object({
-    data: z.array(IgdbGameSchema),
-    meta: z.object({
-        total: z.number(),
-        cached: z.boolean(),
-        source: z.enum(['redis', 'database', 'igdb', 'local']).optional(),
-    }),
-});
-
-export type GameSearchResponseDto = z.infer<typeof GameSearchResponseSchema>;
-
 // ============================================================
 // ROK-229: Expanded game schemas for discovery
 // ============================================================
@@ -64,6 +52,18 @@ export const GameDetailSchema = z.object({
 });
 
 export type GameDetailDto = z.infer<typeof GameDetailSchema>;
+
+// Response for game search endpoint (ROK-375: now returns full GameDetailDto)
+export const GameSearchResponseSchema = z.object({
+    data: z.array(GameDetailSchema),
+    meta: z.object({
+        total: z.number(),
+        cached: z.boolean(),
+        source: z.enum(['redis', 'database', 'igdb', 'local']).optional(),
+    }),
+});
+
+export type GameSearchResponseDto = z.infer<typeof GameSearchResponseSchema>;
 
 /** Discovery page query parameters */
 export const GameDiscoverQuerySchema = z.object({

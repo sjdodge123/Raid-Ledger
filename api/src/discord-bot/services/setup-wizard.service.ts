@@ -270,10 +270,9 @@ export class SetupWizardService {
         })),
       );
 
-    const row =
-      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-        channelSelect,
-      );
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      channelSelect,
+    );
 
     await interaction.reply({
       content:
