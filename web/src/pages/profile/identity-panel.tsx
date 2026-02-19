@@ -60,7 +60,7 @@ export function IdentityPanel() {
         const option = avatarOptions.find(o => o.url === url);
         if (!option) return;
         const pref = option.type === 'character'
-            ? { type: option.type, characterName: option.characterName }
+            ? { type: option.type, characterName: option.characterName, avatarUrl: option.url }
             : { type: option.type };
         updatePreference('avatarPreference', pref)
             .then(() => queryClient.invalidateQueries({ queryKey: ['auth', 'me'] }))

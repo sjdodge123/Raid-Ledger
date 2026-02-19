@@ -14,7 +14,7 @@ export interface User {
     customAvatarUrl: string | null;
     role?: UserRole;
     onboardingCompletedAt: string | null;
-    avatarPreference?: { type: 'custom' | 'discord' | 'character'; characterName?: string } | null;
+    avatarPreference?: { type: 'custom' | 'discord' | 'character'; characterName?: string; avatarUrl?: string } | null;
 }
 
 /** Check if user has admin role */

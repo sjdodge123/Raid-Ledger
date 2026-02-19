@@ -303,7 +303,7 @@ describe('AvatarPanel', () => {
                 fireEvent.click(thumbnailButtons[1]);
                 expect(apiClient.updatePreference).toHaveBeenCalledWith(
                     'avatarPreference',
-                    { type: 'character', characterName: 'Thrall' },
+                    { type: 'character', characterName: 'Thrall', avatarUrl: 'https://example.com/thrall.jpg' },
                 );
             }
         });

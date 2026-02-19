@@ -430,20 +430,36 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
             });
         });
 
-        it('falls through when characters array is undefined and character pref is set', () => {
+        it('falls through when characters array is undefined and character pref has no avatarUrl', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
-                // characters is undefined
+                // characters is undefined, no avatarUrl cached
                 avatarPreference: { type: 'character', characterName: 'Thrall' },
             };
 
-            // `user.characters` is falsy → preference branch skipped → falls to discord
+            // `user.characters` is falsy and no avatarUrl → falls to discord
             const result = resolveAvatar(user);
 
             expect(result).toEqual({
                 url: 'https://discord.com/avatar.png',
                 type: 'discord',
+            });
+        });
+
+        it('uses cached avatarUrl when characters array is undefined but pref has avatarUrl', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: null,
+                // characters is undefined but avatarUrl is cached in preference
+                avatarPreference: { type: 'character', characterName: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'https://example.com/thrall.png',
+                type: 'character',
             });
         });
 
@@ -462,6 +478,60 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
             expect(result).toEqual({
                 url: 'https://discord.com/avatar.png',
                 type: 'discord',
+            });
+        });
+    });
+
+    describe('Cached avatarUrl in preference', () => {
+        it('uses characters array over cached avatarUrl when both available', () => {
+            const user: AvatarUser = {
+                avatar: null,
+                customAvatarUrl: null,
+                characters: [
+                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall-updated.png' },
+                ],
+                // avatarUrl is stale, characters array has newer URL
+                avatarPreference: { type: 'character', characterName: 'Thrall', avatarUrl: 'https://example.com/thrall-old.png' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'https://example.com/thrall-updated.png',
+                type: 'character',
+            });
+        });
+
+        it('uses cached avatarUrl when character deleted from characters array', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: null,
+                characters: [], // character deleted
+                avatarPreference: { type: 'character', characterName: 'DeletedChar', avatarUrl: 'https://example.com/deleted.png' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'https://example.com/deleted.png',
+                type: 'character',
+            });
+        });
+
+        it('uses cached avatarUrl when characters data not loaded (UserMenu context)', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: '/avatars/custom.png',
+                // No characters — typical for UserMenu/MoreDrawer where useAuth() doesn't include characters
+                avatarPreference: { type: 'character', characterName: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+            };
+
+            const result = resolveAvatar(user);
+
+            // Should use cached avatarUrl, NOT fall through to custom or discord
+            expect(result).toEqual({
+                url: 'https://example.com/thrall.png',
+                type: 'character',
             });
         });
     });
