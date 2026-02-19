@@ -69,6 +69,7 @@ export interface GameTimeGridProps {
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'] as const;
 const FULL_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] as const;
 const ALL_HOURS = Array.from({ length: 24 }, (_, i) => i);
+const CELL_GAP = 1; // gap-px = 1px between grid cells
 
 function formatHour(hour: number): string {
     if (hour === 0 || hour === 24) return '12 AM';
@@ -342,7 +343,7 @@ export function GameTimeGrid({
             const gridOffsetLeft = el.offsetLeft;
 
             const allCells = el.querySelectorAll('[data-testid^="cell-0-"]');
-            let rowHeight = firstCell.offsetHeight + gap;
+            let rowHeight = firstCell.offsetHeight + CELL_GAP;
             if (allCells.length >= 2) {
                 const c0 = allCells[0] as HTMLElement;
                 const c1 = allCells[1] as HTMLElement;
@@ -433,9 +434,6 @@ export function GameTimeGrid({
         dragging.current = false;
     }, []);
 
-    // Gap between grid cells (gap-px = 1px)
-    const gap = 1;
-
     // Compute date labels for day headers
     // weekStart may be ISO datetime ("2026-02-08T00:00:00.000Z") or date-only ("2026-02-08")
     const dayDates = useMemo(() => {
@@ -508,7 +506,7 @@ export function GameTimeGrid({
     // Radial gradient centered on hovered cell — shows through grid gaps as feathered grid lines
     const gridLineBackground = useMemo(() => {
         if (hoverDay < 0 || !gridDims || !isInteractive) return undefined;
-        const x = gridDims.colStartLeft + hoverDay * (gridDims.colWidth + gap) + gridDims.colWidth / 2;
+        const x = gridDims.colStartLeft + hoverDay * (gridDims.colWidth + CELL_GAP) + gridDims.colWidth / 2;
         const y = gridDims.headerHeight + (hoverHour - rangeStart) * gridDims.rowHeight + gridDims.rowHeight / 2;
         return `radial-gradient(circle 100px at ${x}px ${y}px, var(--gt-hover-glow), transparent 80%)`;
     }, [hoverDay, hoverHour, gridDims, isInteractive, rangeStart]);
@@ -716,8 +714,8 @@ export function GameTimeGrid({
                 const totalHeight = HOURS.length * gridDims.rowHeight;
                 const relativeHour = currentHour - rangeStart;
                 const redLineY = Math.max(0, Math.min(totalHeight, relativeHour * gridDims.rowHeight));
-                const todayLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
-                const todayRight = todayLeft + gridDims.colWidth + gap;
+                const todayLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
+                const todayRight = todayLeft + gridDims.colWidth + CELL_GAP;
 
                 return (
                     <>
@@ -742,7 +740,7 @@ export function GameTimeGrid({
                                 style={{
                                     top: gridDims.headerHeight + redLineY,
                                     left: todayIndex > 0 ? todayLeft - 1 : todayLeft,
-                                    width: todayIndex > 0 ? todayRight - todayLeft : gridDims.colWidth + gap,
+                                    width: todayIndex > 0 ? todayRight - todayLeft : gridDims.colWidth + CELL_GAP,
                                     height: 0,
                                     borderTop: borderStyle,
                                 }}
@@ -769,7 +767,7 @@ export function GameTimeGrid({
 
             {/* Today column highlight — split: grey above red line, green below */}
             {todayIndex !== undefined && gridDims && (() => {
-                const colLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
+                const colLeft = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
                 const totalHeight = HOURS.length * gridDims.rowHeight;
 
                 // If rolling week is active and currentHour is known, split the column
@@ -833,7 +831,7 @@ export function GameTimeGrid({
                     const relativeHour = currentHour - rangeStart;
                     if (relativeHour < 0 || relativeHour > rangeEnd - rangeStart) return null;
                     const top = gridDims.headerHeight + relativeHour * gridDims.rowHeight;
-                    const left = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + gap);
+                    const left = gridDims.colStartLeft + todayIndex * (gridDims.colWidth + CELL_GAP);
 
                     return (
                         <div
@@ -894,7 +892,7 @@ export function GameTimeGrid({
                     dayEventCounts.set(dayKey, stackIndex + 1);
                     const stackOffset = stackIndex * 2;
 
-                    const left = gridDims.colStartLeft + ev.dayOfWeek * (gridDims.colWidth + gap) + stackOffset;
+                    const left = gridDims.colStartLeft + ev.dayOfWeek * (gridDims.colWidth + CELL_GAP) + stackOffset;
                     const width = gridDims.colWidth - stackOffset;
 
                     return (
@@ -946,7 +944,7 @@ export function GameTimeGrid({
                     const spanHours = visEnd - visStart;
                     const top = gridDims.headerHeight + (visStart - rangeStart) * gridDims.rowHeight;
                     const height = spanHours * gridDims.rowHeight - 1;
-                    const left = gridDims.colStartLeft + block.dayOfWeek * (gridDims.colWidth + gap);
+                    const left = gridDims.colStartLeft + block.dayOfWeek * (gridDims.colWidth + CELL_GAP);
                     const width = gridDims.colWidth;
 
                     // Check if an event block already covers this position — if so, border only
