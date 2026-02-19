@@ -5,10 +5,9 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelSelectMenuBuilder,
-  ChannelType,
+  StringSelectMenuBuilder,
   type ButtonInteraction,
-  type ChannelSelectMenuInteraction,
+  type StringSelectMenuInteraction,
 } from 'discord.js';
 import { eq, and, isNotNull, not, like } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -91,7 +90,7 @@ export class SetupWizardService {
         ) {
           void this.handleButtonInteraction(interaction);
         }
-      } else if (interaction.isChannelSelectMenu()) {
+      } else if (interaction.isStringSelectMenu()) {
         if (interaction.customId === SETUP_IDS.CHANNEL_SELECT) {
           void this.handleChannelSelect(interaction);
         }
@@ -245,18 +244,36 @@ export class SetupWizardService {
 
   /**
    * Step 1: Show channel select dropdown.
+   * Uses StringSelectMenu with pre-fetched channels since DMs lack guild context.
    */
   private async handleStartSetup(
     interaction: ButtonInteraction,
   ): Promise<void> {
-    const channelSelect = new ChannelSelectMenuBuilder()
+    const channels = this.clientService.getTextChannels();
+
+    if (channels.length === 0) {
+      await interaction.reply({
+        content:
+          'No text channels found in the server. Make sure the bot has View Channels permission.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const channelSelect = new StringSelectMenuBuilder()
       .setCustomId(SETUP_IDS.CHANNEL_SELECT)
       .setPlaceholder('Select a default announcement channel')
-      .setChannelTypes(ChannelType.GuildText);
+      .addOptions(
+        channels.slice(0, 25).map((ch) => ({
+          label: `#${ch.name}`,
+          value: ch.id,
+        })),
+      );
 
-    const row = new ActionRowBuilder<ChannelSelectMenuBuilder>().addComponents(
-      channelSelect,
-    );
+    const row =
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        channelSelect,
+      );
 
     await interaction.reply({
       content:
@@ -270,7 +287,7 @@ export class SetupWizardService {
    * Step 2: Channel selected, now confirm community name.
    */
   private async handleChannelSelect(
-    interaction: ChannelSelectMenuInteraction,
+    interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const selectedChannelId = interaction.values[0];
     const userId = interaction.user.id;
