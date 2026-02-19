@@ -9,6 +9,7 @@ import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
+import { SetupWizardService } from './services/setup-wizard.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
@@ -31,6 +32,7 @@ import { RosterViewCommand } from './commands/roster-view.command';
     DiscordBotClientService,
     DiscordEmbedFactory,
     ChannelResolverService,
+    SetupWizardService,
     DiscordEventListener,
     InteractionListener,
     SignupInteractionListener,
@@ -44,6 +46,7 @@ import { RosterViewCommand } from './commands/roster-view.command';
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEventListener,
+    SetupWizardService,
   ],
 })
 export class DiscordBotModule {}

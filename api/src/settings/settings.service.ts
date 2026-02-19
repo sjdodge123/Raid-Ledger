@@ -441,4 +441,50 @@ export class SettingsService {
     await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_CHANNEL, channelId);
     this.logger.log('Discord bot default channel updated');
   }
+
+  /**
+   * Check if the Discord bot setup wizard has been completed (ROK-349)
+   */
+  async isDiscordBotSetupCompleted(): Promise<boolean> {
+    const value = await this.get(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED);
+    return value === 'true';
+  }
+
+  /**
+   * Mark setup wizard as completed (ROK-349)
+   */
+  async markDiscordBotSetupCompleted(): Promise<void> {
+    await this.set(SETTING_KEYS.DISCORD_BOT_SETUP_COMPLETED, 'true');
+    this.logger.log('Discord bot setup wizard marked as completed');
+  }
+
+  /**
+   * Get the Discord bot community name override (ROK-349)
+   */
+  async getDiscordBotCommunityName(): Promise<string | null> {
+    return this.get(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME);
+  }
+
+  /**
+   * Set the Discord bot community name override (ROK-349)
+   */
+  async setDiscordBotCommunityName(name: string): Promise<void> {
+    await this.set(SETTING_KEYS.DISCORD_BOT_COMMUNITY_NAME, name);
+    this.logger.log('Discord bot community name updated');
+  }
+
+  /**
+   * Get the Discord bot timezone setting (ROK-349)
+   */
+  async getDiscordBotTimezone(): Promise<string | null> {
+    return this.get(SETTING_KEYS.DISCORD_BOT_TIMEZONE);
+  }
+
+  /**
+   * Set the Discord bot timezone setting (ROK-349)
+   */
+  async setDiscordBotTimezone(timezone: string): Promise<void> {
+    await this.set(SETTING_KEYS.DISCORD_BOT_TIMEZONE, timezone);
+    this.logger.log('Discord bot timezone updated');
+  }
 }

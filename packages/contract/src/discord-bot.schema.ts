@@ -12,6 +12,7 @@ export const DiscordBotStatusSchema = z.object({
     connecting: z.boolean().optional(),
     guildName: z.string().optional(),
     memberCount: z.number().optional(),
+    setupCompleted: z.boolean().optional(),
 });
 
 export const DiscordBotTestConnectionSchema = z.object({

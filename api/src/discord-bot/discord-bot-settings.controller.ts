@@ -14,6 +14,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   DiscordBotConfigSchema,
@@ -45,6 +46,7 @@ export class DiscordBotSettingsController {
   constructor(
     private readonly discordBotService: DiscordBotService,
     private readonly discordBotClientService: DiscordBotClientService,
+    private readonly setupWizardService: SetupWizardService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -164,6 +166,28 @@ export class DiscordBotSettingsController {
     return {
       success: true,
       message: 'Default channel updated.',
+    };
+  }
+
+  @Post('resend-setup')
+  @HttpCode(HttpStatus.OK)
+  async resendSetupWizard(): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    if (!this.discordBotClientService.isConnected()) {
+      throw new BadRequestException(
+        'Discord bot must be connected to send the setup wizard',
+      );
+    }
+
+    await this.setupWizardService.sendSetupWizardToAdmin();
+
+    this.logger.log('Setup wizard DM re-sent via admin UI');
+
+    return {
+      success: true,
+      message: 'Setup wizard DM sent to admin.',
     };
   }
 }

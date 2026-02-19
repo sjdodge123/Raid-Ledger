@@ -4,6 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 
 describe('DiscordBotSettingsController', () => {
@@ -27,6 +28,13 @@ describe('DiscordBotSettingsController', () => {
           provide: DiscordBotClientService,
           useValue: {
             getTextChannels: jest.fn(),
+            isConnected: jest.fn().mockReturnValue(true),
+          },
+        },
+        {
+          provide: SetupWizardService,
+          useValue: {
+            sendSetupWizardToAdmin: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
