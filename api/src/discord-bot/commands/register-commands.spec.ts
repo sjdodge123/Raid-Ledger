@@ -6,6 +6,9 @@ import { SettingsService } from '../../settings/settings.service';
 import { EventCreateCommand } from './event-create.command';
 import { EventsListCommand } from './events-list.command';
 import { RosterViewCommand } from './roster-view.command';
+import { BindCommand } from './bind.command';
+import { UnbindCommand } from './unbind.command';
+import { BindingsCommand } from './bindings.command';
 import { REST, Routes } from 'discord.js';
 
 // Mock discord.js REST
@@ -100,6 +103,35 @@ describe('RegisterCommandsService', () => {
           provide: RosterViewCommand,
           useValue: mockRosterViewCommand,
         },
+        {
+          provide: BindCommand,
+          useValue: {
+            commandName: 'bind',
+            getDefinition: jest
+              .fn()
+              .mockReturnValue({ name: 'bind', description: 'Bind channel' }),
+          },
+        },
+        {
+          provide: UnbindCommand,
+          useValue: {
+            commandName: 'unbind',
+            getDefinition: jest.fn().mockReturnValue({
+              name: 'unbind',
+              description: 'Unbind channel',
+            }),
+          },
+        },
+        {
+          provide: BindingsCommand,
+          useValue: {
+            commandName: 'bindings',
+            getDefinition: jest.fn().mockReturnValue({
+              name: 'bindings',
+              description: 'List bindings',
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -126,6 +158,9 @@ describe('RegisterCommandsService', () => {
           { name: 'event', description: 'Event commands' },
           { name: 'events', description: 'List events' },
           { name: 'roster', description: 'View roster' },
+          { name: 'bind', description: 'Bind channel' },
+          { name: 'unbind', description: 'Unbind channel' },
+          { name: 'bindings', description: 'List bindings' },
         ],
       });
     });
@@ -142,6 +177,9 @@ describe('RegisterCommandsService', () => {
           { name: 'event', description: 'Event commands' },
           { name: 'events', description: 'List events' },
           { name: 'roster', description: 'View roster' },
+          { name: 'bind', description: 'Bind channel' },
+          { name: 'unbind', description: 'Unbind channel' },
+          { name: 'bindings', description: 'List bindings' },
         ],
       });
       // Guild cleanup is skipped

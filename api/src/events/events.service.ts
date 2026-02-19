@@ -1208,7 +1208,7 @@ export class EventsService {
             }
           : null,
       },
-      registryGameId: eventResponse.game?.registryId ?? null,
+      gameId: eventResponse.game?.id ?? null,
     });
   }
 }

@@ -51,6 +51,10 @@ export function buildCoreIntegrationItems(statuses: {
             status: statuses.igdb.loading ? 'loading'
                 : statuses.igdb.configured ? 'online' : 'offline',
         },
+        {
+            to: '/admin/settings/integrations/channel-bindings',
+            label: 'Channel Bindings',
+        },
     ];
 }
 
