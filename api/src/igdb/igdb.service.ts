@@ -4,7 +4,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { and, eq, ilike, inArray, sql } from 'drizzle-orm';
+import { and, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -23,6 +23,32 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /** IGDB Theme IDs for adult content filtering */
 const ADULT_THEME_IDS = [42, 39]; // 42 = Erotic, 39 = Sexual Content
+
+/**
+ * Keyword blocklist for adult content that IGDB may not tag with adult themes.
+ * When the adult filter is enabled, games whose names contain any of these
+ * keywords (case-insensitive) are excluded from search results.
+ */
+const ADULT_KEYWORDS = [
+  'hentai',
+  'porn',
+  'xxx',
+  'nsfw',
+  'erotic',
+  'lewd',
+  'nude',
+  'naked',
+  'sex toy',
+  'harem',
+  'ecchi',
+  'futanari',
+  'waifu',
+  'ahegao',
+  'succubus',
+  'brothel',
+  'stripclub',
+  'strip poker',
+];
 
 /** IGDB API game response structure (expanded for ROK-229) */
 interface IgdbApiGame {
@@ -526,9 +552,7 @@ export class IgdbService {
       eq(schema.games.banned, false),
     ];
     if (adultFilterEnabled) {
-      dbFilters.push(
-        sql`NOT (${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}])`,
-      );
+      dbFilters.push(...this.buildAdultFilters());
     }
 
     // Layer 1: Check Redis cache — re-query DB with filters to enforce ban/hide/adult
@@ -548,11 +572,7 @@ export class IgdbService {
                 inArray(schema.games.id, cachedIds),
                 eq(schema.games.hidden, false),
                 eq(schema.games.banned, false),
-                ...(adultFilterEnabled
-                  ? [
-                      sql`NOT (${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}])`,
-                    ]
-                  : []),
+                ...(adultFilterEnabled ? this.buildAdultFilters() : []),
               ),
             )
             .limit(IGDB_CONFIG.SEARCH_LIMIT);
@@ -578,8 +598,10 @@ export class IgdbService {
       .where(and(...dbFilters))
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
-    if (cachedGames.length > 0) {
-      this.logger.debug(`Database cache hit for query: ${query}`);
+    if (cachedGames.length >= IGDB_CONFIG.SEARCH_LIMIT) {
+      this.logger.debug(
+        `Database cache hit (full page) for query: ${query}`,
+      );
       const games = cachedGames.map((g) => this.mapDbRowToDetail(g));
 
       // Cache in Redis for future requests (only non-empty results)
@@ -592,7 +614,7 @@ export class IgdbService {
       };
     }
 
-    // Layer 3: Fetch from IGDB with retry logic
+    // Layer 3: Fetch from IGDB (DB had < SEARCH_LIMIT results, try to find more)
     try {
       const igdbGames = await this.fetchWithRetry(normalizedQuery);
 
@@ -666,9 +688,7 @@ export class IgdbService {
       eq(schema.games.banned, false),
     ];
     if (adultFilterEnabled) {
-      filters.push(
-        sql`NOT (${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}])`,
-      );
+      filters.push(...this.buildAdultFilters());
     }
 
     const localGames = await this.db
@@ -978,6 +998,23 @@ export class IgdbService {
   }
 
   /**
+   * Build Drizzle SQL filters for adult content (themes + keyword blocklist).
+   * Returns an array of conditions to spread into an `and()` clause.
+   */
+  private buildAdultFilters(): ReturnType<typeof sql>[] {
+    return [
+      // Block games tagged with adult themes (Erotic, Sexual Content)
+      sql`NOT (${schema.games.themes}::jsonb @> ANY(ARRAY[${sql.raw(ADULT_THEME_IDS.map((id) => `'[${id}]'::jsonb`).join(','))}]))`,
+      // Block games whose names contain adult keywords
+      not(
+        or(
+          ...ADULT_KEYWORDS.map((kw) => ilike(schema.games.name, `%${kw}%`)),
+        )!,
+      ),
+    ];
+  }
+
+  /**
    * Hide a game by ID. Hidden games are excluded from user-facing search/discovery
    * and are not re-imported during IGDB sync.
    */
@@ -1168,13 +1205,20 @@ export class IgdbService {
       .where(
         and(
           eq(schema.games.hidden, false),
-          sql`${schema.games.themes}::jsonb ?| array[${sql.raw(ADULT_THEME_IDS.map((id) => `'${id}'`).join(','))}]`,
+          or(
+            sql`${schema.games.themes}::jsonb @> ANY(ARRAY[${sql.raw(ADULT_THEME_IDS.map((id) => `'[${id}]'::jsonb`).join(','))}])`,
+            or(
+              ...ADULT_KEYWORDS.map((kw) =>
+                ilike(schema.games.name, `%${kw}%`),
+              ),
+            ),
+          ),
         ),
       )
       .returning({ id: schema.games.id });
 
     if (result.length > 0) {
-      this.logger.log(`Auto-hidden ${result.length} games with adult themes`);
+      this.logger.log(`Auto-hidden ${result.length} games with adult themes/keywords`);
     }
 
     return result.length;

@@ -70,7 +70,7 @@ export function GameCard({ game, compact = false }: GameCardProps) {
       }`}
     >
       {/* Cover Image */}
-      <div className="relative aspect-[3/4] bg-overlay">
+      <div className="relative aspect-[3/4] bg-panel">
         {game.coverUrl ? (
           <img
             src={game.coverUrl}
