@@ -12,9 +12,12 @@ vi.mock('../../lib/toast', () => ({
 }));
 
 // Mock the connectivity store
-vi.mock('../../stores/connectivity-store', () => {
-    const { create } = require('zustand');
+const { create } = await vi.hoisted(async () => {
+    const zustand = await import('zustand');
+    return { create: zustand.create };
+});
 
+vi.mock('../../stores/connectivity-store', () => {
     const store = create(() => ({
         status: 'online' as 'checking' | 'online' | 'offline',
         hasBeenOnline: true,

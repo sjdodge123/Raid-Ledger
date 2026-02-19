@@ -4,9 +4,12 @@ import { StartupGate } from './StartupGate';
 import { useConnectivityStore } from '../../stores/connectivity-store';
 
 // Mock the connectivity store so we control state directly
-vi.mock('../../stores/connectivity-store', () => {
-    const { create } = require('zustand');
+const { create } = await vi.hoisted(async () => {
+    const zustand = await import('zustand');
+    return { create: zustand.create };
+});
 
+vi.mock('../../stores/connectivity-store', () => {
     const store = create(() => ({
         status: 'checking',
         hasBeenOnline: false,
