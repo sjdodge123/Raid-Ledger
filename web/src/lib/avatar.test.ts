@@ -1,7 +1,129 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { resolveAvatar, type AvatarUser } from './avatar';
 
+// Mock config module so API_BASE_URL is defined for custom avatar URL resolution
+vi.mock('./config', () => ({
+    API_BASE_URL: 'http://localhost:3000',
+}));
+
 describe('resolveAvatar', () => {
+    describe('Avatar Preference (ROK-352)', () => {
+        it('honors discord preference over custom avatar', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: '/avatars/custom.png',
+                avatarPreference: { type: 'discord' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'https://discord.com/avatar.png',
+                type: 'discord',
+            });
+        });
+
+        it('honors character preference over custom avatar', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: '/avatars/custom.png',
+                characters: [
+                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                ],
+                avatarPreference: { type: 'character', characterName: 'Thrall' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'https://example.com/thrall.png',
+                type: 'character',
+            });
+        });
+
+        it('honors custom preference explicitly', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: '/avatars/custom.png',
+                avatarPreference: { type: 'custom' },
+            };
+
+            const result = resolveAvatar(user);
+
+            expect(result).toEqual({
+                url: 'http://localhost:3000/avatars/custom.png',
+                type: 'custom',
+            });
+        });
+
+        it('falls through when preferred discord source is unavailable', () => {
+            const user: AvatarUser = {
+                avatar: null,
+                customAvatarUrl: '/avatars/custom.png',
+                avatarPreference: { type: 'discord' },
+            };
+
+            const result = resolveAvatar(user);
+
+            // Falls through to default priority: custom is available
+            expect(result).toEqual({
+                url: 'http://localhost:3000/avatars/custom.png',
+                type: 'custom',
+            });
+        });
+
+        it('falls through when preferred character is not found', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: null,
+                characters: [
+                    { gameId: 'wow', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
+                ],
+                avatarPreference: { type: 'character', characterName: 'Thrall' },
+            };
+
+            const result = resolveAvatar(user);
+
+            // Falls through: character 'Thrall' not found, discord is next
+            expect(result).toEqual({
+                url: 'https://discord.com/avatar.png',
+                type: 'discord',
+            });
+        });
+
+        it('falls through when preferred custom is unavailable', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: null,
+                avatarPreference: { type: 'custom' },
+            };
+
+            const result = resolveAvatar(user);
+
+            // Falls through to discord
+            expect(result).toEqual({
+                url: 'https://discord.com/avatar.png',
+                type: 'discord',
+            });
+        });
+
+        it('uses default priority when avatarPreference is null', () => {
+            const user: AvatarUser = {
+                avatar: 'https://discord.com/avatar.png',
+                customAvatarUrl: '/avatars/custom.png',
+                avatarPreference: null,
+            };
+
+            const result = resolveAvatar(user);
+
+            // Default priority: custom > discord
+            expect(result).toEqual({
+                url: 'http://localhost:3000/avatars/custom.png',
+                type: 'custom',
+            });
+        });
+    });
+
     describe('Character Portrait Resolution', () => {
         it('returns character portrait when gameId matches and avatarUrl exists', () => {
             const user: AvatarUser = {

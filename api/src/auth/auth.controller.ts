@@ -16,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
+import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
 import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
@@ -51,6 +52,7 @@ export class AuthController {
     private authService: AuthService,
     private intentTokenService: IntentTokenService,
     private usersService: UsersService,
+    private preferencesService: PreferencesService,
     private signupsService: SignupsService,
     private configService: ConfigService,
     private jwtService: JwtService,
@@ -349,6 +351,13 @@ export class AuthController {
     if (!user) {
       return req.user; // Fallback to JWT payload if user not found
     }
+
+    // Fetch avatar preference from user_preferences (ROK-352)
+    const avatarPref = await this.preferencesService.getUserPreference(
+      req.user.id,
+      'avatarPreference',
+    );
+
     return {
       id: user.id,
       discordId: user.discordId,
@@ -358,6 +367,7 @@ export class AuthController {
       customAvatarUrl: user.customAvatarUrl,
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
+      avatarPreference: avatarPref?.value ?? null,
     };
   }
 

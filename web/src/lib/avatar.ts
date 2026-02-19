@@ -25,6 +25,11 @@ export interface ResolvedAvatar {
  * User object with avatar and optional character data.
  * Used by resolveAvatar to determine the most appropriate avatar to display.
  */
+export interface AvatarPreference {
+    type: AvatarType;
+    characterName?: string;
+}
+
 export interface AvatarUser {
     /** Discord avatar URL (full URL, not hash) */
     avatar: string | null;
@@ -33,8 +38,11 @@ export interface AvatarUser {
     /** User's characters (optional) */
     characters?: Array<{
         gameId: string;
+        name?: string;
         avatarUrl: string | null;
     }>;
+    /** Server-persisted avatar preference from user_preferences table */
+    avatarPreference?: AvatarPreference | null;
 }
 
 /**
@@ -70,12 +78,14 @@ export function toAvatarUser(user: {
     avatar: string | null;
     discordId?: string | null;
     customAvatarUrl?: string | null;
-    characters?: Array<{ gameId: string; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: string; name?: string; avatarUrl: string | null }>;
+    avatarPreference?: AvatarPreference | null;
 }): AvatarUser {
     return {
         avatar: buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null),
         customAvatarUrl: user.customAvatarUrl,
         characters: user.characters,
+        avatarPreference: user.avatarPreference,
     };
 }
 
@@ -95,6 +105,24 @@ export function resolveAvatar(
     // Handle null/undefined user
     if (!user) {
         return { url: null, type: 'initials' };
+    }
+
+    // If user has a server-persisted avatar preference, honor it first (ROK-352)
+    if (user.avatarPreference) {
+        const pref = user.avatarPreference;
+        if (pref.type === 'custom' && user.customAvatarUrl) {
+            return { url: `${API_BASE_URL}${user.customAvatarUrl}`, type: 'custom' };
+        }
+        if (pref.type === 'discord' && user.avatar) {
+            return { url: user.avatar, type: 'discord' };
+        }
+        if (pref.type === 'character' && pref.characterName && user.characters) {
+            const character = user.characters.find(c => c.name === pref.characterName);
+            if (character?.avatarUrl) {
+                return { url: character.avatarUrl, type: 'character' };
+            }
+        }
+        // Preferred source unavailable — fall through to default priority
     }
 
     // Custom avatar has highest priority (ROK-220)
