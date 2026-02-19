@@ -1,0 +1,172 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import { Test, TestingModule } from '@nestjs/testing';
+import { PugInviteListener } from './pug-invite.listener';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { PugInviteService } from '../services/pug-invite.service';
+import type { PugSlotCreatedPayload } from '../../events/pugs.service';
+import type { DiscordLoginPayload } from '../../auth/auth.service';
+import { Events } from 'discord.js';
+
+describe('PugInviteListener', () => {
+  let module: TestingModule;
+  let listener: PugInviteListener;
+  let clientService: jest.Mocked<DiscordBotClientService>;
+  let pugInviteService: jest.Mocked<PugInviteService>;
+
+  beforeEach(async () => {
+    module = await Test.createTestingModule({
+      providers: [
+        PugInviteListener,
+        {
+          provide: DiscordBotClientService,
+          useValue: {
+            getClient: jest.fn().mockReturnValue(null),
+          },
+        },
+        {
+          provide: PugInviteService,
+          useValue: {
+            processPugSlotCreated: jest.fn().mockResolvedValue(undefined),
+            handleNewGuildMember: jest.fn().mockResolvedValue(undefined),
+            claimPugSlots: jest.fn().mockResolvedValue(0),
+          },
+        },
+      ],
+    }).compile();
+
+    listener = module.get(PugInviteListener);
+    clientService = module.get(DiscordBotClientService);
+    pugInviteService = module.get(PugInviteService);
+  });
+
+  afterEach(async () => {
+    jest.clearAllMocks();
+    await module.close();
+  });
+
+  describe('handlePugSlotCreated', () => {
+    it('should call processPugSlotCreated with correct payload', async () => {
+      const payload: PugSlotCreatedPayload = {
+        pugSlotId: 'slot-uuid',
+        eventId: 42,
+        discordUsername: 'testplayer',
+      };
+
+      await listener.handlePugSlotCreated(payload);
+
+      expect(pugInviteService.processPugSlotCreated).toHaveBeenCalledWith(
+        'slot-uuid',
+        42,
+        'testplayer',
+      );
+    });
+  });
+
+  describe('handleDiscordLogin', () => {
+    it('should call claimPugSlots with discord ID and user ID', async () => {
+      const payload: DiscordLoginPayload = {
+        userId: 10,
+        discordId: 'disc-user-456',
+      };
+
+      await listener.handleDiscordLogin(payload);
+
+      expect(pugInviteService.claimPugSlots).toHaveBeenCalledWith(
+        'disc-user-456',
+        10,
+      );
+    });
+
+    it('should handle claim errors gracefully', async () => {
+      pugInviteService.claimPugSlots.mockRejectedValue(
+        new Error('DB error'),
+      );
+
+      const payload: DiscordLoginPayload = {
+        userId: 10,
+        discordId: 'disc-user-456',
+      };
+
+      await expect(
+        listener.handleDiscordLogin(payload),
+      ).resolves.not.toThrow();
+    });
+  });
+
+  describe('handleBotConnected', () => {
+    it('should register guildMemberAdd listener on the client', () => {
+      const mockOn = jest.fn();
+      const mockClient = { on: mockOn };
+      clientService.getClient.mockReturnValue(mockClient as never);
+
+      listener.handleBotConnected();
+
+      expect(mockOn).toHaveBeenCalledWith(
+        Events.GuildMemberAdd,
+        expect.any(Function),
+      );
+    });
+
+    it('should not register twice on repeated connect events', () => {
+      const mockOn = jest.fn();
+      const mockClient = { on: mockOn };
+      clientService.getClient.mockReturnValue(mockClient as never);
+
+      listener.handleBotConnected();
+      listener.handleBotConnected();
+
+      // Should only be called once
+      expect(mockOn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip when client is null', () => {
+      clientService.getClient.mockReturnValue(null);
+
+      listener.handleBotConnected();
+
+      // No error thrown, no listener registered
+      expect(clientService.getClient).toHaveBeenCalled();
+    });
+
+    it('should call handleNewGuildMember when guildMemberAdd fires', async () => {
+      const mockOn = jest.fn();
+      const mockClient = { on: mockOn };
+      clientService.getClient.mockReturnValue(mockClient as never);
+
+      listener.handleBotConnected();
+
+      // Get the callback registered on guildMemberAdd
+      const [, callback] = mockOn.mock.calls[0] as [string, (member: unknown) => Promise<void>];
+      const mockMember = {
+        user: {
+          id: 'new-user-id',
+          username: 'newplayer',
+          avatar: 'avatar-hash-xyz',
+        },
+      };
+
+      await callback(mockMember);
+
+      expect(pugInviteService.handleNewGuildMember).toHaveBeenCalledWith(
+        'new-user-id',
+        'newplayer',
+        'avatar-hash-xyz',
+      );
+    });
+  });
+
+  describe('handleBotDisconnected', () => {
+    it('should allow re-registration after disconnect', () => {
+      const mockOn = jest.fn();
+      const mockClient = { on: mockOn };
+      clientService.getClient.mockReturnValue(mockClient as never);
+
+      listener.handleBotConnected();
+      listener.handleBotDisconnected();
+      listener.handleBotConnected();
+
+      // Should be called twice (once per connect)
+      expect(mockOn).toHaveBeenCalledTimes(2);
+    });
+  });
+});
