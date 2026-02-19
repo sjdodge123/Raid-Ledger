@@ -34,7 +34,7 @@ describe('DiscordEventListener', () => {
       maxAttendees: 20,
       game: { name: 'WoW', coverUrl: 'https://example.com/art.jpg' },
     },
-    registryGameId: 'game-uuid-123',
+    gameId: 101,
   };
 
   const mockEmbed = new EmbedBuilder().setTitle('Test');
@@ -134,9 +134,7 @@ describe('DiscordEventListener', () => {
     it('should post an embed and store the message reference', async () => {
       await listener.handleEventCreated(mockPayload);
 
-      expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledWith(
-        'game-uuid-123',
-      );
+      expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledWith(101);
       expect(embedFactory.buildEventAnnouncement).toHaveBeenCalledWith(
         mockPayload.event,
         { communityName: 'Test Guild', clientUrl: null },

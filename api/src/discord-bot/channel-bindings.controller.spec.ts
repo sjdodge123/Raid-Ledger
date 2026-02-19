@@ -1,26 +1,24 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import type { BindingRecord } from './services/channel-bindings.service';
 
-const makeBinding = (overrides: Partial<BindingRecord> = {}): BindingRecord => ({
-  id: 'binding-uuid-1',
-  guildId: 'guild-123',
-  channelId: 'channel-456',
-  channelType: 'text',
-  bindingPurpose: 'game-announcements',
-  gameId: null,
-  config: null,
-  createdAt: new Date('2025-01-01T00:00:00Z'),
-  updatedAt: new Date('2025-01-01T00:00:00Z'),
-  ...overrides,
-});
+const makeBinding = (overrides: Partial<BindingRecord> = {}): BindingRecord =>
+  ({
+    id: 'binding-uuid-1',
+    guildId: 'guild-123',
+    channelId: 'channel-456',
+    channelType: 'text',
+    bindingPurpose: 'game-announcements',
+    gameId: null,
+    config: null,
+    createdAt: new Date('2025-01-01T00:00:00Z'),
+    updatedAt: new Date('2025-01-01T00:00:00Z'),
+    ...overrides,
+  }) as BindingRecord;
 
 describe('ChannelBindingsController', () => {
   let controller: ChannelBindingsController;
@@ -110,7 +108,7 @@ describe('ChannelBindingsController', () => {
         channelId: 'channel-456',
         channelType: 'text',
         bindingPurpose: 'game-announcements',
-        gameId: 'game-uuid-1',
+        gameId: 42,
         config: { minPlayers: 5 },
       });
       bindingsService.getBindings.mockResolvedValue([binding]);
@@ -123,7 +121,7 @@ describe('ChannelBindingsController', () => {
         channelId: 'channel-456',
         channelType: 'text',
         bindingPurpose: 'game-announcements',
-        gameId: 'game-uuid-1',
+        gameId: 42,
         config: { minPlayers: 5 },
       });
       expect(typeof result.data[0].createdAt).toBe('string');
@@ -235,15 +233,15 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should call bind with correct arguments including gameId', async () => {
-      const validGameUuid = '550e8400-e29b-41d4-a716-446655440000';
-      const created = makeBinding({ gameId: validGameUuid });
+      const gameId = 42;
+      const created = makeBinding({ gameId });
       bindingsService.bind.mockResolvedValue(created);
 
       await controller.createBinding({
         channelId: 'ch-1',
         channelType: 'text',
         bindingPurpose: 'game-announcements',
-        gameId: validGameUuid,
+        gameId,
       });
 
       expect(bindingsService.bind).toHaveBeenCalledWith(
@@ -251,7 +249,7 @@ describe('ChannelBindingsController', () => {
         'ch-1',
         'text',
         'game-announcements',
-        validGameUuid,
+        gameId,
         undefined,
       );
     });
@@ -299,7 +297,9 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should update binding config and return it', async () => {
-      const updated = makeBinding({ config: { minPlayers: 5, gracePeriod: 60 } });
+      const updated = makeBinding({
+        config: { minPlayers: 5, gracePeriod: 60 },
+      });
       bindingsService.updateConfig.mockResolvedValue(updated);
 
       const result = await controller.updateBinding('binding-uuid-1', {

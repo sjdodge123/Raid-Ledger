@@ -21,7 +21,7 @@ export const ChannelBindingSchema = z.object({
   channelName: z.string().optional(),
   channelType: ChannelTypeEnum,
   bindingPurpose: BindingPurposeEnum,
-  gameId: z.string().uuid().nullable(),
+  gameId: z.number().int().nullable(),
   gameName: z.string().nullable().optional(),
   config: ChannelBindingConfigSchema.nullable(),
   createdAt: z.string(),
@@ -36,7 +36,7 @@ export const CreateChannelBindingSchema = z.object({
   channelId: z.string().min(1),
   channelType: ChannelTypeEnum,
   bindingPurpose: BindingPurposeEnum,
-  gameId: z.string().uuid().nullable().optional(),
+  gameId: z.number().int().nullable().optional(),
   config: ChannelBindingConfigSchema.optional(),
 });
 

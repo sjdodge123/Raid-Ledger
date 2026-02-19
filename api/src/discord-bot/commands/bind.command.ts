@@ -44,10 +44,7 @@ export class BindCommand
           .addChannelTypes(ChannelType.GuildText, ChannelType.GuildVoice),
       )
       .addStringOption((opt) =>
-        opt
-          .setName('game')
-          .setDescription('Game name (from game registry)')
-          .setAutocomplete(true),
+        opt.setName('game').setDescription('Game name').setAutocomplete(true),
       )
       .toJSON();
   }
@@ -85,16 +82,16 @@ export class BindCommand
         interaction.channel.type === ChannelType.GuildVoice ? 'voice' : 'text';
     }
 
-    // Resolve game from the registry
+    // Resolve game from the IGDB games catalog (matches /event create behavior)
     const gameName = interaction.options.getString('game');
-    let gameId: string | null = null;
+    let gameId: number | null = null;
     let resolvedGameName: string | null = null;
 
     if (gameName) {
       const [match] = await this.db
-        .select({ id: schema.gameRegistry.id, name: schema.gameRegistry.name })
-        .from(schema.gameRegistry)
-        .where(ilike(schema.gameRegistry.name, gameName))
+        .select({ id: schema.games.id, name: schema.games.name })
+        .from(schema.games)
+        .where(ilike(schema.games.name, gameName))
         .limit(1);
 
       if (match) {
@@ -102,7 +99,7 @@ export class BindCommand
         resolvedGameName = match.name;
       } else {
         await interaction.editReply(
-          `Game "${gameName}" not found in the game registry. Use autocomplete to find available games.`,
+          `Game "${gameName}" not found. Use autocomplete to find available games.`,
         );
         return;
       }
@@ -173,11 +170,11 @@ export class BindCommand
     if (focused.name === 'game') {
       const results = await this.db
         .select({
-          id: schema.gameRegistry.id,
-          name: schema.gameRegistry.name,
+          id: schema.games.id,
+          name: schema.games.name,
         })
-        .from(schema.gameRegistry)
-        .where(ilike(schema.gameRegistry.name, `%${focused.value}%`))
+        .from(schema.games)
+        .where(ilike(schema.games.name, `%${focused.value}%`))
         .limit(25);
 
       await interaction.respond(

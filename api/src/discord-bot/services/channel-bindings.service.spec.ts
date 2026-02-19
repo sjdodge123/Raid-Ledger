@@ -133,7 +133,7 @@ describe('ChannelBindingsService', () => {
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mockSelect.mockReturnValueOnce({ from: fromMock });
 
-      const result = await service.getChannelForGame('guild-123', 'game-uuid');
+      const result = await service.getChannelForGame('guild-123', 42);
 
       expect(result).toBe('channel-789');
     });
@@ -144,7 +144,7 @@ describe('ChannelBindingsService', () => {
       const fromMock = jest.fn().mockReturnValue({ where: whereMock });
       mockSelect.mockReturnValueOnce({ from: fromMock });
 
-      const result = await service.getChannelForGame('guild-123', 'game-uuid');
+      const result = await service.getChannelForGame('guild-123', 42);
 
       expect(result).toBeNull();
     });

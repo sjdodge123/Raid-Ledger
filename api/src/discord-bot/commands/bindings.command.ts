@@ -62,17 +62,17 @@ export class BindingsCommand
       // Resolve game names for bindings with gameId
       const gameIds = bindings
         .map((b) => b.gameId)
-        .filter((id): id is string => id !== null);
+        .filter((id): id is number => id !== null);
 
-      const gameMap = new Map<string, string>();
+      const gameMap = new Map<number, string>();
       for (const gId of [...new Set(gameIds)]) {
         const [game] = await this.db
           .select({
-            id: schema.gameRegistry.id,
-            name: schema.gameRegistry.name,
+            id: schema.games.id,
+            name: schema.games.name,
           })
-          .from(schema.gameRegistry)
-          .where(eq(schema.gameRegistry.id, gId))
+          .from(schema.games)
+          .where(eq(schema.games.id, gId))
           .limit(1);
         if (game) {
           gameMap.set(game.id, game.name);

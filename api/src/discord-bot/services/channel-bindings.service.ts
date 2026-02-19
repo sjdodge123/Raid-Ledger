@@ -15,7 +15,7 @@ export interface BindingRecord {
   channelId: string;
   channelType: string;
   bindingPurpose: string;
-  gameId: string | null;
+  gameId: number | null;
   config: ChannelBindingConfig | null;
   createdAt: Date;
   updatedAt: Date;
@@ -39,7 +39,7 @@ export class ChannelBindingsService {
     channelId: string,
     channelType: ChannelType,
     bindingPurpose: BindingPurpose,
-    gameId: string | null,
+    gameId: number | null,
     config?: ChannelBindingConfig,
   ): Promise<BindingRecord> {
     const [result] = await this.db
@@ -127,7 +127,7 @@ export class ChannelBindingsService {
    */
   async getChannelForGame(
     guildId: string,
-    gameId: string,
+    gameId: number,
   ): Promise<string | null> {
     const [row] = await this.db
       .select({ channelId: schema.channelBindings.channelId })

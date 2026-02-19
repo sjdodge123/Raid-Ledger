@@ -254,10 +254,8 @@ describe('BindingsCommand', () => {
     });
 
     it('should look up game name for bindings with gameId', async () => {
-      const gameId = 'game-uuid-abc';
-      bindingsService.getBindings.mockResolvedValue([
-        makeBinding({ gameId }),
-      ]);
+      const gameId = 42;
+      bindingsService.getBindings.mockResolvedValue([makeBinding({ gameId })]);
 
       // Mock DB to return a game name
       const limitMock = jest
@@ -282,11 +280,9 @@ describe('BindingsCommand', () => {
       expect(description).toContain('World of Warcraft');
     });
 
-    it('should show "Unknown" when gameId has no matching game in registry', async () => {
-      const gameId = 'missing-game-uuid';
-      bindingsService.getBindings.mockResolvedValue([
-        makeBinding({ gameId }),
-      ]);
+    it('should show "Unknown" when gameId has no matching game in DB', async () => {
+      const gameId = 999;
+      bindingsService.getBindings.mockResolvedValue([makeBinding({ gameId })]);
 
       // DB returns no match
       const limitMock = jest.fn().mockResolvedValue([]);
@@ -310,7 +306,7 @@ describe('BindingsCommand', () => {
     });
 
     it('should deduplicate game lookups when multiple bindings share the same gameId', async () => {
-      const gameId = 'shared-game-uuid';
+      const gameId = 42;
       bindingsService.getBindings.mockResolvedValue([
         makeBinding({ id: 'binding-1', channelId: 'ch-1', gameId }),
         makeBinding({ id: 'binding-2', channelId: 'ch-2', gameId }),

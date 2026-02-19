@@ -330,6 +330,13 @@
       "when": 1771470698864,
       "tag": "0046_overjoyed_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1771473617319,
+      "tag": "0047_keen_norrin_radd",
+      "breakpoints": true
     }
   ]
 }

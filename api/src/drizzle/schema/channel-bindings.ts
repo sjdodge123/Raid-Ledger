@@ -2,12 +2,13 @@ import {
   pgTable,
   uuid,
   varchar,
+  integer,
   jsonb,
   timestamp,
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
-import { gameRegistry } from './game-registry';
+import { games } from './games';
 
 /**
  * Channel Bindings - Maps Discord channels to games/behaviors.
@@ -25,7 +26,7 @@ export const channelBindings = pgTable(
     channelId: varchar('channel_id', { length: 255 }).notNull(),
     channelType: varchar('channel_type', { length: 50 }).notNull(), // 'text', 'voice'
     bindingPurpose: varchar('binding_purpose', { length: 50 }).notNull(), // 'game-announcements', 'game-voice-monitor', 'general-lobby'
-    gameId: uuid('game_id').references(() => gameRegistry.id, {
+    gameId: integer('game_id').references(() => games.id, {
       onDelete: 'set null',
     }),
     config: jsonb('config').default({}).$type<{

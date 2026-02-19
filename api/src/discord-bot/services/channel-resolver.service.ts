@@ -23,21 +23,16 @@ export class ChannelResolverService {
 
   /**
    * Resolve the target Discord channel for an event.
-   * @param registryGameId - Game registry UUID for game-specific binding lookup
+   * @param gameId - Games table PK (integer) for game-specific binding lookup
    * @returns Channel ID string or null if no channel configured
    */
-  async resolveChannelForEvent(
-    registryGameId?: string | null,
-  ): Promise<string | null> {
+  async resolveChannelForEvent(gameId?: number | null): Promise<string | null> {
     // Priority 1: Game-specific binding
-    if (registryGameId) {
+    if (gameId) {
       const guildId = this.clientService.getGuildId();
       if (guildId) {
         const boundChannel =
-          await this.channelBindingsService.getChannelForGame(
-            guildId,
-            registryGameId,
-          );
+          await this.channelBindingsService.getChannelForGame(guildId, gameId);
         if (boundChannel) {
           return boundChannel;
         }

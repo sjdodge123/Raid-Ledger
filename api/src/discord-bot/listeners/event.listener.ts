@@ -20,7 +20,7 @@ import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 export interface EventPayload {
   eventId: number;
   event: EmbedEventData;
-  registryGameId?: string | null;
+  gameId?: number | null;
 }
 
 /**
@@ -48,7 +48,7 @@ export class DiscordEventListener {
     }
 
     const channelId = await this.channelResolver.resolveChannelForEvent(
-      payload.registryGameId,
+      payload.gameId,
     );
     if (!channelId) return;
 

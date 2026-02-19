@@ -46,12 +46,12 @@ describe('ChannelResolverService', () => {
     clientService.getGuildId.mockReturnValue('guild-123');
     bindingsService.getChannelForGame.mockResolvedValue('game-channel-456');
 
-    const result = await service.resolveChannelForEvent('game-uuid');
+    const result = await service.resolveChannelForEvent(101);
 
     expect(result).toBe('game-channel-456');
     expect(bindingsService.getChannelForGame).toHaveBeenCalledWith(
       'guild-123',
-      'game-uuid',
+      101,
     );
   });
 
@@ -62,7 +62,7 @@ describe('ChannelResolverService', () => {
       'default-channel',
     );
 
-    const result = await service.resolveChannelForEvent('game-uuid');
+    const result = await service.resolveChannelForEvent(101);
 
     expect(result).toBe('default-channel');
   });
@@ -92,7 +92,7 @@ describe('ChannelResolverService', () => {
     bindingsService.getChannelForGame.mockResolvedValue(null);
     settingsService.getDiscordBotDefaultChannel.mockResolvedValue(null);
 
-    const result = await service.resolveChannelForEvent('game-uuid');
+    const result = await service.resolveChannelForEvent(101);
 
     expect(result).toBeNull();
   });
@@ -103,7 +103,7 @@ describe('ChannelResolverService', () => {
       'default-channel',
     );
 
-    const result = await service.resolveChannelForEvent('game-uuid');
+    const result = await service.resolveChannelForEvent(101);
 
     expect(result).toBe('default-channel');
     expect(bindingsService.getChannelForGame).not.toHaveBeenCalled();
