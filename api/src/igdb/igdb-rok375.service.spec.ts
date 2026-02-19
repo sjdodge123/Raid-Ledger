@@ -141,12 +141,23 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   // ============================================================
   describe('search results return GameDetailDto (not IgdbGameDto)', () => {
     it('database layer returns full GameDetailDto with genres/platforms/ratings', async () => {
+      // The DB layer returns source='database' only when a full page (>= SEARCH_LIMIT = 20)
+      // is found, to avoid suppressing IGDB lookups for partial result sets.
       mockRedis.get.mockResolvedValue(null);
+      const fullPage = Array.from({ length: 20 }, (_, i) => ({
+        ...fullGameRow,
+        id: i + 1,
+      }));
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => thenableResult(fullPage)),
+        })),
+      }));
 
       const result = await service.searchGames('halo');
 
       expect(result.source).toBe('database');
-      expect(result.games.length).toBe(1);
+      expect(result.games.length).toBe(20);
 
       const game = result.games[0];
       // Verify full GameDetailDto fields are present (not just the 5 basic IgdbGameDto fields)
@@ -532,7 +543,17 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
     });
 
     it('returns source "database" for DB cache hits', async () => {
+      // DB layer returns 'database' only when a full page (>= SEARCH_LIMIT = 20) is found
       mockRedis.get.mockResolvedValue(null);
+      const fullPage = Array.from({ length: 20 }, (_, i) => ({
+        ...fullGameRow,
+        id: i + 1,
+      }));
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => thenableResult(fullPage)),
+        })),
+      }));
 
       const result = await service.searchGames('halo');
       expect(result.source).toBe('database');
