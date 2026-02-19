@@ -108,13 +108,17 @@ export class SignupInteractionListener {
     ];
     if (!validActions.includes(action as (typeof validActions)[number])) return;
 
-    // Rate limiting
+    // Defer immediately to capture the interaction token before it expires.
+    // This prevents 10062 (Unknown interaction) from slow async operations
+    // and 40060 (already acknowledged) from concurrent rapid clicks.
+    await interaction.deferReply({ ephemeral: true });
+
+    // Rate limiting — uses editReply since we already deferred
     const cooldownKey = `${interaction.user.id}:${eventId}`;
     const lastInteraction = interactionCooldowns.get(cooldownKey);
     if (lastInteraction && Date.now() - lastInteraction < COOLDOWN_MS) {
-      await interaction.reply({
+      await this.safeEditReply(interaction, {
         content: 'Please wait a moment before trying again.',
-        ephemeral: true,
       });
       return;
     }
@@ -142,12 +146,10 @@ export class SignupInteractionListener {
         `Error handling signup interaction for event ${eventId}:`,
         error,
       );
-      if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: 'Something went wrong. Please try again.',
-          ephemeral: true,
-        });
-      }
+      await this.safeReply(interaction, {
+        content: 'Something went wrong. Please try again.',
+        ephemeral: true,
+      });
     }
   }
 
@@ -158,7 +160,7 @@ export class SignupInteractionListener {
     interaction: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    // deferReply already called in handleButtonInteraction
 
     const discordUserId = interaction.user.id;
 
@@ -314,7 +316,7 @@ export class SignupInteractionListener {
     interaction: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    // deferReply already called in handleButtonInteraction
 
     const discordUserId = interaction.user.id;
     const existingSignup = await this.signupsService.findByDiscordUser(
@@ -376,7 +378,7 @@ export class SignupInteractionListener {
     interaction: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    // deferReply already called in handleButtonInteraction
 
     const discordUserId = interaction.user.id;
     const existingSignup = await this.signupsService.findByDiscordUser(
@@ -497,7 +499,7 @@ export class SignupInteractionListener {
     interaction: ButtonInteraction,
     eventId: number,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    // deferReply already called in handleButtonInteraction
 
     const discordUserId = interaction.user.id;
 
@@ -759,7 +761,7 @@ export class SignupInteractionListener {
         `Error handling role select for event ${eventId}:`,
         error,
       );
-      await interaction.editReply({
+      await this.safeEditReply(interaction, {
         content: 'Something went wrong. Please try again.',
         components: [],
       });
@@ -845,11 +847,72 @@ export class SignupInteractionListener {
         `Error handling character select for event ${eventId}:`,
         error,
       );
-      await interaction.editReply({
+      await this.safeEditReply(interaction, {
         content: 'Something went wrong. Please try again.',
         components: [],
       });
     }
+  }
+
+  /**
+   * Safely reply to an interaction, catching Discord API errors for
+   * already-acknowledged (40060) or expired (10062) interactions.
+   */
+  private async safeReply(
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    options: { content: string; ephemeral?: boolean },
+  ): Promise<void> {
+    try {
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({ content: options.content });
+      } else {
+        await interaction.reply(options);
+      }
+    } catch (error: unknown) {
+      if (this.isDiscordInteractionError(error)) {
+        this.logger.warn(
+          `Interaction response failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Safely edit a deferred/replied interaction, catching Discord API errors
+   * for expired (10062) or already-acknowledged (40060) interactions.
+   */
+  private async safeEditReply(
+    interaction: ButtonInteraction | StringSelectMenuInteraction,
+    options: Parameters<ButtonInteraction['editReply']>[0],
+  ): Promise<void> {
+    try {
+      await interaction.editReply(options);
+    } catch (error: unknown) {
+      if (this.isDiscordInteractionError(error)) {
+        this.logger.warn(
+          `Interaction editReply failed (code ${(error as { code: number }).code}): ${(error as Error).message}`,
+        );
+        return;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Check if an error is a Discord API error for interaction race conditions.
+   * Code 40060 = Interaction has already been acknowledged
+   * Code 10062 = Unknown interaction (token expired)
+   */
+  private isDiscordInteractionError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      ((error as { code: number }).code === 40060 ||
+        (error as { code: number }).code === 10062)
+    );
   }
 
   /**
