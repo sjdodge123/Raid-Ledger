@@ -64,6 +64,8 @@ export const SIGNUP_BUTTON_IDS = {
   DECLINE: 'decline',
   /** Role selection menu for anonymous participants */
   ROLE_SELECT: 'role_select',
+  /** Character selection menu for linked users (ROK-138) */
+  CHARACTER_SELECT: 'char_select',
   /** "Join & Sign Up" (deferred signup — Path A) */
   JOIN_SIGNUP: 'join_signup',
   /** "Quick Sign Up" (anonymous — Path B) */
