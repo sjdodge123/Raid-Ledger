@@ -284,6 +284,7 @@ export function GameTimeGrid({
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const dragging = useRef(false);
     const paintMode = useRef<'paint' | 'erase'>('paint');
+    const wrapperRef = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
     const [gridDims, setGridDims] = useState<{ colWidth: number; rowHeight: number; headerHeight: number; colStartLeft: number } | null>(null);
 
@@ -318,11 +319,14 @@ export function GameTimeGrid({
         return [d, h];
     }, [hoveredCell]);
 
-    // Measure grid dimensions for absolute positioning of overlays + hover effects
+    // Measure grid dimensions for absolute positioning of overlays + hover effects.
+    // Uses getBoundingClientRect() delta from the wrapper (positioning ancestor) to avoid
+    // the offsetParent chain being broken by CSS transforms on ancestor elements (e.g. modal-spring animation).
     const needsMeasurement = (events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || todayIndex !== undefined || isInteractive;
     useEffect(() => {
         const el = gridRef.current;
-        if (!el || !needsMeasurement) return;
+        const wrapper = wrapperRef.current;
+        if (!el || !wrapper || !needsMeasurement) return;
 
         const measure = () => {
             const firstCell = el.querySelector('[data-testid="cell-0-0"]') ??
@@ -330,8 +334,8 @@ export function GameTimeGrid({
             const dayHeader = el.querySelector('[data-testid="day-header-0"]');
             if (!firstCell || !dayHeader) return;
 
+            const wrapperRect = wrapper.getBoundingClientRect();
             const firstRect = firstCell.getBoundingClientRect();
-            const gridRect = el.getBoundingClientRect();
             const headerRect = dayHeader.getBoundingClientRect();
 
             // Find the actual first two visible hour cells to measure row height
@@ -346,8 +350,8 @@ export function GameTimeGrid({
             setGridDims({
                 colWidth: firstRect.width,
                 rowHeight,
-                headerHeight: headerRect.bottom - gridRect.top,
-                colStartLeft: firstRect.left - gridRect.left,
+                headerHeight: (headerRect.top - wrapperRect.top) + headerRect.height,
+                colStartLeft: firstRect.left - wrapperRect.left,
             });
         };
 
@@ -506,7 +510,7 @@ export function GameTimeGrid({
     }, [hoverDay, hoverHour, gridDims, isInteractive, rangeStart]);
 
     return (
-        <div className={`relative overflow-hidden ${className ?? ''}`}>
+        <div ref={wrapperRef} className={`relative overflow-hidden ${className ?? ''}`}>
             {/* Tooltip */}
             {hoveredCell && (
                 <div className="absolute z-30 px-2 py-1 bg-overlay text-foreground text-xs rounded whitespace-nowrap pointer-events-none" style={{ top: 0, right: 0 }}>

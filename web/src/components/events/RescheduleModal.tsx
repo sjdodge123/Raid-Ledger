@@ -144,7 +144,7 @@ export function RescheduleModal({
         return blocks;
     }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
 
-    // Smart hour range
+    // Smart hour range — floor at 6 AM to keep grid compact within modal viewport
     const hourRange: [number, number] = useMemo(() => {
         let minHour = currentHour;
         if (gridSelection) minHour = Math.min(minHour, gridSelection.hour);
@@ -152,7 +152,7 @@ export function RescheduleModal({
             const heatmapMinHour = Math.min(...gameTimeData.cells.map(c => c.hour));
             minHour = Math.min(minHour, heatmapMinHour);
         }
-        const rangeStart = Math.max(0, Math.min(minHour - 1, 6));
+        const rangeStart = Math.max(6, Math.min(minHour - 1, 6));
         return [rangeStart, 24];
     }, [currentHour, gridSelection, gameTimeData]);
 
@@ -259,6 +259,7 @@ export function RescheduleModal({
                     <GameTimeGrid
                         slots={[]}
                         readOnly
+                        compact
                         hourRange={hourRange}
                         events={currentEventBlocks}
                         previewBlocks={previewBlocks}
