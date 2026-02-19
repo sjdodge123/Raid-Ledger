@@ -74,9 +74,11 @@ Review tasks remain blocked until the operator tests locally and moves the story
 to "Code Review" status in Linear. The lead unblocks and spawns review agents
 in Step 7c after polling detects operator approval.
 
-## 6e. Deploy for Operator Testing (after all batch stories pass CI)
+## 6e. Deploy for Operator Testing (MANDATORY — after all batch stories pass CI)
 
-Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **delegate the deploy to the build agent**:
+**The operator cannot test without a deployed app. Deployment is NOT optional — do it automatically.**
+
+Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **immediately delegate the deploy to the build agent**:
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
@@ -103,20 +105,18 @@ The Playwright agent runs independently — do NOT wait for it.
 **Notify the operator — do NOT ask for test results in the terminal:**
 
 ```
-## Batch N — Ready for Testing
-All N stories have passed CI locally and are moved to "In Review" in Linear.
-No PRs created yet — a single batch PR will be created after code review.
+## Batch N — Deployed & Ready for Testing
+All N stories have passed CI and are deployed at localhost:5173.
+Currently running: rok-<num>-<short-name> (ROK-XXX)
 
-Automated Playwright tests are running — results and screenshots will be
-posted to each story in Linear shortly.
-
-Ready for testing:
-- ROK-XXX: <title> — deploy_dev.sh --branch rok-<num>-<short-name> (Linear: In Review)
-- ROK-YYY: <title> — deploy_dev.sh --branch rok-<num>-<short-name> (Linear: In Review)
+Stories to test (all in "In Review" in Linear):
+- ROK-XXX: <title> — DEPLOYED NOW
+- ROK-YYY: <title> — switch with: deploy_dev.sh --branch rok-<num>-<short-name>
 
 Testing checklists have been posted to each story in Linear.
-Test each story locally with: deploy_dev.sh --branch <branch-name>
-Update each story's status in Linear when done:
+Automated Playwright tests are running — results will be posted to Linear shortly.
+
+When done testing each story, update its status in Linear:
   -> "Code Review" = testing passed, ready for code review agent
   -> "Changes Requested" (add comments explaining issues) = testing failed
 ```

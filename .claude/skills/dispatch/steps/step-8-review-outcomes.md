@@ -40,5 +40,5 @@
    The build agent will: run CI -> push -> deploy feature branch -> verify health -> message lead with results.
    If CI fails, the build agent messages back with errors — re-spawn the dev teammate to fix.
 8. Lead moves Linear -> "In Review"
-9. Notify operator: "ROK-XXX has reviewer fixes re-deployed for re-test. Use: deploy_dev.sh --branch rok-<num>-<short-name>"
+9. Notify operator: "ROK-XXX has reviewer fixes re-deployed at localhost:5173 for re-test."
 10. **Review task stays BLOCKED** — cycle repeats from Step 7a (operator re-tests)
