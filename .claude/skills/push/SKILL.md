@@ -98,16 +98,18 @@ Check if a PR already exists:
 gh pr list --head $(git branch --show-current) --json number,url
 ```
 
-**If no PR exists**, create one:
+**If no PR exists**, create one and enable auto-merge:
 
 ```bash
 gh pr create --base main --head $(git branch --show-current) --title "<type>(<story-id>): <short description>" --body "<PR body>"
+gh pr merge --auto --squash
 ```
 
 - Title format: `feat(ROK-329): short description` (use `fix`, `chore`, `refactor` etc. as appropriate)
 - Body should include: Summary, Changes (grouped by area), Testing results from steps 3-5
+- Auto-merge will squash-merge the PR once all CI checks pass
 
-**If a PR already exists**, the push will update it automatically.
+**If a PR already exists**, the push will update it automatically. Auto-merge only needs to be enabled once per PR.
 
 ---
 

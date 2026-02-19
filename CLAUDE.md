@@ -198,10 +198,10 @@ When code is committed:
 ### On Story Completion
 When a story (ROK-XXX) is finished — all ACs met, code committed:
 1. **Dev teammate** messages the lead that implementation is complete
-2. **Lead** pushes the branch and creates a GitHub PR
+2. **Lead** pushes the branch, creates a GitHub PR (`gh pr create --base main`), and enables auto-merge (`gh pr merge --auto --squash`)
 3. **Lead** merges branch into `staging` for manual testing, updates Linear → "In Review"
 4. **Lead** posts PR URL as a Linear comment on the issue
-5. After operator testing + code review approval, PR is merged to `main`
+5. CI passes → PR auto-merges to `main`
 6. **Lead** updates Linear → "Done" with a summary comment:
    - Key files changed
    - Commit SHA(s) and PR number
