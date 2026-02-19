@@ -14,11 +14,7 @@ cat > /tmp/main-protection.json << 'EOF'
     "contexts": ["build-lint-test", "merge"]
   },
   "enforce_admins": true,
-  "required_pull_request_reviews": {
-    "dismiss_stale_reviews": true,
-    "require_code_owner_reviews": false,
-    "required_approving_review_count": 1
-  },
+  "required_pull_request_reviews": null,
   "restrictions": null,
   "required_conversation_resolution": true,
   "allow_force_pushes": false,
@@ -55,9 +51,7 @@ rm /tmp/main-protection.json /tmp/staging-protection.json
 echo "✅ Branch protection rules configured successfully"
 echo ""
 echo "Main branch protection:"
-echo "  - Requires 1 PR approval"
 echo "  - Requires status checks: build-lint-test, merge"
-echo "  - Dismisses stale reviews on new commits"
 echo "  - Requires conversation resolution"
 echo "  - Blocks force pushes and deletions"
 echo ""
