@@ -20,11 +20,18 @@ export function AuthSuccessPage() {
     const hasProcessedRef = useRef(false);
 
     useEffect(() => {
-        // Prevent duplicate processing in React Strict Mode
+        // Prevent duplicate processing in React Strict Mode.
+        // useRef alone doesn't survive Strict Mode's unmount/remount cycle,
+        // so we also check sessionStorage keyed on the actual code value.
         if (hasProcessedRef.current) return;
 
         const code = searchParams.get('code');
         const error = searchParams.get('error');
+
+        if (code && sessionStorage.getItem(`oauth_processed_${code}`)) {
+            hasProcessedRef.current = true;
+            return;
+        }
 
         if (error) {
             hasProcessedRef.current = true;
@@ -42,6 +49,7 @@ export function AuthSuccessPage() {
 
         if (code) {
             hasProcessedRef.current = true;
+            sessionStorage.setItem(`oauth_processed_${code}`, '1');
             (async () => {
                 try {
                     // Exchange one-time code for JWT token
@@ -92,10 +100,12 @@ export function AuthSuccessPage() {
                         }
                     }
 
+                    sessionStorage.removeItem(`oauth_processed_${code}`);
                     const redirectTo = consumeAuthRedirect() || '/calendar';
                     toast.success('Logged in successfully!');
                     navigate(redirectTo, { replace: true });
                 } catch (err) {
+                    sessionStorage.removeItem(`oauth_processed_${code}`);
                     console.error('Login failed:', err);
                     toast.error('Login failed. Please try again.');
                     navigate('/', { replace: true });

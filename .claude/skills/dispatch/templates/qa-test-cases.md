@@ -13,7 +13,7 @@ gh pr diff <PR_NUMBER>
 
 ### Your Job
 Generate a manual testing checklist that the operator can follow to verify
-this story works correctly on staging (localhost:5173).
+this story works correctly locally (localhost:5173).
 
 ### Guidelines
 - Read the story's acceptance criteria carefully — each AC should map to at least one test step
@@ -35,7 +35,7 @@ Use this format for the comment body:
 ## Manual Testing Checklist
 
 ### Setup
-- [ ] Staging deployed at localhost:5173
+- [ ] Feature branch deployed at localhost:5173
 - [ ] Logged in as admin (password in .env ADMIN_PASSWORD)
 
 ### Acceptance Criteria Tests
