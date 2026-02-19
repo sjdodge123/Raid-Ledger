@@ -1111,12 +1111,12 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleButtonInteraction(interaction);
 
-      // Should show role select with characterId encoded, NOT sign up immediately
+      // Should show character select first (even for 1 char), NOT sign up immediately
       expect(mockSignupsService.signup).not.toHaveBeenCalled();
       expect(mockSignupsService.confirmSignup).not.toHaveBeenCalled();
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringContaining('role'),
+          content: expect.stringContaining('character'),
           components: expect.arrayContaining([expect.anything()]),
         }),
       );

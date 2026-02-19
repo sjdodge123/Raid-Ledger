@@ -228,8 +228,25 @@ export class SignupInteractionListener {
           );
           const characters = characterList.data;
 
+          const slotConfig = event.slotConfig as Record<
+            string,
+            unknown
+          > | null;
+
+          // ROK-138: For MMO events, always show character select (even with 1 char)
+          // so users can see and change their character before role selection
+          if (slotConfig?.type === 'mmo' && characters.length >= 1) {
+            await this.showCharacterSelect(
+              interaction,
+              eventId,
+              event.title,
+              characters,
+            );
+            return;
+          }
+
           if (characters.length > 1) {
-            // Multiple characters — show select dropdown
+            // Multiple characters, non-MMO — show select dropdown
             await this.showCharacterSelect(
               interaction,
               eventId,
@@ -241,19 +258,6 @@ export class SignupInteractionListener {
 
           if (characters.length === 1) {
             const char = characters[0];
-
-            // ROK-138: For MMO events, show role select before signing up
-            const slotConfig = event.slotConfig as Record<
-              string,
-              unknown
-            > | null;
-            if (slotConfig?.type === 'mmo') {
-              await this.showRoleSelect(interaction, eventId, char.id, {
-                name: char.name,
-                role: char.roleOverride ?? char.role ?? null,
-              });
-              return;
-            }
 
             // Non-MMO: auto-select character and sign up immediately
             const signupResult = await this.signupsService.signup(
