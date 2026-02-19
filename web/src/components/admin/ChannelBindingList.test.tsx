@@ -159,7 +159,7 @@ describe('ChannelBindingList', () => {
     render(
       <ChannelBindingList
         bindings={[
-          makeBinding({ gameName: 'World of Warcraft', gameId: 'game-1' }),
+          makeBinding({ gameName: 'World of Warcraft', gameId: 1 }),
         ]}
         onUpdate={onUpdate}
         onDelete={onDelete}
