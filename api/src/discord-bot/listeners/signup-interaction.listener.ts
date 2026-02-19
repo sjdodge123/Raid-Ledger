@@ -13,6 +13,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
+import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import {
   DISCORD_BOT_EVENTS,
@@ -51,6 +52,7 @@ export class SignupInteractionListener {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly signupsService: SignupsService,
+    private readonly charactersService: CharactersService,
     private readonly intentTokenService: IntentTokenService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
@@ -199,7 +201,7 @@ export class SignupInteractionListener {
       .limit(1);
 
     if (linkedUser) {
-      // Linked RL user — get event to check if character is required
+      // Linked RL user — get event to check for character selection (ROK-138)
       const [event] = await this.db
         .select()
         .from(schema.events)
@@ -211,11 +213,73 @@ export class SignupInteractionListener {
         return;
       }
 
-      // Sign up the linked user
+      // ROK-138: Check if event has a registry game with character support
+      if (event.registryGameId) {
+        const [game] = await this.db
+          .select()
+          .from(schema.gameRegistry)
+          .where(eq(schema.gameRegistry.id, event.registryGameId))
+          .limit(1);
+
+        if (game) {
+          const characterList = await this.charactersService.findAllForUser(
+            linkedUser.id,
+            event.registryGameId,
+          );
+          const characters = characterList.data;
+
+          if (characters.length > 1) {
+            // Multiple characters — show select dropdown
+            await this.showCharacterSelect(
+              interaction,
+              eventId,
+              event.title,
+              characters,
+            );
+            return;
+          }
+
+          if (characters.length === 1) {
+            // Single character — auto-select and sign up
+            const char = characters[0];
+            const signupResult = await this.signupsService.signup(
+              eventId,
+              linkedUser.id,
+            );
+            await this.signupsService.confirmSignup(
+              eventId,
+              signupResult.id,
+              linkedUser.id,
+              { characterId: char.id },
+            );
+
+            await interaction.editReply({
+              content: `Signed up as **${char.name}**!`,
+            });
+            await this.updateEmbedSignupCount(eventId);
+            return;
+          }
+
+          // No characters for this game — instant signup with nudge if hasRoles
+          await this.signupsService.signup(eventId, linkedUser.id);
+
+          const clientUrl = process.env.CLIENT_URL ?? '';
+          let nudge = '';
+          if (game.hasRoles && clientUrl) {
+            nudge = `\nTip: Create a character at ${clientUrl}/characters to get assigned to a role next time.`;
+          }
+
+          await interaction.editReply({
+            content: `You're signed up for **${event.title}**!${nudge}`,
+          });
+          await this.updateEmbedSignupCount(eventId);
+          return;
+        }
+      }
+
+      // No registry game or game not found — plain signup
       await this.signupsService.signup(eventId, linkedUser.id);
 
-      // TODO: ROK-138 — If game requires character, trigger character select
-      // For now, just confirm the signup
       await interaction.editReply({
         content: `You're signed up for **${event.title}**!`,
       });
@@ -502,19 +566,80 @@ export class SignupInteractionListener {
   }
 
   /**
-   * Handle select menu interactions (role selection for anonymous signup).
+   * Show character selection dropdown for linked users (ROK-138).
+   * Does NOT sign the user up yet — signup happens after character selection.
+   */
+  private async showCharacterSelect(
+    interaction: ButtonInteraction,
+    eventId: number,
+    eventTitle: string,
+    characters: import('@raid-ledger/contract').CharacterDto[],
+  ): Promise<void> {
+    const mainChar = characters.find((c) => c.isMain);
+
+    const options = characters.slice(0, 25).map((char) => {
+      const parts: string[] = [];
+      if (char.class) {
+        parts.push(char.spec ? `${char.class} (${char.spec})` : char.class);
+      }
+      if (char.level) {
+        parts.push(`Level ${char.level}`);
+      }
+      if (char.isMain) {
+        parts.push('\u2B50');
+      }
+
+      return {
+        label: char.name,
+        value: char.id,
+        description: parts.join(' \u2014 ') || undefined,
+        default: mainChar?.id === char.id,
+      };
+    });
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}`)
+      .setPlaceholder('Select a character')
+      .addOptions(options);
+
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+      selectMenu,
+    );
+
+    await interaction.editReply({
+      content: `Pick a character for **${eventTitle}**`,
+      components: [row],
+    });
+  }
+
+  /**
+   * Handle select menu interactions (role selection for anonymous signup,
+   * character selection for linked users).
    */
   private async handleSelectMenuInteraction(
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = interaction.customId.split(':');
-    if (parts.length !== 2 || parts[0] !== SIGNUP_BUTTON_IDS.ROLE_SELECT) {
-      return;
-    }
+    if (parts.length !== 2) return;
 
-    const eventId = parseInt(parts[1], 10);
+    const [action, eventIdStr] = parts;
+    const eventId = parseInt(eventIdStr, 10);
     if (isNaN(eventId)) return;
 
+    if (action === SIGNUP_BUTTON_IDS.ROLE_SELECT) {
+      await this.handleRoleSelectMenu(interaction, eventId);
+    } else if (action === SIGNUP_BUTTON_IDS.CHARACTER_SELECT) {
+      await this.handleCharacterSelectMenu(interaction, eventId);
+    }
+  }
+
+  /**
+   * Handle role selection for anonymous signup (ROK-137).
+   */
+  private async handleRoleSelectMenu(
+    interaction: StringSelectMenuInteraction,
+    eventId: number,
+  ): Promise<void> {
     await interaction.deferUpdate();
 
     const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
@@ -541,6 +666,70 @@ export class SignupInteractionListener {
     } catch (error) {
       this.logger.error(
         `Error handling role select for event ${eventId}:`,
+        error,
+      );
+      await interaction.editReply({
+        content: 'Something went wrong. Please try again.',
+        components: [],
+      });
+    }
+  }
+
+  /**
+   * Handle character selection for linked users (ROK-138).
+   */
+  private async handleCharacterSelectMenu(
+    interaction: StringSelectMenuInteraction,
+    eventId: number,
+  ): Promise<void> {
+    await interaction.deferUpdate();
+
+    const characterId = interaction.values[0];
+    const discordUserId = interaction.user.id;
+
+    try {
+      // Find the linked RL user
+      const [linkedUser] = await this.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.discordId, discordUserId))
+        .limit(1);
+
+      if (!linkedUser) {
+        await interaction.editReply({
+          content: 'Could not find your linked account. Please try again.',
+          components: [],
+        });
+        return;
+      }
+
+      // Sign up and confirm with selected character
+      const signupResult = await this.signupsService.signup(
+        eventId,
+        linkedUser.id,
+      );
+      await this.signupsService.confirmSignup(
+        eventId,
+        signupResult.id,
+        linkedUser.id,
+        { characterId },
+      );
+
+      // Get character name for confirmation message
+      const character = await this.charactersService.findOne(
+        linkedUser.id,
+        characterId,
+      );
+
+      await interaction.editReply({
+        content: `Signed up as **${character.name}**!`,
+        components: [],
+      });
+
+      await this.updateEmbedSignupCount(eventId);
+    } catch (error) {
+      this.logger.error(
+        `Error handling character select for event ${eventId}:`,
         error,
       );
       await interaction.editReply({

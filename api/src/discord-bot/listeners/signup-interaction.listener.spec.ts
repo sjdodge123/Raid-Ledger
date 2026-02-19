@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SignupInteractionListener } from './signup-interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
+import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
@@ -69,6 +70,11 @@ describe('SignupInteractionListener', () => {
     getRoster: jest.Mock;
     cancel: jest.Mock;
     cancelByDiscordUser: jest.Mock;
+    confirmSignup: jest.Mock;
+  };
+  let mockCharactersService: {
+    findAllForUser: jest.Mock;
+    findOne: jest.Mock;
   };
   let mockIntentTokenService: { generate: jest.Mock };
   let mockEmbedFactory: { buildEventUpdate: jest.Mock };
@@ -109,6 +115,14 @@ describe('SignupInteractionListener', () => {
         .mockResolvedValue({ eventId: 1, signups: [], count: 0 }),
       cancel: jest.fn(),
       cancelByDiscordUser: jest.fn(),
+      confirmSignup: jest.fn().mockResolvedValue({ id: 1 }),
+    };
+
+    mockCharactersService = {
+      findAllForUser: jest
+        .fn()
+        .mockResolvedValue({ data: [], meta: { total: 0 } }),
+      findOne: jest.fn().mockResolvedValue({ id: 'char-1', name: 'Thrall' }),
     };
 
     mockIntentTokenService = {
@@ -138,6 +152,7 @@ describe('SignupInteractionListener', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: SignupsService, useValue: mockSignupsService },
+        { provide: CharactersService, useValue: mockCharactersService },
         { provide: IntentTokenService, useValue: mockIntentTokenService },
         { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
         { provide: SettingsService, useValue: mockSettingsService },
@@ -696,6 +711,357 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleSelectMenuInteraction(interaction);
       expect(mockSignupsService.signupDiscord).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // ROK-138: Character select ephemeral
+  // ============================================================
+
+  describe('handleButtonInteraction — character select (ROK-138)', () => {
+    const mockLinkedUser = { id: 42, discordId: 'user-charselect-1' };
+    const mockGameWithRoles = {
+      id: 'game-uuid-1',
+      hasRoles: true,
+      hasSpecs: true,
+    };
+    const mockGameWithoutRoles = {
+      id: 'game-uuid-2',
+      hasRoles: false,
+      hasSpecs: false,
+    };
+
+    function setupLinkedUserAndEvent(
+      userId: string,
+      event: Record<string, unknown>,
+    ) {
+      mockSignupsService.findByDiscordUser.mockResolvedValueOnce(null);
+
+      // linked RL user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ ...mockLinkedUser, discordId: userId }]),
+          }),
+        }),
+      });
+
+      // event found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([event]),
+          }),
+        }),
+      });
+    }
+
+    function setupGameRegistryQuery(game: Record<string, unknown> | null) {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue(game ? [game] : []),
+          }),
+        }),
+      });
+    }
+
+    function setupUpdateEmbedMocks() {
+      mockSignupsService.getRoster.mockResolvedValueOnce({
+        eventId: 1,
+        signups: [],
+        count: 0,
+      });
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+    }
+
+    it('should show character select dropdown when user has multiple characters', async () => {
+      const userId = 'user-charselect-multi';
+      const event = {
+        id: 800,
+        title: 'Mythic Raid',
+        registryGameId: 'game-uuid-1',
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'char-1',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+          {
+            id: 'char-2',
+            name: 'Jaina',
+            class: 'Mage',
+            spec: 'Frost',
+            level: 60,
+            isMain: false,
+          },
+        ],
+        meta: { total: 2 },
+      });
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:800`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      expect(mockCharactersService.findAllForUser).toHaveBeenCalledWith(
+        mockLinkedUser.id,
+        'game-uuid-1',
+      );
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('Pick a character'),
+          components: expect.arrayContaining([expect.anything()]),
+        }),
+      );
+      // Should NOT have called signup yet — waiting for dropdown selection
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
+    });
+
+    it('should auto-select and sign up when user has exactly one character', async () => {
+      const userId = 'user-charselect-single';
+      const event = {
+        id: 801,
+        title: 'Heroic Raid',
+        registryGameId: 'game-uuid-1',
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [
+          {
+            id: 'char-solo',
+            name: 'Thrall',
+            class: 'Shaman',
+            spec: 'Enhancement',
+            level: 60,
+            isMain: true,
+          },
+        ],
+        meta: { total: 1 },
+      });
+
+      setupUpdateEmbedMocks();
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:801`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(
+        801,
+        mockLinkedUser.id,
+      );
+      expect(mockSignupsService.confirmSignup).toHaveBeenCalledWith(
+        801,
+        1,
+        mockLinkedUser.id,
+        { characterId: 'char-solo' },
+      );
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('Thrall'),
+        }),
+      );
+    });
+
+    it('should instant-signup with nudge when user has no characters (hasRoles game)', async () => {
+      const userId = 'user-charselect-none-roles';
+      const event = {
+        id: 802,
+        title: 'Raid Night',
+        registryGameId: 'game-uuid-1',
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [],
+        meta: { total: 0 },
+      });
+
+      process.env.CLIENT_URL = 'https://example.com';
+      setupUpdateEmbedMocks();
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:802`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(
+        802,
+        mockLinkedUser.id,
+      );
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringMatching(
+            /signed up.*Raid Night.*Tip.*character/s,
+          ),
+        }),
+      );
+    });
+
+    it('should instant-signup without nudge when game has no character support', async () => {
+      const userId = 'user-charselect-none-noroles';
+      const event = {
+        id: 803,
+        title: 'Phasmo Night',
+        registryGameId: 'game-uuid-2',
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupGameRegistryQuery(mockGameWithoutRoles);
+
+      mockCharactersService.findAllForUser.mockResolvedValueOnce({
+        data: [],
+        meta: { total: 0 },
+      });
+
+      process.env.CLIENT_URL = 'https://example.com';
+      setupUpdateEmbedMocks();
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:803`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(
+        803,
+        mockLinkedUser.id,
+      );
+      // Should NOT contain the nudge
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.not.stringContaining('Tip'),
+        }),
+      );
+    });
+
+    it('should do plain signup when event has no registryGameId', async () => {
+      const userId = 'user-charselect-nogame';
+      const event = {
+        id: 804,
+        title: 'Casual Game Night',
+        registryGameId: null,
+      };
+
+      setupLinkedUserAndEvent(userId, event);
+      setupUpdateEmbedMocks();
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:804`,
+        userId,
+      );
+      await listener.handleButtonInteraction(interaction);
+
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(
+        804,
+        mockLinkedUser.id,
+      );
+      expect(mockCharactersService.findAllForUser).not.toHaveBeenCalled();
+    });
+  });
+
+  // ============================================================
+  // ROK-138: Character select menu interaction
+  // ============================================================
+
+  describe('handleSelectMenuInteraction — character selection (ROK-138)', () => {
+    it('should sign up with selected character from dropdown', async () => {
+      const userId = 'user-charselect-menu-1';
+
+      // Linked user found
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 42, discordId: userId }]),
+          }),
+        }),
+      });
+
+      mockCharactersService.findOne.mockResolvedValueOnce({
+        id: 'char-selected',
+        name: 'Jaina',
+      });
+
+      // updateEmbedSignupCount
+      mockSignupsService.getRoster.mockResolvedValueOnce({
+        eventId: 900,
+        signups: [],
+        count: 0,
+      });
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+      mockDb.select.mockReturnValueOnce(makeChain([]));
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:900`,
+        ['char-selected'],
+        userId,
+      );
+      await listener.handleSelectMenuInteraction(interaction);
+
+      expect(mockSignupsService.signup).toHaveBeenCalledWith(900, 42);
+      expect(mockSignupsService.confirmSignup).toHaveBeenCalledWith(
+        900,
+        1,
+        42,
+        { characterId: 'char-selected' },
+      );
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('Jaina'),
+          components: [],
+        }),
+      );
+    });
+
+    it('should show error when linked user not found during char select', async () => {
+      const userId = 'user-charselect-menu-noaccount';
+
+      // No linked user
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      const interaction = makeSelectMenuInteraction(
+        `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:901`,
+        ['char-1'],
+        userId,
+      );
+      await listener.handleSelectMenuInteraction(interaction);
+
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining(
+            'Could not find your linked account',
+          ),
+          components: [],
+        }),
+      );
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
     });
   });
 
