@@ -29,6 +29,7 @@ Implement this story from the spec below.
 7. Message the lead with: branch name, commit SHA, files changed, what was done.
 
 ### Critical Rules
+- **Stay in your worktree** — other dev agents are working concurrently in their own worktrees. All file reads, edits, builds, and tests must use paths within `<WORKTREE_PATH>`. Never `cd` outside your worktree or run commands that affect sibling worktrees.
 - Do NOT push to remote — the lead handles all GitHub operations
 - Do NOT create pull requests
 - Do NOT switch branches or leave your worktree
