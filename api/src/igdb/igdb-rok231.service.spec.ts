@@ -288,7 +288,9 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
       // Redis miss
       mockRedis.get.mockResolvedValue(null);
 
-      // Only return non-hidden games (the hidden filter is applied at DB level)
+      // Only return non-hidden games (the hidden filter is applied at DB level).
+      // DB layer returns source='database' only when a full page (>= SEARCH_LIMIT = 20)
+      // is found — so provide 20 visible games to trigger the database-layer path.
       const visibleGame = {
         id: 1,
         igdbId: 111,
@@ -303,10 +305,15 @@ describe('IgdbService — ROK-231: hide/ban and adult content filter', () => {
         screenshots: [],
         videos: [],
       };
+      const fullPageVisible = Array.from({ length: 20 }, (_, i) => ({
+        ...visibleGame,
+        id: i + 1,
+        igdbId: 111 + i,
+      }));
 
       mockDb.select.mockImplementation(() => ({
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue(thenableResult([visibleGame])),
+          where: jest.fn().mockReturnValue(thenableResult(fullPageVisible)),
         }),
       }));
 
