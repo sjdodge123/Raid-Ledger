@@ -74,23 +74,23 @@ Review tasks remain blocked until the operator tests locally and moves the story
 to "Code Review" status in Linear. The lead unblocks and spawns review agents
 in Step 7c after polling detects operator approval.
 
-## 6e. Deploy for Operator Testing (MANDATORY — after all batch stories pass CI)
+## 6e. Build & Run Locally for Operator Testing (MANDATORY — after all batch stories pass CI)
 
-**The operator cannot test without a deployed app. Deployment is NOT optional — do it automatically.**
+**The operator cannot test without the feature branch running locally. This is NOT optional — do it automatically.** This does NOT push to origin — it switches the local dev environment (`localhost:5173`) to the feature branch so the operator can test.
 
-Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **immediately delegate the deploy to the build agent**:
+Once ALL stories in the current batch have passed CI locally and Linear is updated to "In Review", **immediately tell the build agent to switch the local environment**:
 
 ```
 SendMessage(type: "message", recipient: "build-agent",
-  content: "Deploy feature branch rok-<num>-<short-name> for operator testing.",
-  summary: "Deploy ROK-<num> for operator testing")
+  content: "Run feature branch rok-<num>-<short-name> locally for operator testing.",
+  summary: "Build ROK-<num> locally for testing")
 ```
 
-The build agent will use `deploy_dev.sh --branch rok-<num>-<short-name> --rebuild` to deploy. The operator can switch between feature branches for testing.
+The build agent will use `deploy_dev.sh --branch rok-<num>-<short-name> --rebuild` to switch the local dev environment to that feature branch. The operator can switch between branches with `deploy_dev.sh --branch <other-branch>`.
 
 ## 6f. Spawn Playwright Testing Agent (non-blocking)
 
-After the feature branch is deployed, spawn a Playwright testing agent using `templates/playwright-tester.md`:
+After the feature branch is running locally, spawn a Playwright testing agent using `templates/playwright-tester.md`:
 
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
@@ -105,12 +105,12 @@ The Playwright agent runs independently — do NOT wait for it.
 **Notify the operator — do NOT ask for test results in the terminal:**
 
 ```
-## Batch N — Deployed & Ready for Testing
-All N stories have passed CI and are deployed at localhost:5173.
-Currently running: rok-<num>-<short-name> (ROK-XXX)
+## Batch N — Built & Ready for Testing
+All N stories have passed CI. Local dev environment running at localhost:5173.
+Currently on branch: rok-<num>-<short-name> (ROK-XXX)
 
 Stories to test (all in "In Review" in Linear):
-- ROK-XXX: <title> — DEPLOYED NOW
+- ROK-XXX: <title> — RUNNING NOW at localhost:5173
 - ROK-YYY: <title> — switch with: deploy_dev.sh --branch rok-<num>-<short-name>
 
 Testing checklists have been posted to each story in Linear.
