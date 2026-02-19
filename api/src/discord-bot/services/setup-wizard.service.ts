@@ -459,9 +459,9 @@ export class SetupWizardService {
         .setTitle('Raid-Ledger is live!')
         .setDescription(
           [
-            'Event announcements will appear here. Sign up, check rosters,',
-            'and get reminders -- all without leaving Discord.',
-          ].join('\n'),
+            'Your community hub for events, rosters, and scheduling.',
+            'Use Discord for quick signups and reminders, or visit the web app for the full experience.',
+          ].join(' '),
         )
         .setFooter({
           text: `View in Raid Ledger \u2022 ${communityName}`,
