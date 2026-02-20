@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
+import { useMyCharacters } from '../hooks/use-characters';
 import { resolveInviteCode, claimInviteCode } from '../lib/api-client';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
 import { formatRole } from '../lib/role-colors';
+import { WowArmoryImportForm } from '../plugins/wow/components/wow-armory-import-form';
 
 type RoleChoice = 'tank' | 'healer' | 'dps';
 
@@ -15,7 +17,11 @@ type RoleChoice = 'tank' | 'healer' | 'dps';
  *
  * Flow:
  * 1. Resolve the invite code (public endpoint) to show event info
- * 2. If user is authenticated, show role selection + "Join Event" button
+ * 2. If user is authenticated:
+ *    a. Blizzard game + no character? Show WoW Armory Import Form (pre-filled realm)
+ *    b. On import success: auto-claim with imported character's role
+ *    c. "Skip" link: falls back to manual role selector
+ *    d. Non-Blizzard or has character: show role selection + "Join Event" button
  * 3. If not authenticated, redirect to Discord OAuth with invite code in state param
  * 4. On claim: smart matching decides signup vs PUG slot claim
  * 5. Show Discord server invite if returned, then redirect to event detail page
@@ -35,6 +41,25 @@ export function InvitePage() {
     /** Discord server invite URL returned after claim for PUG users (ROK-394) */
     const [serverInviteUrl, setServerInviteUrl] = useState<string | null>(null);
     const [claimedEventId, setClaimedEventId] = useState<number | null>(null);
+    /** When true, show manual role selector even for Blizzard games (skip import) */
+    const [showManualRoleSelector, setShowManualRoleSelector] = useState(false);
+
+    const gameInfo = resolveData?.event?.game;
+    const registryId = gameInfo?.registryId;
+    const isBlizzardGame = gameInfo?.isBlizzardGame === true;
+
+    // Fetch user's characters for this game (only when authenticated + has registryId)
+    const { data: charactersData, refetch: refetchCharacters } = useMyCharacters(
+        registryId,
+        isAuthenticated && !!registryId,
+    );
+    const hasCharacterForGame = (charactersData?.data?.length ?? 0) > 0;
+
+    // Determine whether to show import form vs role selector
+    const shouldShowImportForm = isAuthenticated
+        && isBlizzardGame
+        && !hasCharacterForGame
+        && !showManualRoleSelector;
 
     // Resolve the invite code on mount
     useEffect(() => {
@@ -98,6 +123,34 @@ export function InvitePage() {
             setIsClaiming(false);
         }
     }, [code, navigate, resolveData, selectedRole]);
+
+    /**
+     * After a successful WoW character import, refetch characters and auto-claim
+     * using the newly imported character's role.
+     */
+    const handleImportSuccess = useCallback(async () => {
+        const result = await refetchCharacters();
+        const chars = result.data?.data;
+        if (chars && chars.length > 0) {
+            // Pick the most recently created character for this game
+            const newest = [...chars].sort((a, b) =>
+                new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+            )[0];
+            const importedRole = (newest.roleOverride ?? newest.role) as RoleChoice | null;
+            if (importedRole) {
+                toast.success('Character imported! Joining event...', {
+                    description: `${newest.name} (${formatRole(importedRole)})`,
+                });
+                void handleClaim(importedRole);
+            } else {
+                // Role unknown — fall back to manual selection
+                toast.success('Character imported!', {
+                    description: 'Now select your role to join.',
+                });
+                setShowManualRoleSelector(true);
+            }
+        }
+    }, [refetchCharacters, handleClaim]);
 
     // Clean up OAuth return params (ROK-394)
     // When user returns from OAuth via ?claim=1, we clean up the URL and sessionStorage.
@@ -199,6 +252,9 @@ export function InvitePage() {
 
     const { event } = resolveData;
 
+    // Should the Join button require a role?
+    const requiresRole = resolveData.event?.game?.hasRoles === true && !shouldShowImportForm;
+
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6">
             {/* Event card */}
@@ -239,8 +295,45 @@ export function InvitePage() {
                     </p>
                 )}
 
+                {/* Discord server invite — shown early so PUGs can join while reviewing (ROK-394) */}
+                {resolveData.discordServerInviteUrl && (
+                    <a
+                        href={resolveData.discordServerInviteUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515a.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0a12.64 12.64 0 0 0-.617-1.25a.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057a19.9 19.9 0 0 0 5.993 3.03a.078.078 0 0 0 .084-.028a14.09 14.09 0 0 0 1.226-1.994a.076.076 0 0 0-.041-.106a13.107 13.107 0 0 1-1.872-.892a.077.077 0 0 1-.008-.128a10.2 10.2 0 0 0 .372-.292a.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127a12.299 12.299 0 0 1-1.873.892a.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028a19.839 19.839 0 0 0 6.002-3.03a.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z" />
+                        </svg>
+                        Join our Discord
+                    </a>
+                )}
+
+                {/* WoW character import for Blizzard games (ROK-394) */}
+                {shouldShowImportForm && (
+                    <div className="mt-4 text-left">
+                        <p className="text-xs text-muted mb-3 text-center">
+                            Import your character to auto-detect your role
+                        </p>
+                        <WowArmoryImportForm
+                            gameVariant={gameInfo?.gameVariant ?? undefined}
+                            defaultRealm={gameInfo?.inviterRealm ?? undefined}
+                            onSuccess={() => void handleImportSuccess()}
+                            isMain
+                        />
+                        <button
+                            type="button"
+                            onClick={() => setShowManualRoleSelector(true)}
+                            className="mt-3 w-full text-xs text-muted hover:text-foreground transition-colors"
+                        >
+                            Skip, choose role manually
+                        </button>
+                    </div>
+                )}
+
                 {/* Role selection for authenticated users on MMO/role-based games (ROK-394) */}
-                {isAuthenticated && resolveData.event?.game?.hasRoles && (
+                {isAuthenticated && !shouldShowImportForm && resolveData.event?.game?.hasRoles && (
                     <div className="mt-4">
                         <p className="text-xs text-muted mb-2">Select your role</p>
                         <div className="flex justify-center gap-2">
@@ -265,13 +358,15 @@ export function InvitePage() {
                 {/* Action buttons */}
                 <div className="mt-6 space-y-3">
                     {isAuthenticated ? (
-                        <button
-                            onClick={() => void handleClaim()}
-                            disabled={isClaiming || (resolveData.event?.game?.hasRoles === true && !selectedRole)}
-                            className="btn btn-primary w-full"
-                        >
-                            {isClaiming ? 'Joining...' : 'Join Event'}
-                        </button>
+                        !shouldShowImportForm && (
+                            <button
+                                onClick={() => void handleClaim()}
+                                disabled={isClaiming || (requiresRole && !selectedRole)}
+                                className="btn btn-primary w-full"
+                            >
+                                {isClaiming ? 'Joining...' : 'Join Event'}
+                            </button>
+                        )
                     ) : (
                         <button
                             onClick={handleLogin}

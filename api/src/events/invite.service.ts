@@ -74,10 +74,20 @@ export class InviteService {
     }
 
     // Resolve game info — prefer IGDB coverUrl, fallback to registry iconUrl
+    const BLIZZARD_SLUGS = [
+      'wow',
+      'world-of-warcraft',
+      'wow-classic',
+      'wow-classic-era',
+    ];
     let game: {
       name: string;
       coverUrl?: string | null;
       hasRoles?: boolean;
+      registryId?: string;
+      isBlizzardGame?: boolean;
+      inviterRealm?: string | null;
+      gameVariant?: string | null;
     } | null = null;
     if (event.registryGameId) {
       const [registryRow] = await this.db
@@ -85,6 +95,7 @@ export class InviteService {
           name: schema.gameRegistry.name,
           iconUrl: schema.gameRegistry.iconUrl,
           hasRoles: schema.gameRegistry.hasRoles,
+          slug: schema.gameRegistry.slug,
         })
         .from(schema.gameRegistry)
         .where(eq(schema.gameRegistry.id, event.registryGameId))
@@ -105,10 +116,39 @@ export class InviteService {
       }
 
       if (registryRow) {
+        const isBlizzardGame = BLIZZARD_SLUGS.some(
+          (s) => registryRow.slug === s || registryRow.slug.startsWith('wow'),
+        );
+
+        // Look up inviter's character for realm/gameVariant hints
+        let inviterRealm: string | null = null;
+        let gameVariant: string | null = null;
+        if (isBlizzardGame) {
+          const [inviterChar] = await this.db
+            .select({
+              realm: schema.characters.realm,
+              gameVariant: schema.characters.gameVariant,
+            })
+            .from(schema.characters)
+            .where(
+              and(
+                eq(schema.characters.userId, slot.createdBy),
+                eq(schema.characters.gameId, event.registryGameId),
+              ),
+            )
+            .limit(1);
+          inviterRealm = inviterChar?.realm ?? null;
+          gameVariant = inviterChar?.gameVariant ?? null;
+        }
+
         game = {
           name: registryRow.name,
           coverUrl: igdbCoverUrl || registryRow.iconUrl,
           hasRoles: registryRow.hasRoles,
+          registryId: event.registryGameId,
+          isBlizzardGame,
+          inviterRealm,
+          gameVariant,
         };
       }
     } else if (event.gameId) {
@@ -133,6 +173,11 @@ export class InviteService {
       }
     }
 
+    // Generate Discord server invite for the invite page (ROK-394)
+    const discordServerInviteUrl = await this.tryGenerateServerInvite(
+      slot.eventId,
+    );
+
     return {
       valid: true,
       event: {
@@ -147,6 +192,7 @@ export class InviteService {
         role: slot.role as 'tank' | 'healer' | 'dps',
         status: slot.status as 'pending' | 'invited' | 'accepted' | 'claimed',
       },
+      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
     };
   }
 
