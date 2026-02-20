@@ -63,13 +63,13 @@ function createMockEvent(overrides: Partial<EventResponseDto> = {}): CalendarEve
         id: 1,
         title: 'Test Raid',
         description: 'A test event',
-        startTime: '2026-02-20T20:00:00Z',
-        endTime: '2026-02-20T23:00:00Z',
+        startTime: '2099-02-20T20:00:00Z',
+        endTime: '2099-02-20T23:00:00Z',
         creator: { id: 10, username: 'RaidLeader', avatar: null },
         game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
         signupCount: 3,
-        createdAt: '2026-02-01T00:00:00Z',
-        updatedAt: '2026-02-01T00:00:00Z',
+        createdAt: '2099-02-01T00:00:00Z',
+        updatedAt: '2099-02-01T00:00:00Z',
         ...overrides,
     };
     return {
