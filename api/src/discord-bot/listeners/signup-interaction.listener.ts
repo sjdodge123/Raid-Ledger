@@ -8,11 +8,12 @@ import {
   ButtonStyle,
   StringSelectMenuBuilder,
 } from 'discord.js';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
+import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import {
@@ -22,7 +23,6 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
-  type EmbedEventData,
   type EmbedContext,
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
@@ -52,6 +52,7 @@ export class SignupInteractionListener {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly signupsService: SignupsService,
+    private readonly eventsService: EventsService,
     private readonly charactersService: CharactersService,
     private readonly intentTokenService: IntentTokenService,
     private readonly embedFactory: DiscordEmbedFactory,
@@ -912,88 +913,17 @@ export class SignupInteractionListener {
 
   /**
    * Update the embed to reflect current signup count.
+   * Uses the shared buildEmbedEventData helper for consistent data fetching.
    */
   private async updateEmbedSignupCount(eventId: number): Promise<void> {
     try {
-      const roster = await this.signupsService.getRoster(eventId);
-      // Count only signed_up and tentative (not declined) for the display count
-      const activeCount = roster.signups.filter(
-        (s) => s.status !== 'declined',
-      ).length;
-
-      const [event] = await this.db
-        .select()
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event) return;
-
-      // Query per-role counts from roster_assignments
-      const roleRows = await this.db
-        .select({
-          role: schema.rosterAssignments.role,
-          count: sql<number>`count(*)::int`,
-        })
-        .from(schema.rosterAssignments)
-        .where(eq(schema.rosterAssignments.eventId, eventId))
-        .groupBy(schema.rosterAssignments.role);
-
-      const roleCounts: Record<string, number> = {};
-      for (const row of roleRows) {
-        if (row.role) roleCounts[row.role] = row.count;
-      }
-
-      // Query signups with Discord IDs and assigned roles for mention display
-      const signupRows = await this.db
-        .select({
-          discordId: sql<string>`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
-          role: schema.rosterAssignments.role,
-          status: schema.eventSignups.status,
-        })
-        .from(schema.eventSignups)
-        .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-        .leftJoin(
-          schema.rosterAssignments,
-          eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-        )
-        .where(eq(schema.eventSignups.eventId, eventId));
-
-      const signupMentions = signupRows
-        .filter((r) => r.status !== 'declined' && r.discordId)
-        .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
-
-      // Build event data for embed update
-      const eventData: EmbedEventData = {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        startTime: event.duration[0].toISOString(),
-        endTime: event.duration[1].toISOString(),
-        signupCount: activeCount,
-        maxAttendees: event.maxAttendees,
-        slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
-        roleCounts,
-        signupMentions,
-      };
-
-      // Look up game info if available
-      if (event.gameId) {
-        const [game] = await this.db
-          .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
-          .from(schema.games)
-          .where(eq(schema.games.igdbId, parseInt(event.gameId, 10)))
-          .limit(1);
-        if (game) {
-          eventData.game = { name: game.name, coverUrl: game.coverUrl };
-        }
-      }
+      const eventData = await this.eventsService.buildEmbedEventData(eventId);
 
       const guildId = this.clientService.getGuildId();
       if (!guildId) return;
 
-      // Find the embed message
-      const [record] = await this.db
+      // Find all embed messages for this event
+      const records = await this.db
         .select()
         .from(schema.discordEventMessages)
         .where(
@@ -1001,10 +931,9 @@ export class SignupInteractionListener {
             eq(schema.discordEventMessages.eventId, eventId),
             eq(schema.discordEventMessages.guildId, guildId),
           ),
-        )
-        .limit(1);
+        );
 
-      if (!record) return;
+      if (records.length === 0) return;
 
       const branding = await this.settingsService.getBranding();
       const context: EmbedContext = {
@@ -1012,19 +941,28 @@ export class SignupInteractionListener {
         clientUrl: process.env.CLIENT_URL ?? null,
       };
 
-      const currentState = record.embedState;
-      const { embed, row } = this.embedFactory.buildEventUpdate(
-        eventData,
-        context,
-        currentState as import('../discord-bot.constants').EmbedState,
-      );
+      for (const record of records) {
+        try {
+          const currentState =
+            record.embedState as import('../discord-bot.constants').EmbedState;
+          const { embed, row } = this.embedFactory.buildEventEmbed(
+            eventData,
+            context,
+            { state: currentState },
+          );
 
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-        row,
-      );
+          await this.clientService.editEmbed(
+            record.channelId,
+            record.messageId,
+            embed,
+            row,
+          );
+        } catch (err) {
+          this.logger.warn(
+            `Failed to update embed message ${record.messageId} for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+          );
+        }
+      }
     } catch (error) {
       this.logger.error(
         `Failed to update embed signup count for event ${eventId}:`,

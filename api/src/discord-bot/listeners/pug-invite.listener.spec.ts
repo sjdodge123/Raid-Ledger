@@ -6,7 +6,10 @@ import { PugInviteService } from '../services/pug-invite.service';
 import { CharactersService } from '../../characters/characters.service';
 import { SignupsService } from '../../events/signups.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import type { PugSlotCreatedPayload } from '../../events/pugs.service';
+import {
+  PugsService,
+  type PugSlotCreatedPayload,
+} from '../../events/pugs.service';
 import type { DiscordLoginPayload } from '../../auth/auth.service';
 import { Events } from 'discord.js';
 
@@ -61,6 +64,12 @@ describe('PugInviteListener', () => {
             confirmSignup: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: PugsService,
+          useValue: {
+            findByInviteCode: jest.fn().mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
@@ -91,6 +100,19 @@ describe('PugInviteListener', () => {
         'testplayer',
         1,
       );
+    });
+
+    it('should skip anonymous PUG slots (null discordUsername)', async () => {
+      const payload: PugSlotCreatedPayload = {
+        pugSlotId: 'slot-uuid',
+        eventId: 42,
+        discordUsername: null,
+        creatorUserId: 1,
+      };
+
+      await listener.handlePugSlotCreated(payload);
+
+      expect(pugInviteService.processPugSlotCreated).not.toHaveBeenCalled();
     });
   });
 

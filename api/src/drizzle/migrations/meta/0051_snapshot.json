@@ -1,6 +1,6 @@
 {
-  "id": "64dcade6-d0dd-405c-8443-4be9d63c9946",
-  "prevId": "12815877-c10c-4f17-925f-cf6036951422",
+  "id": "37c8927e-5089-4116-8135-632ccace6d67",
+  "prevId": "64dcade6-d0dd-405c-8443-4be9d63c9946",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -220,6 +220,27 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "reminder_15min": {
+          "name": "reminder_15min",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "reminder_1hour": {
+          "name": "reminder_1hour",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "reminder_24hour": {
+          "name": "reminder_24hour",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "cancelled_at": {
           "name": "cancelled_at",
@@ -2228,7 +2249,7 @@
           "name": "discord_username",
           "type": "varchar(100)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "discord_user_id": {
           "name": "discord_user_id",
@@ -2279,6 +2300,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "invite_code": {
+          "name": "invite_code",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "invited_at": {
           "name": "invited_at",
           "type": "timestamp",
@@ -2312,7 +2339,46 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "unique_event_pug": {
+          "name": "unique_event_pug",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "discord_username",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"pug_slots\".\"discord_username\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "unique_invite_code": {
+          "name": "unique_invite_code",
+          "columns": [
+            {
+              "expression": "invite_code",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"pug_slots\".\"invite_code\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "pug_slots_event_id_events_id_fk": {
           "name": "pug_slots_event_id_events_id_fk",
@@ -2355,16 +2421,7 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "unique_event_pug": {
-          "name": "unique_event_pug",
-          "nullsNotDistinct": false,
-          "columns": [
-            "event_id",
-            "discord_username"
-          ]
-        }
-      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

@@ -5,8 +5,9 @@ import {
   varchar,
   text,
   timestamp,
-  unique,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { events } from './events';
 import { users } from './users';
 
@@ -29,8 +30,8 @@ export const pugSlots = pgTable(
     eventId: integer('event_id')
       .references(() => events.id, { onDelete: 'cascade' })
       .notNull(),
-    /** Discord username of the PUG player */
-    discordUsername: varchar('discord_username', { length: 100 }).notNull(),
+    /** Discord username of the PUG player (nullable for anonymous invite links) */
+    discordUsername: varchar('discord_username', { length: 100 }),
     /** Discord user ID (populated by bot in Phase B) */
     discordUserId: varchar('discord_user_id', { length: 50 }),
     /** Discord avatar hash (populated by bot in Phase B) */
@@ -47,6 +48,8 @@ export const pugSlots = pgTable(
     status: varchar('status', { length: 20 }).default('pending').notNull(),
     /** Server invite URL (populated by bot in Phase B) */
     serverInviteUrl: varchar('server_invite_url', { length: 500 }),
+    /** Magic invite link code — 8-char alphanumeric (ROK-263) */
+    inviteCode: varchar('invite_code', { length: 8 }),
     /** When the Discord bot sent the invite (Phase B) */
     invitedAt: timestamp('invited_at'),
     /** User ID if PUG claimed a Raid Ledger account (Phase B) */
@@ -59,7 +62,14 @@ export const pugSlots = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
-    // Each Discord username can only be a PUG once per event
-    unique('unique_event_pug').on(table.eventId, table.discordUsername),
+    // Named PUG slots: each Discord username can only be a PUG once per event
+    // Anonymous slots (discordUsername IS NULL) are allowed multiple times
+    uniqueIndex('unique_event_pug')
+      .on(table.eventId, table.discordUsername)
+      .where(sql`${table.discordUsername} IS NOT NULL`),
+    // Each invite code must be globally unique
+    uniqueIndex('unique_invite_code')
+      .on(table.inviteCode)
+      .where(sql`${table.inviteCode} IS NOT NULL`),
   ],
 );

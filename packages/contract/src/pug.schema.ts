@@ -19,10 +19,8 @@ export type PugRole = z.infer<typeof PugRoleSchema>;
 
 /** Schema for creating a PUG slot */
 export const CreatePugSlotSchema = z.object({
-    discordUsername: z
-        .string()
-        .min(1, 'Discord username is required')
-        .max(100),
+    /** Discord username — optional for anonymous invite links (ROK-263) */
+    discordUsername: z.string().min(1).max(100).optional(),
     /** Role is optional at invite time — the invitee selects it on accept */
     role: PugRoleSchema.optional().default('dps'),
     class: z.string().max(50).optional(),
@@ -47,7 +45,7 @@ export type UpdatePugSlotDto = z.infer<typeof UpdatePugSlotSchema>;
 export const PugSlotResponseSchema = z.object({
     id: z.string().uuid(),
     eventId: z.number(),
-    discordUsername: z.string(),
+    discordUsername: z.string().nullable().optional(),
     discordUserId: z.string().nullable().optional(),
     discordAvatarHash: z.string().nullable().optional(),
     role: PugRoleSchema,
@@ -56,6 +54,8 @@ export const PugSlotResponseSchema = z.object({
     notes: z.string().nullable().optional(),
     status: PugSlotStatusSchema,
     serverInviteUrl: z.string().nullable().optional(),
+    /** Magic invite link code (ROK-263) */
+    inviteCode: z.string().nullable().optional(),
     claimedByUserId: z.number().nullable().optional(),
     createdBy: z.number(),
     createdAt: z.string().datetime(),
@@ -70,3 +70,46 @@ export const PugSlotListResponseSchema = z.object({
 });
 
 export type PugSlotListResponseDto = z.infer<typeof PugSlotListResponseSchema>;
+
+// ============================================================
+// Invite Code Schemas (ROK-263)
+// ============================================================
+
+/** Response when resolving an invite code */
+export const InviteCodeResolveResponseSchema = z.object({
+    valid: z.boolean(),
+    event: z.object({
+        id: z.number(),
+        title: z.string(),
+        startTime: z.string(),
+        endTime: z.string(),
+        game: z.object({
+            name: z.string(),
+            coverUrl: z.string().nullable().optional(),
+        }).nullable().optional(),
+    }).optional(),
+    slot: z.object({
+        id: z.string().uuid(),
+        role: PugRoleSchema,
+        status: PugSlotStatusSchema,
+    }).optional(),
+    error: z.string().optional(),
+});
+
+export type InviteCodeResolveResponseDto = z.infer<typeof InviteCodeResolveResponseSchema>;
+
+/** Request body for claiming an invite code */
+export const InviteCodeClaimSchema = z.object({
+    /** Optional — if the user wants to sign up with a specific role */
+    role: PugRoleSchema.optional(),
+});
+
+export type InviteCodeClaimDto = z.infer<typeof InviteCodeClaimSchema>;
+
+/** Response from sharing an event to Discord channels */
+export const ShareEventResponseSchema = z.object({
+    channelsPosted: z.number(),
+    channelsSkipped: z.number(),
+});
+
+export type ShareEventResponseDto = z.infer<typeof ShareEventResponseSchema>;

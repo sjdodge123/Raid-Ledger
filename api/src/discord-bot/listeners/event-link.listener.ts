@@ -1,13 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
   ChannelType,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   type Message,
   type EmbedBuilder,
-  type ActionRowBuilder,
-  type ButtonBuilder,
+  type ActionRowBuilder as ActionRowType,
+  type ButtonBuilder as ButtonType,
 } from 'discord.js';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
@@ -15,7 +21,8 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
-import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { PugsService } from '../../events/pugs.service';
+import { DISCORD_BOT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 
 const MAX_UNFURLS_PER_MESSAGE = 3;
 
@@ -44,10 +51,13 @@ export class EventLinkListener {
   private listenerAttached = false;
 
   constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
+    private readonly pugsService: PugsService,
   ) {}
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
@@ -90,59 +100,128 @@ export class EventLinkListener {
     const clientUrl = process.env.CLIENT_URL;
     if (!clientUrl) return;
 
-    // Escape special regex chars in the URL, then match /events/:id
+    // Escape special regex chars in the URL, then match /events/:id and /i/:code
     const escapedUrl = clientUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const pattern = new RegExp(`${escapedUrl}/events/(\\d+)`, 'g');
-    const matches: number[] = [];
+    const eventPattern = new RegExp(`${escapedUrl}/events/(\\d+)`, 'g');
+    const invitePattern = new RegExp(`${escapedUrl}/i/([a-z2-9]{8})`, 'g');
+
+    const eventMatches: number[] = [];
+    const inviteCodes: string[] = [];
     let match: RegExpExecArray | null;
 
-    while ((match = pattern.exec(message.content)) !== null) {
+    while ((match = eventPattern.exec(message.content)) !== null) {
       const eventId = parseInt(match[1], 10);
-      if (!matches.includes(eventId)) {
-        matches.push(eventId);
+      if (!eventMatches.includes(eventId)) {
+        eventMatches.push(eventId);
       }
-      if (matches.length >= MAX_UNFURLS_PER_MESSAGE) break;
+      if (eventMatches.length >= MAX_UNFURLS_PER_MESSAGE) break;
     }
 
-    if (matches.length === 0) return;
+    while ((match = invitePattern.exec(message.content)) !== null) {
+      const code = match[1];
+      if (!inviteCodes.includes(code)) {
+        inviteCodes.push(code);
+      }
+      if (inviteCodes.length >= MAX_UNFURLS_PER_MESSAGE) break;
+    }
+
+    if (eventMatches.length === 0 && inviteCodes.length === 0) return;
 
     const context = await this.buildContext();
     const embeds: EmbedBuilder[] = [];
-    const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+    const rows: ActionRowType<ButtonType>[] = [];
+    const unfurledEventIds: number[] = [];
 
-    for (const eventId of matches) {
+    // Unfurl event links — full embed with roster breakdown
+    for (const eventId of eventMatches) {
       try {
         const event = await this.eventsService.findOne(eventId);
-
-        // Skip cancelled events
         if (event.cancelledAt) continue;
 
-        const { embed, row } = this.embedFactory.buildEventPreview(
-          {
-            id: event.id,
-            title: event.title,
-            startTime: event.startTime,
-            endTime: event.endTime,
-            signupCount: event.signupCount,
-            game: event.game,
-          },
+        const eventData = await this.eventsService.buildEmbedEventData(eventId);
+        const { embed, row } = this.embedFactory.buildEventEmbed(
+          eventData,
           context,
+          { buttons: 'signup' },
         );
 
         embeds.push(embed);
         if (row) rows.push(row);
+        unfurledEventIds.push(eventId);
       } catch {
         // Event not found or other error — silently ignore
+      }
+    }
+
+    // Unfurl invite links (ROK-263) — full embed with roster breakdown
+    for (const code of inviteCodes) {
+      try {
+        const slot = await this.pugsService.findByInviteCode(code);
+        if (!slot) continue;
+
+        const event = await this.eventsService.findOne(slot.eventId);
+        if (event.cancelledAt) continue;
+
+        const eventData = await this.eventsService.buildEmbedEventData(
+          slot.eventId,
+        );
+        const { embed } = this.embedFactory.buildEventEmbed(
+          eventData,
+          context,
+          { buttons: 'none' },
+        );
+        embeds.push(embed);
+
+        // Add "Join Event" interactive button + "View Event" link button
+        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`pug_join:${code}`)
+            .setLabel('Join Event')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setLabel('View Event')
+            .setStyle(ButtonStyle.Link)
+            .setURL(`${clientUrl}/events/${event.id}`),
+        );
+        rows.push(row);
+        if (!unfurledEventIds.includes(slot.eventId)) {
+          unfurledEventIds.push(slot.eventId);
+        }
+      } catch {
+        // Slot/event not found — silently ignore
       }
     }
 
     if (embeds.length === 0) return;
 
     // Send all embeds in a single reply
-    await message.reply({
+    const reply = await message.reply({
       embeds,
       ...(rows.length > 0 ? { components: rows } : {}),
     });
+
+    // Track unfurl reply in discord_event_messages so embed sync updates it
+    const guildId = message.guild?.id;
+    if (guildId && reply.id) {
+      for (const eventId of unfurledEventIds) {
+        try {
+          await this.db
+            .insert(schema.discordEventMessages)
+            .values({
+              eventId,
+              guildId,
+              channelId: message.channel.id,
+              messageId: reply.id,
+              embedState: EMBED_STATES.POSTED,
+            })
+            .onConflictDoNothing();
+        } catch (err) {
+          this.logger.warn(
+            `Failed to track unfurl message for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+          );
+        }
+      }
+    }
   }
 
   private async buildContext(): Promise<EmbedContext> {

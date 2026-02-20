@@ -17,7 +17,7 @@ import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
-import { useCreatePug, useDeletePug, usePugs } from '../hooks/use-pugs';
+import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -107,6 +107,7 @@ export function EventDetailPage() {
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
     const createPug = useCreatePug(eventId);
     const deletePug = useDeletePug(eventId);
+    const regeneratePugCode = useRegeneratePugInviteCode(eventId);
     const { data: pugData } = usePugs(eventId);
     const pugs = pugData?.pugs ?? [];
 
@@ -175,16 +176,25 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-292: Handle inline PUG add from assign modal
-    const handleAddPug = async (discordUsername: string, role: RosterRole) => {
+    // ROK-263: Generate magic invite link for a PUG slot
+    const handleGenerateInviteLink = async (role: RosterRole) => {
         try {
-            await createPug.mutateAsync({
-                discordUsername,
+            const pugSlot = await createPug.mutateAsync({
                 role: role as PugRole,
             });
-            toast.success(`PUG "${discordUsername}" added as ${role}`);
+            if (!pugSlot.inviteCode) {
+                toast.error('Failed to generate invite link', {
+                    description: 'No invite code returned. Please try again.',
+                });
+                return;
+            }
+            const inviteUrl = `${window.location.origin}/i/${pugSlot.inviteCode}`;
+            await navigator.clipboard.writeText(inviteUrl);
+            toast.success('Invite link copied to clipboard!', {
+                description: inviteUrl,
+            });
         } catch (err) {
-            toast.error('Failed to add PUG', {
+            toast.error('Failed to generate invite link', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -197,6 +207,22 @@ export function EventDetailPage() {
             toast.success('Invite cancelled');
         } catch (err) {
             toast.error('Failed to cancel invite', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-263: Handle regenerating a PUG invite link
+    const handleRegeneratePugLink = async (pugId: string) => {
+        try {
+            const updated = await regeneratePugCode.mutateAsync(pugId);
+            if (updated.inviteCode) {
+                const url = `${window.location.origin}/i/${updated.inviteCode}`;
+                await navigator.clipboard.writeText(url);
+                toast.success('New invite link copied to clipboard!');
+            }
+        } catch (err) {
+            toast.error('Failed to regenerate link', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -377,12 +403,14 @@ export function EventDetailPage() {
                             {(roster?.signups?.length ?? 0) > 0 && (
                                 <AttendeeAvatars
                                     signups={roster!.signups.slice(0, 5).map(s => ({
-                                        id: s.id,
+                                        id: s.user.id,
                                         username: s.user.username,
                                         avatar: s.user.avatar ?? null,
-                                        gameId: '',
-                                        avatarUrl: null,
+                                        discordId: s.user.discordId ?? null,
+                                        customAvatarUrl: s.user.customAvatarUrl ?? null,
+                                        characters: s.user.characters,
                                     }))}
+                                    gameId={event.game?.registryId ?? undefined}
                                     totalCount={roster!.count}
                                     maxVisible={5}
                                     size="md"
@@ -515,16 +543,11 @@ export function EventDetailPage() {
                         canJoin={canJoinSlot}
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
-                        onAddPug={canManageRoster && isMMOGame ? handleAddPug : undefined}
+                        onGenerateInviteLink={canManageRoster && isMMOGame ? handleGenerateInviteLink : undefined}
                         pugs={pugs}
-                        onRemovePug={canManageRoster || isSignedUp ? handleRemovePug : undefined}
+                        onRemovePug={canManageRoster ? handleRemovePug : undefined}
+                        onRegeneratePugLink={canManageRoster ? handleRegeneratePugLink : undefined}
                         eventId={eventId}
-                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
-                        signedUpDiscordIds={new Set(
-                            (roster?.signups ?? [])
-                                .map(s => s.user.discordId)
-                                .filter((id): id is string => !!id)
-                        )}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}
@@ -735,7 +758,7 @@ export function EventDetailPage() {
                         isOpen={showInviteModal}
                         onClose={() => setShowInviteModal(false)}
                         eventId={eventId}
-                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
+                        existingPugUsernames={new Set(pugs.filter(p => p.discordUsername).map(p => p.discordUsername!.toLowerCase()))}
                         signedUpDiscordIds={new Set(
                             (roster?.signups ?? [])
                                 .map(s => s.user.discordId)

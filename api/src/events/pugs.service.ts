@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
+import { randomBytes } from 'node:crypto';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -19,13 +20,18 @@ import type {
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
 
+/** Characters for invite codes — no ambiguous chars (0/O, 1/l/I) */
+const INVITE_CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz2345679';
+const INVITE_CODE_LENGTH = 8;
+
 /**
  * Payload emitted when a PUG slot is created (ROK-292).
  */
 export interface PugSlotCreatedPayload {
   pugSlotId: string;
   eventId: number;
-  discordUsername: string;
+  /** Null for anonymous invite links */
+  discordUsername: string | null;
   /** User ID of the admin/user who created the PUG slot */
   creatorUserId: number;
 }
@@ -62,32 +68,40 @@ export class PugsService {
     // Any signed-up user, event creator, or admin can invite PUGs
     await this.verifyInvitePermission(eventId, userId, isAdmin);
 
+    const inviteCode = await this.generateUniqueInviteCode();
+    const discordUsername = dto.discordUsername ?? null;
+
     try {
       const [inserted] = await this.db
         .insert(schema.pugSlots)
         .values({
           eventId,
-          discordUsername: dto.discordUsername,
+          discordUsername,
           role: dto.role,
           class: dto.class ?? null,
           spec: dto.spec ?? null,
           notes: dto.notes ?? null,
           status: 'pending',
+          inviteCode,
           createdBy: userId,
         })
         .returning();
 
+      const label = discordUsername ?? `anonymous (${inviteCode})`;
       this.logger.log(
-        `PUG slot created: ${dto.discordUsername} as ${dto.role} for event ${eventId}`,
+        `PUG slot created: ${label} as ${dto.role} for event ${eventId}`,
       );
 
       // Emit event for Discord bot integration (ROK-292)
-      this.eventEmitter.emit(PUG_SLOT_EVENTS.CREATED, {
-        pugSlotId: inserted.id,
-        eventId,
-        discordUsername: dto.discordUsername,
-        creatorUserId: userId,
-      } satisfies PugSlotCreatedPayload);
+      // Only emit if there's a username to process
+      if (discordUsername) {
+        this.eventEmitter.emit(PUG_SLOT_EVENTS.CREATED, {
+          pugSlotId: inserted.id,
+          eventId,
+          discordUsername,
+          creatorUserId: userId,
+        } satisfies PugSlotCreatedPayload);
+      }
 
       return this.toPugSlotResponse(inserted);
     } catch (error: unknown) {
@@ -101,6 +115,61 @@ export class PugsService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Regenerate the invite code for a PUG slot (ROK-263).
+   */
+  async regenerateInviteCode(
+    eventId: number,
+    pugId: string,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<PugSlotResponseDto> {
+    await this.verifyEventPermission(eventId, userId, isAdmin);
+
+    const [existing] = await this.db
+      .select()
+      .from(schema.pugSlots)
+      .where(
+        and(
+          eq(schema.pugSlots.id, pugId),
+          eq(schema.pugSlots.eventId, eventId),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      throw new NotFoundException(
+        `PUG slot ${pugId} not found for event ${eventId}`,
+      );
+    }
+
+    const newCode = await this.generateUniqueInviteCode();
+    const [updated] = await this.db
+      .update(schema.pugSlots)
+      .set({ inviteCode: newCode, updatedAt: new Date() })
+      .where(eq(schema.pugSlots.id, pugId))
+      .returning();
+
+    this.logger.log(
+      `Regenerated invite code for PUG slot ${pugId}: ${newCode}`,
+    );
+    return this.toPugSlotResponse(updated);
+  }
+
+  /**
+   * Find a PUG slot by invite code (ROK-263).
+   */
+  async findByInviteCode(
+    code: string,
+  ): Promise<typeof schema.pugSlots.$inferSelect | null> {
+    const [slot] = await this.db
+      .select()
+      .from(schema.pugSlots)
+      .where(eq(schema.pugSlots.inviteCode, code))
+      .limit(1);
+    return slot ?? null;
   }
 
   /**
@@ -318,7 +387,7 @@ export class PugsService {
     return {
       id: row.id,
       eventId: row.eventId,
-      discordUsername: row.discordUsername,
+      discordUsername: row.discordUsername ?? null,
       discordUserId: row.discordUserId ?? null,
       discordAvatarHash: row.discordAvatarHash ?? null,
       role: row.role as 'tank' | 'healer' | 'dps',
@@ -327,10 +396,38 @@ export class PugsService {
       notes: row.notes ?? null,
       status: row.status as 'pending' | 'invited' | 'accepted' | 'claimed',
       serverInviteUrl: row.serverInviteUrl ?? null,
+      inviteCode: row.inviteCode ?? null,
       claimedByUserId: row.claimedByUserId ?? null,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),
     };
+  }
+
+  /**
+   * Generate a unique 8-char invite code (ROK-263).
+   * Uses [a-z2-9] charset (no ambiguous chars).
+   * Retries on collision (up to 5 times).
+   */
+  private async generateUniqueInviteCode(maxRetries = 5): Promise<string> {
+    for (let i = 0; i < maxRetries; i++) {
+      const code = this.generateInviteCode();
+      const [existing] = await this.db
+        .select({ id: schema.pugSlots.id })
+        .from(schema.pugSlots)
+        .where(eq(schema.pugSlots.inviteCode, code))
+        .limit(1);
+      if (!existing) return code;
+    }
+    throw new ConflictException('Failed to generate unique invite code');
+  }
+
+  private generateInviteCode(): string {
+    const bytes = randomBytes(INVITE_CODE_LENGTH);
+    let code = '';
+    for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
+      code += INVITE_CODE_CHARS[bytes[i] % INVITE_CODE_CHARS.length];
+    }
+    return code;
   }
 }

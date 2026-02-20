@@ -27,7 +27,13 @@ import {
 } from '../discord-bot.constants';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 import { SignupsService } from '../../events/signups.service';
-import type { PugSlotCreatedPayload } from '../../events/pugs.service';
+import {
+  PugsService,
+  type PugSlotCreatedPayload,
+} from '../../events/pugs.service';
+
+/** Button ID prefix for the "Join Event" button on invite unfurls (ROK-263) */
+const PUG_JOIN_PREFIX = 'pug_join';
 
 /**
  * Listener that bridges NestJS events and Discord.js gateway events
@@ -53,6 +59,7 @@ export class PugInviteListener {
     private readonly pugInviteService: PugInviteService,
     private readonly charactersService: CharactersService,
     private readonly signupsService: SignupsService,
+    private readonly pugsService: PugsService,
   ) {}
 
   /**
@@ -111,9 +118,19 @@ export class PugInviteListener {
   /**
    * Handle PUG slot created event.
    * Runs async — does not block the API response.
+   * Anonymous slots (null discordUsername) are skipped — they use invite links (ROK-263).
    */
   @OnEvent(PUG_SLOT_EVENTS.CREATED)
   async handlePugSlotCreated(payload: PugSlotCreatedPayload): Promise<void> {
+    // Skip anonymous slots — they use magic invite links, not bot DMs
+    if (!payload.discordUsername) {
+      this.logger.debug(
+        'Skipping anonymous PUG slot for event %d (invite link flow)',
+        payload.eventId,
+      );
+      return;
+    }
+
     this.logger.debug(
       'Processing PUG slot created: %s for event %d',
       payload.discordUsername,
@@ -175,6 +192,13 @@ export class PugInviteListener {
     const customId = interaction.customId;
     const parts = customId.split(':');
     const [action] = parts;
+
+    // Handle "Join Event" button from invite unfurl (ROK-263)
+    if (action === PUG_JOIN_PREFIX) {
+      const inviteCode = parts[1];
+      await this.handleJoinEventButton(interaction, inviteCode);
+      return;
+    }
 
     // Handle member invite buttons (ROK-292) — 3 parts: action:eventId:notificationId
     if (
@@ -880,6 +904,125 @@ export class PugInviteListener {
       slot.eventId,
       slot.id,
     );
+  }
+
+  // ====================================================================
+  // "Join Event" Button Handler (ROK-263)
+  // For unfurled invite links — smart matching
+  // ====================================================================
+
+  /**
+   * Handle "Join Event" button from invite link unfurl.
+   * Smart matching:
+   * 1. Has linked RL account + already signed up -> "Already signed up"
+   * 2. Has linked RL account -> create normal signup, delete PUG slot -> "You've joined!"
+   * 3. No RL account -> ephemeral with web link
+   */
+  private async handleJoinEventButton(
+    interaction: ButtonInteraction,
+    inviteCode: string,
+  ): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      const slot = await this.pugsService.findByInviteCode(inviteCode);
+      if (!slot) {
+        await interaction.editReply({
+          content: 'This invite is no longer valid.',
+        });
+        return;
+      }
+
+      // Look up event
+      const [event] = await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, slot.eventId))
+        .limit(1);
+
+      if (!event || event.cancelledAt) {
+        await interaction.editReply({
+          content: 'This event is no longer available.',
+        });
+        return;
+      }
+
+      // Look up linked RL account
+      const [linkedUser] = await this.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.discordId, interaction.user.id))
+        .limit(1);
+
+      if (!linkedUser) {
+        // No RL account — direct to web
+        const clientUrl = process.env.CLIENT_URL ?? '';
+        const inviteUrl = `${clientUrl}/i/${inviteCode}`;
+        await interaction.editReply({
+          content: `You need a Raid Ledger account to join. Click here to sign up:\n${inviteUrl}`,
+        });
+        return;
+      }
+
+      // Check if already signed up
+      const [existingSignup] = await this.db
+        .select({ id: schema.eventSignups.id })
+        .from(schema.eventSignups)
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, slot.eventId),
+            eq(schema.eventSignups.userId, linkedUser.id),
+          ),
+        )
+        .limit(1);
+
+      if (existingSignup) {
+        await interaction.editReply({
+          content: "You're already signed up for this event!",
+        });
+        return;
+      }
+
+      // Create normal signup (not PUG) — use the slot's role
+      try {
+        await this.signupsService.signup(slot.eventId, linkedUser.id, {
+          slotRole: slot.role as 'tank' | 'healer' | 'dps',
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to sign up';
+        await interaction.editReply({ content: msg });
+        return;
+      }
+
+      // Delete the anonymous PUG slot
+      await this.db
+        .delete(schema.pugSlots)
+        .where(eq(schema.pugSlots.id, slot.id));
+
+      await interaction.editReply({
+        content: `You've joined **${event.title}**! Check the event page for details.`,
+      });
+
+      this.logger.log(
+        'Discord user %s joined event %d via invite link %s',
+        interaction.user.username,
+        slot.eventId,
+        inviteCode,
+      );
+    } catch (error) {
+      this.logger.error(
+        'Error handling Join Event button for invite %s:',
+        inviteCode,
+        error,
+      );
+      try {
+        await interaction.editReply({
+          content: 'Something went wrong. Please try again.',
+        });
+      } catch {
+        // Interaction may have expired
+      }
+    }
   }
 
   // ====================================================================

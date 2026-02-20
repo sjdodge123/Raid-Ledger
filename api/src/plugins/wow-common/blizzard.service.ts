@@ -1027,14 +1027,10 @@ export class BlizzardService {
             name: treeName,
             spentPoints: points,
             talents: (tree.talents ?? [])
-              .filter(
-                (t) => t.talent?.name || t.spell_tooltip?.spell?.name,
-              )
+              .filter((t) => t.talent?.name || t.spell_tooltip?.spell?.name)
               .map((t) => ({
                 name:
-                  t.talent?.name ??
-                  t.spell_tooltip?.spell?.name ??
-                  'Unknown',
+                  t.talent?.name ?? t.spell_tooltip?.spell?.name ?? 'Unknown',
                 id: t.talent?.id,
                 spellId: t.spell_tooltip?.spell?.id,
                 rank: t.talent_rank,

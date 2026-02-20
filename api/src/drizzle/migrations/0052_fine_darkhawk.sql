@@ -1,0 +1,2 @@
+ALTER TABLE "discord_event_messages" DROP CONSTRAINT "unique_event_guild";--> statement-breakpoint
+ALTER TABLE "discord_event_messages" ADD CONSTRAINT "unique_event_channel_message" UNIQUE("event_id","channel_id","message_id");

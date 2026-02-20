@@ -7,6 +7,8 @@ describe('EventLinkListener', () => {
   let mockEmbedFactory: Record<string, jest.Mock>;
   let mockSettingsService: Record<string, jest.Mock>;
   let mockEventsService: Record<string, jest.Mock>;
+  let mockPugsService: Record<string, jest.Mock>;
+  let mockDb: { insert: jest.Mock };
 
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = { toJSON: jest.fn() };
@@ -21,7 +23,7 @@ describe('EventLinkListener', () => {
     };
 
     mockEmbedFactory = {
-      buildEventPreview: jest.fn().mockReturnValue({
+      buildEventEmbed: jest.fn().mockReturnValue({
         embed: mockEmbed,
         row: mockRow,
       }),
@@ -41,13 +43,38 @@ describe('EventLinkListener', () => {
         cancelledAt: null,
         game: { name: 'World of Warcraft', coverUrl: null },
       }),
+      buildEmbedEventData: jest.fn().mockResolvedValue({
+        id: 42,
+        title: 'Mythic Raid Night',
+        startTime: '2026-02-20T20:00:00.000Z',
+        endTime: '2026-02-20T23:00:00.000Z',
+        signupCount: 15,
+        maxAttendees: null,
+        slotConfig: null,
+        roleCounts: {},
+        signupMentions: [],
+        game: { name: 'World of Warcraft', coverUrl: null },
+      }),
+    };
+
+    mockPugsService = {
+      findByInviteCode: jest.fn().mockResolvedValue(null),
+    };
+
+    const insertChain: Record<string, jest.Mock> = {};
+    insertChain.values = jest.fn().mockReturnValue(insertChain);
+    insertChain.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+    mockDb = {
+      insert: jest.fn().mockReturnValue(insertChain),
     };
 
     listener = new EventLinkListener(
+      mockDb as never,
       mockClientService as never,
       mockEmbedFactory as never,
       mockSettingsService as never,
       mockEventsService as never,
+      mockPugsService as never,
     );
   });
 
@@ -109,7 +136,7 @@ describe('EventLinkListener', () => {
     let mockReply: jest.Mock;
 
     beforeEach(() => {
-      mockReply = jest.fn().mockResolvedValue(undefined);
+      mockReply = jest.fn().mockResolvedValue({ id: 'reply-msg-1' });
     });
 
     function createMessage(
@@ -122,7 +149,7 @@ describe('EventLinkListener', () => {
         content,
         author: { bot: false },
         guild: { id: '123' },
-        channel: { type: ChannelType.GuildText },
+        channel: { type: ChannelType.GuildText, id: 'chan-1' },
         reply: mockReply,
         ...overrides,
       };
@@ -134,7 +161,7 @@ describe('EventLinkListener', () => {
       await callHandleMessage(msg);
 
       expect(mockEventsService.findOne).toHaveBeenCalledWith(42);
-      expect(mockEmbedFactory.buildEventPreview).toHaveBeenCalled();
+      expect(mockEmbedFactory.buildEventEmbed).toHaveBeenCalled();
       expect(mockReply).toHaveBeenCalledWith({
         embeds: [mockEmbed],
         components: [mockRow],
@@ -255,7 +282,7 @@ describe('EventLinkListener', () => {
     });
 
     it('should handle embed without row when no CLIENT_URL for preview', async () => {
-      mockEmbedFactory.buildEventPreview.mockReturnValue({
+      mockEmbedFactory.buildEventEmbed.mockReturnValue({
         embed: mockEmbed,
         row: undefined,
       });

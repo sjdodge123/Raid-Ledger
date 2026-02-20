@@ -17,6 +17,7 @@ import { AuthSuccessPage } from './pages/auth-success-page';
 
 // -- Lazy loaded public pages --
 const JoinPage = lazy(() => import('./pages/join-page').then(m => ({ default: m.JoinPage })));
+const InvitePage = lazy(() => import('./pages/invite-page').then(m => ({ default: m.InvitePage })));
 
 // -- Lazy loaded pages --
 const CalendarPage = lazy(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
@@ -92,6 +93,7 @@ function App() {
               <Route path="/auth/success" element={<AuthSuccessPage />} />
               {/* ROK-137: Deferred signup landing page (public — handles intent tokens) */}
               <Route path="/join" element={<JoinPage />} />
+              <Route path="/i/:code" element={<InvitePage />} />
 
               {/* -- Protected routes (ROK-283: global auth guard) -- */}
               <Route element={<AuthGuard />}>
