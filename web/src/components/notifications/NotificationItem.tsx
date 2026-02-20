@@ -191,7 +191,7 @@ export function NotificationItem({
                 {content}
                 <div className="pl-11">
                     <EventInviteActions
-                        eventId={notification.payload.eventId as number}
+                        eventId={notification.payload!.eventId as number}
                         notificationId={notification.id}
                         onComplete={onClose}
                     />
