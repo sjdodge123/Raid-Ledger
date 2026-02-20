@@ -1,4 +1,4 @@
-import { registerSlotComponent } from '../plugin-registry';
+import { registerSlotComponent, registerPlugin } from '../plugin-registry';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
@@ -13,6 +13,12 @@ import { ProfileCharacterActions } from './slots/profile-character-actions';
 let registered = false;
 if (!registered) {
     registered = true;
+
+    registerPlugin('blizzard', {
+        icon: '\u2694\uFE0F',
+        color: 'blue',
+        label: 'World of Warcraft Plugin',
+    });
 
     registerSlotComponent({
         pluginSlug: 'blizzard',

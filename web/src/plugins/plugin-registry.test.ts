@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { registerSlotComponent, getSlotRegistrations, clearRegistry } from './plugin-registry';
+import { registerSlotComponent, getSlotRegistrations, clearRegistry, registerPlugin, getPluginBadge } from './plugin-registry';
 
 function StubComponent() { return null; }
 function StubComponent2() { return null; }
@@ -99,5 +99,32 @@ describe('plugin-registry', () => {
         expect(registrations).toHaveLength(2);
         expect(registrations[0].pluginSlug).toBe('plugin-a');
         expect(registrations[1].pluginSlug).toBe('plugin-b');
+    });
+
+    it('registerPlugin stores badge metadata', () => {
+        registerPlugin('my-plugin', { icon: 'X', color: 'blue', label: 'My Plugin' });
+        const badge = getPluginBadge('my-plugin');
+        expect(badge).toEqual({ icon: 'X', color: 'blue', label: 'My Plugin' });
+    });
+
+    it('getPluginBadge returns undefined for unregistered plugin', () => {
+        expect(getPluginBadge('nonexistent')).toBeUndefined();
+    });
+
+    it('clearRegistry also clears badge metadata', () => {
+        registerPlugin('test', { icon: 'T', color: 'red', label: 'Test' });
+        expect(getPluginBadge('test')).toBeDefined();
+
+        clearRegistry();
+
+        expect(getPluginBadge('test')).toBeUndefined();
+    });
+
+    it('registerPlugin overwrites badge for same slug (HMR safe)', () => {
+        registerPlugin('plug', { icon: 'A', color: 'blue', label: 'First' });
+        registerPlugin('plug', { icon: 'B', color: 'red', label: 'Second' });
+
+        const badge = getPluginBadge('plug');
+        expect(badge).toEqual({ icon: 'B', color: 'red', label: 'Second' });
     });
 });

@@ -13,6 +13,12 @@ export type PluginSlotName =
     | 'admin-settings:plugin-content'
     | 'profile:character-actions';
 
+export interface PluginBadgeMeta {
+    icon: string;
+    color: string;
+    label: string;
+}
+
 export interface SlotRegistration {
     pluginSlug: string;
     slotName: PluginSlotName;
@@ -23,6 +29,17 @@ export interface SlotRegistration {
 
 /** Module-level registry — populated at import time by plugin register files */
 const registry: SlotRegistration[] = [];
+
+/** Badge metadata keyed by plugin slug */
+const badgeRegistry = new Map<string, PluginBadgeMeta>();
+
+export function registerPlugin(slug: string, badge: PluginBadgeMeta): void {
+    badgeRegistry.set(slug, badge);
+}
+
+export function getPluginBadge(slug: string): PluginBadgeMeta | undefined {
+    return badgeRegistry.get(slug);
+}
 
 export function registerSlotComponent(registration: SlotRegistration): void {
     // De-duplicate: replace existing registration for the same plugin+slot
@@ -46,4 +63,5 @@ export function getSlotRegistrations(slotName: PluginSlotName): readonly SlotReg
 
 export function clearRegistry(): void {
     registry.length = 0;
+    badgeRegistry.clear();
 }

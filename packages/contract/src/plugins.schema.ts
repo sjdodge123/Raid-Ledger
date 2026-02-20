@@ -1,5 +1,13 @@
 import { z } from 'zod';
 
+export const PluginBadgeSchema = z.object({
+  icon: z.string(),
+  color: z.string(),
+  label: z.string(),
+});
+
+export type PluginBadgeDto = z.infer<typeof PluginBadgeSchema>;
+
 export const PluginAuthorSchema = z.object({
   name: z.string(),
   url: z.string().optional(),
@@ -24,6 +32,7 @@ export const PluginInfoSchema = z.object({
   version: z.string(),
   description: z.string(),
   author: PluginAuthorSchema,
+  badge: PluginBadgeSchema.optional(),
   gameSlugs: z.array(z.string()).default([]),
   capabilities: z.array(z.string()),
   integrations: z.array(PluginIntegrationInfoSchema),
