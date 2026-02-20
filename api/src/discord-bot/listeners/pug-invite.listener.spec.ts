@@ -3,6 +3,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PugInviteListener } from './pug-invite.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { PugInviteService } from '../services/pug-invite.service';
+import { CharactersService } from '../../characters/characters.service';
+import { SignupsService } from '../../events/signups.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { PugSlotCreatedPayload } from '../../events/pugs.service';
 import type { DiscordLoginPayload } from '../../auth/auth.service';
@@ -42,6 +44,21 @@ describe('PugInviteListener', () => {
             processPugSlotCreated: jest.fn().mockResolvedValue(undefined),
             handleNewGuildMember: jest.fn().mockResolvedValue(undefined),
             claimPugSlots: jest.fn().mockResolvedValue(0),
+            sendMemberInviteDm: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: CharactersService,
+          useValue: {
+            findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+            findOne: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: SignupsService,
+          useValue: {
+            signup: jest.fn().mockResolvedValue({ id: 1 }),
+            confirmSignup: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -63,6 +80,7 @@ describe('PugInviteListener', () => {
         pugSlotId: 'slot-uuid',
         eventId: 42,
         discordUsername: 'testplayer',
+        creatorUserId: 1,
       };
 
       await listener.handlePugSlotCreated(payload);
@@ -71,6 +89,7 @@ describe('PugInviteListener', () => {
         'slot-uuid',
         42,
         'testplayer',
+        1,
       );
     });
   });
@@ -197,6 +216,43 @@ describe('PugInviteListener', () => {
         ([event]: [string]) => event === Events.GuildMemberAdd,
       );
       expect(guildMemberCalls).toHaveLength(2);
+    });
+
+    it('should clear boundInteractionHandler reference on disconnect', () => {
+      const mockOn = jest.fn();
+      const mockRemoveListener = jest.fn();
+      const mockClient = { on: mockOn, removeListener: mockRemoveListener };
+      clientService.getClient.mockReturnValue(mockClient as never);
+
+      listener.handleBotConnected();
+      // After connect, boundInteractionHandler is set — simulate disconnect
+      listener.handleBotDisconnected();
+
+      // On next connect, should NOT try to remove a stale handler from the new client
+      listener.handleBotConnected();
+
+      // removeListener should NOT be called because boundInteractionHandler was cleared
+      expect(mockRemoveListener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMemberInviteCreated', () => {
+    it('should delegate to pugInviteService.sendMemberInviteDm', async () => {
+      const payload = {
+        eventId: 42,
+        targetDiscordId: 'discord-user-789',
+        notificationId: 'notif-uuid',
+        gameId: null,
+      };
+
+      await listener.handleMemberInviteCreated(payload);
+
+      expect(pugInviteService.sendMemberInviteDm).toHaveBeenCalledWith(
+        42,
+        'discord-user-789',
+        'notif-uuid',
+        null,
+      );
     });
   });
 });

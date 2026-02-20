@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   EmbedBuilder,
@@ -12,7 +12,7 @@ import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
-import { EMBED_COLORS, PUG_BUTTON_IDS } from '../discord-bot.constants';
+import { EMBED_COLORS, PUG_BUTTON_IDS, MEMBER_INVITE_BUTTON_IDS } from '../discord-bot.constants';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -42,6 +42,7 @@ export class PugInviteService {
     pugSlotId: string,
     eventId: number,
     discordUsername: string,
+    creatorUserId?: number,
   ): Promise<void> {
     if (!this.clientService.isConnected()) {
       this.logger.debug(
@@ -81,6 +82,17 @@ export class PugInviteService {
       return;
     }
 
+    // Guard against duplicate DMs: only process slots still in 'pending' state.
+    // Slots already 'invited', 'accepted', or 'claimed' have been processed already.
+    if (pugSlot.status !== 'pending') {
+      this.logger.debug(
+        'PUG slot %s already processed (status: %s), skipping invite',
+        pugSlotId,
+        pugSlot.status,
+      );
+      return;
+    }
+
     try {
       const member = await this.findGuildMember(discordUsername);
 
@@ -88,8 +100,8 @@ export class PugInviteService {
         // PUG is in the server — resolve avatar, send DM, update status
         await this.handleMemberFound(pugSlotId, eventId, member, event);
       } else {
-        // PUG is not in the server — generate server invite URL
-        await this.handleMemberNotFound(pugSlotId, eventId);
+        // PUG is not in the server — generate server invite URL, notify creator
+        await this.handleMemberNotFound(pugSlotId, eventId, discordUsername, creatorUserId);
       }
     } catch (error) {
       this.logger.error(
@@ -295,11 +307,14 @@ export class PugInviteService {
 
   /**
    * Handle case where PUG is not found in the Discord server.
-   * Generates a server invite URL, keeps status as "pending".
+   * Generates a server invite URL, keeps status as "pending",
+   * and DMs the creator with the invite link so they can relay it.
    */
   private async handleMemberNotFound(
     pugSlotId: string,
     eventId: number,
+    discordUsername: string,
+    creatorUserId?: number,
   ): Promise<void> {
     const inviteUrl = await this.generateServerInvite(eventId);
 
@@ -316,6 +331,64 @@ export class PugInviteService {
         'PUG not in server, generated invite URL for slot %s',
         pugSlotId,
       );
+
+      // DM the creator with the invite link so they can relay it
+      if (creatorUserId) {
+        await this.notifyCreatorWithInvite(
+          creatorUserId,
+          discordUsername,
+          inviteUrl,
+        );
+      }
+    }
+  }
+
+  /**
+   * DM the PUG slot creator with the server invite link
+   * so they can share it with the player.
+   */
+  private async notifyCreatorWithInvite(
+    creatorUserId: number,
+    pugUsername: string,
+    inviteUrl: string,
+  ): Promise<void> {
+    // Look up the creator's Discord ID
+    const [creator] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, creatorUserId))
+      .limit(1);
+
+    if (!creator?.discordId) return;
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.PUG_INVITE)
+      .setTitle('Server Invite Needed')
+      .setDescription(
+        [
+          `**${pugUsername}** isn't in the server yet.`,
+          `Share this invite link with them:`,
+          '',
+          inviteUrl,
+          '',
+          `Once they join, they'll automatically receive the raid invite.`,
+        ].join('\n'),
+      )
+      .setTimestamp();
+
+    try {
+      await this.clientService.sendEmbedDM(creator.discordId, embed);
+      this.logger.log(
+        'Sent server invite relay DM to creator (user %d) for PUG %s',
+        creatorUserId,
+        pugUsername,
+      );
+    } catch (error) {
+      this.logger.warn(
+        'Failed to send invite relay DM to creator %d: %s',
+        creatorUserId,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
     }
   }
 
@@ -326,7 +399,7 @@ export class PugInviteService {
     pugSlotId: string,
     discordUserId: string,
     eventId: number,
-    role: string,
+    _role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const branding = await this.settingsService.getBranding();
@@ -345,8 +418,6 @@ export class PugInviteService {
       timeZoneName: 'short',
     });
 
-    const roleDisplay = role.charAt(0).toUpperCase() + role.slice(1);
-
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.PUG_INVITE)
       .setTitle(`You've been invited to a raid!`)
@@ -354,7 +425,6 @@ export class PugInviteService {
         [
           `**${event.title}**`,
           `📅 ${dateStr} at ${timeStr}`,
-          `🛡️ Your role: **${roleDisplay}**`,
           '',
           clientUrl ? `📎 [Event details](${clientUrl}/events/${eventId})` : '',
         ]
@@ -364,9 +434,9 @@ export class PugInviteService {
       .setFooter({ text: communityName })
       .setTimestamp();
 
-    // Add channel link if available (use default channel — raw DB row has UUID registryGameId,
-    // not the integer gameId needed for game-specific binding)
-    const channelId = await this.channelResolver.resolveChannelForEvent();
+    // Add voice channel link if available (resolve voice monitor binding)
+    const gameId = await this.resolveIntegerGameId(event);
+    const channelId = await this.channelResolver.resolveVoiceChannelForEvent(gameId);
     if (channelId) {
       embed.addFields({
         name: 'Voice Channel',
@@ -401,6 +471,109 @@ export class PugInviteService {
       this.logger.warn(
         'Failed to send PUG invite DM to %s: %s',
         discordUserId,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+    }
+  }
+
+  /**
+   * Send a member invite DM with Accept/Decline buttons (ROK-292).
+   * For registered users — uses member invite button IDs (not PUG IDs).
+   * The Accept flow creates an event signup + character/role selection.
+   */
+  async sendMemberInviteDm(
+    eventId: number,
+    targetDiscordId: string,
+    notificationId: string,
+    gameId?: number | null,
+  ): Promise<void> {
+    if (!this.clientService.isConnected()) {
+      this.logger.debug(
+        'Bot not connected, skipping member invite DM for %s',
+        targetDiscordId,
+      );
+      return;
+    }
+
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event || event.cancelledAt) {
+      this.logger.debug(
+        'Event %d is cancelled or not found, skipping member invite DM',
+        eventId,
+      );
+      return;
+    }
+
+    const branding = await this.settingsService.getBranding();
+    const clientUrl = process.env.CLIENT_URL ?? null;
+    const communityName = branding.communityName || 'Raid Ledger';
+
+    const startDate = event.duration[0];
+    const dateStr = startDate.toLocaleDateString('en-US', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.PUG_INVITE)
+      .setTitle(`You've been invited to an event!`)
+      .setDescription(
+        [
+          `**${event.title}**`,
+          `📅 ${dateStr} at ${timeStr}`,
+          '',
+          clientUrl ? `📎 [Event details](${clientUrl}/events/${eventId})` : '',
+        ]
+          .filter(Boolean)
+          .join('\n'),
+      )
+      .setFooter({ text: communityName })
+      .setTimestamp();
+
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForEvent(gameId);
+    if (voiceChannelId) {
+      embed.addFields({
+        name: 'Voice Channel',
+        value: `<#${voiceChannelId}>`,
+        inline: true,
+      });
+    }
+
+    // Accept / Decline action buttons (member invite IDs)
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`)
+        .setLabel('Accept')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`)
+        .setLabel('Decline')
+        .setStyle(ButtonStyle.Danger),
+    );
+
+    try {
+      await this.clientService.sendEmbedDM(targetDiscordId, embed, row);
+      this.logger.log(
+        'Sent member invite DM to %s for event %d',
+        targetDiscordId,
+        eventId,
+      );
+    } catch (error) {
+      this.logger.warn(
+        'Failed to send member invite DM to %s: %s',
+        targetDiscordId,
         error instanceof Error ? error.message : 'Unknown error',
       );
     }
@@ -455,5 +628,24 @@ export class PugInviteService {
       this.logger.error('Failed to generate server invite:', error);
       return null;
     }
+  }
+
+  /**
+   * Resolve the integer games.id from a raw event DB row.
+   * Events store the IGDB ID as text in the legacy `gameId` field;
+   * channel bindings reference the integer `games.id` PK.
+   */
+  private async resolveIntegerGameId(
+    event: typeof schema.events.$inferSelect,
+  ): Promise<number | null> {
+    if (!event.gameId) return null;
+
+    const [game] = await this.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(sql`${schema.games.igdbId}::text`, event.gameId))
+      .limit(1);
+
+    return game?.id ?? null;
   }
 }

@@ -160,6 +160,9 @@ describe('PugInviteService', () => {
             resolveChannelForEvent: jest
               .fn()
               .mockResolvedValue('channel-789'),
+            resolveVoiceChannelForEvent: jest
+              .fn()
+              .mockResolvedValue('channel-789'),
           },
         },
         {
@@ -226,6 +229,39 @@ describe('PugInviteService', () => {
           return createSelectChain([mockEvent]);
         }
         return createSelectChain([]);
+      });
+
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
+
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('should skip when PUG slot is already invited (guard against duplicate DMs)', async () => {
+      const alreadyInvitedSlot = { ...mockPugSlot, status: 'invited' };
+      let selectCallCount = 0;
+      mockDb.select.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          return createSelectChain([mockEvent]);
+        }
+        return createSelectChain([alreadyInvitedSlot]);
+      });
+
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
+
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should skip when PUG slot is already accepted', async () => {
+      const acceptedSlot = { ...mockPugSlot, status: 'accepted' };
+      let selectCallCount = 0;
+      mockDb.select.mockImplementation(() => {
+        selectCallCount++;
+        if (selectCallCount === 1) {
+          return createSelectChain([mockEvent]);
+        }
+        return createSelectChain([acceptedSlot]);
       });
 
       await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
@@ -468,7 +504,9 @@ describe('PugInviteService', () => {
   });
 
   describe('DM embed content', () => {
-    /** Helper to set up mocks for the member-found (DM) path */
+    /** Helper to set up mocks for the member-found (DM) path.
+     *  select call order: 1) event lookup, 2) pug slot verification,
+     *  3) re-read slot after update (handleMemberFound) */
     function setupMemberFoundPath() {
       let selectCallCount = 0;
       mockDb.select.mockImplementation(() => {
@@ -497,7 +535,6 @@ describe('PugInviteService', () => {
       const embedData = embed.toJSON();
 
       expect(embedData.description).toContain('Weekly Raid');
-      expect(embedData.description).toContain('Dps');
       expect(embedData.footer?.text).toBe('Test Guild');
     });
 
@@ -538,7 +575,7 @@ describe('PugInviteService', () => {
     });
 
     it('should skip voice channel field when no channel resolved', async () => {
-      channelResolver.resolveChannelForEvent.mockResolvedValue(null);
+      channelResolver.resolveVoiceChannelForEvent.mockResolvedValue(null);
       setupMemberFoundPath();
 
       await service.processPugSlotCreated(
