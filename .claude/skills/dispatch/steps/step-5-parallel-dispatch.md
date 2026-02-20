@@ -23,13 +23,18 @@ TeamCreate(team_name: "dispatch-batch-N")
 Create tasks in the shared task list:
 - One **implementation task** per story (assigned to dev teammates)
 - One **review task** per story (blocked by implementation — review agents spawn per-story after operator approval)
-- PRs are created individually per story after CI passes and the branch is pushed (Step 6b)
+- Branches are pushed per story after CI passes (Step 6b) — PRs are created after code review passes (Step 8)
 
 ## 5c. Spawn Dev Teammates
 
 Spawn one dev teammate per story using the appropriate template from `templates/`:
 - **Rework stories** → use `templates/dev-rework.md`
 - **New work** → use `templates/dev-new-ready.md`
+
+**Update Linear to "In Progress" for each story being dispatched (MANDATORY):**
+```
+mcp__linear__update_issue(id: <issue_id>, state: "In Progress")
+```
 
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",

@@ -2,11 +2,18 @@
 
 ## If reviewer approves:
 
-1. PR auto-merges to main once CI passes (auto-merge was enabled at PR creation).
-   If auto-merge is not yet enabled: `gh pr merge <number> --auto --squash`
-2. Lead updates Linear -> "Done", posts summary comment:
-   - Key files changed, commit SHA(s), PR number
-   - Notable decisions or deviations
+1. **Create PR and enable auto-merge** (PRs are only created after code review passes):
+   ```bash
+   gh pr create --base main --head rok-<num>-<short-name> \
+     --title "feat(ROK-<num>): <short description>" \
+     --body "<summary of changes>"
+   gh pr merge <number> --auto --squash
+   ```
+2. **Once CI passes and PR auto-merges — update Linear → "Done" (MANDATORY):**
+   ```
+   mcp__linear__update_issue(id: <issue_id>, state: "Done")
+   mcp__linear__create_comment(issueId: <issue_id>, body: "Code review passed. PR #<num> merged to main.\nKey files changed: <list>\nCommit SHA(s): <sha>")
+   ```
 3. Lead removes worktree:
    ```bash
    git worktree remove ../Raid-Ledger--rok-<num>
