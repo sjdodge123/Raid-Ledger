@@ -54,22 +54,49 @@ git push -u origin <branch-name>
 Message lead with push result (include whether rebase brought in new commits).
 
 ### 3. "Deploy feature branch ROK-XXX for testing"
-Deploy the feature branch locally so the operator can test:
+Deploy the feature branch locally so the operator can test.
+
+**IMPORTANT: Do NOT use `deploy_dev.sh --branch`** when the branch is checked out in a worktree — git won't allow the same branch in two places. Instead, deploy directly from the worktree:
+
 ```bash
-./scripts/deploy_dev.sh --branch <branch-name> --rebuild
-```
-Wait for deploy to complete, then verify health:
-```bash
+# 1. Kill any running API/web processes first
+pkill -f 'node.*nest start' 2>/dev/null
+pkill -f 'node.*enable-source-maps.*api/dist/src/main' 2>/dev/null
+pkill -f 'node.*vite' 2>/dev/null
+sleep 2
+
+# 2. Ensure Docker DB + Redis are running
+docker compose -f /Users/sdodge/Documents/Projects/Raid-Ledger/docker-compose.yml up -d db redis
+
+# 3. Copy .env to worktree (worktrees don't get .gitignored files)
+cp /Users/sdodge/Documents/Projects/Raid-Ledger/.env ../Raid-Ledger--rok-<num>/.env
+
+# 4. Build contract (required before API/web can start)
+cd ../Raid-Ledger--rok-<num>
+npm run build -w packages/contract
+
+# 5. Source env vars and start servers
+# NOTE: NestJS ConfigModule may not find .env via file path in worktrees,
+# so we source the vars into the shell environment explicitly.
+set -a && source .env && set +a
+npm run start:dev -w api > /tmp/rok-<num>-api.log 2>&1 &
+npm run dev -w web > /tmp/rok-<num>-web.log 2>&1 &
+
+# 6. Wait for startup and verify health
+sleep 15
 curl -sf http://localhost:3000/health && echo "HEALTHY" || echo "UNHEALTHY"
 ```
-Message lead with deploy + health result.
+
+The operator's app settings (Discord OAuth, Blizzard keys, etc.) are in the shared PostgreSQL database, not the filesystem — all worktrees share the same DB.
+
+Message lead with deploy + health result. If health check fails, check `/tmp/rok-<num>-api.log` for errors.
 
 ### 4. "Full pipeline: validate, push, deploy ROK-XXX"
 Runs the full pipeline in this order. Stop and report if any step fails:
 1. **Sync with main** — `git fetch origin main && git rebase origin/main` (from Task 2)
 2. **Validate** — full CI build/lint/test (from Task 1)
 3. **Push** — `git push -u origin <branch-name>`
-4. **Deploy** — `deploy_dev.sh --branch <branch-name> --rebuild` + health check (from Task 3)
+4. **Deploy from worktree** — follow the worktree deploy procedure in Task 3 (NOT `deploy_dev.sh --branch`)
 
 Note: The sync + validate in steps 1-2 replaces the standalone validate (Task 1). Do NOT validate twice.
 

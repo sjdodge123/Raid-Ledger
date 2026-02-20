@@ -72,3 +72,6 @@ export * from './discord-bot.schema.js';
 
 // Channel Bindings (ROK-348)
 export * from './channel-bindings.schema.js';
+
+// Auth (ROK-389)
+export * from './auth.schema.js';
