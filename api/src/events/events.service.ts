@@ -1335,8 +1335,8 @@ export class EventsService {
         registryId: registry.id, // ROK-194: UUID for character matching
         name: registry.name,
         slug: registry.slug,
-        // Prefer IGDB coverUrl if available, fallback to registry iconUrl
-        coverUrl: game?.coverUrl || registry.iconUrl,
+        // Only use IGDB cover art; never fall back to registry iconUrl
+        coverUrl: game?.coverUrl || null,
       };
     } else if (game) {
       gameData = {
