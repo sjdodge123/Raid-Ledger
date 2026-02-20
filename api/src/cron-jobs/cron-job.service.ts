@@ -337,9 +337,31 @@ export class CronJobService implements OnApplicationBootstrap {
     }
 
     if (cronJob) {
-      // Fire it now — the job's onTick handler runs synchronously
       this.logger.log(`Manually triggering cron job: ${job.name}`);
-      void cronJob.fireOnTick();
+
+      if (job.source === 'plugin' && job.pluginSlug && this.pluginRegistry) {
+        // Plugin jobs — use executeWithTracking so the execution is recorded
+        // in the DB. Look up the handler from the CronRegistrar adapter.
+        const registrar = this.pluginRegistry.getAdapter<CronRegistrar>(
+          EXTENSION_POINTS.CRON_REGISTRAR,
+          job.pluginSlug,
+        );
+        const definition = registrar
+          ?.getCronJobs()
+          .find((j) => `${job.pluginSlug}:${j.name}` === job.name);
+
+        if (definition) {
+          await this.executeWithTracking(job.name, async () => {
+            await definition.handler();
+          });
+        } else {
+          // Adapter missing — fall back to fire-and-forget
+          void cronJob.fireOnTick();
+        }
+      } else {
+        // Built-in core job — fireOnTick is already tracked by the @Cron decorator
+        void cronJob.fireOnTick();
+      }
     } else {
       // Job exists in DB but not in SchedulerRegistry (e.g. unactivated plugin).
       // Record as "skipped" since the handler didn't actually execute.
