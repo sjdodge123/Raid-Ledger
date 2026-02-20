@@ -319,7 +319,7 @@ export function EventDetailPage() {
                 )}
 
                 {canManageRoster && !isCancelled && (
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-2 gap-2 sm:flex">
                         <button
                             onClick={() => setShowInviteModal(true)}
                             className="btn btn-primary btn-sm"
@@ -619,6 +619,7 @@ export function EventDetailPage() {
                                             userId={signup.user.id}
                                             username={signup.user.username}
                                             user={toAvatarUser(signup.user)}
+                                            gameId={event.game?.registryId ?? undefined}
                                             showAvatar
                                             size="md"
                                         />
@@ -667,6 +668,7 @@ export function EventDetailPage() {
                                             userId={signup.user.id}
                                             username={signup.user.username}
                                             user={toAvatarUser(signup.user)}
+                                            gameId={event.game?.registryId ?? undefined}
                                             showAvatar
                                             size="md"
                                         />

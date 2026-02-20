@@ -63,9 +63,9 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                         </div>
                     )}
 
-                    <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap overflow-hidden">
-                            <span className="font-medium text-foreground truncate">
+                    <div className="min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium text-foreground truncate max-w-[180px] sm:max-w-none">
                                 {character.name}
                             </span>
                             {/* Main badge — mobile only (desktop shows in actions area) */}
@@ -88,7 +88,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                                 </span>
                             )}
                         </div>
-                        <div className="flex items-center gap-2 text-sm text-muted flex-wrap overflow-hidden">
+                        <div className="flex items-center gap-1.5 text-sm text-muted flex-wrap">
                             {/* Level (ROK-234) */}
                             {character.level && (
                                 <>
@@ -97,13 +97,13 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                                 </>
                             )}
                             {/* Race (ROK-234) */}
-                            {character.race && <span>{character.race}</span>}
+                            {character.race && <span className="truncate max-w-[100px] sm:max-w-none">{character.race}</span>}
                             {character.race && character.class && <span>•</span>}
-                            {character.class && <span>{character.class}</span>}
-                            {character.spec && <span>• {character.spec}</span>}
+                            {character.class && <span className="truncate max-w-[100px] sm:max-w-none">{character.class}</span>}
+                            {character.spec && <span className="truncate max-w-[80px] sm:max-w-none">• {character.spec}</span>}
                             {character.effectiveRole && (
                                 <span
-                                    className={`px-1.5 py-0.5 rounded text-xs text-foreground ${roleColors[character.effectiveRole] || 'bg-faint'}`}
+                                    className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${roleColors[character.effectiveRole] || 'bg-faint'}`}
                                 >
                                     {character.effectiveRole.toUpperCase()}
                                 </span>
@@ -111,7 +111,7 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                             {character.itemLevel && (
                                 <>
                                     <span>•</span>
-                                    <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                                    <span className="text-purple-400 whitespace-nowrap">{character.itemLevel} iLvl</span>
                                 </>
                             )}
                         </div>

@@ -177,6 +177,12 @@ export class DiscordEmbedFactory {
       })
       .setTimestamp();
 
+    // ROK-399: Make title clickable
+    const clientUrl = context.clientUrl || process.env.CLIENT_URL;
+    if (clientUrl) {
+      embed.setURL(`${clientUrl}/events/${event.id}`);
+    }
+
     if (event.game?.coverUrl) {
       embed.setThumbnail(event.game.coverUrl);
     }
@@ -273,6 +279,12 @@ export class DiscordEmbedFactory {
       .setTitle(`📅 ${event.title}`)
       .setColor(color);
 
+    // ROK-399: Make title clickable by linking to event page
+    const clientUrl = context.clientUrl || process.env.CLIENT_URL;
+    if (clientUrl) {
+      embed.setURL(`${clientUrl}/events/${event.id}`);
+    }
+
     // Body: key data with bold labels
     const bodyLines: string[] = [];
     if (event.game?.name) {
@@ -294,9 +306,9 @@ export class DiscordEmbedFactory {
       embed.setThumbnail(event.game.coverUrl);
     }
 
-    // Footer
+    // Footer — ROK-399: community name only (title is now the clickable link)
     embed.setFooter({
-      text: `🔗 View in Raid Ledger • ${context.communityName || 'Community'}`,
+      text: context.communityName || 'Raid Ledger',
     });
 
     embed.setTimestamp();

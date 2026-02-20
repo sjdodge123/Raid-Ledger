@@ -69,7 +69,14 @@ export class ShareService {
       );
 
     if (bindings.length === 0) {
-      return { channelsPosted: 0, channelsSkipped: 0 };
+      // No game-specific binding — fall back to default notification channel
+      const defaultChannelId =
+        await this.settingsService.getDiscordBotDefaultChannel();
+      if (defaultChannelId) {
+        bindings.push({ channelId: defaultChannelId } as (typeof bindings)[0]);
+      } else {
+        return { channelsPosted: 0, channelsSkipped: 0 };
+      }
     }
 
     // Check which channels already have posts for this event
