@@ -4,6 +4,7 @@ import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { useAdminSettings } from '../../../hooks/use-admin-settings';
 import { useNewBadge } from '../../../hooks/use-new-badge';
 import { NewBadge } from '../../../components/ui/new-badge';
+import { getPluginBadge } from '../../plugin-registry';
 
 export function BlizzardIntegrationSlot() {
     const { blizzardStatus, updateBlizzard, testBlizzard, clearBlizzard } = useAdminSettings();
@@ -90,10 +91,13 @@ export function BlizzardIntegrationSlot() {
         </svg>
     );
 
+    const pluginBadge = getPluginBadge('blizzard');
+
     return (
         <IntegrationCard
             title="Blizzard API"
             description="Enable WoW Armory character import"
+            pluginBadge={pluginBadge}
             icon={
                 <div className="w-10 h-10 rounded-lg bg-[#148EFF] flex items-center justify-center">
                     <svg className="w-6 h-6 text-foreground" viewBox="0 0 24 24" fill="currentColor">

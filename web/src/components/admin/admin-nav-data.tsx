@@ -12,6 +12,8 @@ export interface NavItem {
     status?: IntegrationStatus;
     /** Source plugin name for plugin-installed integrations (e.g. "World of Warcraft") */
     pluginSource?: string;
+    /** Plugin slug — used to look up the plugin badge image */
+    pluginSlug?: string;
 }
 
 export interface NavSection {
@@ -70,6 +72,7 @@ export function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[]
                 newBadgeKey: `integration-nav-seen:${plugin.slug}:${integration.key}`,
                 status: integration.configured ? 'online' : 'offline',
                 pluginSource: plugin.name,
+                pluginSlug: plugin.slug,
             });
         }
     }

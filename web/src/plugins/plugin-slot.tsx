@@ -12,6 +12,7 @@ interface PluginSlotProps {
 /**
  * Renders plugin-provided components for a named slot.
  * Components are filtered by active plugin status and stacked by priority.
+ * Plugin badges are shown only on admin UI cards, not on user-facing slots (ROK-302).
  * When no active plugin fills the slot, renders the fallback.
  */
 export function PluginSlot({ name, context, fallback, className }: PluginSlotProps) {

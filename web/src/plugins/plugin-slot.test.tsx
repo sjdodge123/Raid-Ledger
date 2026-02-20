@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { PluginSlot } from './plugin-slot';
-import { registerSlotComponent, clearRegistry } from './plugin-registry';
+import { registerSlotComponent, clearRegistry, registerPlugin } from './plugin-registry';
 import { usePluginStore } from '../stores/plugin-store';
 
 function TestComponent(props: { message?: string }) {
@@ -145,5 +145,28 @@ describe('PluginSlot', () => {
         const wrapper = container.querySelector('.fallback-wrapper');
         expect(wrapper).toBeInTheDocument();
         expect(wrapper?.textContent).toBe('Fallback content');
+    });
+
+    it('does not render badges on user-facing slots (badges are admin-only)', () => {
+        registerPlugin('blizzard', {
+            icon: 'W',
+            color: 'blue',
+            label: 'WoW Plugin',
+        });
+        registerSlotComponent({
+            pluginSlug: 'blizzard',
+            slotName: 'character-detail:sections',
+            component: TestComponent,
+            priority: 0,
+        });
+
+        usePluginStore.getState().setActiveSlugs(['blizzard']);
+
+        const { container } = render(
+            <PluginSlot name="character-detail:sections" />,
+        );
+        expect(screen.getByTestId('test-component')).toBeInTheDocument();
+        // Badges only appear on admin UI cards, not on PluginSlot
+        expect(container.querySelector('[title="WoW Plugin"]')).toBeNull();
     });
 });

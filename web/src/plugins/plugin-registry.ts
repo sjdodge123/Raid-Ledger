@@ -13,6 +13,15 @@ export type PluginSlotName =
     | 'admin-settings:plugin-content'
     | 'profile:character-actions';
 
+export interface PluginBadgeMeta {
+    /** Emoji string, or image URL (starting with "/" or "http") */
+    icon: string;
+    /** Optional smaller image URL for compact badge contexts */
+    iconSmall?: string;
+    color: string;
+    label: string;
+}
+
 export interface SlotRegistration {
     pluginSlug: string;
     slotName: PluginSlotName;
@@ -21,9 +30,48 @@ export interface SlotRegistration {
     priority: number;
 }
 
+/** Handle returned by registerPlugin() — all slot registrations must go through this */
+export interface PluginHandle {
+    readonly slug: string;
+    registerSlot(
+        slotName: PluginSlotName,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        component: ComponentType<any>,
+        priority?: number,
+    ): void;
+}
+
 /** Module-level registry — populated at import time by plugin register files */
 const registry: SlotRegistration[] = [];
 
+/** Badge metadata keyed by plugin slug */
+const badgeRegistry = new Map<string, PluginBadgeMeta>();
+
+/**
+ * Register a plugin with badge metadata and receive a handle for slot registration.
+ * Plugins MUST call this before registering any slots — the handle enforces this contract.
+ */
+export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHandle {
+    badgeRegistry.set(slug, badge);
+
+    return {
+        slug,
+        registerSlot(slotName, component, priority = 0) {
+            registerSlotComponent({
+                pluginSlug: slug,
+                slotName,
+                component,
+                priority,
+            });
+        },
+    };
+}
+
+export function getPluginBadge(slug: string): PluginBadgeMeta | undefined {
+    return badgeRegistry.get(slug);
+}
+
+/** @internal Used by PluginHandle.registerSlot — prefer using the handle pattern */
 export function registerSlotComponent(registration: SlotRegistration): void {
     // De-duplicate: replace existing registration for the same plugin+slot
     // to prevent HMR from accumulating duplicate entries (ROK-206)
@@ -46,4 +94,10 @@ export function getSlotRegistrations(slotName: PluginSlotName): readonly SlotReg
 
 export function clearRegistry(): void {
     registry.length = 0;
+    badgeRegistry.clear();
+}
+
+/** Returns true if the icon string represents an image URL (starts with "/" or "http") */
+export function isImageIcon(icon: string): boolean {
+    return icon.startsWith('/') || icon.startsWith('http');
 }

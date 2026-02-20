@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import type { PluginBadgeMeta } from '../../plugins/plugin-registry';
+import { PluginBadge } from '../ui/plugin-badge';
 
 interface IntegrationCardProps {
     title: string;
@@ -7,6 +9,8 @@ interface IntegrationCardProps {
     isConfigured: boolean;
     isLoading?: boolean;
     badge?: ReactNode;
+    /** Plugin badge metadata — renders an image badge in the top-right corner */
+    pluginBadge?: PluginBadgeMeta;
     onMouseEnter?: () => void;
     children: ReactNode;
 }
@@ -22,6 +26,7 @@ export function IntegrationCard({
     isConfigured,
     isLoading = false,
     badge,
+    pluginBadge,
     onMouseEnter,
     children,
 }: IntegrationCardProps) {
@@ -33,9 +38,19 @@ export function IntegrationCard({
             {/* Header */}
             <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                        {icon}
-                    </div>
+                    {/* Plugin badge replaces default icon when present */}
+                    {pluginBadge ? (
+                        <PluginBadge
+                            icon={pluginBadge.icon}
+                            iconSmall={pluginBadge.iconSmall}
+                            label={pluginBadge.label}
+                            size="md"
+                        />
+                    ) : (
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+                            {icon}
+                        </div>
+                    )}
                     <div className="text-left">
                         <div className="flex items-center gap-2">
                             <h2 className="text-lg font-semibold text-foreground">{title}</h2>
