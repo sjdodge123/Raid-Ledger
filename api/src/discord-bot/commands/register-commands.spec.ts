@@ -9,6 +9,7 @@ import { RosterViewCommand } from './roster-view.command';
 import { BindCommand } from './bind.command';
 import { UnbindCommand } from './unbind.command';
 import { BindingsCommand } from './bindings.command';
+import { InviteCommand } from './invite.command';
 import { REST, Routes } from 'discord.js';
 
 // Mock discord.js REST
@@ -132,6 +133,16 @@ describe('RegisterCommandsService', () => {
             }),
           },
         },
+        {
+          provide: InviteCommand,
+          useValue: {
+            commandName: 'invite',
+            getDefinition: jest.fn().mockReturnValue({
+              name: 'invite',
+              description: 'Invite user to event',
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -161,6 +172,7 @@ describe('RegisterCommandsService', () => {
           { name: 'bind', description: 'Bind channel' },
           { name: 'unbind', description: 'Unbind channel' },
           { name: 'bindings', description: 'List bindings' },
+          { name: 'invite', description: 'Invite user to event' },
         ],
       });
     });
@@ -180,6 +192,7 @@ describe('RegisterCommandsService', () => {
           { name: 'bind', description: 'Bind channel' },
           { name: 'unbind', description: 'Unbind channel' },
           { name: 'bindings', description: 'List bindings' },
+          { name: 'invite', description: 'Invite user to event' },
         ],
       });
       // Guild cleanup is skipped

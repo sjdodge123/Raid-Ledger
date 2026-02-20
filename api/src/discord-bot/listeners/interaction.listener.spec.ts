@@ -8,6 +8,7 @@ import { RosterViewCommand } from '../commands/roster-view.command';
 import { BindCommand } from '../commands/bind.command';
 import { UnbindCommand } from '../commands/unbind.command';
 import { BindingsCommand } from '../commands/bindings.command';
+import { InviteCommand } from '../commands/invite.command';
 import { Events } from 'discord.js';
 
 describe('InteractionListener', () => {
@@ -83,6 +84,13 @@ describe('InteractionListener', () => {
           provide: BindingsCommand,
           useValue: {
             commandName: 'bindings',
+            handleInteraction: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: InviteCommand,
+          useValue: {
+            commandName: 'invite',
             handleInteraction: jest.fn().mockResolvedValue(undefined),
           },
         },

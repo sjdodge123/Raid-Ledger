@@ -321,4 +321,188 @@ describe('DiscordEmbedFactory', () => {
       expect(embed.toJSON().description).toContain('45m');
     });
   });
+
+  describe('buildEventPreview', () => {
+    it('should use cyan announcement color', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
+    });
+
+    it('should set the title with calendar emoji', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().title).toBe('📅 Mythic Raid Night');
+    });
+
+    it('should include game name in description', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().description).toContain('World of Warcraft');
+    });
+
+    it('should include signup count', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().description).toContain('15');
+      expect(embed.toJSON().description).toContain('signed up');
+    });
+
+    it('should include date and time', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      const desc = embed.toJSON().description;
+      expect(desc).toContain('📆');
+      expect(desc).toContain('⏰');
+    });
+
+    it('should include a View Event link button', () => {
+      const { row } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(row).toBeDefined();
+      const components = row!.toJSON().components as {
+        label?: string;
+        url?: string;
+      }[];
+      expect(components).toHaveLength(1);
+      expect(components[0].label).toBe('View Event');
+      expect(components[0].url).toBe('http://localhost:5173/events/42');
+    });
+
+    it('should set game art as thumbnail', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().thumbnail?.url).toBe(
+        'https://example.com/wow-art.jpg',
+      );
+    });
+
+    it('should include community name in footer', () => {
+      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
+      expect(embed.toJSON().footer?.text).toBe('Test Guild');
+    });
+
+    it('should omit row when no client URL', () => {
+      const origEnv = process.env.CLIENT_URL;
+      delete process.env.CLIENT_URL;
+
+      const { row } = factory.buildEventPreview(baseEvent, {
+        communityName: 'Test',
+        clientUrl: null,
+      });
+      expect(row).toBeUndefined();
+
+      process.env.CLIENT_URL = origEnv;
+    });
+
+    it('should handle events without game data', () => {
+      const noGameEvent: EmbedEventData = { ...baseEvent, game: null };
+      const { embed } = factory.buildEventPreview(noGameEvent, baseContext);
+      expect(embed.toJSON().description).not.toContain('🎮');
+      expect(embed.toJSON().thumbnail).toBeUndefined();
+    });
+  });
+
+  describe('buildEventInvite', () => {
+    it('should use teal PUG invite color', () => {
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.PUG_INVITE);
+    });
+
+    it('should set the title with invite text', () => {
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      expect(embed.toJSON().title).toBe(
+        "You're invited to **Mythic Raid Night**!",
+      );
+    });
+
+    it('should include game name in description', () => {
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      expect(embed.toJSON().description).toContain('World of Warcraft');
+    });
+
+    it('should include date and time', () => {
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      const desc = embed.toJSON().description;
+      expect(desc).toContain('📆');
+      expect(desc).toContain('⏰');
+    });
+
+    it('should include description excerpt', () => {
+      const eventWithDesc: EmbedEventData = {
+        ...baseEvent,
+        description: 'Weekly mythic progression',
+      };
+      const { embed } = factory.buildEventInvite(
+        eventWithDesc,
+        baseContext,
+        'inviter',
+      );
+      expect(embed.toJSON().description).toContain('Weekly mythic progression');
+    });
+
+    it('should truncate long descriptions to 200 chars', () => {
+      const longDesc = 'A'.repeat(250);
+      const eventWithLongDesc: EmbedEventData = {
+        ...baseEvent,
+        description: longDesc,
+      };
+      const { embed } = factory.buildEventInvite(
+        eventWithLongDesc,
+        baseContext,
+        'inviter',
+      );
+      expect(embed.toJSON().description).toContain('...');
+    });
+
+    it('should include inviter and community in footer', () => {
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      const footer = embed.toJSON().footer?.text;
+      expect(footer).toContain('inviter');
+      expect(footer).toContain('Test Guild');
+    });
+
+    it('should include a View Event link button', () => {
+      const { row } = factory.buildEventInvite(
+        baseEvent,
+        baseContext,
+        'inviter',
+      );
+      expect(row).toBeDefined();
+      const components = row!.toJSON().components as {
+        label?: string;
+        url?: string;
+      }[];
+      expect(components).toHaveLength(1);
+      expect(components[0].label).toBe('View Event');
+      expect(components[0].url).toBe('http://localhost:5173/events/42');
+    });
+
+    it('should omit row when no client URL', () => {
+      const origEnv = process.env.CLIENT_URL;
+      delete process.env.CLIENT_URL;
+
+      const { row } = factory.buildEventInvite(
+        baseEvent,
+        { communityName: 'Test', clientUrl: null },
+        'inviter',
+      );
+      expect(row).toBeUndefined();
+
+      process.env.CLIENT_URL = origEnv;
+    });
+  });
 });
