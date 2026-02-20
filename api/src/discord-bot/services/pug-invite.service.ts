@@ -12,7 +12,11 @@ import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
-import { EMBED_COLORS, PUG_BUTTON_IDS, MEMBER_INVITE_BUTTON_IDS } from '../discord-bot.constants';
+import {
+  EMBED_COLORS,
+  PUG_BUTTON_IDS,
+  MEMBER_INVITE_BUTTON_IDS,
+} from '../discord-bot.constants';
 
 /**
  * Handles PUG invite flow via Discord bot (ROK-292).
@@ -101,7 +105,12 @@ export class PugInviteService {
         await this.handleMemberFound(pugSlotId, eventId, member, event);
       } else {
         // PUG is not in the server — generate server invite URL, notify creator
-        await this.handleMemberNotFound(pugSlotId, eventId, discordUsername, creatorUserId);
+        await this.handleMemberNotFound(
+          pugSlotId,
+          eventId,
+          discordUsername,
+          creatorUserId,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -436,7 +445,8 @@ export class PugInviteService {
 
     // Add voice channel link if available (resolve voice monitor binding)
     const gameId = await this.resolveIntegerGameId(event);
-    const channelId = await this.channelResolver.resolveVoiceChannelForEvent(gameId);
+    const channelId =
+      await this.channelResolver.resolveVoiceChannelForEvent(gameId);
     if (channelId) {
       embed.addFields({
         name: 'Voice Channel',
@@ -554,11 +564,15 @@ export class PugInviteService {
     // Accept / Decline action buttons (member invite IDs)
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`)
+        .setCustomId(
+          `${MEMBER_INVITE_BUTTON_IDS.ACCEPT}:${eventId}:${notificationId}`,
+        )
         .setLabel('Accept')
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
-        .setCustomId(`${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`)
+        .setCustomId(
+          `${MEMBER_INVITE_BUTTON_IDS.DECLINE}:${eventId}:${notificationId}`,
+        )
         .setLabel('Decline')
         .setStyle(ButtonStyle.Danger),
     );

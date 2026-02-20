@@ -92,6 +92,7 @@ describe('InteractionListener', () => {
           useValue: {
             commandName: 'invite',
             handleInteraction: jest.fn().mockResolvedValue(undefined),
+            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

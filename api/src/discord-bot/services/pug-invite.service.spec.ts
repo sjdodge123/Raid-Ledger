@@ -8,7 +8,9 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
 /** Create a Collection-like object that has a .find() method (mimics discord.js Collection). */
 function createMockCollection(
-  entries: Array<{ user: { id: string; username: string; avatar: string | null } }>,
+  entries: Array<{
+    user: { id: string; username: string; avatar: string | null };
+  }>,
 ) {
   return {
     find: (predicate: (m: (typeof entries)[0]) => boolean) =>
@@ -96,7 +98,9 @@ describe('PugInviteService', () => {
 
   /** Reusable mock guild with matching member */
   const createMockGuild = (
-    members: Array<{ user: { id: string; username: string; avatar: string | null } }> = [],
+    members: Array<{
+      user: { id: string; username: string; avatar: string | null };
+    }> = [],
   ) => ({
     members: {
       fetch: jest.fn().mockResolvedValue(createMockCollection(members)),
@@ -157,9 +161,7 @@ describe('PugInviteService', () => {
         {
           provide: ChannelResolverService,
           useValue: {
-            resolveChannelForEvent: jest
-              .fn()
-              .mockResolvedValue('channel-789'),
+            resolveChannelForEvent: jest.fn().mockResolvedValue('channel-789'),
             resolveVoiceChannelForEvent: jest
               .fn()
               .mockResolvedValue('channel-789'),
@@ -283,11 +285,7 @@ describe('PugInviteService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       // Should have called update to set status to 'invited'
       expect(mockDb.update).toHaveBeenCalled();
@@ -330,11 +328,7 @@ describe('PugInviteService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       // Should have set server invite URL
       expect(updateChain.set).toHaveBeenCalledWith(
@@ -372,11 +366,7 @@ describe('PugInviteService', () => {
       // .where() is the terminal for this query
       mockDb.select.mockReturnValue(createSelectTerminalWhereChain([]));
 
-      await service.handleNewGuildMember(
-        'user-id',
-        'newplayer',
-        'avatar-hash',
-      );
+      await service.handleNewGuildMember('user-id', 'newplayer', 'avatar-hash');
 
       expect(mockDb.update).not.toHaveBeenCalled();
     });
@@ -524,11 +514,7 @@ describe('PugInviteService', () => {
     it('should include event title, role, and community name in embed', async () => {
       setupMemberFoundPath();
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       expect(clientService.sendEmbedDM).toHaveBeenCalled();
       const [, embed] = clientService.sendEmbedDM.mock.calls[0];
@@ -541,11 +527,7 @@ describe('PugInviteService', () => {
     it('should include event link when CLIENT_URL is set', async () => {
       setupMemberFoundPath();
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       const [, embed] = clientService.sendEmbedDM.mock.calls[0];
       const embedData = embed.toJSON();
@@ -558,11 +540,7 @@ describe('PugInviteService', () => {
     it('should include voice channel link when resolved', async () => {
       setupMemberFoundPath();
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       const [, embed] = clientService.sendEmbedDM.mock.calls[0];
       const embedData = embed.toJSON();
@@ -578,11 +556,7 @@ describe('PugInviteService', () => {
       channelResolver.resolveVoiceChannelForEvent.mockResolvedValue(null);
       setupMemberFoundPath();
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       const [, embed] = clientService.sendEmbedDM.mock.calls[0];
       const embedData = embed.toJSON();
@@ -611,11 +585,7 @@ describe('PugInviteService', () => {
         return createSelectChain([mockPugSlot]);
       });
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
       // update should not have been called for invite URL since both paths returned null
@@ -643,16 +613,10 @@ describe('PugInviteService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      await service.processPugSlotCreated(
-        'pug-slot-uuid',
-        42,
-        'testplayer',
-      );
+      await service.processPugSlotCreated('pug-slot-uuid', 42, 'testplayer');
 
       // Should have used system channel for the invite
-      expect(mockGuild.channels.fetch).toHaveBeenCalledWith(
-        'system-channel',
-      );
+      expect(mockGuild.channels.fetch).toHaveBeenCalledWith('system-channel');
     });
   });
 });

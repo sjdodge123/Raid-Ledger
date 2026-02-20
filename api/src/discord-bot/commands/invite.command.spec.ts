@@ -38,6 +38,23 @@ describe('InviteCommand', () => {
         cancelledAt: null,
         game: { name: 'World of Warcraft', coverUrl: null },
       }),
+      findAll: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 42,
+            title: 'Mythic Raid Night',
+            startTime: '2026-02-20T20:00:00.000Z',
+          },
+          {
+            id: 43,
+            title: 'PvP Arena',
+            startTime: '2026-02-21T18:00:00.000Z',
+          },
+        ],
+        total: 2,
+        page: 1,
+        limit: 25,
+      }),
     };
 
     command = new InviteCommand(
@@ -64,9 +81,14 @@ describe('InviteCommand', () => {
 
     it('should have event and user options', () => {
       const def = command.getDefinition();
-      const options = def.options as { name: string; required: boolean }[];
+      const options = def.options as {
+        name: string;
+        required: boolean;
+        autocomplete?: boolean;
+      }[];
       expect(options[0].name).toBe('event');
       expect(options[0].required).toBe(true);
+      expect(options[0].autocomplete).toBe(true);
       expect(options[1].name).toBe('user');
       expect(options[1].required).toBe(true);
     });
@@ -152,6 +174,69 @@ describe('InviteCommand', () => {
         expect.objectContaining({ communityName: 'Test Guild' }),
         'inviter-user',
       );
+    });
+  });
+
+  describe('handleAutocomplete', () => {
+    let mockAutocomplete: {
+      options: { getFocused: jest.Mock };
+      respond: jest.Mock;
+    };
+
+    beforeEach(() => {
+      mockAutocomplete = {
+        options: { getFocused: jest.fn().mockReturnValue('') },
+        respond: jest.fn().mockResolvedValue(undefined),
+      };
+    });
+
+    it('should return matching events', async () => {
+      mockAutocomplete.options.getFocused.mockReturnValue('mythic');
+
+      await command.handleAutocomplete(mockAutocomplete as never);
+
+      expect(mockEventsService.findAll).toHaveBeenCalledWith({
+        page: 1,
+        upcoming: 'true',
+        limit: 25,
+      });
+      expect(mockAutocomplete.respond).toHaveBeenCalledWith(
+        expect.arrayContaining([expect.objectContaining({ value: 42 })]),
+      );
+      // Should not include PvP Arena since query is 'mythic'
+      const calls = mockAutocomplete.respond.mock.calls as [
+        { name: string; value: number }[],
+      ][];
+      expect(calls[0][0]).toHaveLength(1);
+    });
+
+    it('should return all events when query is empty', async () => {
+      await command.handleAutocomplete(mockAutocomplete as never);
+
+      const calls = mockAutocomplete.respond.mock.calls as [
+        { name: string; value: number }[],
+      ][];
+      expect(calls[0][0]).toHaveLength(2);
+    });
+
+    it('should respond with empty array on error', async () => {
+      mockEventsService.findAll.mockRejectedValue(new Error('DB error'));
+
+      await command.handleAutocomplete(mockAutocomplete as never);
+
+      expect(mockAutocomplete.respond).toHaveBeenCalledWith([]);
+    });
+
+    it('should format event names with date and time', async () => {
+      await command.handleAutocomplete(mockAutocomplete as never);
+
+      const calls = mockAutocomplete.respond.mock.calls as [
+        { name: string; value: number }[],
+      ][];
+      const choices = calls[0][0];
+      // Should contain the event title and a formatted date
+      expect(choices[0].name).toContain('Mythic Raid Night');
+      expect(choices[0].name).toContain('Feb');
     });
   });
 });

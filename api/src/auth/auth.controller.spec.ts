@@ -472,7 +472,9 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
     const result = await controller.getProfile(makeRequest(1) as any);
 
-    expect((result as Record<string, unknown>).avatarPreference).toEqual({ type: 'custom' });
+    expect((result as Record<string, unknown>).avatarPreference).toEqual({
+      type: 'custom',
+    });
   });
 
   it('calls getUserPreference with correct userId and key "avatarPreference"', async () => {

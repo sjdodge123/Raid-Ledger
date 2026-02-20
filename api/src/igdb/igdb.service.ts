@@ -599,9 +599,7 @@ export class IgdbService {
       .limit(IGDB_CONFIG.SEARCH_LIMIT);
 
     if (cachedGames.length >= IGDB_CONFIG.SEARCH_LIMIT) {
-      this.logger.debug(
-        `Database cache hit (full page) for query: ${query}`,
-      );
+      this.logger.debug(`Database cache hit (full page) for query: ${query}`);
       const games = cachedGames.map((g) => this.mapDbRowToDetail(g));
 
       // Cache in Redis for future requests (only non-empty results)
@@ -1007,9 +1005,7 @@ export class IgdbService {
       sql`NOT (${schema.games.themes}::jsonb @> ANY(ARRAY[${sql.raw(ADULT_THEME_IDS.map((id) => `'[${id}]'::jsonb`).join(','))}]))`,
       // Block games whose names contain adult keywords
       not(
-        or(
-          ...ADULT_KEYWORDS.map((kw) => ilike(schema.games.name, `%${kw}%`)),
-        )!,
+        or(...ADULT_KEYWORDS.map((kw) => ilike(schema.games.name, `%${kw}%`)))!,
       ),
     ];
   }
@@ -1218,7 +1214,9 @@ export class IgdbService {
       .returning({ id: schema.games.id });
 
     if (result.length > 0) {
-      this.logger.log(`Auto-hidden ${result.length} games with adult themes/keywords`);
+      this.logger.log(
+        `Auto-hidden ${result.length} games with adult themes/keywords`,
+      );
     }
 
     return result.length;

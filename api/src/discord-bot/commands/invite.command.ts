@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
+  type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -34,7 +35,11 @@ export class InviteCommand
       .setDescription('Invite a Discord user to an event')
       .setDMPermission(false)
       .addIntegerOption((opt) =>
-        opt.setName('event').setDescription('Event ID').setRequired(true),
+        opt
+          .setName('event')
+          .setDescription('Event to invite the user to')
+          .setRequired(true)
+          .setAutocomplete(true),
       )
       .addUserOption((opt) =>
         opt.setName('user').setDescription('User to invite').setRequired(true),
@@ -100,6 +105,46 @@ export class InviteCommand
       targetUser.username,
       interaction.user.username,
     );
+  }
+
+  async handleAutocomplete(
+    interaction: AutocompleteInteraction,
+  ): Promise<void> {
+    const query = interaction.options.getFocused();
+
+    try {
+      const result = await this.eventsService.findAll({
+        page: 1,
+        upcoming: 'true',
+        limit: 25,
+      });
+
+      const filtered = result.data
+        .filter((event) =>
+          event.title.toLowerCase().includes(query.toLowerCase()),
+        )
+        .slice(0, 25)
+        .map((event) => {
+          const date = new Date(event.startTime);
+          const formatted = date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+          });
+          const time = date.toLocaleTimeString('en-US', {
+            hour: 'numeric',
+            minute: '2-digit',
+          });
+          const label = `${event.title} — ${formatted} at ${time}`;
+          return {
+            name: label.length > 100 ? label.slice(0, 97) + '...' : label,
+            value: event.id,
+          };
+        });
+
+      await interaction.respond(filtered);
+    } catch {
+      await interaction.respond([]);
+    }
   }
 
   private async buildContext(): Promise<EmbedContext> {

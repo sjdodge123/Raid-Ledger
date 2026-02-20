@@ -118,9 +118,11 @@ describe('PugsService', () => {
     it('should not emit event when creation fails', async () => {
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
-          returning: jest.fn().mockRejectedValue(
-            Object.assign(new Error('unique_event_pug'), {}),
-          ),
+          returning: jest
+            .fn()
+            .mockRejectedValue(
+              Object.assign(new Error('unique_event_pug'), {}),
+            ),
         }),
       });
 
