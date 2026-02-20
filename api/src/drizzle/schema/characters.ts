@@ -69,6 +69,8 @@ export const characters = pgTable(
     gameVariant: varchar('game_variant', { length: 30 }),
     /** Full equipped items data from Blizzard API (JSONB) */
     equipment: jsonb('equipment'),
+    /** Raw talent tree data from Blizzard API (JSONB) */
+    talents: jsonb('talents'),
     /** Display order for drag-to-reorder UI */
     displayOrder: integer('display_order').default(0).notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),

@@ -35,6 +35,7 @@ export interface BlizzardEquipmentItem {
 export interface InferredSpecialization {
   spec: string | null;
   role: 'tank' | 'healer' | 'dps' | null;
+  talents: unknown;
 }
 
 /** Equipment data returned from the Blizzard API */
@@ -893,34 +894,93 @@ export class BlizzardService {
         this.logger.debug(
           `Specializations endpoint returned ${res.status} for ${charName}-${realmSlug}`,
         );
-        return { spec: null, role: null };
+        return { spec: null, role: null, talents: null };
       }
 
       const data = (await res.json()) as {
         // Retail format
         active_specialization?: { name: string };
-        // Classic format — array of talent trees with spent point counts
         specializations?: Array<{
           specialization_name?: string;
           spent_points?: number;
-          talents?: Array<unknown>;
+          talents?: Array<{
+            talent?: { name?: string; id?: number };
+            spell_tooltip?: { spell?: { name?: string; id?: number } };
+            tier_index?: number;
+            column_index?: number;
+          }>;
         }>;
         // Some variants return specialization_groups
         specialization_groups?: Array<{
           specializations?: Array<{
             specialization_name?: string;
             spent_points?: number;
-            talents?: Array<unknown>;
+            talents?: Array<{
+              talent?: { name?: string; id?: number };
+              spell_tooltip?: { spell?: { name?: string; id?: number } };
+              tier_index?: number;
+              column_index?: number;
+            }>;
           }>;
         }>;
+        // Retail talent loadouts
+        active_hero_talent_tree?: {
+          hero_talent_tree?: { name?: string };
+          talents?: Array<{
+            talent?: { name?: string; id?: number };
+          }>;
+        };
       };
 
       // Retail: if active_specialization is present, use it directly
       if (data.active_specialization?.name) {
         const specName = data.active_specialization.name;
+
+        // Capture retail talent loadout
+        const retailTalents: {
+          format: 'retail';
+          specName: string;
+          classTalents: Array<{ name: string; id?: number }>;
+          heroTalents: {
+            treeName: string | null;
+            talents: Array<{ name: string; id?: number }>;
+          } | null;
+        } = {
+          format: 'retail',
+          specName,
+          classTalents: [],
+          heroTalents: null,
+        };
+
+        // Extract spec talents from specializations array
+        const specTrees = data.specializations ?? [];
+        for (const tree of specTrees) {
+          if (tree.talents) {
+            for (const t of tree.talents) {
+              const name = t.talent?.name ?? t.spell_tooltip?.spell?.name;
+              const id = t.talent?.id ?? t.spell_tooltip?.spell?.id;
+              if (name) {
+                retailTalents.classTalents.push({ name, id });
+              }
+            }
+          }
+        }
+
+        // Extract hero talent tree
+        if (data.active_hero_talent_tree) {
+          retailTalents.heroTalents = {
+            treeName:
+              data.active_hero_talent_tree.hero_talent_tree?.name ?? null,
+            talents: (data.active_hero_talent_tree.talents ?? [])
+              .filter((t) => t.talent?.name)
+              .map((t) => ({ name: t.talent!.name!, id: t.talent?.id })),
+          };
+        }
+
         return {
           spec: specName,
           role: this.specToRole(specName),
+          talents: retailTalents,
         };
       }
 
@@ -931,21 +991,56 @@ export class BlizzardService {
         [];
 
       if (trees.length === 0) {
-        return { spec: null, role: null };
+        return { spec: null, role: null, talents: null };
       }
+
+      // Build classic talent data with per-tree point distribution
+      const classicTalents: {
+        format: 'classic';
+        trees: Array<{
+          name: string;
+          spentPoints: number;
+          talents: Array<{ name: string; id?: number }>;
+        }>;
+        summary: string;
+      } = {
+        format: 'classic',
+        trees: [],
+        summary: '',
+      };
 
       // Find tree with most spent points
       let bestTree: { name: string; points: number } | null = null;
       for (const tree of trees) {
         const treeName = tree.specialization_name;
         const points = tree.spent_points ?? tree.talents?.length ?? 0;
+
+        if (treeName) {
+          classicTalents.trees.push({
+            name: treeName,
+            spentPoints: points,
+            talents: (tree.talents ?? [])
+              .filter((t) => t.talent?.name)
+              .map((t) => ({ name: t.talent!.name!, id: t.talent?.id })),
+          });
+        }
+
         if (treeName && (!bestTree || points > bestTree.points)) {
           bestTree = { name: treeName, points };
         }
       }
 
+      // Build summary string like "31/20/0"
+      classicTalents.summary = classicTalents.trees
+        .map((t) => t.spentPoints)
+        .join('/');
+
       if (!bestTree || bestTree.points === 0) {
-        return { spec: null, role: null };
+        return {
+          spec: null,
+          role: null,
+          talents: classicTalents.trees.length > 0 ? classicTalents : null,
+        };
       }
 
       // Map tree name to role using class-specific lookup
@@ -960,10 +1055,11 @@ export class BlizzardService {
       return {
         spec: bestTree.name,
         role,
+        talents: classicTalents,
       };
     } catch (err) {
       this.logger.debug(`Failed to fetch specializations: ${err}`);
-      return { spec: null, role: null };
+      return { spec: null, role: null, talents: null };
     }
   }
 

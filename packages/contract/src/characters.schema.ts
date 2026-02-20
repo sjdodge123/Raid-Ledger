@@ -94,6 +94,7 @@ export const CharacterSchema = z.object({
     region: z.string().max(10).nullable(),
     gameVariant: z.string().max(30).nullable(),
     equipment: CharacterEquipmentSchema.nullable(),
+    talents: z.unknown().nullable(),
     displayOrder: z.number().int(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
