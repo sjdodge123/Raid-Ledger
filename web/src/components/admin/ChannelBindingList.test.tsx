@@ -127,7 +127,7 @@ describe('ChannelBindingList', () => {
     expect(screen.getByText('Announcements')).toBeInTheDocument();
   });
 
-  it('shows "Voice Monitor" badge for game-voice-monitor binding', () => {
+  it('shows "Event Announcements" badge for game-voice-monitor binding', () => {
     render(
       <ChannelBindingList
         bindings={[makeBinding({ bindingPurpose: 'game-voice-monitor' })]}
@@ -138,7 +138,7 @@ describe('ChannelBindingList', () => {
       />,
     );
 
-    expect(screen.getByText('Voice Monitor')).toBeInTheDocument();
+    expect(screen.getByText('Event Announcements')).toBeInTheDocument();
   });
 
   it('shows "General Lobby" badge for general-lobby binding', () => {

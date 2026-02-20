@@ -122,7 +122,7 @@ export class BindCommand
       const behaviorLabel =
         behavior === 'game-announcements'
           ? 'Event Announcements'
-          : 'Voice Monitor';
+          : 'Event Announcements';
 
       const description = [
         `**#${channelName}** bound for **${behaviorLabel}**`,
