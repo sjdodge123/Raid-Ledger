@@ -100,6 +100,13 @@ export function AuthSuccessPage() {
                         }
                     }
 
+                    // ROK-263: Check for stored invite code from magic invite link flow
+                    const storedInviteCode = sessionStorage.getItem('invite_code');
+                    if (storedInviteCode) {
+                        navigate(`/i/${storedInviteCode}`, { replace: true });
+                        return;
+                    }
+
                     sessionStorage.removeItem(`oauth_processed_${code}`);
                     const redirectTo = consumeAuthRedirect() || '/calendar';
                     toast.success('Logged in successfully!');

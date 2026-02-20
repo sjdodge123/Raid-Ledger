@@ -6,7 +6,7 @@
 import { useState } from 'react';
 import type { PugSlotResponseDto, PugRole } from '@raid-ledger/contract';
 import { toast } from '../../lib/toast';
-import { usePugs, useCreatePug, useUpdatePug, useDeletePug } from '../../hooks/use-pugs';
+import { usePugs, useCreatePug, useUpdatePug, useDeletePug, useRegeneratePugInviteCode } from '../../hooks/use-pugs';
 import { PugCard } from './pug-card';
 import { PugFormModal } from './pug-form-modal';
 import { formatRole } from '../../lib/role-colors';
@@ -24,6 +24,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
     const createPug = useCreatePug(eventId);
     const updatePug = useUpdatePug(eventId);
     const deletePug = useDeletePug(eventId);
+    const regenerateCode = useRegeneratePugInviteCode(eventId);
 
     const [showFormModal, setShowFormModal] = useState(false);
     const [editingPug, setEditingPug] = useState<PugSlotResponseDto | null>(null);
@@ -47,6 +48,21 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
             toast.success('PUG removed from roster');
         } catch (err) {
             toast.error('Failed to remove PUG', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    const handleRegenerateLink = async (pugId: string) => {
+        try {
+            const updated = await regenerateCode.mutateAsync(pugId);
+            if (updated.inviteCode) {
+                const url = `${window.location.origin}/i/${updated.inviteCode}`;
+                await navigator.clipboard.writeText(url);
+                toast.success('New invite link copied to clipboard!');
+            }
+        } catch (err) {
+            toast.error('Failed to regenerate link', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -123,7 +139,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                     {canManage && ' — use the Assign modal to add PUGs'}
                 </div>
             ) : (
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                     {pugs.map((pug) => (
                         <PugCard
                             key={pug.id}
@@ -131,6 +147,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                             canManage={canManage}
                             onEdit={handleEdit}
                             onRemove={handleRemove}
+                            onRegenerateLink={canManage ? handleRegenerateLink : undefined}
                             showRole={isMMOGame}
                         />
                     ))}

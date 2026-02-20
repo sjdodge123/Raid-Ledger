@@ -46,6 +46,7 @@ describe('PugsService', () => {
     spec: null,
     notes: null,
     status: 'pending',
+    inviteCode: 'ab3cd4ef',
     serverInviteUrl: null,
     claimedByUserId: null,
     createdBy: 1,
@@ -54,9 +55,17 @@ describe('PugsService', () => {
   };
 
   beforeEach(async () => {
+    // select() is called for: 1) event lookup (returns mockEvent), 2) invite code uniqueness check (returns [])
+    let selectCallCount = 0;
     mockDb = {
       insert: jest.fn().mockReturnValue(createChainMock([mockInsertedPugSlot])),
-      select: jest.fn().mockReturnValue(createChainMock([mockEvent])),
+      select: jest.fn().mockImplementation(() => {
+        selectCallCount++;
+        // First select = event lookup, subsequent = invite code uniqueness check
+        return selectCallCount === 1
+          ? createChainMock([mockEvent])
+          : createChainMock([]);
+      }),
       update: jest.fn().mockReturnValue(createChainMock()),
       delete: jest.fn().mockReturnValue(createChainMock()),
     };

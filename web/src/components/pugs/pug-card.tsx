@@ -7,6 +7,7 @@ import { useState } from 'react';
 import type { PugSlotResponseDto } from '@raid-ledger/contract';
 import { PugAvatar } from './pug-avatar';
 import { ROLE_BADGE_CLASSES, ROLE_EMOJI, formatRole } from '../../lib/role-colors';
+import { toast } from '../../lib/toast';
 
 /** Status indicator colors */
 const STATUS_COLORS: Record<string, { dot: string; label: string }> = {
@@ -24,19 +25,32 @@ interface PugCardProps {
     onEdit?: (pug: PugSlotResponseDto) => void;
     /** Called when remove is clicked */
     onRemove?: (pugId: string) => void;
+    /** Called when regenerate invite link is clicked (ROK-263) */
+    onRegenerateLink?: (pugId: string) => void;
     /** Whether to display the role badge (only for MMO games) */
     showRole?: boolean;
 }
 
-export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = false }: PugCardProps) {
+export function PugCard({ pug, canManage = false, onEdit, onRemove, onRegenerateLink, showRole = false }: PugCardProps) {
     const [showMenu, setShowMenu] = useState(false);
     const statusInfo = STATUS_COLORS[pug.status] ?? STATUS_COLORS.pending;
+    const isAnonymous = !pug.discordUsername;
+    const inviteUrl = pug.inviteCode ? `${window.location.origin}/i/${pug.inviteCode}` : null;
+
+    const handleCopyInviteUrl = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (inviteUrl) {
+            navigator.clipboard.writeText(inviteUrl).then(() => {
+                toast.success('Invite link copied!');
+            }).catch(() => {});
+        }
+    };
 
     return (
-        <div className="relative flex items-center gap-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-900/10 p-2.5 transition-all">
+        <div className="relative flex items-center gap-3 rounded-lg border border-dashed border-amber-500/40 bg-amber-900/10 p-2 min-h-[60px] transition-all">
             {/* Avatar */}
             <PugAvatar
-                username={pug.discordUsername}
+                username={pug.discordUsername ?? null}
                 discordUserId={pug.discordUserId}
                 discordAvatarHash={pug.discordAvatarHash}
                 sizeClassName="h-8 w-8"
@@ -46,16 +60,30 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = f
             <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                     <span
-                        className="truncate font-medium text-foreground"
-                        title={pug.discordUsername}
+                        className={`truncate font-medium ${isAnonymous ? 'text-muted italic' : 'text-foreground'}`}
+                        title={pug.discordUsername ?? 'Awaiting player'}
                     >
-                        {pug.discordUsername}
+                        {pug.discordUsername ?? 'Awaiting player'}
                     </span>
 
-                    {/* Guest badge */}
-                    <span className="shrink-0 rounded-full bg-amber-600/30 px-2 py-0.5 text-xs font-medium text-amber-300">
-                        Guest
-                    </span>
+                    {/* Guest / Invite badge — clickable to copy invite link when available */}
+                    {canManage && inviteUrl ? (
+                        <button
+                            onClick={handleCopyInviteUrl}
+                            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-blue-600/30 px-2 py-0.5 text-xs font-medium text-blue-300 hover:bg-blue-600/50 transition-colors cursor-pointer"
+                            title="Click to copy invite link"
+                        >
+                            <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.172 13.828a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.102 1.101" />
+                            </svg>
+                            {isAnonymous ? 'Invite' : 'Guest'}
+                        </button>
+                    ) : (
+                        <span className="shrink-0 rounded-full bg-amber-600/30 px-2 py-0.5 text-xs font-medium text-amber-300">
+                            {isAnonymous ? 'Invite' : 'Guest'}
+                        </span>
+                    )}
 
                     {/* Role badge (MMO games only) */}
                     {showRole && (
@@ -88,8 +116,8 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = f
                     </p>
                 )}
 
-                {/* Server invite URL (shown to managers when PUG is not yet in server) */}
-                {canManage && pug.serverInviteUrl && pug.status === 'pending' && (
+                {/* Legacy: Server invite URL (shown to managers when PUG is not yet in server) */}
+                {canManage && pug.serverInviteUrl && pug.status === 'pending' && !inviteUrl && (
                     <div className="mt-1 flex items-center gap-1.5">
                         <a
                             href={pug.serverInviteUrl}
@@ -139,17 +167,43 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, showRole = f
                                 className="fixed inset-0 z-40"
                                 onClick={() => setShowMenu(false)}
                             />
-                            <div className="absolute right-0 top-8 z-50 w-32 rounded-lg border border-edge bg-surface shadow-lg">
-                                <button
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        setShowMenu(false);
-                                        onEdit?.(pug);
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg"
-                                >
-                                    Edit
-                                </button>
+                            <div className="absolute right-0 top-8 z-50 w-40 rounded-lg border border-edge bg-surface shadow-lg">
+                                {onEdit && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowMenu(false);
+                                            onEdit(pug);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors rounded-t-lg"
+                                    >
+                                        Edit
+                                    </button>
+                                )}
+                                {inviteUrl && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowMenu(false);
+                                            handleCopyInviteUrl(e);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors"
+                                    >
+                                        Copy Link
+                                    </button>
+                                )}
+                                {onRegenerateLink && inviteUrl && (
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setShowMenu(false);
+                                            onRegenerateLink(pug.id);
+                                        }}
+                                        className="w-full px-3 py-2 text-left text-sm text-foreground hover:bg-panel transition-colors"
+                                    >
+                                        Regenerate Link
+                                    </button>
+                                )}
                                 <button
                                     onClick={(e) => {
                                         e.stopPropagation();

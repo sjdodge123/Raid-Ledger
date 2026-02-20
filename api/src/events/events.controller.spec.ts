@@ -4,6 +4,7 @@ import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
+import { ShareService } from './share.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -77,6 +78,14 @@ describe('EventsController', () => {
         { provide: EventsService, useValue: mockEventsService },
         { provide: SignupsService, useValue: mockSignupsService },
         { provide: PugsService, useValue: mockPugsService },
+        {
+          provide: ShareService,
+          useValue: {
+            shareToDiscordChannels: jest
+              .fn()
+              .mockResolvedValue({ channelsPosted: 0, channelsSkipped: 0 }),
+          },
+        },
       ],
     }).compile();
 

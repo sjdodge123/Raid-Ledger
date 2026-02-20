@@ -4,6 +4,7 @@ import {
   type EmbedContext,
 } from './discord-embed.factory';
 import { EMBED_COLORS, EMBED_STATES } from '../discord-bot.constants';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 describe('DiscordEmbedFactory', () => {
   let factory: DiscordEmbedFactory;
@@ -37,53 +38,52 @@ describe('DiscordEmbedFactory', () => {
     factory = new DiscordEmbedFactory();
   });
 
-  describe('buildEventAnnouncement', () => {
-    it('should build an embed with cyan color for new events', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+  describe('buildEventEmbed', () => {
+    it('should build an embed with cyan color by default (posted state)', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
     it('should set the title with calendar emoji prefix', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.title).toBe('📅 Mythic Raid Night');
     });
 
     it('should set the author to Raid Ledger', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.author?.name).toBe('Raid Ledger');
     });
 
     it('should include game name in the description', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).toContain('World of Warcraft');
     });
 
     it('should include date and time in the description', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
-      // Date format is locale-dependent but should include a date marker
       expect(json.description).toContain('📆');
       expect(json.description).toContain('⏰');
     });
 
     it('should include duration in the description', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).toContain('3h');
     });
 
     it('should include roster breakdown for MMO slot config', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).toContain('ROSTER:');
@@ -93,22 +93,22 @@ describe('DiscordEmbedFactory', () => {
     });
 
     it('should set game art as thumbnail', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.thumbnail?.url).toBe('https://example.com/wow-art.jpg');
     });
 
     it('should include community name in footer', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.footer?.text).toContain('Test Guild');
       expect(json.footer?.text).toContain('View in Raid Ledger');
     });
 
-    it('should include signup action buttons and a View Event link button', () => {
-      const { row } = factory.buildEventAnnouncement(baseEvent, baseContext);
+    it('should include signup action buttons by default', () => {
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext);
 
       expect(row).toBeDefined();
       const components = row!.toJSON().components as {
@@ -132,10 +132,7 @@ describe('DiscordEmbedFactory', () => {
         game: null,
       };
 
-      const { embed } = factory.buildEventAnnouncement(
-        noGameEvent,
-        baseContext,
-      );
+      const { embed } = factory.buildEventEmbed(noGameEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).not.toContain('🎮');
@@ -150,10 +147,7 @@ describe('DiscordEmbedFactory', () => {
         signupCount: 5,
       };
 
-      const { embed } = factory.buildEventAnnouncement(
-        simpleEvent,
-        baseContext,
-      );
+      const { embed } = factory.buildEventEmbed(simpleEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).toContain('ROSTER: 5/10');
@@ -167,7 +161,7 @@ describe('DiscordEmbedFactory', () => {
         signupCount: 3,
       };
 
-      const { embed } = factory.buildEventAnnouncement(openEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(openEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).toContain('3 signed up');
@@ -181,7 +175,7 @@ describe('DiscordEmbedFactory', () => {
         signupCount: 0,
       };
 
-      const { embed } = factory.buildEventAnnouncement(emptyEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(emptyEvent, baseContext);
       const json = embed.toJSON();
 
       expect(json.description).not.toContain('ROSTER');
@@ -195,7 +189,7 @@ describe('DiscordEmbedFactory', () => {
       const origEnv = process.env.CLIENT_URL;
       delete process.env.CLIENT_URL;
 
-      const { row } = factory.buildEventAnnouncement(baseEvent, noUrlContext);
+      const { row } = factory.buildEventEmbed(baseEvent, noUrlContext);
 
       expect(row).toBeDefined();
       const components = row!.toJSON().components as { label?: string }[];
@@ -214,13 +208,120 @@ describe('DiscordEmbedFactory', () => {
         clientUrl: 'http://localhost:5173',
       };
 
-      const { embed } = factory.buildEventAnnouncement(
-        baseEvent,
-        noNameContext,
-      );
+      const { embed } = factory.buildEventEmbed(baseEvent, noNameContext);
       const json = embed.toJSON();
 
       expect(json.footer?.text).toContain('Community');
+    });
+
+    it('should use "view" button mode with only View Event link', () => {
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext, {
+        buttons: 'view',
+      });
+
+      expect(row).toBeDefined();
+      const components = row!.toJSON().components as {
+        label?: string;
+        url?: string;
+      }[];
+      expect(components).toHaveLength(1);
+      expect(components[0].label).toBe('View Event');
+      expect(components[0].url).toBe('http://localhost:5173/events/42');
+    });
+
+    it('should omit row with "view" button mode when no client URL', () => {
+      const origEnv = process.env.CLIENT_URL;
+      delete process.env.CLIENT_URL;
+
+      const { row } = factory.buildEventEmbed(
+        baseEvent,
+        {
+          communityName: 'Test',
+          clientUrl: null,
+        },
+        { buttons: 'view' },
+      );
+      expect(row).toBeUndefined();
+
+      process.env.CLIENT_URL = origEnv;
+    });
+
+    it('should omit row with "none" button mode', () => {
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext, {
+        buttons: 'none',
+      });
+      expect(row).toBeUndefined();
+    });
+
+    it('should accept a custom action row', () => {
+      const customRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId('custom:1')
+          .setLabel('Custom Button')
+          .setStyle(ButtonStyle.Primary),
+      );
+
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext, {
+        buttons: customRow,
+      });
+
+      expect(row).toBeDefined();
+      const components = row!.toJSON().components as { label?: string }[];
+      expect(components).toHaveLength(1);
+      expect(components[0].label).toBe('Custom Button');
+    });
+
+    it('should omit buttons for cancelled state regardless of button mode', () => {
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.CANCELLED,
+        buttons: 'signup',
+      });
+      expect(row).toBeUndefined();
+    });
+
+    it('should omit buttons for completed state regardless of button mode', () => {
+      const { row } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.COMPLETED,
+        buttons: 'signup',
+      });
+      expect(row).toBeUndefined();
+    });
+  });
+
+  describe('buildEventEmbed state colors', () => {
+    it('should use cyan for posted state', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.POSTED,
+      });
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
+    });
+
+    it('should use amber for imminent state', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.IMMINENT,
+      });
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
+    });
+
+    it('should use emerald for live state', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.LIVE,
+      });
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
+    });
+
+    it('should use slate for completed state', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.COMPLETED,
+      });
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.SYSTEM);
+    });
+
+    it('should use red for cancelled state', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.CANCELLED,
+      });
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ERROR);
     });
   });
 
@@ -248,56 +349,34 @@ describe('DiscordEmbedFactory', () => {
     });
   });
 
-  describe('buildEventUpdate', () => {
-    it('should use cyan for posted state', () => {
-      const { embed } = factory.buildEventUpdate(
+  describe('deprecated aliases', () => {
+    it('buildEventAnnouncement delegates to buildEventEmbed', () => {
+      const announcement = factory.buildEventAnnouncement(
         baseEvent,
         baseContext,
-        EMBED_STATES.POSTED,
       );
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
+      const embed = factory.buildEventEmbed(baseEvent, baseContext);
+
+      expect(announcement.embed.toJSON()).toEqual(embed.embed.toJSON());
     });
 
-    it('should use amber for imminent state', () => {
-      const { embed } = factory.buildEventUpdate(
+    it('buildEventUpdate delegates to buildEventEmbed', () => {
+      const update = factory.buildEventUpdate(
         baseEvent,
         baseContext,
         EMBED_STATES.IMMINENT,
       );
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
-    });
+      const embed = factory.buildEventEmbed(baseEvent, baseContext, {
+        state: EMBED_STATES.IMMINENT,
+      });
 
-    it('should use emerald for live state', () => {
-      const { embed } = factory.buildEventUpdate(
-        baseEvent,
-        baseContext,
-        EMBED_STATES.LIVE,
-      );
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.SIGNUP_CONFIRMATION);
-    });
-
-    it('should use slate for completed state', () => {
-      const { embed } = factory.buildEventUpdate(
-        baseEvent,
-        baseContext,
-        EMBED_STATES.COMPLETED,
-      );
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.SYSTEM);
-    });
-
-    it('should use red for cancelled state', () => {
-      const { embed } = factory.buildEventUpdate(
-        baseEvent,
-        baseContext,
-        EMBED_STATES.CANCELLED,
-      );
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.ERROR);
+      expect(update.embed.toJSON()).toEqual(embed.embed.toJSON());
     });
   });
 
   describe('duration formatting', () => {
     it('should format hours-only duration', () => {
-      const { embed } = factory.buildEventAnnouncement(baseEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       expect(embed.toJSON().description).toContain('3h');
     });
 
@@ -307,7 +386,7 @@ describe('DiscordEmbedFactory', () => {
         endTime: '2026-02-20T21:30:00.000Z', // 1h 30m
       };
 
-      const { embed } = factory.buildEventAnnouncement(mixedEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(mixedEvent, baseContext);
       expect(embed.toJSON().description).toContain('1h 30m');
     });
 
@@ -317,82 +396,8 @@ describe('DiscordEmbedFactory', () => {
         endTime: '2026-02-20T20:45:00.000Z', // 45m
       };
 
-      const { embed } = factory.buildEventAnnouncement(shortEvent, baseContext);
+      const { embed } = factory.buildEventEmbed(shortEvent, baseContext);
       expect(embed.toJSON().description).toContain('45m');
-    });
-  });
-
-  describe('buildEventPreview', () => {
-    it('should use cyan announcement color', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
-    });
-
-    it('should set the title with calendar emoji', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().title).toBe('📅 Mythic Raid Night');
-    });
-
-    it('should include game name in description', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().description).toContain('World of Warcraft');
-    });
-
-    it('should include signup count', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().description).toContain('15');
-      expect(embed.toJSON().description).toContain('signed up');
-    });
-
-    it('should include date and time', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      const desc = embed.toJSON().description;
-      expect(desc).toContain('📆');
-      expect(desc).toContain('⏰');
-    });
-
-    it('should include a View Event link button', () => {
-      const { row } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(row).toBeDefined();
-      const components = row!.toJSON().components as {
-        label?: string;
-        url?: string;
-      }[];
-      expect(components).toHaveLength(1);
-      expect(components[0].label).toBe('View Event');
-      expect(components[0].url).toBe('http://localhost:5173/events/42');
-    });
-
-    it('should set game art as thumbnail', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().thumbnail?.url).toBe(
-        'https://example.com/wow-art.jpg',
-      );
-    });
-
-    it('should include community name in footer', () => {
-      const { embed } = factory.buildEventPreview(baseEvent, baseContext);
-      expect(embed.toJSON().footer?.text).toBe('Test Guild');
-    });
-
-    it('should omit row when no client URL', () => {
-      const origEnv = process.env.CLIENT_URL;
-      delete process.env.CLIENT_URL;
-
-      const { row } = factory.buildEventPreview(baseEvent, {
-        communityName: 'Test',
-        clientUrl: null,
-      });
-      expect(row).toBeUndefined();
-
-      process.env.CLIENT_URL = origEnv;
-    });
-
-    it('should handle events without game data', () => {
-      const noGameEvent: EmbedEventData = { ...baseEvent, game: null };
-      const { embed } = factory.buildEventPreview(noGameEvent, baseContext);
-      expect(embed.toJSON().description).not.toContain('🎮');
-      expect(embed.toJSON().thumbnail).toBeUndefined();
     });
   });
 

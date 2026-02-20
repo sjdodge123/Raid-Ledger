@@ -10,6 +10,7 @@ import {
     createPugSlot,
     updatePugSlot,
     deletePugSlot,
+    regeneratePugInviteCode,
 } from '../lib/api-client';
 
 /**
@@ -66,6 +67,22 @@ export function useDeletePug(eventId: number) {
 
     return useMutation<void, Error, string>({
         mutationFn: (pugId) => deletePugSlot(eventId, pugId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'pugs'],
+            });
+        },
+    });
+}
+
+/**
+ * Mutation hook for regenerating a PUG slot invite code (ROK-263).
+ */
+export function useRegeneratePugInviteCode(eventId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation<PugSlotResponseDto, Error, string>({
+        mutationFn: (pugId) => regeneratePugInviteCode(eventId, pugId),
         onSuccess: () => {
             queryClient.invalidateQueries({
                 queryKey: ['events', eventId, 'pugs'],

@@ -6,8 +6,8 @@
 import { useState } from 'react';
 
 interface PugAvatarProps {
-    /** Discord username to derive initials and color from */
-    username: string;
+    /** Discord username to derive initials and color from (null for anonymous invite slots) */
+    username: string | null;
     /** Discord user ID for CDN avatar URL */
     discordUserId?: string | null;
     /** Discord avatar hash for CDN avatar URL */
@@ -67,11 +67,25 @@ export function PugAvatar({
         return (
             <img
                 src={getDiscordAvatarUrl(discordUserId, discordAvatarHash)}
-                alt={username}
-                title={username}
+                alt={username ?? 'Invite'}
+                title={username ?? 'Awaiting player'}
                 className={`${sizeClassName} rounded-full shrink-0 object-cover`}
                 onError={() => setImgError(true)}
             />
+        );
+    }
+
+    // Anonymous invite slot: show a link icon placeholder
+    if (!username) {
+        return (
+            <div
+                className={`${sizeClassName} rounded-full flex items-center justify-center text-amber-400 bg-amber-500/20 shrink-0`}
+                title="Awaiting player"
+            >
+                <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+            </div>
         );
     }
 

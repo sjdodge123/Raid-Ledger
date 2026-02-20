@@ -48,29 +48,67 @@ export interface EmbedContext {
   clientUrl?: string | null;
 }
 
+/** Controls what action row buttons are attached to the embed. */
+export type EmbedButtonMode =
+  /** Signup buttons (Sign Up, Tentative, Decline) + View Event link */
+  | 'signup'
+  /** View Event link button only */
+  | 'view'
+  /** No buttons */
+  | 'none'
+  /** Caller provides a custom action row */
+  | ActionRowBuilder<ButtonBuilder>;
+
+export interface BuildEventEmbedOptions {
+  /** Embed color state (default: POSTED) */
+  state?: EmbedState;
+  /** What buttons to attach (default: 'signup') */
+  buttons?: EmbedButtonMode;
+}
+
 /**
- * Factory service that constructs Discord.js EmbedBuilder instances
- * for each message type. Follows the universal embed anatomy from
- * the design spec section 2.2.
- *
- * Reusable by ROK-126 (reminders), ROK-180 (notifications),
- * ROK-292 (PUG invites), and other stories.
+ * Factory service that constructs Discord.js EmbedBuilder instances.
+ * All event embeds use `buildEventEmbed()` for a consistent visual layout.
  */
 @Injectable()
 export class DiscordEmbedFactory {
   /**
-   * Build an event announcement embed (Cyan accent).
-   * Used when a new event is created and posted to Discord.
-   * Includes signup action buttons (ROK-137).
+   * Build a standard event embed with consistent layout.
+   * The embed body is always the same: title, game, date/time, full roster breakdown.
+   * The `options` parameter controls color (via state) and what buttons are attached.
    */
-  buildEventAnnouncement(
+  buildEventEmbed(
     event: EmbedEventData,
     context: EmbedContext,
+    options?: BuildEventEmbedOptions,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    const color = this.getColorForState(EMBED_STATES.POSTED);
+    const state = options?.state ?? EMBED_STATES.POSTED;
+    const buttons = options?.buttons ?? 'signup';
+
+    const color = this.getColorForState(state);
     const embed = this.createBaseEmbed(event, context, color);
-    const row = this.buildSignupButtons(event.id, context.clientUrl);
-    return { embed, row };
+
+    // Cancelled and completed states never show buttons regardless of request
+    if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
+      return { embed };
+    }
+
+    if (buttons === 'none') {
+      return { embed };
+    }
+
+    if (buttons === 'signup') {
+      const row = this.buildSignupButtons(event.id, context.clientUrl);
+      return { embed, row };
+    }
+
+    if (buttons === 'view') {
+      const row = this.buildViewButton(event.id, context.clientUrl);
+      return row ? { embed, row } : { embed };
+    }
+
+    // Custom ActionRowBuilder provided by caller
+    return { embed, row: buttons };
   }
 
   /**
@@ -94,23 +132,85 @@ export class DiscordEmbedFactory {
   }
 
   /**
-   * Re-render an existing embed with updated state.
-   * Used by the state machine when embed_state transitions occur.
+   * Build an event invite DM embed (ROK-380).
+   * Used by the /invite slash command to send a rich invite to a Discord user.
+   * Intentionally different visual from channel embeds: personalized title,
+   * inviter attribution in footer, teal PUG accent color.
    */
+  buildEventInvite(
+    event: EmbedEventData,
+    context: EmbedContext,
+    inviterUsername: string,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const startDate = new Date(event.startTime);
+    const dateStr = startDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    const bodyLines: string[] = [];
+    if (event.game?.name) {
+      bodyLines.push(`🎮 **${event.game.name}**`);
+    }
+    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
+    if (event.description) {
+      const excerpt =
+        event.description.length > 200
+          ? event.description.slice(0, 200) + '...'
+          : event.description;
+      bodyLines.push('');
+      bodyLines.push(excerpt);
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.PUG_INVITE)
+      .setTitle(`You're invited to **${event.title}**!`)
+      .setDescription(bodyLines.join('\n'))
+      .setFooter({
+        text: `Sent by ${inviterUsername} via ${context.communityName || 'Raid Ledger'}`,
+      })
+      .setTimestamp();
+
+    if (event.game?.coverUrl) {
+      embed.setThumbnail(event.game.coverUrl);
+    }
+
+    const row = this.buildViewButton(event.id, context.clientUrl);
+    return row ? { embed, row } : { embed };
+  }
+
+  // ---- Deprecated aliases (kept for backward compatibility during migration) ----
+
+  /** @deprecated Use buildEventEmbed() instead */
+  buildEventAnnouncement(
+    event: EmbedEventData,
+    context: EmbedContext,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    return this.buildEventEmbed(event, context, {
+      state: EMBED_STATES.POSTED,
+      buttons: 'signup',
+    });
+  }
+
+  /** @deprecated Use buildEventEmbed() instead */
   buildEventUpdate(
     event: EmbedEventData,
     context: EmbedContext,
     state: EmbedState,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    const color = this.getColorForState(state);
-    const embed = this.createBaseEmbed(event, context, color);
-    // Cancelled and completed states don't show buttons
-    if (state === EMBED_STATES.CANCELLED || state === EMBED_STATES.COMPLETED) {
-      return { embed };
-    }
-    const row = this.buildSignupButtons(event.id, context.clientUrl);
-    return { embed, row };
+    return this.buildEventEmbed(event, context, {
+      state,
+      buttons: 'signup',
+    });
   }
+
+  // ---- Private helpers ----
 
   /**
    * Get the accent color for a given embed state.
@@ -136,6 +236,7 @@ export class DiscordEmbedFactory {
 
   /**
    * Create the base embed following the universal anatomy.
+   * Always renders: title, game, date/time with duration, full roster breakdown.
    */
   private createBaseEmbed(
     event: EmbedEventData,
@@ -274,123 +375,6 @@ export class DiscordEmbedFactory {
   }
 
   /**
-   * Build a compact event preview embed (ROK-380).
-   * Used when auto-unfurling event links posted in Discord channels.
-   * Shows title, game, date/time, signup count, and a "View Event" link button.
-   */
-  buildEventPreview(
-    event: EmbedEventData,
-    context: EmbedContext,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    const startDate = new Date(event.startTime);
-    const dateStr = startDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-    const timeStr = startDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
-
-    const bodyLines: string[] = [];
-    if (event.game?.name) {
-      bodyLines.push(`🎮 **${event.game.name}**`);
-    }
-    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
-    bodyLines.push(`👥 **${event.signupCount}** signed up`);
-
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.ANNOUNCEMENT)
-      .setTitle(`📅 ${event.title}`)
-      .setDescription(bodyLines.join('\n'))
-      .setFooter({
-        text: context.communityName || 'Raid Ledger',
-      })
-      .setTimestamp();
-
-    if (event.game?.coverUrl) {
-      embed.setThumbnail(event.game.coverUrl);
-    }
-
-    const baseUrl = context.clientUrl || process.env.CLIENT_URL;
-    if (baseUrl) {
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setLabel('View Event')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${baseUrl}/events/${event.id}`),
-      );
-      return { embed, row };
-    }
-
-    return { embed };
-  }
-
-  /**
-   * Build an event invite DM embed (ROK-380).
-   * Used by the /invite slash command to send a rich invite to a Discord user.
-   */
-  buildEventInvite(
-    event: EmbedEventData,
-    context: EmbedContext,
-    inviterUsername: string,
-  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
-    const startDate = new Date(event.startTime);
-    const dateStr = startDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-    const timeStr = startDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
-
-    const bodyLines: string[] = [];
-    if (event.game?.name) {
-      bodyLines.push(`🎮 **${event.game.name}**`);
-    }
-    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
-    if (event.description) {
-      const excerpt =
-        event.description.length > 200
-          ? event.description.slice(0, 200) + '...'
-          : event.description;
-      bodyLines.push('');
-      bodyLines.push(excerpt);
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor(EMBED_COLORS.PUG_INVITE)
-      .setTitle(`You're invited to **${event.title}**!`)
-      .setDescription(bodyLines.join('\n'))
-      .setFooter({
-        text: `Sent by ${inviterUsername} via ${context.communityName || 'Raid Ledger'}`,
-      })
-      .setTimestamp();
-
-    if (event.game?.coverUrl) {
-      embed.setThumbnail(event.game.coverUrl);
-    }
-
-    const baseUrl = context.clientUrl || process.env.CLIENT_URL;
-    if (baseUrl) {
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder()
-          .setLabel('View Event')
-          .setStyle(ButtonStyle.Link)
-          .setURL(`${baseUrl}/events/${event.id}`),
-      );
-      return { embed, row };
-    }
-
-    return { embed };
-  }
-
-  /**
    * Build signup action buttons for the embed (ROK-137).
    * Includes: Sign Up (green), Tentative (yellow), Decline (red), View Event (link).
    */
@@ -430,5 +414,23 @@ export class DiscordEmbedFactory {
     }
 
     return row;
+  }
+
+  /**
+   * Build a standalone "View Event" link button.
+   */
+  private buildViewButton(
+    eventId: number,
+    clientUrl?: string | null,
+  ): ActionRowBuilder<ButtonBuilder> | undefined {
+    const baseUrl = clientUrl || process.env.CLIENT_URL;
+    if (!baseUrl) return undefined;
+
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('View Event')
+        .setStyle(ButtonStyle.Link)
+        .setURL(`${baseUrl}/events/${eventId}`),
+    );
   }
 }

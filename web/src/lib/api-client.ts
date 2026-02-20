@@ -791,6 +791,8 @@ import type {
     UpdatePugSlotDto,
     PugSlotResponseDto,
     PugSlotListResponseDto,
+    InviteCodeResolveResponseDto,
+    ShareEventResponseDto,
 } from '@raid-ledger/contract';
 
 /**
@@ -915,4 +917,47 @@ export async function searchDiscordMembers(
     return fetchApi(
         `/discord/members/search?q=${encodeURIComponent(query)}`,
     );
+}
+
+// ============================================================
+// Invite Code API (ROK-263)
+// ============================================================
+
+/**
+ * Resolve an invite code — public, no auth required.
+ */
+export async function resolveInviteCode(
+    code: string,
+): Promise<InviteCodeResolveResponseDto> {
+    return fetchApi(`/invite/${code}`);
+}
+
+/**
+ * Claim an invite code — requires auth.
+ */
+export async function claimInviteCode(
+    code: string,
+): Promise<{ type: 'signup' | 'claimed'; eventId: number }> {
+    return fetchApi(`/invite/${code}/claim`, { method: 'POST' });
+}
+
+/**
+ * Share an event to bound Discord channels.
+ */
+export async function shareEventToDiscord(
+    eventId: number,
+): Promise<ShareEventResponseDto> {
+    return fetchApi(`/events/${eventId}/share`, { method: 'POST' });
+}
+
+/**
+ * Regenerate invite code for a PUG slot.
+ */
+export async function regeneratePugInviteCode(
+    eventId: number,
+    pugId: string,
+): Promise<PugSlotResponseDto> {
+    return fetchApi(`/events/${eventId}/pugs/${pugId}/regenerate-code`, {
+        method: 'POST',
+    });
 }

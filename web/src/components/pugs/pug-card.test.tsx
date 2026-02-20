@@ -14,6 +14,7 @@ const createMockPug = (overrides: Partial<PugSlotResponseDto> = {}): PugSlotResp
     spec: null,
     notes: null,
     status: 'pending',
+    inviteCode: null,
     serverInviteUrl: null,
     claimedByUserId: null,
     createdBy: 1,
@@ -175,6 +176,142 @@ describe('PugCard', () => {
         });
     });
 
+    describe('invite badge (ROK-263)', () => {
+        it('renders clickable invite badge when canManage and inviteCode present', () => {
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123', discordUsername: null })}
+                    canManage
+                />,
+            );
+
+            const badge = screen.getByTitle('Click to copy invite link');
+            expect(badge).toBeInTheDocument();
+            expect(badge.tagName).toBe('BUTTON');
+            expect(badge).toHaveTextContent('Invite');
+        });
+
+        it('renders static badge when no inviteCode', () => {
+            render(<PugCard pug={createMockPug()} canManage />);
+
+            expect(screen.queryByTitle('Click to copy invite link')).not.toBeInTheDocument();
+            expect(screen.getByText('Guest')).toBeInTheDocument();
+        });
+
+        it('renders static badge when canManage is false even with inviteCode', () => {
+            render(
+                <PugCard pug={createMockPug({ inviteCode: 'abc123' })} />,
+            );
+
+            expect(screen.queryByTitle('Click to copy invite link')).not.toBeInTheDocument();
+            expect(screen.getByText('Guest')).toBeInTheDocument();
+        });
+
+        it('copies invite URL when badge is clicked', () => {
+            const mockWriteText = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { writeText: mockWriteText },
+            });
+
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123' })}
+                    canManage
+                />,
+            );
+
+            fireEvent.click(screen.getByTitle('Click to copy invite link'));
+
+            expect(mockWriteText).toHaveBeenCalledWith(
+                expect.stringContaining('/i/abc123'),
+            );
+        });
+
+        it('shows "Guest" text on clickable badge when username is present', () => {
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123', discordUsername: 'player1' })}
+                    canManage
+                />,
+            );
+
+            const badge = screen.getByTitle('Click to copy invite link');
+            expect(badge).toHaveTextContent('Guest');
+        });
+    });
+
+    describe('dropdown link actions (ROK-263)', () => {
+        it('shows Copy Link and Regenerate Link in menu when inviteCode is present', () => {
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123' })}
+                    canManage
+                    onEdit={vi.fn()}
+                    onRegenerateLink={vi.fn()}
+                />,
+            );
+
+            fireEvent.click(screen.getByLabelText('PUG actions'));
+
+            expect(screen.getByText('Copy Link')).toBeInTheDocument();
+            expect(screen.getByText('Regenerate Link')).toBeInTheDocument();
+        });
+
+        it('does not show Copy Link or Regenerate Link when no inviteCode', () => {
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: null })}
+                    canManage
+                    onEdit={vi.fn()}
+                    onRegenerateLink={vi.fn()}
+                />,
+            );
+
+            fireEvent.click(screen.getByLabelText('PUG actions'));
+
+            expect(screen.queryByText('Copy Link')).not.toBeInTheDocument();
+            expect(screen.queryByText('Regenerate Link')).not.toBeInTheDocument();
+        });
+
+        it('copies invite URL when Copy Link is clicked in menu', () => {
+            const mockWriteText = vi.fn().mockResolvedValue(undefined);
+            Object.assign(navigator, {
+                clipboard: { writeText: mockWriteText },
+            });
+
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123' })}
+                    canManage
+                    onEdit={vi.fn()}
+                />,
+            );
+
+            fireEvent.click(screen.getByLabelText('PUG actions'));
+            fireEvent.click(screen.getByText('Copy Link'));
+
+            expect(mockWriteText).toHaveBeenCalledWith(
+                expect.stringContaining('/i/abc123'),
+            );
+        });
+
+        it('calls onRegenerateLink when Regenerate Link is clicked', () => {
+            const onRegenerateLink = vi.fn();
+            render(
+                <PugCard
+                    pug={createMockPug({ inviteCode: 'abc123' })}
+                    canManage
+                    onRegenerateLink={onRegenerateLink}
+                />,
+            );
+
+            fireEvent.click(screen.getByLabelText('PUG actions'));
+            fireEvent.click(screen.getByText('Regenerate Link'));
+
+            expect(onRegenerateLink).toHaveBeenCalledWith('pug-uuid-1');
+        });
+    });
+
     describe('manage actions', () => {
         it('shows action menu button when canManage is true', () => {
             render(<PugCard pug={createMockPug()} canManage />);
@@ -187,7 +324,7 @@ describe('PugCard', () => {
         });
 
         it('shows Edit and Remove options when menu is opened', () => {
-            render(<PugCard pug={createMockPug()} canManage />);
+            render(<PugCard pug={createMockPug()} canManage onEdit={vi.fn()} />);
 
             fireEvent.click(screen.getByLabelText('PUG actions'));
 

@@ -31,7 +31,7 @@ export const discordEventMessages = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
-    unique('unique_event_guild').on(table.eventId, table.guildId),
+    unique('unique_event_channel_message').on(table.eventId, table.channelId, table.messageId),
     index('idx_discord_event_messages_event').on(table.eventId),
     index('idx_discord_event_messages_message').on(
       table.guildId,
