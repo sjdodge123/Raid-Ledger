@@ -994,13 +994,19 @@ export class BlizzardService {
         return { spec: null, role: null, talents: null };
       }
 
-      // Build classic talent data with per-tree point distribution
+      // Build classic talent data with per-tree point distribution and grid positions
       const classicTalents: {
         format: 'classic';
         trees: Array<{
           name: string;
           spentPoints: number;
-          talents: Array<{ name: string; id?: number }>;
+          talents: Array<{
+            name: string;
+            id?: number;
+            spellId?: number;
+            tier: number;
+            column: number;
+          }>;
         }>;
         summary: string;
       } = {
@@ -1021,7 +1027,13 @@ export class BlizzardService {
             spentPoints: points,
             talents: (tree.talents ?? [])
               .filter((t) => t.talent?.name)
-              .map((t) => ({ name: t.talent!.name!, id: t.talent?.id })),
+              .map((t) => ({
+                name: t.talent!.name!,
+                id: t.talent?.id,
+                spellId: t.spell_tooltip?.spell?.id,
+                tier: t.tier_index ?? 0,
+                column: t.column_index ?? 0,
+              })),
           });
         }
 
