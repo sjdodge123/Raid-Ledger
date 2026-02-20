@@ -906,6 +906,7 @@ export class BlizzardService {
           talents?: Array<{
             talent?: { name?: string; id?: number };
             spell_tooltip?: { spell?: { name?: string; id?: number } };
+            talent_rank?: number;
             tier_index?: number;
             column_index?: number;
           }>;
@@ -918,6 +919,7 @@ export class BlizzardService {
             talents?: Array<{
               talent?: { name?: string; id?: number };
               spell_tooltip?: { spell?: { name?: string; id?: number } };
+              talent_rank?: number;
               tier_index?: number;
               column_index?: number;
             }>;
@@ -994,7 +996,7 @@ export class BlizzardService {
         return { spec: null, role: null, talents: null };
       }
 
-      // Build classic talent data with per-tree point distribution and grid positions
+      // Build classic talent data with per-tree point distribution
       const classicTalents: {
         format: 'classic';
         trees: Array<{
@@ -1004,8 +1006,7 @@ export class BlizzardService {
             name: string;
             id?: number;
             spellId?: number;
-            tier: number;
-            column: number;
+            rank?: number;
           }>;
         }>;
         summary: string;
@@ -1026,13 +1027,17 @@ export class BlizzardService {
             name: treeName,
             spentPoints: points,
             talents: (tree.talents ?? [])
-              .filter((t) => t.talent?.name)
+              .filter(
+                (t) => t.talent?.name || t.spell_tooltip?.spell?.name,
+              )
               .map((t) => ({
-                name: t.talent!.name!,
+                name:
+                  t.talent?.name ??
+                  t.spell_tooltip?.spell?.name ??
+                  'Unknown',
                 id: t.talent?.id,
                 spellId: t.spell_tooltip?.spell?.id,
-                tier: t.tier_index ?? 0,
-                column: t.column_index ?? 0,
+                rank: t.talent_rank,
               })),
           });
         }
