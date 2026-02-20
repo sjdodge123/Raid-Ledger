@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { usePluginStore } from '../stores/plugin-store';
-import { getSlotRegistrations, getPluginBadge, type PluginSlotName } from './plugin-registry';
-import { PluginBadge } from '../components/ui/plugin-badge';
+import { getSlotRegistrations, type PluginSlotName } from './plugin-registry';
 
 interface PluginSlotProps {
     name: PluginSlotName;
@@ -13,7 +12,7 @@ interface PluginSlotProps {
 /**
  * Renders plugin-provided components for a named slot.
  * Components are filtered by active plugin status and stacked by priority.
- * Each plugin component is automatically wrapped with its plugin badge (ROK-302).
+ * Plugin badges are shown only on admin UI cards, not on user-facing slots (ROK-302).
  * When no active plugin fills the slot, renders the fallback.
  */
 export function PluginSlot({ name, context, fallback, className }: PluginSlotProps) {
@@ -27,23 +26,9 @@ export function PluginSlot({ name, context, fallback, className }: PluginSlotPro
         return className ? <div className={className}>{fallback}</div> : <>{fallback}</>;
     }
 
-    const content = registrations.map((r, i) => {
-        const badge = getPluginBadge(r.pluginSlug);
-        return (
-            <div key={`${r.pluginSlug}:${r.slotName}:${i}`} className="relative">
-                {badge && (
-                    <div className="absolute top-2 right-2 z-10">
-                        <PluginBadge
-                            icon={badge.icon}
-                            iconSmall={badge.iconSmall}
-                            label={badge.label}
-                        />
-                    </div>
-                )}
-                <r.component {...context} />
-            </div>
-        );
-    });
+    const content = registrations.map((r, i) => (
+        <r.component key={`${r.pluginSlug}:${r.slotName}:${i}`} {...context} />
+    ));
 
     return className ? <div className={className}>{content}</div> : <>{content}</>;
 }

@@ -147,7 +147,7 @@ describe('PluginSlot', () => {
         expect(wrapper?.textContent).toBe('Fallback content');
     });
 
-    it('renders plugin badge when plugin has badge metadata', () => {
+    it('does not render badges on user-facing slots (badges are admin-only)', () => {
         registerPlugin('blizzard', {
             icon: 'W',
             color: 'blue',
@@ -162,26 +162,11 @@ describe('PluginSlot', () => {
 
         usePluginStore.getState().setActiveSlugs(['blizzard']);
 
-        render(<PluginSlot name="character-detail:sections" />);
-        expect(screen.getByTestId('test-component')).toBeInTheDocument();
-        expect(screen.getByTitle('WoW Plugin')).toBeInTheDocument();
-    });
-
-    it('does not render badge when plugin has no badge metadata', () => {
-        registerSlotComponent({
-            pluginSlug: 'no-badge-plugin',
-            slotName: 'character-detail:sections',
-            component: TestComponent,
-            priority: 0,
-        });
-
-        usePluginStore.getState().setActiveSlugs(['no-badge-plugin']);
-
         const { container } = render(
             <PluginSlot name="character-detail:sections" />,
         );
         expect(screen.getByTestId('test-component')).toBeInTheDocument();
-        // No badge element should be present
-        expect(container.querySelector('[aria-label]')).toBeNull();
+        // Badges only appear on admin UI cards, not on PluginSlot
+        expect(container.querySelector('[title="WoW Plugin"]')).toBeNull();
     });
 });

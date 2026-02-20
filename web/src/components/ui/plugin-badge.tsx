@@ -17,37 +17,19 @@ interface PluginBadgeProps {
 export function PluginBadge({ icon, iconSmall, label, size = 'sm' }: PluginBadgeProps) {
     const dimension = size === 'md' ? 'w-8 h-8' : 'w-6 h-6';
 
-    if (size === 'md') {
-        const imageUrl = isImageIcon(icon);
-        return imageUrl ? (
-            <img
-                src={icon}
-                alt=""
-                className={`${dimension} rounded object-cover`}
-                aria-hidden="true"
-                title={label}
-            />
-        ) : (
-            <span className="text-xl" aria-hidden="true" title={label}>
-                {icon}
-            </span>
-        );
-    }
-
-    // sm (default) — compact badge for PluginSlot overlays
-    const displayIcon = iconSmall ?? icon;
+    const displayIcon = size === 'sm' ? (iconSmall ?? icon) : icon;
     const displayIsImage = isImageIcon(displayIcon);
 
     return displayIsImage ? (
         <img
             src={displayIcon}
             alt=""
-            className={`${dimension} rounded-sm object-cover`}
+            className={`${dimension} rounded-full object-cover`}
             aria-hidden="true"
             title={label}
         />
     ) : (
-        <span className="text-base" aria-hidden="true" title={label}>
+        <span className={size === 'md' ? 'text-xl' : 'text-base'} aria-hidden="true" title={label}>
             {displayIcon}
         </span>
     );
