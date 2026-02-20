@@ -36,11 +36,6 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
         return acc;
     }, {});
 
-    const handleAdd = () => {
-        setEditingPug(null);
-        setShowFormModal(true);
-    };
-
     const handleEdit = (pug: PugSlotResponseDto) => {
         setEditingPug(pug);
         setShowFormModal(true);
@@ -103,15 +98,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
                     )}
                 </h4>
 
-                {canManage && (
-                    <button
-                        onClick={handleAdd}
-                        className="btn btn-secondary btn-sm"
-                        type="button"
-                    >
-                        + Add PUG
-                    </button>
-                )}
+                {/* ROK-292: Add PUG button removed — PUG add is now inline in the Assign modal */}
             </div>
 
             {/* Role composition summary (MMO games only) */}
@@ -133,7 +120,7 @@ export function PugSection({ eventId, canManage, isMMOGame = false }: PugSection
             ) : pugs.length === 0 ? (
                 <div className="flex items-center justify-center py-4 text-sm text-dim">
                     No PUGs added yet
-                    {canManage && ' — click "Add PUG" to fill roster gaps'}
+                    {canManage && ' — use the Assign modal to add PUGs'}
                 </div>
             ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">

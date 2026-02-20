@@ -27,6 +27,8 @@ export interface CreateNotificationInput {
   message: string;
   payload?: Record<string, any>;
   expiresAt?: Date;
+  /** Skip the Discord DM dispatch (e.g., when a custom Discord DM is sent separately) */
+  skipDiscord?: boolean;
 }
 
 export interface NotificationDto {
@@ -105,7 +107,7 @@ export class NotificationService {
     );
 
     // Dispatch to Discord channel (ROK-180 AC-2)
-    if (this.discordNotificationService) {
+    if (this.discordNotificationService && !input.skipDiscord) {
       this.discordNotificationService
         .dispatch({
           notificationId: created.id,

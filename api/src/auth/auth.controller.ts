@@ -24,6 +24,7 @@ import type { Response, Request } from 'express';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../notifications/discord-notification.service';
 import { CharactersService } from '../characters/characters.service';
@@ -33,6 +34,7 @@ import * as crypto from 'crypto';
 import type Redis from 'ioredis';
 import { RedeemIntentSchema } from '@raid-ledger/contract';
 import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
+import { AUTH_EVENTS, type DiscordLoginPayload } from './auth.service';
 
 // Uses the DynamicDiscordStrategy's stored _callbackURL from database settings.
 // No getAuthenticateOptions() override — the strategy's callback URL is the single source of truth.
@@ -67,6 +69,7 @@ export class AuthController {
     private discordNotificationService: DiscordNotificationService | null,
     private charactersService: CharactersService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -376,6 +379,12 @@ export class AuthController {
         discordProfile.username,
         discordProfile.avatar,
       );
+
+      // Auto-claim PUG slots matching this Discord account (ROK-292)
+      this.eventEmitter.emit(AUTH_EVENTS.DISCORD_LOGIN, {
+        userId,
+        discordId: discordProfile.id,
+      } satisfies DiscordLoginPayload);
 
       // Send welcome DM now that Discord is linked (ROK-180 AC-1)
       if (this.discordNotificationService) {

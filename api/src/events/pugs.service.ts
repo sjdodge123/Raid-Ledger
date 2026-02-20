@@ -6,16 +6,29 @@ import {
   ForbiddenException,
   ConflictException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
+import { PUG_SLOT_EVENTS } from '../discord-bot/discord-bot.constants';
 import type {
   CreatePugSlotDto,
   UpdatePugSlotDto,
   PugSlotResponseDto,
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
+
+/**
+ * Payload emitted when a PUG slot is created (ROK-292).
+ */
+export interface PugSlotCreatedPayload {
+  pugSlotId: string;
+  eventId: number;
+  discordUsername: string;
+  /** User ID of the admin/user who created the PUG slot */
+  creatorUserId: number;
+}
 
 /**
  * Service for managing PUG (Pick Up Group) slots on events (ROK-262).
@@ -29,6 +42,7 @@ export class PugsService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -45,8 +59,8 @@ export class PugsService {
     isAdmin: boolean,
     dto: CreatePugSlotDto,
   ): Promise<PugSlotResponseDto> {
-    // Verify event exists and user has permission
-    await this.verifyEventPermission(eventId, userId, isAdmin);
+    // Any signed-up user, event creator, or admin can invite PUGs
+    await this.verifyInvitePermission(eventId, userId, isAdmin);
 
     try {
       const [inserted] = await this.db
@@ -66,6 +80,14 @@ export class PugsService {
       this.logger.log(
         `PUG slot created: ${dto.discordUsername} as ${dto.role} for event ${eventId}`,
       );
+
+      // Emit event for Discord bot integration (ROK-292)
+      this.eventEmitter.emit(PUG_SLOT_EVENTS.CREATED, {
+        pugSlotId: inserted.id,
+        eventId,
+        discordUsername: dto.discordUsername,
+        creatorUserId: userId,
+      } satisfies PugSlotCreatedPayload);
 
       return this.toPugSlotResponse(inserted);
     } catch (error: unknown) {
@@ -192,8 +214,6 @@ export class PugsService {
     userId: number,
     isAdmin: boolean,
   ): Promise<void> {
-    await this.verifyEventPermission(eventId, userId, isAdmin);
-
     // Verify PUG exists for this event
     const [existing] = await this.db
       .select()
@@ -210,6 +230,11 @@ export class PugsService {
       throw new NotFoundException(
         `PUG slot ${pugId} not found for event ${eventId}`,
       );
+    }
+
+    // Allow removal by: creator/admin, event creator, or the user who created the invite
+    if (existing.createdBy !== userId) {
+      await this.verifyEventPermission(eventId, userId, isAdmin);
     }
 
     await this.db.delete(schema.pugSlots).where(eq(schema.pugSlots.id, pugId));
@@ -245,6 +270,46 @@ export class PugsService {
   }
 
   /**
+   * Verify the user can invite PUGs: creator, admin/operator, OR any signed-up attendee.
+   */
+  private async verifyInvitePermission(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Creator and admin/operator always allowed
+    if (event.creatorId === userId || isAdmin) return;
+
+    // Check if user is signed up for this event
+    const [signup] = await this.db
+      .select({ id: schema.eventSignups.id })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) {
+      throw new ForbiddenException(
+        'You must be signed up for the event to invite players',
+      );
+    }
+  }
+
+  /**
    * Convert a database row to PugSlotResponseDto.
    */
   private toPugSlotResponse(
@@ -261,6 +326,7 @@ export class PugsService {
       spec: row.spec ?? null,
       notes: row.notes ?? null,
       status: row.status as 'pending' | 'invited' | 'accepted' | 'claimed',
+      serverInviteUrl: row.serverInviteUrl ?? null,
       claimedByUserId: row.claimedByUserId ?? null,
       createdBy: row.createdBy,
       createdAt: row.createdAt.toISOString(),

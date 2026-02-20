@@ -53,4 +53,19 @@ export class ChannelResolverService {
     );
     return null;
   }
+
+  /**
+   * Resolve the voice channel for an event (for invite DM embeds).
+   * Looks for game-voice-monitor bindings specifically.
+   * @param gameId - Games table PK (integer) for game-specific binding lookup
+   * @returns Voice channel ID string or null if none configured
+   */
+  async resolveVoiceChannelForEvent(
+    gameId?: number | null,
+  ): Promise<string | null> {
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return null;
+
+    return this.channelBindingsService.getVoiceChannelForGame(guildId, gameId);
+  }
 }

@@ -7,14 +7,17 @@ import { CharactersModule } from '../characters/characters.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
+import { DiscordMemberController } from './discord-member.controller';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { ChannelBindingsService } from './services/channel-bindings.service';
+import { PugInviteService } from './services/pug-invite.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
+import { PugInviteListener } from './listeners/pug-invite.listener';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
 import { EventsListCommand } from './commands/events-list.command';
@@ -31,7 +34,7 @@ import { BindingsCommand } from './commands/bindings.command';
     forwardRef(() => AuthModule),
     CharactersModule,
   ],
-  controllers: [DiscordBotSettingsController, ChannelBindingsController],
+  controllers: [DiscordBotSettingsController, DiscordMemberController, ChannelBindingsController],
   providers: [
     DiscordBotService,
     DiscordBotClientService,
@@ -39,9 +42,11 @@ import { BindingsCommand } from './commands/bindings.command';
     ChannelResolverService,
     SetupWizardService,
     ChannelBindingsService,
+    PugInviteService,
     DiscordEventListener,
     InteractionListener,
     SignupInteractionListener,
+    PugInviteListener,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,
@@ -57,6 +62,7 @@ import { BindingsCommand } from './commands/bindings.command';
     DiscordEventListener,
     SetupWizardService,
     ChannelBindingsService,
+    PugInviteService,
   ],
 })
 export class DiscordBotModule {}

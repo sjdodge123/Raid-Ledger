@@ -1,12 +1,17 @@
 /**
- * PugAvatar - Generated SVG avatar for PUG players (ROK-262).
- * Uses initials-based avatar with consistent color from username hash,
- * following the same pattern as InterestPlayerAvatars.
+ * PugAvatar - Avatar for PUG players (ROK-262, ROK-292).
+ * Shows Discord CDN avatar when available, falls back to initials-based
+ * generated avatar with consistent color from username hash.
  */
+import { useState } from 'react';
 
 interface PugAvatarProps {
     /** Discord username to derive initials and color from */
     username: string;
+    /** Discord user ID for CDN avatar URL */
+    discordUserId?: string | null;
+    /** Discord avatar hash for CDN avatar URL */
+    discordAvatarHash?: string | null;
     /** Tailwind size class (default: 'h-10 w-10') */
     sizeClassName?: string;
 }
@@ -43,10 +48,33 @@ function getInitials(username: string): string {
     return username.charAt(0).toUpperCase();
 }
 
+/** Build Discord CDN avatar URL from user ID and avatar hash. */
+function getDiscordAvatarUrl(userId: string, avatarHash: string): string {
+    return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.png?size=64`;
+}
+
 export function PugAvatar({
     username,
+    discordUserId,
+    discordAvatarHash,
     sizeClassName = 'h-10 w-10',
 }: PugAvatarProps) {
+    const [imgError, setImgError] = useState(false);
+
+    const hasDiscordAvatar = discordUserId && discordAvatarHash && !imgError;
+
+    if (hasDiscordAvatar) {
+        return (
+            <img
+                src={getDiscordAvatarUrl(discordUserId, discordAvatarHash)}
+                alt={username}
+                title={username}
+                className={`${sizeClassName} rounded-full shrink-0 object-cover`}
+                onError={() => setImgError(true)}
+            />
+        );
+    }
+
     const bgColor = getColorFromUsername(username);
     const initials = getInitials(username);
 

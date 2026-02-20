@@ -5,7 +5,7 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, PugRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
@@ -17,7 +17,7 @@ import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
-import { PugSection } from '../components/pugs';
+import { useCreatePug, useDeletePug, usePugs } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -25,6 +25,7 @@ import './event-detail-page.css';
 const SignupConfirmationModal = lazy(() => import('../components/events/signup-confirmation-modal').then(m => ({ default: m.SignupConfirmationModal })));
 const RescheduleModal = lazy(() => import('../components/events/RescheduleModal').then(m => ({ default: m.RescheduleModal })));
 const CancelEventModal = lazy(() => import('../components/events/cancel-event-modal').then(m => ({ default: m.CancelEventModal })));
+const InviteModal = lazy(() => import('../components/events/invite-modal').then(m => ({ default: m.InviteModal })));
 
 /**
  * Event Detail Page - ROK-184 Redesign
@@ -85,6 +86,7 @@ export function EventDetailPage() {
     const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
+    const [showInviteModal, setShowInviteModal] = useState(false);
 
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
@@ -103,6 +105,10 @@ export function EventDetailPage() {
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
+    const createPug = useCreatePug(eventId);
+    const deletePug = useDeletePug(eventId);
+    const { data: pugData } = usePugs(eventId);
+    const pugs = pugData?.pugs ?? [];
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -169,6 +175,33 @@ export function EventDetailPage() {
         }
     };
 
+    // ROK-292: Handle inline PUG add from assign modal
+    const handleAddPug = async (discordUsername: string, role: RosterRole) => {
+        try {
+            await createPug.mutateAsync({
+                discordUsername,
+                role: role as PugRole,
+            });
+            toast.success(`PUG "${discordUsername}" added as ${role}`);
+        } catch (err) {
+            toast.error('Failed to add PUG', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-292: Handle removing a PUG invite
+    const handleRemovePug = async (pugId: string) => {
+        try {
+            await deletePug.mutateAsync(pugId);
+            toast.success('Invite cancelled');
+        } catch (err) {
+            toast.error('Failed to cancel invite', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
     // ROK-183/184: Handle slot click to join directly
     const handleSlotClick = async (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
@@ -221,8 +254,8 @@ export function EventDetailPage() {
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
     // Filter out declined signups from display
     const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
-    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus === 'confirmed').sort(alphabetical);
     const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending').sort(alphabetical);
+    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus !== 'pending').sort(alphabetical);
     // tentativeSignups can be used to show a separate section if needed
     // const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
 
@@ -249,8 +282,24 @@ export function EventDetailPage() {
                     {fromCalendar ? '← Back to Calendar' : '← Back'}
                 </button>
 
+                {/* Invite button for any signed-up user */}
+                {isSignedUp && !canManageRoster && !isCancelled && (
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="btn btn-primary btn-sm"
+                    >
+                        Invite
+                    </button>
+                )}
+
                 {canManageRoster && !isCancelled && (
                     <div className="flex gap-2">
+                        <button
+                            onClick={() => setShowInviteModal(true)}
+                            className="btn btn-primary btn-sm"
+                        >
+                            Invite
+                        </button>
                         <button
                             onClick={() => setShowRescheduleModal(true)}
                             className="btn btn-secondary btn-sm"
@@ -466,6 +515,16 @@ export function EventDetailPage() {
                         canJoin={canJoinSlot}
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
+                        onAddPug={canManageRoster && isMMOGame ? handleAddPug : undefined}
+                        pugs={pugs}
+                        onRemovePug={canManageRoster || isSignedUp ? handleRemovePug : undefined}
+                        eventId={eventId}
+                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
+                        signedUpDiscordIds={new Set(
+                            (roster?.signups ?? [])
+                                .map(s => s.user.discordId)
+                                .filter((id): id is string => !!id)
+                        )}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}
@@ -486,12 +545,6 @@ export function EventDetailPage() {
                         ) : undefined}
                     />
 
-                    {/* ROK-262: PUG Slots Section */}
-                    <PugSection
-                        eventId={eventId}
-                        canManage={canManageRoster}
-                        isMMOGame={isMMOGame}
-                    />
                 </div>
             )}
 
@@ -671,6 +724,23 @@ export function EventDetailPage() {
                         description={event.description}
                         creatorUsername={event.creator?.username}
                         signupCount={event.signupCount}
+                    />
+                </Suspense>
+            )}
+
+            {/* ROK-292: Invite Modal */}
+            {showInviteModal && (
+                <Suspense fallback={null}>
+                    <InviteModal
+                        isOpen={showInviteModal}
+                        onClose={() => setShowInviteModal(false)}
+                        eventId={eventId}
+                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
+                        signedUpDiscordIds={new Set(
+                            (roster?.signups ?? [])
+                                .map(s => s.user.discordId)
+                                .filter((id): id is string => !!id)
+                        )}
                     />
                 </Suspense>
             )}

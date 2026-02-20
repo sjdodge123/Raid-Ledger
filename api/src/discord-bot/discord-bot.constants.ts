@@ -16,6 +16,14 @@ export const APP_EVENT_EVENTS = {
 } as const;
 
 /**
+ * Application-level event names for PUG slot lifecycle (ROK-292).
+ * Emitted by PugsService, consumed by PugInviteListener.
+ */
+export const PUG_SLOT_EVENTS = {
+  CREATED: 'pug-slot.created',
+} as const;
+
+/**
  * Accent colors for Discord embeds (design spec section 2.1).
  * Values are decimal representations of hex colors for discord.js.
  */
@@ -58,6 +66,46 @@ export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
  * Custom IDs for signup interaction buttons (ROK-137).
  * Format: `{action}:{eventId}` — e.g. `signup:42`
  */
+/**
+ * Custom IDs for PUG invite interaction buttons (ROK-292).
+ * Format: `{action}:{pugSlotId}` — e.g. `pug_accept:uuid`
+ */
+export const PUG_BUTTON_IDS = {
+  ACCEPT: 'pug_accept',
+  DECLINE: 'pug_decline',
+  /** Select menus shown after PUG accepts — invitee picks character/role */
+  CHARACTER_SELECT: 'pug_char_select',
+  ROLE_SELECT: 'pug_role_select',
+} as const;
+
+/**
+ * Custom IDs for member invite interaction buttons (ROK-292).
+ * Format: `{action}:{eventId}:{notificationId}` — e.g. `member_accept:42:uuid`
+ * Used for registered-user invites (as opposed to PUG invites).
+ */
+export const MEMBER_INVITE_BUTTON_IDS = {
+  ACCEPT: 'member_accept',
+  DECLINE: 'member_decline',
+  CHARACTER_SELECT: 'member_char_select',
+  ROLE_SELECT: 'member_role_select',
+} as const;
+
+/**
+ * Application-level event names for member invite lifecycle (ROK-292).
+ * Emitted by EventsService, consumed by PugInviteListener.
+ */
+export const MEMBER_INVITE_EVENTS = {
+  CREATED: 'member.invite.created',
+} as const;
+
+export interface MemberInviteCreatedPayload {
+  eventId: number;
+  targetDiscordId: string;
+  notificationId: string;
+  /** Integer games.id for channel binding lookup */
+  gameId?: number | null;
+}
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

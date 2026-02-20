@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useNotifications, type Notification } from '../../hooks/use-notifications';
+import { EventInviteActions } from '../events/event-invite-actions';
 
 interface NotificationItemProps {
     notification: Notification;
@@ -10,6 +11,9 @@ interface NotificationItemProps {
  * Individual notification row.
  * Shows icon, title, time ago, and read/unread state.
  * Clicking navigates to relevant page and marks as read.
+ *
+ * Invite notifications (new_event with invitedBy) render inline
+ * Accept/Decline buttons instead of navigating on click.
  */
 export function NotificationItem({
     notification,
@@ -20,7 +24,15 @@ export function NotificationItem({
 
     const isUnread = !notification.readAt;
 
+    // Detect invite notifications that need Accept/Decline buttons
+    const isInvite = notification.type === 'new_event'
+        && !!notification.payload?.invitedBy
+        && isUnread;
+
     const handleClick = () => {
+        // Invite notifications use inline buttons instead of click-to-navigate
+        if (isInvite) return;
+
         // Mark as read
         if (isUnread) {
             markRead(notification.id);
@@ -138,42 +150,64 @@ export function NotificationItem({
         return created.toLocaleDateString();
     };
 
+    // Shared notification content (icon + text + unread dot)
+    const content = (
+        <div className="flex items-start gap-3">
+            {/* Icon */}
+            <div
+                className={`flex-shrink-0 p-2 rounded-full ${isUnread
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-overlay/50 text-muted'
+                    }`}
+            >
+                {getIcon()}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 min-w-0">
+                <p
+                    className={`text-sm font-medium ${isUnread ? 'text-foreground' : 'text-secondary'
+                        }`}
+                >
+                    {notification.title}
+                </p>
+                <p className="text-sm text-muted mt-0.5 line-clamp-2">
+                    {notification.message}
+                </p>
+                <p className="text-xs text-dim mt-1">{getTimeAgo()}</p>
+            </div>
+
+            {/* Unread indicator */}
+            {isUnread && (
+                <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mt-2" />
+            )}
+        </div>
+    );
+
+    // Invite notifications: render as div with inline Accept/Decline buttons
+    if (isInvite) {
+        return (
+            <div className={`w-full px-4 py-3 text-left ${isUnread ? 'bg-panel/30' : ''}`}>
+                {content}
+                <div className="pl-11">
+                    <EventInviteActions
+                        eventId={notification.payload!.eventId as number}
+                        notificationId={notification.id}
+                        onComplete={onClose}
+                    />
+                </div>
+            </div>
+        );
+    }
+
+    // Regular notifications: clickable button that navigates
     return (
         <button
             onClick={handleClick}
             className={`w-full px-4 py-3 text-left hover:bg-panel/50 transition-colors ${isUnread ? 'bg-panel/30' : ''
                 }`}
         >
-            <div className="flex items-start gap-3">
-                {/* Icon */}
-                <div
-                    className={`flex-shrink-0 p-2 rounded-full ${isUnread
-                            ? 'bg-emerald-500/20 text-emerald-400'
-                            : 'bg-overlay/50 text-muted'
-                        }`}
-                >
-                    {getIcon()}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                    <p
-                        className={`text-sm font-medium ${isUnread ? 'text-foreground' : 'text-secondary'
-                            }`}
-                    >
-                        {notification.title}
-                    </p>
-                    <p className="text-sm text-muted mt-0.5 line-clamp-2">
-                        {notification.message}
-                    </p>
-                    <p className="text-xs text-dim mt-1">{getTimeAgo()}</p>
-                </div>
-
-                {/* Unread indicator */}
-                {isUnread && (
-                    <div className="flex-shrink-0 w-2 h-2 bg-emerald-400 rounded-full mt-2" />
-                )}
-            </div>
+            {content}
         </button>
     );
 }

@@ -435,6 +435,29 @@ export class EventsController {
     }
   }
 
+  /**
+   * Invite a registered member to an event (ROK-292).
+   * Sends a notification instead of creating a PUG slot.
+   * Requires authentication.
+   */
+  @Post(':id/invite-member')
+  @UseGuards(AuthGuard('jwt'))
+  async inviteMember(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: { discordId?: string },
+  ): Promise<{ message: string }> {
+    if (!body.discordId || typeof body.discordId !== 'string') {
+      throw new BadRequestException('discordId is required');
+    }
+    return this.eventsService.inviteMember(
+      eventId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+      body.discordId,
+    );
+  }
+
   // ============================================================
   // PUG Slot Endpoints (ROK-262)
   // ============================================================

@@ -4,6 +4,8 @@ import {
   Put,
   Post,
   Body,
+  Query,
+  Inject,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -16,11 +18,17 @@ import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
+import { CharactersService } from '../characters/characters.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { eq } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as schema from '../drizzle/schema';
 import {
   DiscordBotConfigSchema,
   DiscordBotTestConnectionSchema,
   type DiscordBotStatusResponse,
   type DiscordBotTestResult,
+  type CharacterDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -48,6 +56,9 @@ export class DiscordBotSettingsController {
     private readonly discordBotClientService: DiscordBotClientService,
     private readonly setupWizardService: SetupWizardService,
     private readonly settingsService: SettingsService,
+    private readonly charactersService: CharactersService,
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
   ) {}
 
   @Get()
@@ -195,5 +206,36 @@ export class DiscordBotSettingsController {
       success: true,
       message: 'Setup wizard DM sent to admin.',
     };
+  }
+
+  /**
+   * ROK-292: Look up characters for a Discord user by their Discord ID and game.
+   * Used by the Invite modal to show character options (like the Discord signup flow).
+   */
+  @Get('members/characters')
+  async getMemberCharacters(
+    @Query('discordId') discordId: string,
+    @Query('gameId') gameId: string,
+  ): Promise<CharacterDto[]> {
+    if (!discordId || !gameId) {
+      return [];
+    }
+
+    // Look up the Raid Ledger user linked to this Discord ID
+    const [linkedUser] = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.discordId, discordId))
+      .limit(1);
+
+    if (!linkedUser) {
+      return [];
+    }
+
+    const result = await this.charactersService.findAllForUser(
+      linkedUser.id,
+      gameId,
+    );
+    return result.data;
   }
 }

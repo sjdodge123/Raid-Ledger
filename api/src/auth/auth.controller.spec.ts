@@ -13,6 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { UserRole } from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
@@ -129,6 +130,7 @@ describe('AuthController — redeemIntent', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: REDIS_CLIENT,
           useValue: {
@@ -358,6 +360,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
         { provide: JwtService, useValue: mockJwtService },
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
+        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: REDIS_CLIENT,
           useValue: {
@@ -454,7 +457,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
     const result = await controller.getProfile(makeRequest(1) as any);
 
-    expect(result.avatarPreference).toEqual({
+    expect((result as Record<string, unknown>).avatarPreference).toEqual({
       type: 'character',
       characterName: 'Thrall',
     });
@@ -469,7 +472,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
 
     const result = await controller.getProfile(makeRequest(1) as any);
 
-    expect(result.avatarPreference).toEqual({ type: 'custom' });
+    expect((result as Record<string, unknown>).avatarPreference).toEqual({ type: 'custom' });
   });
 
   it('calls getUserPreference with correct userId and key "avatarPreference"', async () => {

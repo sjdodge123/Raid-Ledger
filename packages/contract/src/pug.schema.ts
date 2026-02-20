@@ -23,7 +23,8 @@ export const CreatePugSlotSchema = z.object({
         .string()
         .min(1, 'Discord username is required')
         .max(100),
-    role: PugRoleSchema,
+    /** Role is optional at invite time — the invitee selects it on accept */
+    role: PugRoleSchema.optional().default('dps'),
     class: z.string().max(50).optional(),
     spec: z.string().max(50).optional(),
     notes: z.string().max(500).optional(),
@@ -54,6 +55,7 @@ export const PugSlotResponseSchema = z.object({
     spec: z.string().nullable().optional(),
     notes: z.string().nullable().optional(),
     status: PugSlotStatusSchema,
+    serverInviteUrl: z.string().nullable().optional(),
     claimedByUserId: z.number().nullable().optional(),
     createdBy: z.number(),
     createdAt: z.string().datetime(),

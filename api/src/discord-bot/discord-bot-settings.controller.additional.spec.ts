@@ -11,6 +11,8 @@ import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
+import { CharactersService } from '../characters/characters.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 
 describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
   let controller: DiscordBotSettingsController;
@@ -50,6 +52,14 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             getDiscordBotDefaultChannel: jest.fn(),
             setDiscordBotDefaultChannel: jest.fn(),
           },
+        },
+        {
+          provide: CharactersService,
+          useValue: { findAllForUser: jest.fn() },
+        },
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: {},
         },
       ],
     }).compile();
@@ -202,6 +212,14 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
               setDiscordBotDefaultChannel: jest.fn(),
             },
           },
+          {
+            provide: CharactersService,
+            useValue: { findAllForUser: jest.fn() },
+          },
+          {
+            provide: DrizzleAsyncProvider,
+            useValue: {},
+          },
         ],
       }).compile();
 
@@ -256,6 +274,14 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
               getDiscordBotDefaultChannel: jest.fn(),
               setDiscordBotDefaultChannel: jest.fn(),
             },
+          },
+          {
+            provide: CharactersService,
+            useValue: { findAllForUser: jest.fn() },
+          },
+          {
+            provide: DrizzleAsyncProvider,
+            useValue: {},
           },
         ],
       }).compile();
@@ -400,6 +426,14 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
               setDiscordBotDefaultChannel: jest.fn(),
             },
           },
+          {
+            provide: CharactersService,
+            useValue: { findAllForUser: jest.fn() },
+          },
+          {
+            provide: DrizzleAsyncProvider,
+            useValue: {},
+          },
         ],
       }).compile();
 
@@ -456,6 +490,14 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
               getDiscordBotDefaultChannel: jest.fn(),
               setDiscordBotDefaultChannel: jest.fn(),
             },
+          },
+          {
+            provide: CharactersService,
+            useValue: { findAllForUser: jest.fn() },
+          },
+          {
+            provide: DrizzleAsyncProvider,
+            useValue: {},
           },
         ],
       }).compile();

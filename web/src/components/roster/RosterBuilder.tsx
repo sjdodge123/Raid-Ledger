@@ -1,6 +1,6 @@
 import React, { memo } from 'react';
 import { toast } from '../../lib/toast';
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, PugSlotResponseDto } from '@raid-ledger/contract';
 import { RosterSlot } from './RosterSlot';
 import { UnassignedBar } from './UnassignedBar';
 import { AssignmentPopup } from './AssignmentPopup';
@@ -41,6 +41,18 @@ interface RosterBuilderProps {
     onSelfRemove?: () => void;
     /** Optional extra content rendered alongside the UnassignedBar in a shared sticky row */
     stickyExtra?: React.ReactNode;
+    /** ROK-292: Called when admin adds a PUG from the assign modal */
+    onAddPug?: (discordUsername: string, role: RosterRole) => void;
+    /** ROK-292: PUG slots to render inline in roster grid */
+    pugs?: PugSlotResponseDto[];
+    /** ROK-292: Called when admin cancels/removes a PUG invite */
+    onRemovePug?: (pugId: string) => void;
+    /** ROK-292: Discord usernames that already have PUG slots for this event */
+    existingPugUsernames?: Set<string>;
+    /** ROK-292: Discord IDs of users already signed up for this event */
+    signedUpDiscordIds?: Set<string>;
+    /** ROK-292: Event ID (needed for member invite endpoint in AssignmentPopup) */
+    eventId?: number;
 }
 
 // MMO-style role slots
@@ -76,6 +88,12 @@ export const RosterBuilder = memo(function RosterBuilder({
     currentUserId,
     onSelfRemove,
     stickyExtra,
+    onAddPug,
+    pugs = [],
+    onRemovePug,
+    existingPugUsernames,
+    signedUpDiscordIds,
+    eventId,
 }: RosterBuilderProps) {
     const { announce } = useAriaLive();
 
@@ -410,6 +428,64 @@ export const RosterBuilder = memo(function RosterBuilder({
                 )}
             </Modal>
 
+            {/* ROK-292: Guest Invites bar (PUG slots shown separately from roster) */}
+            {/* Only show pending/invited PUGs — accepted/claimed ones have signup entries in the roster */}
+            {pugs.filter(p => p.status === 'pending' || p.status === 'invited').length > 0 && (
+                <div className="rounded-lg border border-dashed border-amber-500/40 bg-amber-900/10 p-3">
+                    <h4 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-amber-400">
+                        <span className="inline-block h-2.5 w-2.5 rounded bg-amber-500" />
+                        Guest Invites ({pugs.filter(p => p.status === 'pending' || p.status === 'invited').length})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                        {pugs.filter(p => p.status === 'pending' || p.status === 'invited').map((pug) => (
+                            <div
+                                key={pug.id}
+                                className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-panel/60 px-3 py-2"
+                            >
+                                {pug.discordUserId && pug.discordAvatarHash ? (
+                                    <img
+                                        src={`https://cdn.discordapp.com/avatars/${pug.discordUserId}/${pug.discordAvatarHash}.png?size=32`}
+                                        alt=""
+                                        className="h-7 w-7 shrink-0 rounded-full"
+                                    />
+                                ) : (
+                                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-amber-400 text-xs font-bold">
+                                        {pug.discordUsername.charAt(0).toUpperCase()}
+                                    </div>
+                                )}
+                                <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-sm font-medium text-foreground truncate">{pug.discordUsername}</span>
+                                        <span className="shrink-0 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-400">Guest</span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                        <span className="text-xs text-muted capitalize">{pug.role}</span>
+                                        <span className="text-dim text-[10px]">&middot;</span>
+                                        <span className={`text-xs capitalize ${
+                                            pug.status === 'accepted' || pug.status === 'claimed' ? 'text-emerald-400' :
+                                            pug.status === 'invited' ? 'text-indigo-400' :
+                                            'text-amber-400'
+                                        }`}>{pug.status}</span>
+                                    </div>
+                                </div>
+                                {onRemovePug && (
+                                    <button
+                                        onClick={() => onRemovePug(pug.id)}
+                                        className="shrink-0 ml-1 flex items-center justify-center w-6 h-6 rounded text-dim hover:bg-red-500/20 hover:text-red-400 transition-colors"
+                                        aria-label={`Remove ${pug.discordUsername}`}
+                                        title="Cancel invite"
+                                    >
+                                        <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Role Slots */}
             <div className="space-y-2 sm:space-y-4">
                 {roleSlots.map(({ role, label, color }) => {
@@ -457,6 +533,7 @@ export const RosterBuilder = memo(function RosterBuilder({
             <AssignmentPopup
                 isOpen={isPopupOpen}
                 onClose={handleClosePopup}
+                eventId={eventId ?? 0}
                 slotRole={assignmentTarget?.role ?? null}
                 slotPosition={assignmentTarget?.position ?? 0}
                 unassigned={pool}
@@ -466,6 +543,11 @@ export const RosterBuilder = memo(function RosterBuilder({
                 onSelfAssign={canSelfAssign ? handleSelfAssign : undefined}
                 availableSlots={availableSlots}
                 onAssignToSlot={handleAssignToSlot}
+                onAddPug={onAddPug && assignmentTarget ? (username) => {
+                    onAddPug(username, assignmentTarget.role);
+                } : undefined}
+                existingPugUsernames={existingPugUsernames}
+                signedUpDiscordIds={signedUpDiscordIds}
             />
         </div>
     );
