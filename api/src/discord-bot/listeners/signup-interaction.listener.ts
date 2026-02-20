@@ -387,13 +387,8 @@ export class SignupInteractionListener {
     );
 
     if (existingSignup) {
-      await this.signupsService.updateStatus(
-        eventId,
-        existingSignup.discordUserId
-          ? { discordUserId: existingSignup.discordUserId }
-          : { userId: existingSignup.user.id },
-        { status: 'declined' },
-      );
+      // Fully remove the signup (cascade deletes roster assignment too)
+      await this.signupsService.cancelByDiscordUser(eventId, discordUserId);
 
       await interaction.editReply({
         content: "You've **declined** this event.",

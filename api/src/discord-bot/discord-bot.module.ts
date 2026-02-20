@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
@@ -15,9 +16,15 @@ import { SetupWizardService } from './services/setup-wizard.service';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { PugInviteService } from './services/pug-invite.service';
 import { DiscordEventListener } from './listeners/event.listener';
+import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
+import {
+  EmbedSyncQueueService,
+  EMBED_SYNC_QUEUE,
+} from './queues/embed-sync.queue';
+import { EmbedSyncProcessor } from './processors/embed-sync.processor';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
 import { EventsListCommand } from './commands/events-list.command';
@@ -35,6 +42,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
     forwardRef(() => EventsModule),
     forwardRef(() => AuthModule),
     CharactersModule,
+    BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -50,6 +58,9 @@ import { EventLinkListener } from './listeners/event-link.listener';
     ChannelBindingsService,
     PugInviteService,
     DiscordEventListener,
+    DiscordSyncListener,
+    EmbedSyncQueueService,
+    EmbedSyncProcessor,
     InteractionListener,
     SignupInteractionListener,
     PugInviteListener,
