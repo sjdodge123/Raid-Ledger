@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Events, ChannelType, type Message } from 'discord.js';
+import {
+  Events,
+  ChannelType,
+  type Message,
+  type EmbedBuilder,
+  type ActionRowBuilder,
+  type ButtonBuilder,
+} from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
@@ -13,10 +20,23 @@ import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 const MAX_UNFURLS_PER_MESSAGE = 3;
 
 /**
+ * Module-scoped dedup set — prevents duplicate unfurls when dev-mode HMR
+ * creates multiple EventLinkListener instances pointing at surviving Client objects.
+ * Entries auto-expire after 30 seconds.
+ */
+const recentlyProcessed = new Map<string, number>();
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, ts] of recentlyProcessed) {
+    if (now - ts > 30_000) recentlyProcessed.delete(id);
+  }
+}, 30_000).unref();
+
+/**
  * Listener that auto-unfurls Raid Ledger event links posted in Discord channels (ROK-380).
  *
  * When a message containing a CLIENT_URL/events/:id URL is posted in a guild text channel,
- * the bot replies with a compact event preview embed.
+ * the bot replies with a single embed (or multiple embeds for multiple links).
  */
 @Injectable()
 export class EventLinkListener {
@@ -54,6 +74,10 @@ export class EventLinkListener {
     // Skip bot messages (prevents self-reply loops)
     if (message.author.bot) return;
 
+    // Module-scoped dedup: prevent duplicate unfurls from HMR ghost instances
+    if (recentlyProcessed.has(message.id)) return;
+    recentlyProcessed.set(message.id, Date.now());
+
     // Only unfurl in guild text channels (not DMs)
     if (!message.guild) return;
     if (
@@ -83,6 +107,8 @@ export class EventLinkListener {
     if (matches.length === 0) return;
 
     const context = await this.buildContext();
+    const embeds: EmbedBuilder[] = [];
+    const rows: ActionRowBuilder<ButtonBuilder>[] = [];
 
     for (const eventId of matches) {
       try {
@@ -103,14 +129,20 @@ export class EventLinkListener {
           context,
         );
 
-        await message.reply({
-          embeds: [embed],
-          ...(row ? { components: [row] } : {}),
-        });
+        embeds.push(embed);
+        if (row) rows.push(row);
       } catch {
         // Event not found or other error — silently ignore
       }
     }
+
+    if (embeds.length === 0) return;
+
+    // Send all embeds in a single reply
+    await message.reply({
+      embeds,
+      ...(rows.length > 0 ? { components: rows } : {}),
+    });
   }
 
   private async buildContext(): Promise<EmbedContext> {

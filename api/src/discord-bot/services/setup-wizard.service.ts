@@ -158,10 +158,6 @@ export class SetupWizardService {
             '',
             '1. Pick a default announcement channel',
             '2. Confirm your community name',
-            '',
-            '**Important:** For event link unfurl to work, enable the **Message Content Intent** ' +
-              'under Bot > Privileged Gateway Intents in the ' +
-              '[Discord Developer Portal](https://discord.com/developers/applications).',
           ].join('\n'),
         )
         .setFooter({ text: 'Raid Ledger Setup' })

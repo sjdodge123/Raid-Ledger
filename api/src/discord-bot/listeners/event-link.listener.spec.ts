@@ -11,6 +11,8 @@ describe('EventLinkListener', () => {
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = { toJSON: jest.fn() };
 
+  let messageIdCounter = 0;
+
   beforeEach(() => {
     process.env.CLIENT_URL = 'http://localhost:5173';
 
@@ -114,7 +116,9 @@ describe('EventLinkListener', () => {
       content: string,
       overrides: Record<string, unknown> = {},
     ) {
+      messageIdCounter++;
       return {
+        id: `msg-${messageIdCounter}`,
         content,
         author: { bot: false },
         guild: { id: '123' },
@@ -137,7 +141,7 @@ describe('EventLinkListener', () => {
       });
     });
 
-    it('should unfurl multiple different event links (up to 3)', async () => {
+    it('should batch multiple event links into a single reply', async () => {
       const msg = createMessage(
         'Events: http://localhost:5173/events/1 and http://localhost:5173/events/2 and http://localhost:5173/events/3 and http://localhost:5173/events/4',
       );
@@ -146,7 +150,12 @@ describe('EventLinkListener', () => {
 
       // Should only unfurl up to 3
       expect(mockEventsService.findOne).toHaveBeenCalledTimes(3);
-      expect(mockReply).toHaveBeenCalledTimes(3);
+      // All embeds sent in a single reply
+      expect(mockReply).toHaveBeenCalledTimes(1);
+      expect(mockReply).toHaveBeenCalledWith({
+        embeds: [mockEmbed, mockEmbed, mockEmbed],
+        components: [mockRow, mockRow, mockRow],
+      });
     });
 
     it('should deduplicate the same event ID', async () => {
@@ -258,6 +267,17 @@ describe('EventLinkListener', () => {
       expect(mockReply).toHaveBeenCalledWith({
         embeds: [mockEmbed],
       });
+    });
+
+    it('should deduplicate the same message ID (HMR protection)', async () => {
+      const msg = createMessage('http://localhost:5173/events/42');
+
+      await callHandleMessage(msg);
+      await callHandleMessage(msg);
+
+      // Second call is a no-op — same message.id
+      expect(mockEventsService.findOne).toHaveBeenCalledTimes(1);
+      expect(mockReply).toHaveBeenCalledTimes(1);
     });
   });
 });
