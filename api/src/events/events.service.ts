@@ -29,7 +29,8 @@ import { randomUUID } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
-import { APP_EVENT_EVENTS } from '../discord-bot/discord-bot.constants';
+import { APP_EVENT_EVENTS, MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
+import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
 
 /** Constants for events service */
 const EVENTS_CONFIG = {
@@ -1083,6 +1084,91 @@ export class EventsService {
     this.emitEventLifecycle(APP_EVENT_EVENTS.UPDATED, rescheduledEvent);
 
     return rescheduledEvent;
+  }
+
+  /**
+   * Invite a registered member to an event (ROK-292).
+   * Looks up the user by Discord ID and sends them a new_event notification.
+   * @param eventId - Event ID
+   * @param inviterId - ID of user sending the invite
+   * @param isAdmin - Whether the inviter is admin/operator
+   * @param discordId - Discord ID of the member to invite
+   * @returns Success message
+   */
+  async inviteMember(
+    eventId: number,
+    inviterId: number,
+    isAdmin: boolean,
+    discordId: string,
+  ): Promise<{ message: string }> {
+    // Verify event exists
+    const event = await this.findOne(eventId);
+
+    // Look up the target user by Discord ID
+    const [targetUser] = await this.db
+      .select({ id: schema.users.id, username: schema.users.username })
+      .from(schema.users)
+      .where(eq(schema.users.discordId, discordId))
+      .limit(1);
+
+    if (!targetUser) {
+      throw new NotFoundException(
+        'No registered user found with that Discord ID',
+      );
+    }
+
+    // Check if user is already signed up
+    const [existingSignup] = await this.db
+      .select({ id: schema.eventSignups.id })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, targetUser.id),
+        ),
+      );
+
+    if (existingSignup) {
+      throw new BadRequestException(
+        `${targetUser.username} is already signed up for this event`,
+      );
+    }
+
+    // Get inviter username for the notification
+    const [inviter] = await this.db
+      .select({ username: schema.users.username })
+      .from(schema.users)
+      .where(eq(schema.users.id, inviterId))
+      .limit(1);
+
+    // Create in-app notification (skip Discord — we send a custom DM with Accept/Decline buttons)
+    const notification = await this.notificationService.create({
+      userId: targetUser.id,
+      type: 'new_event',
+      title: 'Event Invitation',
+      message: `${inviter?.username ?? 'Someone'} invited you to "${event.title}"`,
+      payload: {
+        eventId,
+        invitedBy: inviter?.username ?? null,
+      },
+      skipDiscord: true,
+    });
+
+    // Emit event so the Discord bot sends a DM with Accept/Decline buttons
+    if (notification) {
+      this.eventEmitter.emit(MEMBER_INVITE_EVENTS.CREATED, {
+        eventId,
+        targetDiscordId: discordId,
+        notificationId: notification.id,
+        gameId: event.game?.id ?? null,
+      } satisfies MemberInviteCreatedPayload);
+    }
+
+    this.logger.log(
+      `User ${inviterId} invited registered member ${targetUser.id} (${targetUser.username}) to event ${eventId}`,
+    );
+
+    return { message: `Invite sent to ${targetUser.username}` };
   }
 
   /**

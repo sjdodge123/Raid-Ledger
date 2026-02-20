@@ -81,6 +81,7 @@ describe('AssignmentPopup', () => {
                 slotPosition={1}
                 unassigned={mockUnassigned}
                 onAssign={mockOnAssign}
+                eventId={1}
             />
         );
 
@@ -103,6 +104,7 @@ describe('AssignmentPopup', () => {
                 slotPosition={1}
                 unassigned={mockUnassigned}
                 onAssign={mockOnAssign}
+                eventId={1}
             />
         );
 
@@ -145,6 +147,7 @@ describe('AssignmentPopup', () => {
                 currentOccupant={occupant}
                 onAssign={mockOnAssign}
                 onRemove={mockOnRemove}
+                eventId={1}
             />
         );
 
@@ -161,6 +164,7 @@ describe('AssignmentPopup', () => {
                 slotPosition={1}
                 unassigned={mockUnassigned}
                 onAssign={mockOnAssign}
+                eventId={1}
             />
         );
 
@@ -179,6 +183,7 @@ describe('AssignmentPopup', () => {
                 slotPosition={1}
                 unassigned={[]}
                 onAssign={mockOnAssign}
+                eventId={1}
             />
         );
 
@@ -194,6 +199,7 @@ describe('AssignmentPopup', () => {
                 slotPosition={1}
                 unassigned={mockUnassigned}
                 onAssign={mockOnAssign}
+                eventId={1}
             />
         );
 

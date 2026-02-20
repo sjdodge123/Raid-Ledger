@@ -26,6 +26,8 @@ export interface PugSlotCreatedPayload {
   pugSlotId: string;
   eventId: number;
   discordUsername: string;
+  /** User ID of the admin/user who created the PUG slot */
+  creatorUserId: number;
 }
 
 /**
@@ -57,8 +59,8 @@ export class PugsService {
     isAdmin: boolean,
     dto: CreatePugSlotDto,
   ): Promise<PugSlotResponseDto> {
-    // Verify event exists and user has permission
-    await this.verifyEventPermission(eventId, userId, isAdmin);
+    // Any signed-up user, event creator, or admin can invite PUGs
+    await this.verifyInvitePermission(eventId, userId, isAdmin);
 
     try {
       const [inserted] = await this.db
@@ -84,6 +86,7 @@ export class PugsService {
         pugSlotId: inserted.id,
         eventId,
         discordUsername: dto.discordUsername,
+        creatorUserId: userId,
       } satisfies PugSlotCreatedPayload);
 
       return this.toPugSlotResponse(inserted);
@@ -211,8 +214,6 @@ export class PugsService {
     userId: number,
     isAdmin: boolean,
   ): Promise<void> {
-    await this.verifyEventPermission(eventId, userId, isAdmin);
-
     // Verify PUG exists for this event
     const [existing] = await this.db
       .select()
@@ -229,6 +230,11 @@ export class PugsService {
       throw new NotFoundException(
         `PUG slot ${pugId} not found for event ${eventId}`,
       );
+    }
+
+    // Allow removal by: creator/admin, event creator, or the user who created the invite
+    if (existing.createdBy !== userId) {
+      await this.verifyEventPermission(eventId, userId, isAdmin);
     }
 
     await this.db.delete(schema.pugSlots).where(eq(schema.pugSlots.id, pugId));
@@ -259,6 +265,46 @@ export class PugsService {
     if (event.creatorId !== userId && !isAdmin) {
       throw new ForbiddenException(
         'Only event creator or admin/operator can manage PUG slots',
+      );
+    }
+  }
+
+  /**
+   * Verify the user can invite PUGs: creator, admin/operator, OR any signed-up attendee.
+   */
+  private async verifyInvitePermission(
+    eventId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    // Creator and admin/operator always allowed
+    if (event.creatorId === userId || isAdmin) return;
+
+    // Check if user is signed up for this event
+    const [signup] = await this.db
+      .select({ id: schema.eventSignups.id })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) {
+      throw new ForbiddenException(
+        'You must be signed up for the event to invite players',
       );
     }
   }

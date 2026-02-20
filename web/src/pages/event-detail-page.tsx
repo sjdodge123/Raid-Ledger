@@ -17,8 +17,7 @@ import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
-import { PugSection } from '../components/pugs';
-import { useCreatePug } from '../hooks/use-pugs';
+import { useCreatePug, useDeletePug, usePugs } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
 import './event-detail-page.css';
 
@@ -107,6 +106,9 @@ export function EventDetailPage() {
     const selfUnassign = useSelfUnassign(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
     const createPug = useCreatePug(eventId);
+    const deletePug = useDeletePug(eventId);
+    const { data: pugData } = usePugs(eventId);
+    const pugs = pugData?.pugs ?? [];
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -188,6 +190,18 @@ export function EventDetailPage() {
         }
     };
 
+    // ROK-292: Handle removing a PUG invite
+    const handleRemovePug = async (pugId: string) => {
+        try {
+            await deletePug.mutateAsync(pugId);
+            toast.success('Invite cancelled');
+        } catch (err) {
+            toast.error('Failed to cancel invite', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
     // ROK-183/184: Handle slot click to join directly
     const handleSlotClick = async (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
@@ -240,8 +254,8 @@ export function EventDetailPage() {
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
     // Filter out declined signups from display
     const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
-    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus === 'confirmed').sort(alphabetical);
     const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending').sort(alphabetical);
+    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus !== 'pending').sort(alphabetical);
     // tentativeSignups can be used to show a separate section if needed
     // const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
 
@@ -267,6 +281,16 @@ export function EventDetailPage() {
                 >
                     {fromCalendar ? '← Back to Calendar' : '← Back'}
                 </button>
+
+                {/* Invite button for any signed-up user */}
+                {isSignedUp && !canManageRoster && !isCancelled && (
+                    <button
+                        onClick={() => setShowInviteModal(true)}
+                        className="btn btn-primary btn-sm"
+                    >
+                        Invite
+                    </button>
+                )}
 
                 {canManageRoster && !isCancelled && (
                     <div className="flex gap-2">
@@ -492,6 +516,15 @@ export function EventDetailPage() {
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
                         onAddPug={canManageRoster && isMMOGame ? handleAddPug : undefined}
+                        pugs={pugs}
+                        onRemovePug={canManageRoster || isSignedUp ? handleRemovePug : undefined}
+                        eventId={eventId}
+                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
+                        signedUpDiscordIds={new Set(
+                            (roster?.signups ?? [])
+                                .map(s => s.user.discordId)
+                                .filter((id): id is string => !!id)
+                        )}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}
@@ -512,12 +545,6 @@ export function EventDetailPage() {
                         ) : undefined}
                     />
 
-                    {/* ROK-262: PUG Slots Section */}
-                    <PugSection
-                        eventId={eventId}
-                        canManage={canManageRoster}
-                        isMMOGame={isMMOGame}
-                    />
                 </div>
             )}
 
@@ -708,7 +735,12 @@ export function EventDetailPage() {
                         isOpen={showInviteModal}
                         onClose={() => setShowInviteModal(false)}
                         eventId={eventId}
-                        isMMOGame={isMMOGame}
+                        existingPugUsernames={new Set(pugs.map(p => p.discordUsername.toLowerCase()))}
+                        signedUpDiscordIds={new Set(
+                            (roster?.signups ?? [])
+                                .map(s => s.user.discordId)
+                                .filter((id): id is string => !!id)
+                        )}
                     />
                 </Suspense>
             )}

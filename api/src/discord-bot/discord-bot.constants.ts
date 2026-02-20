@@ -73,7 +73,38 @@ export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
 export const PUG_BUTTON_IDS = {
   ACCEPT: 'pug_accept',
   DECLINE: 'pug_decline',
+  /** Select menus shown after PUG accepts — invitee picks character/role */
+  CHARACTER_SELECT: 'pug_char_select',
+  ROLE_SELECT: 'pug_role_select',
 } as const;
+
+/**
+ * Custom IDs for member invite interaction buttons (ROK-292).
+ * Format: `{action}:{eventId}:{notificationId}` — e.g. `member_accept:42:uuid`
+ * Used for registered-user invites (as opposed to PUG invites).
+ */
+export const MEMBER_INVITE_BUTTON_IDS = {
+  ACCEPT: 'member_accept',
+  DECLINE: 'member_decline',
+  CHARACTER_SELECT: 'member_char_select',
+  ROLE_SELECT: 'member_role_select',
+} as const;
+
+/**
+ * Application-level event names for member invite lifecycle (ROK-292).
+ * Emitted by EventsService, consumed by PugInviteListener.
+ */
+export const MEMBER_INVITE_EVENTS = {
+  CREATED: 'member.invite.created',
+} as const;
+
+export interface MemberInviteCreatedPayload {
+  eventId: number;
+  targetDiscordId: string;
+  notificationId: string;
+  /** Integer games.id for channel binding lookup */
+  gameId?: number | null;
+}
 
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',

@@ -68,7 +68,8 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
         }
     };
 
-    const isClickable = onAdminClick || (!item && !!(onJoinClick || isPending));
+    const isOccupied = !!item;
+    const isClickable = onAdminClick || (!isOccupied && !!(onJoinClick || isPending));
 
     // ROK-184: Glow effect classes for current user's slot
     const glowClass = isCurrentUser

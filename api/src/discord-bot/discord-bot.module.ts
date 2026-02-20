@@ -7,6 +7,7 @@ import { CharactersModule } from '../characters/characters.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
+import { DiscordMemberController } from './discord-member.controller';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
@@ -33,7 +34,7 @@ import { BindingsCommand } from './commands/bindings.command';
     forwardRef(() => AuthModule),
     CharactersModule,
   ],
-  controllers: [DiscordBotSettingsController, ChannelBindingsController],
+  controllers: [DiscordBotSettingsController, DiscordMemberController, ChannelBindingsController],
   providers: [
     DiscordBotService,
     DiscordBotClientService,

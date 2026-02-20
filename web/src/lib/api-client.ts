@@ -872,6 +872,19 @@ export async function deletePugSlot(
     });
 }
 
+/**
+ * Invite a registered member to an event (sends notification, not PUG).
+ */
+export async function inviteMember(
+    eventId: number,
+    discordId: string,
+): Promise<{ message: string }> {
+    return fetchApi(`/events/${eventId}/invite-member`, {
+        method: 'POST',
+        body: JSON.stringify({ discordId }),
+    });
+}
+
 // ============================================================
 // Discord Member Search (ROK-292)
 // ============================================================
@@ -880,16 +893,26 @@ export interface DiscordMemberSearchResult {
     discordId: string;
     username: string;
     avatar: string | null;
+    /** Whether this Discord user has a linked Raid Ledger account */
+    isRegistered?: boolean;
+}
+
+/**
+ * List Discord server members (initial load for Invite modal).
+ * Available to any authenticated user.
+ */
+export async function listDiscordMembers(): Promise<DiscordMemberSearchResult[]> {
+    return fetchApi('/discord/members/list');
 }
 
 /**
  * Search Discord server members by username query.
- * Requires admin/operator auth.
+ * Available to any authenticated user.
  */
 export async function searchDiscordMembers(
     query: string,
 ): Promise<DiscordMemberSearchResult[]> {
     return fetchApi(
-        `/admin/settings/discord-bot/members/search?q=${encodeURIComponent(query)}`,
+        `/discord/members/search?q=${encodeURIComponent(query)}`,
     );
 }

@@ -374,6 +374,40 @@ export class DiscordBotClientService {
   }
 
   /**
+   * ROK-292: List guild members (no query required).
+   * Returns up to `limit` members for initial display in the Invite modal.
+   */
+  async listGuildMembers(
+    limit = 25,
+  ): Promise<
+    { discordId: string; username: string; avatar: string | null }[]
+  > {
+    if (!this.client?.isReady()) return [];
+
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return [];
+
+    try {
+      const members = await guild.members.list({ limit });
+
+      return members
+        .filter((m) => !m.user.bot)
+        .map((m) => ({
+          discordId: m.user.id,
+          username: m.user.username,
+          avatar: m.user.avatar,
+        }))
+        .sort((a, b) => a.username.localeCompare(b.username));
+    } catch (error) {
+      this.logger.warn(
+        'Failed to list guild members: %s',
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      return [];
+    }
+  }
+
+  /**
    * Check whether the bot has every required permission in its guild.
    */
   checkPermissions(): PermissionCheckResult[] {

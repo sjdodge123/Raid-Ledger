@@ -44,7 +44,10 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
         return {
             avatarUser: {
                 ...base,
-                characters: [{ gameId: '__roster__', avatarUrl: player.character.avatarUrl }],
+                characters: [
+                    ...(base.characters ?? []),
+                    { gameId: '__roster__', avatarUrl: player.character.avatarUrl },
+                ],
             } satisfies AvatarUser,
             gameId: '__roster__',
         };

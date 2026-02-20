@@ -1241,7 +1241,9 @@ export class SignupsService {
       username: isAnonymous
         ? (row.event_signups.discordUsername ?? 'Discord User')
         : (row.users?.username ?? 'Unknown'),
-      avatar: row.users?.avatar ?? null,
+      avatar: isAnonymous
+        ? (row.event_signups.discordAvatarHash ?? null)
+        : (row.users?.avatar ?? null),
       customAvatarUrl: row.users?.customAvatarUrl ?? null,
       slot: (assignment?.role as RosterRole) ?? null,
       position: assignment?.position ?? 0,
