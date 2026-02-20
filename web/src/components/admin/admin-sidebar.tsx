@@ -3,6 +3,8 @@ import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { NewBadge } from '../ui/new-badge';
+import { PluginBadge } from '../ui/plugin-badge';
+import { getPluginBadge } from '../../plugins/plugin-registry';
 import type { IntegrationStatus, NavItem } from './admin-nav-data';
 import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildNavSections } from './admin-nav-data';
 
@@ -95,6 +97,7 @@ export function SidebarNavItem({
     onNavigate?: () => void;
 }) {
     const { isNew, markSeen } = useNewBadge(item.newBadgeKey ?? '');
+    const badge = item.pluginSlug ? getPluginBadge(item.pluginSlug) : undefined;
 
     return (
         <Link
@@ -107,6 +110,13 @@ export function SidebarNavItem({
                     : 'text-muted hover:text-foreground hover:bg-overlay/20'
                 }`}
         >
+            {badge && (
+                <PluginBadge
+                    icon={badge.iconSmall ?? badge.icon}
+                    label={badge.label}
+                    size="sm"
+                />
+            )}
             <span className="truncate min-w-0 flex-1">{item.label}</span>
             {item.newBadgeKey && <NewBadge visible={isNew} />}
             {item.status && <StatusPill status={item.status} />}
