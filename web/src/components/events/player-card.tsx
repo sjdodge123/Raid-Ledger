@@ -105,6 +105,12 @@ export function PlayerCard({
                 <div className="flex items-center gap-2">
                     <Link
                         to={`/users/${player.userId}`}
+                        state={player.userId === 0 ? {
+                            guest: true,
+                            username: player.username,
+                            discordId: player.discordId,
+                            avatarHash: player.avatar,
+                        } : undefined}
                         className="truncate font-medium text-foreground hover:text-indigo-400 transition-colors"
                         title={player.username}
                         onClick={(e) => e.stopPropagation()}

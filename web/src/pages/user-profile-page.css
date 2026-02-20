@@ -194,6 +194,22 @@
     margin-bottom: 1.5rem;
 }
 
+/* Guest profile (ROK-381) */
+.user-profile-guest-note {
+    font-size: 0.8125rem;
+    color: #71717a;
+    margin: 0.25rem 0 0;
+    font-style: italic;
+}
+
+.user-profile-guest-actions {
+    padding-top: 1rem;
+}
+
+[data-scheme="light"] .user-profile-guest-note {
+    color: #94a3b8;
+}
+
 /* Skeleton Loading */
 .user-profile-skeleton {
     display: flex;
