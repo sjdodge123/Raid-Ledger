@@ -85,6 +85,10 @@ interface FormState {
     // Recurrence
     recurrenceFrequency: '' | 'weekly' | 'biweekly' | 'monthly';
     recurrenceUntil: string;
+    // Reminders (ROK-126)
+    reminder15min: boolean;
+    reminder1hour: boolean;
+    reminder24hour: boolean;
     // Content instances
     selectedInstances: Record<string, unknown>[];
     titleIsAutoSuggested: boolean;
@@ -209,6 +213,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 autoUnbench: editEvent.autoUnbench ?? true,
                 recurrenceFrequency: '',
                 recurrenceUntil: '',
+                reminder15min: editEvent.reminder15min ?? true,
+                reminder1hour: editEvent.reminder1hour ?? false,
+                reminder24hour: editEvent.reminder24hour ?? false,
                 selectedInstances: (editEvent.contentInstances as Record<string, unknown>[]) ?? [],
                 titleIsAutoSuggested: false,
                 descriptionIsAutoSuggested: false,
@@ -234,6 +241,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             autoUnbench: true,
             recurrenceFrequency: '',
             recurrenceUntil: '',
+            reminder15min: true,
+            reminder1hour: false,
+            reminder24hour: false,
             selectedInstances: [],
             titleIsAutoSuggested: false,
             descriptionIsAutoSuggested: false,
@@ -595,6 +605,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             autoUnbench: form.autoUnbench,
             recurrence,
             contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
+            reminder15min: form.reminder15min,
+            reminder1hour: form.reminder1hour,
+            reminder24hour: form.reminder24hour,
         };
 
         mutation.mutate(dto);
@@ -1057,7 +1070,82 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             {/* Divider */}
             <div className="border-t border-edge-subtle" />
 
-            {/* ═══════════ Section 5: Server Automation (stub) ═══════════ */}
+            {/* ═══════════ Section 5: Reminders (ROK-126) ═══════════ */}
+            <FormSection title="Reminders">
+                <p className="text-xs text-dim -mt-2">
+                    Signed-up members with Discord linked will receive DM reminders before this event.
+                </p>
+                <div className="bg-panel/50 border border-edge-subtle rounded-lg px-4 divide-y divide-edge-subtle">
+                    {/* 15 minutes */}
+                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
+                        <div>
+                            <span className="text-sm text-secondary font-medium">15 minutes before</span>
+                            <p className="text-xs text-dim mt-0.5">Starting soon!</p>
+                        </div>
+                        <div className="event-detail-autosub-toggle shrink-0">
+                            <div
+                                className="event-detail-autosub-toggle__track"
+                                role="switch"
+                                aria-checked={form.reminder15min}
+                                aria-label="15-minute reminder"
+                                tabIndex={0}
+                                onClick={() => updateField('reminder15min', !form.reminder15min)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder15min', !form.reminder15min); } }}
+                            >
+                                <span className={`event-detail-autosub-toggle__option ${form.reminder15min ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                                <span className={`event-detail-autosub-toggle__option ${!form.reminder15min ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                            </div>
+                        </div>
+                    </div>
+                    {/* 1 hour */}
+                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
+                        <div>
+                            <span className="text-sm text-secondary font-medium">1 hour before</span>
+                            <p className="text-xs text-dim mt-0.5">Coming up in 1 hour</p>
+                        </div>
+                        <div className="event-detail-autosub-toggle shrink-0">
+                            <div
+                                className="event-detail-autosub-toggle__track"
+                                role="switch"
+                                aria-checked={form.reminder1hour}
+                                aria-label="1-hour reminder"
+                                tabIndex={0}
+                                onClick={() => updateField('reminder1hour', !form.reminder1hour)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder1hour', !form.reminder1hour); } }}
+                            >
+                                <span className={`event-detail-autosub-toggle__option ${form.reminder1hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                                <span className={`event-detail-autosub-toggle__option ${!form.reminder1hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                            </div>
+                        </div>
+                    </div>
+                    {/* 24 hours */}
+                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
+                        <div>
+                            <span className="text-sm text-secondary font-medium">24 hours before</span>
+                            <p className="text-xs text-dim mt-0.5">Tomorrow's event</p>
+                        </div>
+                        <div className="event-detail-autosub-toggle shrink-0">
+                            <div
+                                className="event-detail-autosub-toggle__track"
+                                role="switch"
+                                aria-checked={form.reminder24hour}
+                                aria-label="24-hour reminder"
+                                tabIndex={0}
+                                onClick={() => updateField('reminder24hour', !form.reminder24hour)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder24hour', !form.reminder24hour); } }}
+                            >
+                                <span className={`event-detail-autosub-toggle__option ${form.reminder24hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
+                                <span className={`event-detail-autosub-toggle__option ${!form.reminder24hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </FormSection>
+
+            {/* Divider */}
+            <div className="border-t border-edge-subtle" />
+
+            {/* ═══════════ Section 6: Server Automation (stub) ═══════════ */}
             {form.game && (
                 <>
                     <FormSection title="Server Automation">

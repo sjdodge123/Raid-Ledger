@@ -1,190 +1,259 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, isNull, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
-/** Hour (0-23) at which day-of reminders fire in the user's local timezone */
-const DAY_OF_HOUR = 9;
+/**
+ * Reminder window definitions (ROK-126).
+ * Each window has a type key, a label for the embed, and the number of
+ * milliseconds before event start at which the reminder fires.
+ */
+const REMINDER_WINDOWS = [
+  {
+    type: '15min',
+    label: '15 Minutes',
+    ms: 15 * 60 * 1000,
+    fieldKey: 'reminder15min' as const,
+  },
+  {
+    type: '1hour',
+    label: '1 Hour',
+    ms: 60 * 60 * 1000,
+    fieldKey: 'reminder1hour' as const,
+  },
+  {
+    type: '24hour',
+    label: '24 Hours',
+    ms: 24 * 60 * 60 * 1000,
+    fieldKey: 'reminder24hour' as const,
+  },
+] as const;
 
-interface UserTimezone {
-  userId: number;
-  timezone: string;
-}
+type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 
 /**
- * Scheduled service that sends event reminders (ROK-185).
+ * Scheduled service that sends event reminders via Discord DM (ROK-126).
  *
- * Two reminder types:
- * - **day_of**: Fires at 9am in each user's local timezone on the day of an event
- * - **starting_soon**: Fires ~30 minutes before event start
+ * Runs every 60 seconds, checking for events that fall within each
+ * configured reminder window. Uses the `event_reminders_sent` table
+ * with a unique constraint for idempotent duplicate prevention.
  *
- * Duplicate prevention uses the `event_reminders_sent` table with a unique
- * constraint + ON CONFLICT DO NOTHING for atomic idempotency.
+ * Replaces the earlier ROK-185 day-of / starting-soon approach with
+ * per-event configurable 15min / 1hour / 24hour windows.
  */
 @Injectable()
 export class EventReminderService {
   private readonly logger = new Logger(EventReminderService.name);
+  private readonly clientUrl: string;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly cronJobService: CronJobService,
-  ) {}
-
-  /**
-   * Day-of reminder cron: runs every 15 minutes.
-   * Checks if it's currently the target hour (9am) in each signed-up user's timezone.
-   * If so, sends a day-of reminder for every event they're signed up for today.
-   */
-  @Cron('0 */15 * * * *', { name: 'EventReminderService_handleDayOfReminders' })
-  async handleDayOfReminders() {
-    await this.cronJobService.executeWithTracking(
-      'EventReminderService_handleDayOfReminders',
-      async () => {
-        this.logger.debug('Running day-of reminder check...');
-
-        const userTimezones = await this.getUserTimezones();
-        if (userTimezones.length === 0) return;
-
-        const now = new Date();
-
-        // Find users whose local time is currently in the target hour
-        const eligibleUserIds: number[] = [];
-        for (const { userId, timezone } of userTimezones) {
-          if (this.isTargetHour(now, timezone, DAY_OF_HOUR)) {
-            eligibleUserIds.push(userId);
-          }
-        }
-
-        if (eligibleUserIds.length === 0) return;
-
-        this.logger.debug(
-          `Day-of: ${eligibleUserIds.length} users at target hour`,
-        );
-
-        // For each eligible user, find events today in their timezone that they're signed up for
-        for (const { userId, timezone } of userTimezones) {
-          if (!eligibleUserIds.includes(userId)) continue;
-
-          const todayRange = this.getTodayRange(now, timezone);
-          await this.sendDayOfRemindersForUser(
-            userId,
-            todayRange.start,
-            todayRange.end,
-          );
-        }
-      },
-    );
+  ) {
+    this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
   }
 
   /**
-   * Starting-soon reminder cron: runs every 5 minutes.
-   * Sends reminders for events starting within the next 35 minutes.
-   *
-   * Uses schema-level selection (which goes through Drizzle's fromDriver for
-   * proper tsrange→Date conversion) then filters in JS, avoiding timezone
-   * mismatches from raw SQL `lower(duration)` strings.
+   * Main cron: runs every 60 seconds (ROK-126 AC-1).
+   * For each reminder window, finds events whose start time is within the
+   * window and sends DM reminders to all confirmed attendees with Discord linked.
    */
-  @Cron('0 */5 * * * *', {
-    name: 'EventReminderService_handleStartingSoonReminders',
-  })
-  async handleStartingSoonReminders() {
+  @Cron('0 */1 * * * *', { name: 'EventReminderService_handleReminders' })
+  async handleReminders(): Promise<void> {
     await this.cronJobService.executeWithTracking(
-      'EventReminderService_handleStartingSoonReminders',
+      'EventReminderService_handleReminders',
       async () => {
-        this.logger.debug('Running starting-soon reminder check...');
+        this.logger.debug('Running event reminder check...');
 
         const now = new Date();
-        const windowMs = 35 * 60 * 1000; // 35 minutes
 
-        // Fetch all events and filter in JS.
+        // Fetch all non-cancelled future events (using schema-level read for proper tsrange→Date).
+        // Include reminder config columns to know which windows are enabled per event.
         const candidateEvents = await this.db
           .select({
             id: schema.events.id,
             title: schema.events.title,
             duration: schema.events.duration,
+            gameId: schema.events.gameId,
+            registryGameId: schema.events.registryGameId,
+            reminder15min: schema.events.reminder15min,
+            reminder1hour: schema.events.reminder1hour,
+            reminder24hour: schema.events.reminder24hour,
+            cancelledAt: schema.events.cancelledAt,
           })
-          .from(schema.events);
+          .from(schema.events)
+          .where(isNull(schema.events.cancelledAt));
 
-        // Filter precisely in JS using fromDriver-converted Dates
-        const upcomingEvents = candidateEvents.filter((event) => {
-          const startTime = event.duration[0];
-          const msUntil = startTime.getTime() - now.getTime();
-          return msUntil >= 0 && msUntil <= windowMs;
-        });
+        // For each reminder window, find events in that window
+        for (const window of REMINDER_WINDOWS) {
+          const eventsInWindow = candidateEvents.filter((event) => {
+            // Check if this window is enabled for this event
+            if (!event[window.fieldKey]) return false;
 
-        if (upcomingEvents.length === 0) return;
+            const startTime = event.duration[0];
+            const msUntil = startTime.getTime() - now.getTime();
+            // Fire if event starts within [0, window.ms] from now
+            // Use a small buffer (90s) to handle cron timing jitter
+            return msUntil >= -90_000 && msUntil <= window.ms;
+          });
 
-        this.logger.debug(
-          `Starting-soon: ${upcomingEvents.length} events in window`,
-        );
+          if (eventsInWindow.length === 0) continue;
 
-        const eventIds = upcomingEvents.map((e) => e.id);
-
-        // Get all signups for these events
-        const signups = await this.db
-          .select({
-            eventId: schema.eventSignups.eventId,
-            userId: schema.eventSignups.userId,
-          })
-          .from(schema.eventSignups)
-          .where(inArray(schema.eventSignups.eventId, eventIds));
-
-        // Group signups by event (filter out anonymous Discord participants)
-        const signupsByEvent = new Map<number, number[]>();
-        for (const signup of signups) {
-          if (signup.userId === null) continue; // Skip anonymous participants
-          if (!signupsByEvent.has(signup.eventId)) {
-            signupsByEvent.set(signup.eventId, []);
-          }
-          signupsByEvent.get(signup.eventId)!.push(signup.userId);
-        }
-
-        // Send reminders
-        for (const event of upcomingEvents) {
-          const userIds = signupsByEvent.get(event.id) ?? [];
-          const startTime = event.duration[0];
-          const minutesUntil = Math.round(
-            (startTime.getTime() - now.getTime()) / 60000,
+          this.logger.debug(
+            `${window.type}: ${eventsInWindow.length} events in window`,
           );
 
-          for (const userId of userIds) {
-            await this.sendReminder({
-              eventId: event.id,
-              userId,
-              reminderType: 'starting_soon',
-              title: `${event.title} starting soon`,
-              message: `${event.title} starts in about ${minutesUntil} minutes.`,
-            });
-          }
+          await this.sendRemindersForWindow(
+            eventsInWindow,
+            window.type,
+            window.label,
+            now,
+          );
         }
       },
     );
   }
 
   /**
-   * Send a reminder notification with duplicate prevention.
+   * Send reminders for all events in a specific window.
+   */
+  private async sendRemindersForWindow(
+    events: {
+      id: number;
+      title: string;
+      duration: [Date, Date];
+      gameId: string | null;
+      registryGameId: string | null;
+    }[],
+    windowType: ReminderWindowType,
+    windowLabel: string,
+    now: Date,
+  ): Promise<void> {
+    const eventIds = events.map((e) => e.id);
+
+    // Get all signups for these events (RL members only — filter out anonymous)
+    const signups = await this.db
+      .select({
+        eventId: schema.eventSignups.eventId,
+        userId: schema.eventSignups.userId,
+      })
+      .from(schema.eventSignups)
+      .where(inArray(schema.eventSignups.eventId, eventIds));
+
+    // Group signups by event
+    const signupsByEvent = new Map<number, number[]>();
+    for (const signup of signups) {
+      if (signup.userId === null) continue; // Skip anonymous Discord participants
+      if (!signupsByEvent.has(signup.eventId)) {
+        signupsByEvent.set(signup.eventId, []);
+      }
+      signupsByEvent.get(signup.eventId)!.push(signup.userId);
+    }
+
+    // Collect all unique user IDs for batch character + user info lookup
+    const allUserIds = [...new Set(Array.from(signupsByEvent.values()).flat())];
+
+    if (allUserIds.length === 0) return;
+
+    // Batch fetch user info (for Discord ID and character)
+    const users = await this.db
+      .select({
+        id: schema.users.id,
+        discordId: schema.users.discordId,
+      })
+      .from(schema.users)
+      .where(inArray(schema.users.id, allUserIds));
+
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    // Batch fetch characters for signed-up users
+    const characters =
+      allUserIds.length > 0
+        ? await this.db
+            .select({
+              userId: schema.characters.userId,
+              name: schema.characters.name,
+              charClass: schema.characters.class,
+              gameId: schema.characters.gameId,
+            })
+            .from(schema.characters)
+            .where(inArray(schema.characters.userId, allUserIds))
+        : [];
+
+    // Group characters by userId
+    const charsByUser = new Map<number, typeof characters>();
+    for (const char of characters) {
+      if (!charsByUser.has(char.userId)) {
+        charsByUser.set(char.userId, []);
+      }
+      charsByUser.get(char.userId)!.push(char);
+    }
+
+    // Send reminders per event, per user
+    for (const event of events) {
+      const userIds = signupsByEvent.get(event.id) ?? [];
+      const startTime = event.duration[0];
+      const minutesUntil = Math.max(
+        0,
+        Math.round((startTime.getTime() - now.getTime()) / 60000),
+      );
+
+      for (const userId of userIds) {
+        const user = userMap.get(userId);
+        if (!user?.discordId) continue; // No Discord linked — skip
+
+        // Find user's character for this event's game
+        const userChars = charsByUser.get(userId) ?? [];
+        const matchingChar = event.gameId
+          ? (userChars.find((c) => c.gameId === event.registryGameId) ??
+            userChars[0])
+          : userChars[0];
+
+        const charDisplay = matchingChar
+          ? `${matchingChar.name}${matchingChar.charClass ? ` (${matchingChar.charClass})` : ''}`
+          : null;
+
+        await this.sendReminder({
+          eventId: event.id,
+          userId,
+          windowType,
+          windowLabel,
+          title: event.title,
+          startTime,
+          minutesUntil,
+          characterDisplay: charDisplay,
+        });
+      }
+    }
+  }
+
+  /**
+   * Send a single reminder notification with duplicate prevention.
    * Inserts a tracking row with ON CONFLICT DO NOTHING — if the row already
    * exists (duplicate), the insert returns empty and we skip the notification.
    */
   async sendReminder(input: {
     eventId: number;
     userId: number;
-    reminderType: string;
+    windowType: ReminderWindowType;
+    windowLabel: string;
     title: string;
-    message: string;
+    startTime: Date;
+    minutesUntil: number;
+    characterDisplay: string | null;
   }): Promise<boolean> {
     const result = await this.db
       .insert(schema.eventRemindersSent)
       .values({
         eventId: input.eventId,
         userId: input.userId,
-        reminderType: input.reminderType,
+        reminderType: input.windowType,
       })
       .onConflictDoNothing({
         target: [
@@ -200,22 +269,107 @@ export class EventReminderService {
       return false;
     }
 
+    // Build the time display string
+    const timeStr = input.startTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+    });
+
+    const messageText = this.buildReminderMessage(
+      input.windowLabel,
+      input.title,
+      timeStr,
+      input.minutesUntil,
+    );
+
+    // Create in-app notification (this also dispatches to Discord DM via the standard pipeline)
     await this.notificationService.create({
       userId: input.userId,
       type: 'event_reminder',
-      title: input.title,
-      message: input.message,
-      payload: { eventId: input.eventId },
+      title: `Event Starting in ${input.windowLabel}!`,
+      message: messageText,
+      payload: {
+        eventId: input.eventId,
+        reminderWindow: input.windowType,
+        characterDisplay: input.characterDisplay,
+      },
     });
 
     return true;
   }
 
   /**
-   * Batch query user timezone preferences.
-   * Users with 'auto' or no timezone fall back to UTC.
+   * Build a human-readable reminder message.
    */
-  async getUserTimezones(): Promise<UserTimezone[]> {
+  private buildReminderMessage(
+    windowLabel: string,
+    eventTitle: string,
+    timeStr: string,
+    minutesUntil: number,
+  ): string {
+    if (minutesUntil <= 1) {
+      return `${eventTitle} is starting now!`;
+    }
+    if (minutesUntil <= 60) {
+      return `${eventTitle} starts in ${minutesUntil} minutes at ${timeStr}.`;
+    }
+    const hours = Math.round(minutesUntil / 60);
+    if (hours === 1) {
+      return `${eventTitle} starts in 1 hour at ${timeStr}.`;
+    }
+    return `${eventTitle} starts in ${hours} hours at ${timeStr}.`;
+  }
+
+  /**
+   * Legacy compatibility: kept for existing day-of reminders.
+   * Now delegates to handleReminders for the 24-hour window.
+   */
+  @Cron('0 */15 * * * *', { name: 'EventReminderService_handleDayOfReminders' })
+  async handleDayOfReminders(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'EventReminderService_handleDayOfReminders',
+      async () => {
+        this.logger.debug('Running day-of reminder check...');
+
+        const userTimezones = await this.getUserTimezones();
+        if (userTimezones.length === 0) return;
+
+        const now = new Date();
+
+        // Find users whose local time is currently in the target hour (9am)
+        const eligibleUserIds: number[] = [];
+        for (const { userId, timezone } of userTimezones) {
+          if (this.isTargetHour(now, timezone, 9)) {
+            eligibleUserIds.push(userId);
+          }
+        }
+
+        if (eligibleUserIds.length === 0) return;
+
+        this.logger.debug(
+          `Day-of: ${eligibleUserIds.length} users at target hour`,
+        );
+
+        for (const { userId, timezone } of userTimezones) {
+          if (!eligibleUserIds.includes(userId)) continue;
+
+          const todayRange = this.getTodayRange(now, timezone);
+          await this.sendDayOfRemindersForUser(
+            userId,
+            todayRange.start,
+            todayRange.end,
+          );
+        }
+      },
+    );
+  }
+
+  /**
+   * Batch query user timezone preferences.
+   */
+  async getUserTimezones(): Promise<{ userId: number; timezone: string }[]> {
     const rows = await this.db
       .select({
         userId: schema.userPreferences.userId,
@@ -235,7 +389,6 @@ export class EventReminderService {
 
   /**
    * Check if the current time in the given timezone is at the target hour.
-   * Uses a 15-minute window to account for cron interval.
    */
   private isTargetHour(
     now: Date,
@@ -248,7 +401,6 @@ export class EventReminderService {
       );
       return localTime.getHours() === targetHour && localTime.getMinutes() < 15;
     } catch {
-      // Invalid timezone — fall back to UTC
       const utcHour = now.getUTCHours();
       return utcHour === targetHour && now.getUTCMinutes() < 15;
     }
@@ -262,15 +414,12 @@ export class EventReminderService {
     timezone: string,
   ): { start: Date; end: Date } {
     try {
-      // Get the local date string in the user's timezone
       const localDateStr = now.toLocaleDateString('en-CA', {
         timeZone: timezone,
-      }); // YYYY-MM-DD
-      // Create start/end of day in the user's timezone
+      });
       const startLocal = new Date(`${localDateStr}T00:00:00`);
       const endLocal = new Date(`${localDateStr}T23:59:59.999`);
 
-      // Convert back to UTC by getting the offset
       const formatter = new Intl.DateTimeFormat('en-US', {
         timeZone: timezone,
         timeZoneName: 'shortOffset',
@@ -279,7 +428,6 @@ export class EventReminderService {
       const offsetPart = parts.find((p) => p.type === 'timeZoneName');
       const offsetStr = offsetPart?.value ?? 'GMT';
 
-      // Parse offset like "GMT-5" or "GMT+5:30"
       const offsetMatch = offsetStr.match(/GMT([+-]?)(\d+)?(?::(\d+))?/);
       let offsetMinutes = 0;
       if (offsetMatch) {
@@ -294,7 +442,6 @@ export class EventReminderService {
         end: new Date(endLocal.getTime() - offsetMinutes * 60000),
       };
     } catch {
-      // Fallback to UTC today
       const utcDateStr = now.toISOString().slice(0, 10);
       return {
         start: new Date(`${utcDateStr}T00:00:00Z`),
@@ -305,31 +452,31 @@ export class EventReminderService {
 
   /**
    * Send day-of reminders for a single user.
-   * Finds all events the user is signed up for that start within the given range.
-   * Uses schema-level selection for proper tsrange→Date conversion.
    */
   private async sendDayOfRemindersForUser(
     userId: number,
     rangeStart: Date,
     rangeEnd: Date,
   ): Promise<void> {
-    // Find events this user is signed up for.
-    // No SQL-level time filter — tsrange fromDriver timezone interpretation makes
-    // SQL comparisons unreliable. JS filtering on converted Dates is correct.
     const userEvents = await this.db
       .select({
         eventId: schema.events.id,
         title: schema.events.title,
         duration: schema.events.duration,
+        cancelledAt: schema.events.cancelledAt,
       })
       .from(schema.eventSignups)
       .innerJoin(
         schema.events,
         eq(schema.eventSignups.eventId, schema.events.id),
       )
-      .where(eq(schema.eventSignups.userId, userId));
+      .where(
+        and(
+          eq(schema.eventSignups.userId, userId),
+          isNull(schema.events.cancelledAt),
+        ),
+      );
 
-    // Filter in JS using fromDriver-converted Dates
     const todayEvents = userEvents.filter((row) => {
       const startTime = row.duration[0];
       return startTime >= rangeStart && startTime <= rangeEnd;
@@ -337,18 +484,16 @@ export class EventReminderService {
 
     for (const row of todayEvents) {
       const startTime = row.duration[0];
-      const timeStr = startTime.toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-      });
 
       await this.sendReminder({
         eventId: row.eventId,
         userId,
-        reminderType: 'day_of',
-        title: `${row.title} is today`,
-        message: `${row.title} is scheduled for today at ${timeStr}.`,
+        windowType: '24hour',
+        windowLabel: '24 Hours',
+        title: row.title,
+        startTime,
+        minutesUntil: Math.round((startTime.getTime() - Date.now()) / 60000),
+        characterDisplay: null,
       });
     }
   }
