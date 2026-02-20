@@ -613,7 +613,7 @@ describe('SignupInteractionListener', () => {
   // ============================================================
 
   describe('handleButtonInteraction — Decline button', () => {
-    it('should update existing signup to declined status', async () => {
+    it('should fully remove existing signup when declining', async () => {
       const userId = 'user-decline-update-1';
       mockSignupsService.findByDiscordUser.mockResolvedValueOnce({
         id: 1,
@@ -637,10 +637,9 @@ describe('SignupInteractionListener', () => {
       );
       await listener.handleButtonInteraction(interaction);
 
-      expect(mockSignupsService.updateStatus).toHaveBeenCalledWith(
+      expect(mockSignupsService.cancelByDiscordUser).toHaveBeenCalledWith(
         501,
-        { userId: 60 },
-        { status: 'declined' },
+        userId,
       );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({

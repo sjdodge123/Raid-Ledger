@@ -17,7 +17,7 @@ Checks for in-flight work first (and finishes it), then pulls dispatchable stori
 
 Each step has detailed instructions in a separate file under `steps/`. **Read each step file when you reach that step** — do NOT read all steps upfront.
 
-The dispatch flow is: check in-flight work -> finish it -> gather new stories -> present batch -> create worktrees -> spawn parallel team -> operator tests -> review agents -> merge to main.
+The dispatch flow is: clean up workspace -> check in-flight work -> finish it -> gather new stories -> present batch -> create worktrees -> spawn parallel team -> operator tests -> review agents -> merge to main.
 
 ---
 
@@ -47,6 +47,7 @@ Execute steps in order. Read each step's file when you reach it.
 
 | Step | File | Description |
 |------|------|-------------|
+| 0 | `steps/step-0-workspace-cleanup.md` | Clean up stale worktrees, merged branches, and team artifacts |
 | 1 | `steps/step-1-gather-stories.md` | Check in-flight work (finish first), then gather new stories |
 | 2 | `steps/step-2-enrich-stories.md` | Fetch comments/feedback for rework; extract spec details for new work |
 | 3 | `steps/step-3-present-dispatch.md` | Present dispatch summary, assign parallel batches |

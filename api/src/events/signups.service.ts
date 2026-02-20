@@ -8,12 +8,15 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq, and, sql, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { BenchPromotionService } from './bench-promotion.service';
+import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
+import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
 import type {
   SignupResponseDto,
   EventRosterDto,
@@ -43,6 +46,7 @@ export class SignupsService {
     private db: PostgresJsDatabase<typeof schema>,
     private notificationService: NotificationService,
     private benchPromotionService: BenchPromotionService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -240,6 +244,13 @@ export class SignupsService {
       return result.response;
     }
 
+    this.emitSignupEvent(SIGNUP_EVENTS.CREATED, {
+      eventId,
+      userId,
+      signupId: result.signup.id,
+      action: 'signup_created',
+    });
+
     return this.buildSignupResponse(result.signup, user, null);
   }
 
@@ -346,6 +357,12 @@ export class SignupsService {
       return inserted;
     });
 
+    this.emitSignupEvent(SIGNUP_EVENTS.CREATED, {
+      eventId,
+      signupId: result.id,
+      action: 'discord_signup_created',
+    });
+
     return this.buildAnonymousSignupResponse(result);
   }
 
@@ -396,6 +413,13 @@ export class SignupsService {
     this.logger.log(
       `Signup ${signup.id} status updated to ${dto.status} for event ${eventId}`,
     );
+
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId: updated.userId,
+      signupId: updated.id,
+      action: `status_changed_to_${dto.status}`,
+    });
 
     if (updated.userId) {
       const [user] = await this.db
@@ -505,6 +529,12 @@ export class SignupsService {
     this.logger.log(
       `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId}`,
     );
+
+    this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
+      eventId,
+      signupId: signup.id,
+      action: 'discord_signup_cancelled',
+    });
   }
 
   /**
@@ -617,6 +647,13 @@ export class SignupsService {
       `User ${userId} confirmed signup ${signupId} with character ${dto.characterId}`,
     );
 
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId,
+      signupId,
+      action: 'signup_confirmed',
+    });
+
     return this.buildSignupResponse(updated, user, character);
   }
 
@@ -628,7 +665,7 @@ export class SignupsService {
    */
   async cancel(eventId: number, userId: number): Promise<void> {
     // Find the signup first to get its ID
-    const [signup] = await this.db
+    let [signup] = await this.db
       .select()
       .from(schema.eventSignups)
       .where(
@@ -638,6 +675,29 @@ export class SignupsService {
         ),
       )
       .limit(1);
+
+    // ROK-119: If not found by userId, check for unclaimed anonymous signup
+    // matching the user's discordId (e.g., Quick Sign Up before account link).
+    if (!signup) {
+      const [user] = await this.db
+        .select({ discordId: schema.users.discordId })
+        .from(schema.users)
+        .where(eq(schema.users.id, userId))
+        .limit(1);
+
+      if (user?.discordId) {
+        [signup] = await this.db
+          .select()
+          .from(schema.eventSignups)
+          .where(
+            and(
+              eq(schema.eventSignups.eventId, eventId),
+              eq(schema.eventSignups.discordUserId, user.discordId),
+            ),
+          )
+          .limit(1);
+      }
+    }
 
     if (!signup) {
       throw new NotFoundException(
@@ -689,6 +749,13 @@ export class SignupsService {
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(`User ${userId} canceled signup for event ${eventId}`);
+
+    this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
+      eventId,
+      userId,
+      signupId: signup.id,
+      action: 'signup_cancelled',
+    });
 
     // Notify organizer if the user held a roster slot
     if (notifyData) {
@@ -1065,6 +1132,11 @@ export class SignupsService {
       `Roster updated for event ${eventId}: ${dto.assignments.length} assignments`,
     );
 
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      action: 'roster_updated',
+    });
+
     return this.getRosterWithAssignments(eventId);
   }
 
@@ -1216,6 +1288,14 @@ export class SignupsService {
       player: 10,
       bench: 5,
     };
+  }
+
+  /**
+   * Emit a signup lifecycle event for Discord embed sync (ROK-119).
+   * Fires asynchronously — failures are logged but do not block the caller.
+   */
+  private emitSignupEvent(eventName: string, payload: SignupEventPayload): void {
+    this.eventEmitter.emit(eventName, payload);
   }
 
   /**

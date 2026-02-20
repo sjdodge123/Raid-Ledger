@@ -63,6 +63,23 @@ export const EMBED_STATES = {
 export type EmbedState = (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
 
 /**
+ * Application-level event names for signup lifecycle (ROK-119).
+ * Emitted by SignupsService, consumed by DiscordSyncListener.
+ */
+export const SIGNUP_EVENTS = {
+  CREATED: 'signup.created',
+  UPDATED: 'signup.updated',
+  DELETED: 'signup.deleted',
+} as const;
+
+export interface SignupEventPayload {
+  eventId: number;
+  userId?: number | null;
+  signupId?: number;
+  action: string;
+}
+
+/**
  * Custom IDs for signup interaction buttons (ROK-137).
  * Format: `{action}:{eventId}` — e.g. `signup:42`
  */
