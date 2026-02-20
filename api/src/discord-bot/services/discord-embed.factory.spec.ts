@@ -103,8 +103,14 @@ describe('DiscordEmbedFactory', () => {
       const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
-      expect(json.footer?.text).toContain('Test Guild');
-      expect(json.footer?.text).toContain('View in Raid Ledger');
+      expect(json.footer?.text).toBe('Test Guild');
+    });
+
+    it('should set URL on title for clickable link (ROK-399)', () => {
+      const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
+      const json = embed.toJSON();
+
+      expect(json.url).toBe('http://localhost:5173/events/42');
     });
 
     it('should include signup action buttons by default', () => {
@@ -211,7 +217,7 @@ describe('DiscordEmbedFactory', () => {
       const { embed } = factory.buildEventEmbed(baseEvent, noNameContext);
       const json = embed.toJSON();
 
-      expect(json.footer?.text).toContain('Community');
+      expect(json.footer?.text).toBe('Raid Ledger');
     });
 
     it('should use "view" button mode with only View Event link', () => {
@@ -357,7 +363,10 @@ describe('DiscordEmbedFactory', () => {
       );
       const embed = factory.buildEventEmbed(baseEvent, baseContext);
 
-      const announcementJson = { ...announcement.embed.toJSON(), timestamp: null };
+      const announcementJson = {
+        ...announcement.embed.toJSON(),
+        timestamp: null,
+      };
       const embedJson = { ...embed.embed.toJSON(), timestamp: null };
       expect(announcementJson).toEqual(embedJson);
     });
