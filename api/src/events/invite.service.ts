@@ -14,6 +14,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SignupsService } from './signups.service';
 import { PugInviteService } from '../discord-bot/services/pug-invite.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
 /**
@@ -22,6 +23,7 @@ import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 @Injectable()
 export class InviteService {
   private readonly logger = new Logger(InviteService.name);
+  private readonly clientUrl: string;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -30,7 +32,12 @@ export class InviteService {
     @Optional()
     @Inject(forwardRef(() => PugInviteService))
     private readonly pugInviteService: PugInviteService | null,
-  ) {}
+    @Optional()
+    @Inject(forwardRef(() => DiscordBotClientService))
+    private readonly discordClient: DiscordBotClientService | null,
+  ) {
+    this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
+  }
 
   /**
    * Resolve an invite code — return event + slot context.
@@ -306,6 +313,9 @@ export class InviteService {
         slot.eventId,
       );
 
+      // Fire-and-forget post-claim DM (ROK-394)
+      this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
+
       return {
         type: 'signup',
         eventId: slot.eventId,
@@ -330,7 +340,44 @@ export class InviteService {
       slot.eventId,
     );
 
+    // Fire-and-forget post-claim DM (ROK-394)
+    this.sendPostClaimDM(userId, event.title, slot.eventId).catch(() => {});
+
     return { type: 'claimed', eventId: slot.eventId };
+  }
+
+  /**
+   * Send a post-claim DM with event link and voice channel info (ROK-394 step 5).
+   * Fire-and-forget — caller should `.catch(() => {})`.
+   */
+  private async sendPostClaimDM(
+    userId: number,
+    eventTitle: string,
+    eventId: number,
+  ): Promise<void> {
+    if (!this.discordClient || !this.discordClient.isConnected()) return;
+
+    // Look up user's discordId
+    const [user] = await this.db
+      .select({ discordId: schema.users.discordId })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+
+    if (!user?.discordId) return;
+
+    const eventUrl = `${this.clientUrl}/events/${eventId}`;
+    const message = [
+      `You have joined **${eventTitle}**!`,
+      `View the event: ${eventUrl}`,
+    ].join('\n');
+
+    await this.discordClient.sendDirectMessage(user.discordId, message);
+    this.logger.log(
+      'Sent post-claim DM to user %d for event %d',
+      userId,
+      eventId,
+    );
   }
 
   /**
