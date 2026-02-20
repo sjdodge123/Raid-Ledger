@@ -33,6 +33,7 @@ export interface ExternalEquipmentItem {
 export interface ExternalInferredSpecialization {
   spec: string | null;
   role: 'tank' | 'healer' | 'dps' | null;
+  talents?: unknown;
 }
 
 /** Equipment data returned from an external game API */

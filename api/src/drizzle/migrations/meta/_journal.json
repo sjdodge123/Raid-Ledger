@@ -351,6 +351,13 @@
       "when": 1771555308611,
       "tag": "0049_perfect_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1771559612440,
+      "tag": "0050_fantastic_titanium_man",
+      "breakpoints": true
     }
   ]
 }

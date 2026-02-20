@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useWowheadTooltips, isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
 import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
 import { ItemDetailModal } from '../components/item-detail-modal';
+import { TalentDisplay } from '../components/talent-display';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 
 /** Quality color mapping for WoW item quality */
@@ -233,6 +234,7 @@ function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }: Equip
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
     equipment: CharacterEquipmentDto | null;
+    talents: unknown;
     gameVariant: string | null;
     renderUrl: string | null;
     isArmoryImported: boolean;
@@ -240,6 +242,7 @@ interface CharacterDetailSectionsProps {
 
 export function CharacterDetailSections({
     equipment,
+    talents,
     gameVariant,
     renderUrl,
     isArmoryImported,
@@ -251,17 +254,23 @@ export function CharacterDetailSections({
     // No equipment data — show placeholder (handles demo chars, FFXIV, etc.)
     if (!equipment) {
         return (
-            <div className="bg-panel border border-edge rounded-lg p-6">
-                <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
-                <div className="text-center py-8 text-muted">
-                    <p className="text-lg">No equipment data</p>
-                    <p className="text-sm mt-1">
-                        {isArmoryImported
-                            ? 'Equipment data may not be available for this character. Try refreshing.'
-                            : 'Equipment data is only available for characters imported from the Blizzard Armory.'}
-                    </p>
+            <>
+                <div className="bg-panel border border-edge rounded-lg p-6">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
+                    <div className="text-center py-8 text-muted">
+                        <p className="text-lg">No equipment data</p>
+                        <p className="text-sm mt-1">
+                            {isArmoryImported
+                                ? 'Equipment data may not be available for this character. Try refreshing.'
+                                : 'Equipment data is only available for characters imported from the Blizzard Armory.'}
+                        </p>
+                    </div>
                 </div>
-            </div>
+                <div className="bg-panel border border-edge rounded-lg p-6">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
+                    <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} />
+                </div>
+            </>
         );
     }
 
@@ -303,6 +312,12 @@ export function CharacterDetailSections({
                 onNavigate={setSelectedItemIndex}
                 gameVariant={gameVariant}
             />
+
+            {/* Talents Section */}
+            <div className="bg-panel border border-edge rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
+                <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} />
+            </div>
         </>
     );
 }

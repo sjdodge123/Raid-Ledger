@@ -389,8 +389,9 @@ export class CharactersService {
       dto.gameVariant,
     );
 
-    // If adapter didn't return a spec, infer from talents
-    if (!profile.spec && profile.class) {
+    // Fetch specialization data (includes talent builds)
+    let talents: unknown = null;
+    if (profile.class) {
       const inferred = await adapter.fetchSpecialization(
         dto.name,
         dto.realm,
@@ -398,8 +399,9 @@ export class CharactersService {
         profile.class,
         dto.gameVariant,
       );
-      if (inferred.spec) profile.spec = inferred.spec;
-      if (inferred.role) profile.role = inferred.role;
+      if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
+      if (!profile.role && inferred.role) profile.role = inferred.role;
+      talents = inferred.talents ?? null;
     }
 
     // Fetch equipment (non-fatal)
@@ -485,6 +487,7 @@ export class CharactersService {
             region: dto.region,
             gameVariant: dto.gameVariant,
             equipment: equipment,
+            talents: talents,
           })
           .returning();
 
@@ -554,8 +557,9 @@ export class CharactersService {
       gameVariant,
     );
 
-    // If adapter didn't return a spec, infer from talents
-    if (!profile.spec && profile.class) {
+    // Fetch specialization data (includes talent builds)
+    let talents: unknown = null;
+    if (profile.class) {
       const inferred = await adapter.fetchSpecialization(
         character.name,
         character.realm,
@@ -563,8 +567,9 @@ export class CharactersService {
         profile.class,
         gameVariant,
       );
-      if (inferred.spec) profile.spec = inferred.spec;
-      if (inferred.role) profile.role = inferred.role;
+      if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
+      if (!profile.role && inferred.role) profile.role = inferred.role;
+      talents = inferred.talents ?? null;
     }
 
     const equipment = await adapter.fetchEquipment(
@@ -591,6 +596,7 @@ export class CharactersService {
         region,
         gameVariant,
         equipment: equipment,
+        talents: talents,
         updatedAt: new Date(),
       })
       .where(eq(schema.characters.id, characterId))
@@ -659,8 +665,9 @@ export class CharactersService {
           variant,
         );
 
-        // Infer spec/role from talents if adapter didn't return active_spec
-        if (!profile.spec && profile.class) {
+        // Fetch specialization data (includes talent builds)
+        let talents: unknown = null;
+        if (profile.class) {
           const inferred = await adapter.fetchSpecialization(
             char.name,
             char.realm!,
@@ -668,8 +675,9 @@ export class CharactersService {
             profile.class,
             variant,
           );
-          if (inferred.spec) profile.spec = inferred.spec;
-          if (inferred.role) profile.role = inferred.role;
+          if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
+          if (!profile.role && inferred.role) profile.role = inferred.role;
+          talents = inferred.talents ?? null;
         }
 
         const equipment = await adapter.fetchEquipment(
@@ -694,6 +702,7 @@ export class CharactersService {
             lastSyncedAt: new Date(),
             profileUrl: profile.profileUrl,
             equipment: equipment,
+            talents: talents,
             updatedAt: new Date(),
           })
           .where(eq(schema.characters.id, char.id));
@@ -755,6 +764,7 @@ export class CharactersService {
       region: row.region ?? null,
       gameVariant: row.gameVariant ?? null,
       equipment: (row.equipment as CharacterDto['equipment']) ?? null,
+      talents: row.talents ?? null,
       displayOrder: row.displayOrder,
       createdAt: row.createdAt.toISOString(),
       updatedAt: row.updatedAt.toISOString(),

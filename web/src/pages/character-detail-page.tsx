@@ -224,6 +224,7 @@ export function CharacterDetailPage() {
                 name="character-detail:sections"
                 context={{
                     equipment: character.equipment,
+                    talents: character.talents,
                     gameVariant: character.gameVariant,
                     renderUrl: character.renderUrl,
                     isArmoryImported,
