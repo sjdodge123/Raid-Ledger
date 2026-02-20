@@ -164,7 +164,7 @@ describe('PluginSlot', () => {
 
         render(<PluginSlot name="character-detail:sections" />);
         expect(screen.getByTestId('test-component')).toBeInTheDocument();
-        expect(screen.getByLabelText('WoW Plugin')).toBeInTheDocument();
+        expect(screen.getByTitle('WoW Plugin')).toBeInTheDocument();
     });
 
     it('does not render badge when plugin has no badge metadata', () => {
