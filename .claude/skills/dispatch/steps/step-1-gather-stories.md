@@ -14,11 +14,6 @@ mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
 mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
 ```
 
-Also check for orphaned worktrees:
-```bash
-git worktree list
-```
-
 ### Present In-Flight Dashboard
 
 ```
@@ -44,8 +39,6 @@ git worktree list
 |-------|-------|-----------------|---------|
 | ROK-XXX | <title> | <1-line summary> | <relative time> |
 ```
-
-Report any worktrees that exist but don't match an in-flight story — they may be leftover from a previous session and should be cleaned up.
 
 ### Resume In-Flight Work
 
