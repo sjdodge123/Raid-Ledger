@@ -29,7 +29,10 @@ import { randomUUID } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
-import { APP_EVENT_EVENTS, MEMBER_INVITE_EVENTS } from '../discord-bot/discord-bot.constants';
+import {
+  APP_EVENT_EVENTS,
+  MEMBER_INVITE_EVENTS,
+} from '../discord-bot/discord-bot.constants';
 import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
 
 /** Constants for events service */
@@ -80,6 +83,9 @@ export class EventsService {
       recurrenceGroupId,
       recurrenceRule: dto.recurrence ?? null,
       contentInstances: dto.contentInstances ?? null,
+      reminder15min: dto.reminder15min ?? true,
+      reminder1hour: dto.reminder1hour ?? false,
+      reminder24hour: dto.reminder24hour ?? false,
     };
 
     if (dto.recurrence) {
@@ -712,6 +718,12 @@ export class EventsService {
     if (dto.autoUnbench !== undefined) updateData.autoUnbench = dto.autoUnbench;
     if (dto.contentInstances !== undefined)
       updateData.contentInstances = dto.contentInstances;
+    if (dto.reminder15min !== undefined)
+      updateData.reminder15min = dto.reminder15min;
+    if (dto.reminder1hour !== undefined)
+      updateData.reminder1hour = dto.reminder1hour;
+    if (dto.reminder24hour !== undefined)
+      updateData.reminder24hour = dto.reminder24hour;
 
     // Handle time updates with validation
     if (dto.startTime || dto.endTime) {
@@ -1038,6 +1050,11 @@ export class EventsService {
       })
       .where(eq(schema.events.id, eventId));
 
+    // ROK-126: Clear existing reminder records so reminders re-fire for the new time
+    await this.db
+      .delete(schema.eventRemindersSent)
+      .where(eq(schema.eventRemindersSent.eventId, eventId));
+
     this.logger.log(`Event rescheduled: ${eventId} by user ${userId}`);
 
     // Notify all signed-up RL users (except the rescheduler; skip anonymous Discord participants)
@@ -1353,6 +1370,9 @@ export class EventsService {
         (event.contentInstances as EventResponseDto['contentInstances']) ??
         null,
       recurrenceGroupId: event.recurrenceGroupId ?? null,
+      reminder15min: event.reminder15min,
+      reminder1hour: event.reminder1hour,
+      reminder24hour: event.reminder24hour,
       cancelledAt: event.cancelledAt?.toISOString() ?? null,
       cancellationReason: event.cancellationReason ?? null,
       createdAt: event.createdAt.toISOString(),

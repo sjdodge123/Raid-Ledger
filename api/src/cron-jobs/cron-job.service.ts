@@ -31,11 +31,12 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   IgdbService_handleScheduledSync: {
     description: 'Syncs game data from IGDB every 6 hours',
   },
+  EventReminderService_handleReminders: {
+    description:
+      'Checks for events within reminder windows and sends DM reminders every 60 seconds (ROK-126)',
+  },
   EventReminderService_handleDayOfReminders: {
     description: 'Sends day-of event reminders every 15 minutes',
-  },
-  EventReminderService_handleStartingSoonReminders: {
-    description: 'Sends starting-soon event reminders every 5 minutes',
   },
   RelayService_handleHeartbeat: {
     description: 'Sends heartbeat to the Raid Ledger relay hub every hour',
