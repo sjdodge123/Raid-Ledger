@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { CronJob } from 'cron';
@@ -8,13 +8,29 @@ import { EXTENSION_POINTS } from './extension-points';
 import type { CronRegistrar } from './extension-points';
 
 @Injectable()
-export class CronManagerService {
+export class CronManagerService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CronManagerService.name);
 
   constructor(
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly pluginRegistry: PluginRegistryService,
   ) {}
+
+  /**
+   * On startup, register cron jobs for all already-active plugins.
+   * The ACTIVATED event is only emitted when a plugin is toggled on at
+   * runtime, so plugins that are already active at boot never fire it.
+   */
+  onApplicationBootstrap(): void {
+    const registrars =
+      this.pluginRegistry.getAdaptersForExtensionPoint<CronRegistrar>(
+        EXTENSION_POINTS.CRON_REGISTRAR,
+      );
+
+    for (const [slug, registrar] of registrars) {
+      this.registerJobsForPlugin(slug, registrar);
+    }
+  }
 
   @OnEvent(PLUGIN_EVENTS.ACTIVATED)
   handlePluginActivated(payload: { slug: string }): void {
@@ -24,9 +40,27 @@ export class CronManagerService {
     );
     if (!adapter) return;
 
+    this.registerJobsForPlugin(payload.slug, adapter);
+  }
+
+  /**
+   * Register cron jobs from a CronRegistrar adapter into the SchedulerRegistry.
+   * Skips jobs that are already registered (idempotent).
+   */
+  private registerJobsForPlugin(slug: string, adapter: CronRegistrar): void {
     const jobs = adapter.getCronJobs();
     for (const job of jobs) {
-      const jobName = `${payload.slug}:${job.name}`;
+      const jobName = `${slug}:${job.name}`;
+
+      // Skip if already registered (e.g., bootstrap ran before ACTIVATED event)
+      try {
+        this.schedulerRegistry.getCronJob(jobName);
+        this.logger.debug(`Cron job already registered: ${jobName}`);
+        continue;
+      } catch {
+        // Not registered yet — proceed to create it
+      }
+
       try {
         const cronJob = CronJob.from({
           cronTime: job.cronExpression,
