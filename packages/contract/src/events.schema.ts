@@ -43,6 +43,12 @@ export const CreateEventSchema = z.object({
     autoUnbench: z.boolean().optional(),
     recurrence: RecurrenceSchema.optional(),
     contentInstances: z.array(z.record(z.string(), z.unknown())).optional(),
+    /** Send DM reminder 15 min before event. Default true (ROK-126). */
+    reminder15min: z.boolean().optional(),
+    /** Send DM reminder 1 hour before event. Default false (ROK-126). */
+    reminder1hour: z.boolean().optional(),
+    /** Send DM reminder 24 hours before event. Default false (ROK-126). */
+    reminder24hour: z.boolean().optional(),
 }).refine(
     (data) => new Date(data.startTime) < new Date(data.endTime),
     { message: 'Start time must be before end time', path: ['endTime'] }
@@ -62,6 +68,12 @@ export const UpdateEventSchema = z.object({
     maxAttendees: z.number().int().min(1).optional().nullable(),
     autoUnbench: z.boolean().optional(),
     contentInstances: z.array(z.record(z.string(), z.unknown())).optional().nullable(),
+    /** Send DM reminder 15 min before event (ROK-126). */
+    reminder15min: z.boolean().optional(),
+    /** Send DM reminder 1 hour before event (ROK-126). */
+    reminder1hour: z.boolean().optional(),
+    /** Send DM reminder 24 hours before event (ROK-126). */
+    reminder24hour: z.boolean().optional(),
 }).refine(
     (data) => {
         if (data.startTime && data.endTime) {
@@ -118,6 +130,12 @@ export const EventResponseSchema = z.object({
     autoUnbench: z.boolean().optional(),
     contentInstances: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
     recurrenceGroupId: z.string().uuid().nullable().optional(),
+    /** DM reminder 15 min before event (ROK-126). */
+    reminder15min: z.boolean().optional(),
+    /** DM reminder 1 hour before event (ROK-126). */
+    reminder1hour: z.boolean().optional(),
+    /** DM reminder 24 hours before event (ROK-126). */
+    reminder24hour: z.boolean().optional(),
     cancelledAt: z.string().datetime().nullable().optional(),
     cancellationReason: z.string().nullable().optional(),
     createdAt: z.string().datetime(),

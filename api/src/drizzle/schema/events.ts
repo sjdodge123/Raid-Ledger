@@ -65,6 +65,12 @@ export const events = pgTable('events', {
   recurrenceRule: jsonb('recurrence_rule'),
   /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
   contentInstances: jsonb('content_instances'),
+  /** Send DM reminder 15 minutes before event. Default true (ROK-126). */
+  reminder15min: boolean('reminder_15min').default(true).notNull(),
+  /** Send DM reminder 1 hour before event. Default false (ROK-126). */
+  reminder1hour: boolean('reminder_1hour').default(false).notNull(),
+  /** Send DM reminder 24 hours before event. Default false (ROK-126). */
+  reminder24hour: boolean('reminder_24hour').default(false).notNull(),
   /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
   cancelledAt: timestamp('cancelled_at'),
   /** Optional reason provided when the event was cancelled (ROK-374). */

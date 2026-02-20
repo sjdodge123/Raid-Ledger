@@ -13,6 +13,7 @@ describe('EventReminderService', () => {
     mockDb = {
       select: jest.fn(),
       insert: jest.fn(),
+      delete: jest.fn(),
     };
 
     mockNotificationService = {
@@ -55,7 +56,7 @@ describe('EventReminderService', () => {
         id: 1,
         eventId: 10,
         userId: 1,
-        reminderType: 'starting_soon',
+        reminderType: '15min',
         sentAt: new Date(),
       };
 
@@ -70,20 +71,28 @@ describe('EventReminderService', () => {
       const result = await service.sendReminder({
         eventId: 10,
         userId: 1,
-        reminderType: 'starting_soon',
-        title: 'Event starting soon',
-        message: 'Event starts in 30 minutes.',
+        windowType: '15min',
+        windowLabel: '15 Minutes',
+        title: 'Raid Night',
+        startTime: new Date(Date.now() + 15 * 60 * 1000),
+        minutesUntil: 15,
+        characterDisplay: 'Thrall (Shaman)',
       });
 
       expect(result).toBe(true);
       expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockNotificationService.create).toHaveBeenCalledWith({
-        userId: 1,
-        type: 'event_reminder',
-        title: 'Event starting soon',
-        message: 'Event starts in 30 minutes.',
-        payload: { eventId: 10 },
-      });
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          type: 'event_reminder',
+          title: 'Event Starting in 15 Minutes!',
+          payload: {
+            eventId: 10,
+            reminderWindow: '15min',
+            characterDisplay: 'Thrall (Shaman)',
+          },
+        }),
+      );
     });
 
     it('should skip notification when reminder already sent (duplicate)', async () => {
@@ -98,9 +107,12 @@ describe('EventReminderService', () => {
       const result = await service.sendReminder({
         eventId: 10,
         userId: 1,
-        reminderType: 'starting_soon',
-        title: 'Event starting soon',
-        message: 'Event starts in 30 minutes.',
+        windowType: '15min',
+        windowLabel: '15 Minutes',
+        title: 'Raid Night',
+        startTime: new Date(Date.now() + 15 * 60 * 1000),
+        minutesUntil: 15,
+        characterDisplay: null,
       });
 
       expect(result).toBe(false);
@@ -172,38 +184,63 @@ describe('EventReminderService', () => {
     });
   });
 
-  describe('handleStartingSoonReminders', () => {
-    it('should exit early when no events in window', async () => {
-      // No .where() — query returns all events, JS filters by time
+  describe('handleReminders', () => {
+    it('should exit early when no events are in any window', async () => {
+      // Return events that are far in the future (not in any window)
+      const futureStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
+      const futureEnd = new Date(futureStart.getTime() + 2 * 60 * 60 * 1000);
+
       const selectChain = {
-        from: jest.fn().mockResolvedValue([]),
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              title: 'Far Future Event',
+              duration: [futureStart, futureEnd] as [Date, Date],
+              gameId: null,
+              registryGameId: null,
+              reminder15min: true,
+              reminder1hour: false,
+              reminder24hour: false,
+              cancelledAt: null,
+            },
+          ]),
+        }),
       };
       mockDb.select.mockReturnValue(selectChain);
 
-      await service.handleStartingSoonReminders();
+      await service.handleReminders();
 
-      // Only the events query should have been called
+      // Only the candidate events query, no signups/users queries
       expect(mockDb.select).toHaveBeenCalledTimes(1);
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
-    it('should send reminders for events starting soon', async () => {
+    it('should send reminders for events in the 15min window', async () => {
       const now = new Date();
-      const soonStart = new Date(now.getTime() + 25 * 60 * 1000); // 25 min from now
-      const soonEnd = new Date(now.getTime() + 85 * 60 * 1000);
+      const soonStart = new Date(now.getTime() + 10 * 60 * 1000); // 10 min from now
+      const soonEnd = new Date(soonStart.getTime() + 2 * 60 * 60 * 1000);
 
-      // First call: find candidate events (no .where() — JS filters by time)
+      // First call: candidate events query
       const eventsSelectChain = {
-        from: jest.fn().mockResolvedValue([
-          {
-            id: 10,
-            title: 'Raid Night',
-            duration: [soonStart, soonEnd] as [Date, Date],
-          },
-        ]),
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              title: 'Raid Night',
+              duration: [soonStart, soonEnd] as [Date, Date],
+              gameId: null,
+              registryGameId: null,
+              reminder15min: true,
+              reminder1hour: false,
+              reminder24hour: false,
+              cancelledAt: null,
+            },
+          ]),
+        }),
       };
 
-      // Second call: get signups for these events
+      // Second call: signups
       const signupsSelectChain = {
         from: jest.fn().mockReturnValue({
           where: jest.fn().mockResolvedValue([
@@ -213,16 +250,35 @@ describe('EventReminderService', () => {
         }),
       };
 
+      // Third call: users
+      const usersSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            { id: 1, discordId: 'discord-1' },
+            { id: 2, discordId: 'discord-2' },
+          ]),
+        }),
+      };
+
+      // Fourth call: characters
+      const charsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
       mockDb.select
         .mockReturnValueOnce(eventsSelectChain)
-        .mockReturnValueOnce(signupsSelectChain);
+        .mockReturnValueOnce(signupsSelectChain)
+        .mockReturnValueOnce(usersSelectChain)
+        .mockReturnValueOnce(charsSelectChain);
 
       // Mock sendReminder tracking insert
       const trackingRow = {
         id: 1,
         eventId: 10,
         userId: 1,
-        reminderType: 'starting_soon',
+        reminderType: '15min',
         sentAt: new Date(),
       };
       mockDb.insert.mockReturnValue({
@@ -233,7 +289,7 @@ describe('EventReminderService', () => {
         }),
       });
 
-      await service.handleStartingSoonReminders();
+      await service.handleReminders();
 
       // Should have created notifications for both users
       expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
@@ -241,16 +297,55 @@ describe('EventReminderService', () => {
         expect.objectContaining({
           userId: 1,
           type: 'event_reminder',
-          payload: { eventId: 10 },
+          payload: expect.objectContaining({
+            eventId: 10,
+            reminderWindow: '15min',
+          }) as Record<string, unknown>,
         }),
       );
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           userId: 2,
           type: 'event_reminder',
-          payload: { eventId: 10 },
+          payload: expect.objectContaining({
+            eventId: 10,
+            reminderWindow: '15min',
+          }) as Record<string, unknown>,
         }),
       );
+    });
+
+    it('should not send reminders when window is disabled for event', async () => {
+      const now = new Date();
+      const soonStart = new Date(now.getTime() + 10 * 60 * 1000);
+      const soonEnd = new Date(soonStart.getTime() + 2 * 60 * 60 * 1000);
+
+      const eventsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            {
+              id: 10,
+              title: 'Raid Night',
+              duration: [soonStart, soonEnd] as [Date, Date],
+              gameId: null,
+              registryGameId: null,
+              // 15min reminder is disabled
+              reminder15min: false,
+              reminder1hour: false,
+              reminder24hour: false,
+              cancelledAt: null,
+            },
+          ]),
+        }),
+      };
+
+      mockDb.select.mockReturnValueOnce(eventsSelectChain);
+
+      await service.handleReminders();
+
+      // No signups query should have been made
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
   });
 });
