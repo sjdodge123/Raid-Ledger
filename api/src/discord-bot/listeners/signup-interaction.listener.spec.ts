@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SignupInteractionListener } from './signup-interaction.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
+import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
@@ -79,12 +80,13 @@ describe('SignupInteractionListener', () => {
     cancelByDiscordUser: jest.Mock;
     confirmSignup: jest.Mock;
   };
+  let mockEventsService: { buildEmbedEventData: jest.Mock };
   let mockCharactersService: {
     findAllForUser: jest.Mock;
     findOne: jest.Mock;
   };
   let mockIntentTokenService: { generate: jest.Mock };
-  let mockEmbedFactory: { buildEventUpdate: jest.Mock };
+  let mockEmbedFactory: { buildEventEmbed: jest.Mock };
   let mockSettingsService: { getBranding: jest.Mock };
   let mockDb: Record<string, jest.Mock>;
 
@@ -94,12 +96,17 @@ describe('SignupInteractionListener', () => {
 
   /** Default chain mock for DB queries returning empty */
   function makeChain(result: unknown[] = []) {
-    const chain: Record<string, jest.Mock> = {};
+    const chain: Record<string, unknown> = {};
     chain.from = jest.fn().mockReturnValue(chain);
     chain.where = jest.fn().mockReturnValue(chain);
     chain.limit = jest.fn().mockResolvedValue(result);
     chain.leftJoin = jest.fn().mockReturnValue(chain);
     chain.groupBy = jest.fn().mockResolvedValue(result);
+    // Make the chain itself awaitable (thenable) so queries without .limit() resolve
+    chain.then = (
+      resolve: (v: unknown) => void,
+      reject: (e: unknown) => void,
+    ) => Promise.resolve(result).then(resolve, reject);
     return chain;
   }
 
@@ -125,6 +132,21 @@ describe('SignupInteractionListener', () => {
       confirmSignup: jest.fn().mockResolvedValue({ id: 1 }),
     };
 
+    mockEventsService = {
+      buildEmbedEventData: jest.fn().mockResolvedValue({
+        id: 1,
+        title: 'Test Event',
+        startTime: '2026-02-20T20:00:00.000Z',
+        endTime: '2026-02-20T23:00:00.000Z',
+        signupCount: 0,
+        maxAttendees: null,
+        slotConfig: null,
+        roleCounts: {},
+        signupMentions: [],
+        game: null,
+      }),
+    };
+
     mockCharactersService = {
       findAllForUser: jest
         .fn()
@@ -137,7 +159,7 @@ describe('SignupInteractionListener', () => {
     };
 
     mockEmbedFactory = {
-      buildEventUpdate: jest
+      buildEventEmbed: jest
         .fn()
         .mockReturnValue({ embed: mockEmbed, row: mockRow }),
     };
@@ -159,6 +181,7 @@ describe('SignupInteractionListener', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: SignupsService, useValue: mockSignupsService },
+        { provide: EventsService, useValue: mockEventsService },
         { provide: CharactersService, useValue: mockCharactersService },
         { provide: IntentTokenService, useValue: mockIntentTokenService },
         { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
@@ -2316,65 +2339,19 @@ describe('SignupInteractionListener', () => {
         name: 'EmbedChar',
       });
 
-      // updateEmbedSignupCount: 1) getRoster
-      mockSignupsService.getRoster.mockResolvedValueOnce({
-        eventId: 1015,
-        signups: [{ id: 55, status: 'signed_up' }],
-        count: 1,
-      });
-
-      // updateEmbedSignupCount: 2) event lookup (comes before role counts in the implementation)
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([
-              {
-                id: 1015,
-                title: 'Embed Update Event',
-                description: null,
-                duration: [
-                  new Date('2026-03-01T20:00:00Z'),
-                  new Date('2026-03-01T23:00:00Z'),
-                ],
-                maxAttendees: null,
-                slotConfig: null,
-                gameId: null,
-                registryGameId: null,
-              },
-            ]),
-          }),
-        }),
-      });
-
-      // updateEmbedSignupCount: 3) role counts query (ends with .groupBy())
-      mockDb.select.mockReturnValueOnce(makeChain([]));
-
-      // updateEmbedSignupCount: 4) signup mentions query (ends with .where() on a leftJoin chain)
-      // Must resolve the .where() call since the query is awaited at the .where() step.
-      {
-        const mentionsChain: Record<string, jest.Mock> = {};
-        mentionsChain.from = jest.fn().mockReturnValue(mentionsChain);
-        mentionsChain.leftJoin = jest.fn().mockReturnValue(mentionsChain);
-        mentionsChain.where = jest.fn().mockResolvedValue([]);
-        mockDb.select.mockReturnValueOnce(mentionsChain);
-      }
-
-      // updateEmbedSignupCount: 5) discord event messages lookup
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([
-              {
-                eventId: 1015,
-                channelId: 'channel-1',
-                messageId: 'msg-1',
-                guildId: 'guild-123',
-                embedState: 'posted',
-              },
-            ]),
-          }),
-        }),
-      });
+      // updateEmbedSignupCount uses shared buildEmbedEventData (mocked above)
+      // then looks up the discord event message record in DB
+      const msgRecord = [
+        {
+          eventId: 1015,
+          channelId: 'channel-1',
+          messageId: 'msg-1',
+          guildId: 'guild-123',
+          embedState: 'posted',
+        },
+      ];
+      const msgChain = makeChain(msgRecord);
+      mockDb.select.mockReturnValueOnce(msgChain);
 
       const interaction = makeSelectMenuInteraction(
         `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:1015`,
@@ -2400,7 +2377,7 @@ describe('SignupInteractionListener', () => {
       );
 
       // Verify embed was updated via updateEmbedSignupCount
-      expect(mockSignupsService.getRoster).toHaveBeenCalledWith(1015);
+      expect(mockEventsService.buildEmbedEventData).toHaveBeenCalledWith(1015);
       expect(mockClientService.editEmbed).toHaveBeenCalled();
     });
 

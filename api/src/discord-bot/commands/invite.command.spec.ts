@@ -7,6 +7,8 @@ describe('InviteCommand', () => {
   let mockEmbedFactory: Record<string, jest.Mock>;
   let mockSettingsService: Record<string, jest.Mock>;
   let mockEventsService: Record<string, jest.Mock>;
+  let mockPugsService: Record<string, jest.Mock>;
+  let mockDb: Record<string, jest.Mock>;
 
   const mockEmbed = new EmbedBuilder().setTitle('Test');
   const mockRow = { toJSON: jest.fn() };
@@ -57,11 +59,26 @@ describe('InviteCommand', () => {
       }),
     };
 
+    mockPugsService = {
+      create: jest
+        .fn()
+        .mockResolvedValue({ id: 'pug-1', inviteCode: 'abc12345' }),
+    };
+
+    mockDb = {
+      select: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue([]),
+    };
+
     command = new InviteCommand(
+      mockDb as never,
       mockClientService as never,
       mockEmbedFactory as never,
       mockSettingsService as never,
       mockEventsService as never,
+      mockPugsService as never,
     );
   });
 
@@ -75,11 +92,13 @@ describe('InviteCommand', () => {
     it('should return a slash command definition', () => {
       const def = command.getDefinition();
       expect(def.name).toBe('invite');
-      expect(def.description).toBe('Invite a Discord user to an event');
+      expect(def.description).toBe(
+        'Invite a Discord user or generate an invite link',
+      );
       expect(def.options).toHaveLength(2);
     });
 
-    it('should have event and user options', () => {
+    it('should have event (required) and user (optional) options', () => {
       const def = command.getDefinition();
       const options = def.options as {
         name: string;
@@ -90,7 +109,7 @@ describe('InviteCommand', () => {
       expect(options[0].required).toBe(true);
       expect(options[0].autocomplete).toBe(true);
       expect(options[1].name).toBe('user');
-      expect(options[1].required).toBe(true);
+      expect(options[1].required).toBe(false);
     });
   });
 
@@ -100,79 +119,121 @@ describe('InviteCommand', () => {
 
     beforeEach(() => {
       mockEditReply = jest.fn().mockResolvedValue(undefined);
+      // DB lookup returns invoker's RL account
+      mockDb.limit = jest.fn().mockResolvedValue([{ id: 1, role: 'admin' }]);
+    });
+
+    describe('with user (named invite)', () => {
+      beforeEach(() => {
+        mockInteraction = {
+          deferReply: jest.fn().mockResolvedValue(undefined),
+          editReply: mockEditReply,
+          options: {
+            getInteger: jest.fn().mockReturnValue(42),
+            getUser: jest
+              .fn()
+              .mockReturnValue({ id: '999', username: 'target-user' }),
+          },
+          user: { id: 'invoker-discord-id', username: 'inviter-user' },
+        };
+      });
+
+      it('should create a named PUG and confirm success', async () => {
+        await command.handleInteraction(mockInteraction as never);
+
+        expect(mockEventsService.findOne).toHaveBeenCalledWith(42);
+        expect(mockPugsService.create).toHaveBeenCalledWith(
+          42,
+          1,
+          true,
+          expect.objectContaining({
+            discordUsername: 'target-user',
+            role: 'dps',
+          }),
+        );
+        expect(mockEditReply).toHaveBeenCalledWith(
+          'Invite sent to <@999> for **Mythic Raid Night**',
+        );
+      });
+
+      it('should reply with error if event not found', async () => {
+        mockEventsService.findOne.mockRejectedValue(
+          new Error('Event not found'),
+        );
+
+        await command.handleInteraction(mockInteraction as never);
+
+        expect(mockEditReply).toHaveBeenCalledWith('Event not found');
+        expect(mockPugsService.create).not.toHaveBeenCalled();
+      });
+
+      it('should reply with error if event is cancelled', async () => {
+        mockEventsService.findOne.mockResolvedValue({
+          id: 42,
+          title: 'Cancelled Event',
+          cancelledAt: '2026-02-20T00:00:00.000Z',
+          startTime: '2026-02-20T20:00:00.000Z',
+          endTime: '2026-02-20T23:00:00.000Z',
+          signupCount: 0,
+          game: null,
+        });
+
+        await command.handleInteraction(mockInteraction as never);
+
+        expect(mockEditReply).toHaveBeenCalledWith('Event not found');
+        expect(mockPugsService.create).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('without user (anonymous invite link)', () => {
+      beforeEach(() => {
+        process.env.CLIENT_URL = 'http://localhost:5173';
+        mockInteraction = {
+          deferReply: jest.fn().mockResolvedValue(undefined),
+          editReply: mockEditReply,
+          options: {
+            getInteger: jest.fn().mockReturnValue(42),
+            getUser: jest.fn().mockReturnValue(null),
+          },
+          user: { id: 'invoker-discord-id', username: 'inviter-user' },
+        };
+      });
+
+      afterEach(() => {
+        delete process.env.CLIENT_URL;
+      });
+
+      it('should create an anonymous PUG and return invite URL', async () => {
+        await command.handleInteraction(mockInteraction as never);
+
+        expect(mockPugsService.create).toHaveBeenCalledWith(
+          42,
+          1,
+          true,
+          expect.objectContaining({ role: 'dps' }),
+        );
+        expect(mockEditReply).toHaveBeenCalledWith(
+          expect.stringContaining('/i/abc12345'),
+        );
+      });
+    });
+
+    it('should reply with error if invoker has no RL account', async () => {
+      mockDb.limit = jest.fn().mockResolvedValue([]);
       mockInteraction = {
         deferReply: jest.fn().mockResolvedValue(undefined),
         editReply: mockEditReply,
         options: {
           getInteger: jest.fn().mockReturnValue(42),
-          getUser: jest
-            .fn()
-            .mockReturnValue({ id: '999', username: 'target-user' }),
+          getUser: jest.fn().mockReturnValue(null),
         },
-        user: { username: 'inviter-user' },
+        user: { id: 'unknown-user', username: 'nobody' },
       };
-    });
-
-    it('should send a DM and confirm success', async () => {
-      await command.handleInteraction(mockInteraction as never);
-
-      expect(mockEventsService.findOne).toHaveBeenCalledWith(42);
-      expect(mockEmbedFactory.buildEventInvite).toHaveBeenCalled();
-      expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
-        '999',
-        mockEmbed,
-        mockRow,
-      );
-      expect(mockEditReply).toHaveBeenCalledWith(
-        'Invite sent to <@999> for **Mythic Raid Night**',
-      );
-    });
-
-    it('should reply with error if event not found', async () => {
-      mockEventsService.findOne.mockRejectedValue(new Error('Event not found'));
-
-      await command.handleInteraction(mockInteraction as never);
-
-      expect(mockEditReply).toHaveBeenCalledWith('Event not found');
-      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
-    });
-
-    it('should reply with error if event is cancelled', async () => {
-      mockEventsService.findOne.mockResolvedValue({
-        id: 42,
-        title: 'Cancelled Event',
-        cancelledAt: '2026-02-20T00:00:00.000Z',
-        startTime: '2026-02-20T20:00:00.000Z',
-        endTime: '2026-02-20T23:00:00.000Z',
-        signupCount: 0,
-        game: null,
-      });
-
-      await command.handleInteraction(mockInteraction as never);
-
-      expect(mockEditReply).toHaveBeenCalledWith('Event not found');
-      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
-    });
-
-    it('should reply with error if DM fails', async () => {
-      mockClientService.sendEmbedDM.mockRejectedValue(
-        new Error('Cannot send DM'),
-      );
 
       await command.handleInteraction(mockInteraction as never);
 
       expect(mockEditReply).toHaveBeenCalledWith(
-        'Could not send DM to <@999> — they may have DMs disabled',
-      );
-    });
-
-    it('should pass inviter username to buildEventInvite', async () => {
-      await command.handleInteraction(mockInteraction as never);
-
-      expect(mockEmbedFactory.buildEventInvite).toHaveBeenCalledWith(
-        expect.objectContaining({ id: 42 }),
-        expect.objectContaining({ communityName: 'Test Guild' }),
-        'inviter-user',
+        'You need a linked Raid Ledger account to use this command.',
       );
     });
   });

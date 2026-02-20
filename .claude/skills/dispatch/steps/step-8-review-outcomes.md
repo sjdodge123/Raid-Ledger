@@ -1,30 +1,50 @@
 # Step 8: Handle Code Review Outcomes
 
-## If reviewer approves:
+## If reviewer approves (APPROVED or APPROVED WITH FIXES):
 
-1. **Create PR and enable auto-merge** (PRs are only created after code review passes):
+**⛔ BEFORE creating a PR, verify ALL commits are pushed to remote. The reviewer may have committed auto-fixes locally that haven't been pushed yet.**
+
+1. **Check for unpushed commits in the worktree:**
+   ```bash
+   cd ../Raid-Ledger--rok-<num>
+   git log origin/rok-<num>-<short-name>..HEAD --oneline
+   ```
+
+2. **If there are unpushed commits (reviewer applied auto-fixes), push them first:**
+   ```
+   SendMessage(type: "message", recipient: "build-agent",
+     content: "Push ROK-<num> after reviewer auto-fixes. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+     summary: "Push ROK-<num> reviewer fixes")
+   ```
+   **WAIT for the build agent to confirm push succeeded before proceeding.**
+   The build agent will: sync with origin/main (rebase) -> re-run CI -> push.
+   If CI fails after reviewer changes, re-spawn the reviewer or dev to fix.
+
+   **DO NOT create the PR until the build agent confirms the push succeeded.**
+
+3. **Create PR and enable auto-merge** (only AFTER all commits are on remote):
    ```bash
    gh pr create --base main --head rok-<num>-<short-name> \
      --title "feat(ROK-<num>): <short description>" \
      --body "<summary of changes>"
    gh pr merge <number> --auto --squash
    ```
-2. **Once CI passes and PR auto-merges — update Linear → "Done" (MANDATORY):**
+4. **Once CI passes and PR auto-merges — update Linear → "Done" (MANDATORY):**
    ```
    mcp__linear__update_issue(id: <issue_id>, state: "Done")
    mcp__linear__create_comment(issueId: <issue_id>, body: "Code review passed. PR #<num> merged to main.\nKey files changed: <list>\nCommit SHA(s): <sha>")
    ```
-3. Lead removes worktree:
+5. Lead removes worktree:
    ```bash
    git worktree remove ../Raid-Ledger--rok-<num>
    ```
-4. Report progress:
+6. Report progress:
    ```
    ## [N/total] ROK-XXX — <title>
    PR: #<num> merged to main | Commits: SHA1, SHA2
    ```
 
-## If reviewer requests changes:
+## If reviewer requests changes (BLOCKED):
 
 1. Lead updates Linear -> "Changes Requested"
 2. **Re-block the review task** in the shared task list (add blocker back)

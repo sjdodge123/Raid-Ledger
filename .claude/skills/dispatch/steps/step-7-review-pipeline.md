@@ -79,4 +79,8 @@ If the status is NOT "Code Review", DO NOT proceed — the operator hasn't appro
 **Critical:** The reviewer should ONLY review stories that have been moved to
 "Code Review" status by the operator. Code review is gated on operator approval.
 
+**Critical:** When the reviewer reports back with "APPROVED WITH FIXES", their auto-fix
+commits are LOCAL ONLY (not pushed). Step 8 MUST push these commits before creating the PR.
+Skipping this causes auto-merge to ship the pre-review code to main.
+
 See `templates/reviewer.md` for the full reviewer prompt template.

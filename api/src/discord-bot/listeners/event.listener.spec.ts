@@ -43,15 +43,22 @@ describe('DiscordEventListener', () => {
   beforeEach(async () => {
     delete process.env.CLIENT_URL;
 
-    // Chain-able mock for Drizzle query builder
+    // Chain-able mock for Drizzle query builder.
+    // The chain is thenable so `await db.select().from(...).where(...)` resolves
+    // to the result array, while `.limit()` also resolves for queries that use it.
     const createChainMock = (resolvedValue: unknown[] = []) => {
-      const chain: Record<string, jest.Mock> = {};
+      const chain: Record<string, jest.Mock> & { then?: unknown } = {};
       chain.from = jest.fn().mockReturnValue(chain);
       chain.where = jest.fn().mockReturnValue(chain);
       chain.limit = jest.fn().mockResolvedValue(resolvedValue);
       chain.set = jest.fn().mockReturnValue(chain);
       chain.values = jest.fn().mockReturnValue(chain);
       chain.returning = jest.fn().mockResolvedValue(resolvedValue);
+      // Make the chain itself awaitable (thenable)
+      chain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve(resolvedValue).then(resolve, reject);
       return chain;
     };
 
@@ -82,15 +89,12 @@ describe('DiscordEventListener', () => {
         {
           provide: DiscordEmbedFactory,
           useValue: {
-            buildEventAnnouncement: jest
+            buildEventEmbed: jest
               .fn()
               .mockReturnValue({ embed: mockEmbed, row: mockRow }),
             buildEventCancelled: jest
               .fn()
               .mockReturnValue({ embed: mockEmbed }),
-            buildEventUpdate: jest
-              .fn()
-              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
           },
         },
         {
@@ -135,7 +139,7 @@ describe('DiscordEventListener', () => {
       await listener.handleEventCreated(mockPayload);
 
       expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledWith(101);
-      expect(embedFactory.buildEventAnnouncement).toHaveBeenCalledWith(
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
         { communityName: 'Test Guild', clientUrl: null },
       );
@@ -207,10 +211,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.limit = jest.fn().mockResolvedValue([mockRecord]);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};
@@ -220,10 +227,10 @@ describe('DiscordEventListener', () => {
 
       await listener.handleEventUpdated(mockPayload);
 
-      expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
         { communityName: 'Test Guild', clientUrl: null },
-        EMBED_STATES.POSTED,
+        { state: EMBED_STATES.POSTED },
       );
       expect(clientService.editEmbed).toHaveBeenCalledWith(
         'channel-789',
@@ -245,10 +252,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.limit = jest.fn().mockResolvedValue([mockRecord]);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};
@@ -281,10 +291,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.limit = jest.fn().mockResolvedValue([mockRecord]);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const deleteChain: Record<string, jest.Mock> = {};
@@ -315,10 +328,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.limit = jest.fn().mockResolvedValue([mockRecord]);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const deleteChain: Record<string, jest.Mock> = {};
@@ -347,10 +363,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.limit = jest.fn().mockResolvedValue([mockRecord]);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};
@@ -364,10 +383,10 @@ describe('DiscordEventListener', () => {
         mockPayload.event,
       );
 
-      expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
         { communityName: 'Test Guild', clientUrl: null },
-        EMBED_STATES.IMMINENT,
+        { state: EMBED_STATES.IMMINENT },
       );
       expect(clientService.editEmbed).toHaveBeenCalled();
     });

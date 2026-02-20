@@ -17,7 +17,9 @@ When a dev teammate messages the lead that their story is complete:
 
 ## 6b. When a Test Agent Completes -> Validate CI -> Push -> Update Linear
 
-When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and update Linear**. Do NOT create a PR — the lead handles PRs later after code review passes (Step 8).
+When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and update Linear**.
+
+**⛔ DO NOT CREATE A PR HERE. The branch is pushed for CI validation and operator testing only. PRs are created in Step 8 AFTER code review passes and all commits (including reviewer auto-fixes) are pushed. Creating a PR early causes auto-merge to ship unreviewed code to main.**
 
 **1. Delegate push pipeline to the build agent:**
 

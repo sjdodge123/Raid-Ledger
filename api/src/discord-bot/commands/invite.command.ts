@@ -1,10 +1,14 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
 import {
   SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
+import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
@@ -12,6 +16,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EventsService } from '../../events/events.service';
+import { PugsService } from '../../events/pugs.service';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -23,16 +28,19 @@ export class InviteCommand
   private readonly logger = new Logger(InviteCommand.name);
 
   constructor(
+    @Inject(DrizzleAsyncProvider)
+    private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
+    private readonly pugsService: PugsService,
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
     return new SlashCommandBuilder()
       .setName('invite')
-      .setDescription('Invite a Discord user to an event')
+      .setDescription('Invite a Discord user or generate an invite link')
       .setDMPermission(false)
       .addIntegerOption((opt) =>
         opt
@@ -42,7 +50,10 @@ export class InviteCommand
           .setAutocomplete(true),
       )
       .addUserOption((opt) =>
-        opt.setName('user').setDescription('User to invite').setRequired(true),
+        opt
+          .setName('user')
+          .setDescription('User to invite (omit for invite link)')
+          .setRequired(false),
       )
       .toJSON();
   }
@@ -53,7 +64,7 @@ export class InviteCommand
     await interaction.deferReply({ ephemeral: true });
 
     const eventId = interaction.options.getInteger('event', true);
-    const targetUser = interaction.options.getUser('user', true);
+    const targetUser = interaction.options.getUser('user', false);
 
     // Fetch event data
     let event;
@@ -69,42 +80,110 @@ export class InviteCommand
       return;
     }
 
-    // Build invite embed
-    const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildEventInvite(
-      {
-        id: event.id,
-        title: event.title,
-        description: event.description,
-        startTime: event.startTime,
-        endTime: event.endTime,
-        signupCount: event.signupCount,
-        game: event.game,
-      },
-      context,
-      interaction.user.username,
-    );
+    // Look up the invoking Discord user's RL account for PUG creation
+    const [invoker] = await this.db
+      .select({ id: schema.users.id, role: schema.users.role })
+      .from(schema.users)
+      .where(eq(schema.users.discordId, interaction.user.id))
+      .limit(1);
 
-    // Send DM to the target user
-    try {
-      await this.clientService.sendEmbedDM(targetUser.id, embed, row);
-    } catch {
+    if (!invoker) {
       await interaction.editReply(
-        `Could not send DM to <@${targetUser.id}> — they may have DMs disabled`,
+        'You need a linked Raid Ledger account to use this command.',
       );
       return;
     }
 
-    await interaction.editReply(
-      `Invite sent to <@${targetUser.id}> for **${event.title}**`,
-    );
+    const isAdmin = invoker.role === 'admin' || invoker.role === 'operator';
 
-    this.logger.log(
-      'Sent event invite DM: event %d to user %s (by %s)',
-      eventId,
-      targetUser.username,
-      interaction.user.username,
-    );
+    if (targetUser) {
+      // Mode 2: Named PUG — create PUG slot for specific user, triggers DM flow
+      await this.handleNamedInvite(
+        interaction,
+        eventId,
+        event,
+        targetUser,
+        invoker.id,
+        isAdmin,
+      );
+    } else {
+      // Mode 1: Anonymous invite link — generate tiny URL
+      await this.handleAnonymousInvite(
+        interaction,
+        eventId,
+        event,
+        invoker.id,
+        isAdmin,
+      );
+    }
+  }
+
+  /**
+   * Mode 1: No user specified — create anonymous PUG slot and return tiny URL.
+   */
+  private async handleAnonymousInvite(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+    event: { title: string },
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    try {
+      const pugSlot = await this.pugsService.create(eventId, userId, isAdmin, {
+        role: 'dps',
+      });
+
+      const clientUrl = process.env.CLIENT_URL ?? '';
+      const tinyUrl = `${clientUrl}/i/${pugSlot.inviteCode}`;
+
+      await interaction.editReply(
+        `Invite link for **${event.title}**:\n${tinyUrl}\n\nShare this link — anyone who clicks it can join the event.`,
+      );
+
+      this.logger.log(
+        'Generated invite link for event %d: %s (by %s)',
+        eventId,
+        pugSlot.inviteCode,
+        interaction.user.username,
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : 'Failed to generate invite link';
+      await interaction.editReply(msg);
+    }
+  }
+
+  /**
+   * Mode 2: User specified — create named PUG slot, triggers DM flow (ROK-292).
+   */
+  private async handleNamedInvite(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+    event: { title: string },
+    targetUser: import('discord.js').User,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    try {
+      await this.pugsService.create(eventId, userId, isAdmin, {
+        discordUsername: targetUser.username,
+        role: 'dps',
+      });
+
+      await interaction.editReply(
+        `Invite sent to <@${targetUser.id}> for **${event.title}**`,
+      );
+
+      this.logger.log(
+        'Created named PUG invite: event %d for user %s (by %s)',
+        eventId,
+        targetUser.username,
+        interaction.user.username,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to send invite';
+      await interaction.editReply(msg);
+    }
   }
 
   async handleAutocomplete(

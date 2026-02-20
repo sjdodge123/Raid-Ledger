@@ -60,7 +60,7 @@ export class DiscordEventListener {
 
     try {
       const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventAnnouncement(
+      const { embed, row } = this.embedFactory.buildEventEmbed(
         payload.event,
         context,
       );
@@ -94,7 +94,7 @@ export class DiscordEventListener {
     const guildId = this.clientService.getGuildId();
     if (!guildId) return;
 
-    // Find existing message record
+    // Find all message records for this event
     const records = await this.db
       .select()
       .from(schema.discordEventMessages)
@@ -103,8 +103,7 @@ export class DiscordEventListener {
           eq(schema.discordEventMessages.eventId, payload.eventId),
           eq(schema.discordEventMessages.guildId, guildId),
         ),
-      )
-      .limit(1);
+      );
 
     if (records.length === 0) {
       this.logger.debug(
@@ -113,39 +112,39 @@ export class DiscordEventListener {
       return;
     }
 
-    const record = records[0];
+    const context = await this.buildContext();
 
-    try {
-      const context = await this.buildContext();
-      const currentState =
-        record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
-      const { embed, row } = this.embedFactory.buildEventUpdate(
-        payload.event,
-        context,
-        currentState,
-      );
+    for (const record of records) {
+      try {
+        const currentState =
+          record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
+        const { embed, row } = this.embedFactory.buildEventEmbed(
+          payload.event,
+          context,
+          { state: currentState },
+        );
 
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-        row,
-      );
+        await this.clientService.editEmbed(
+          record.channelId,
+          record.messageId,
+          embed,
+          row,
+        );
 
-      // Update timestamp
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({ updatedAt: new Date() })
-        .where(eq(schema.discordEventMessages.id, record.id));
+        await this.db
+          .update(schema.discordEventMessages)
+          .set({ updatedAt: new Date() })
+          .where(eq(schema.discordEventMessages.id, record.id));
 
-      this.logger.log(
-        `Updated event embed for event ${payload.eventId} (msg: ${record.messageId})`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to update event embed for event ${payload.eventId}:`,
-        error,
-      );
+        this.logger.log(
+          `Updated event embed for event ${payload.eventId} (msg: ${record.messageId})`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to update event embed for event ${payload.eventId} (msg: ${record.messageId}):`,
+          error,
+        );
+      }
     }
   }
 
@@ -164,44 +163,42 @@ export class DiscordEventListener {
           eq(schema.discordEventMessages.eventId, payload.eventId),
           eq(schema.discordEventMessages.guildId, guildId),
         ),
-      )
-      .limit(1);
+      );
 
     if (records.length === 0) return;
 
-    const record = records[0];
+    const context = await this.buildContext();
 
-    try {
-      const context = await this.buildContext();
-      const { embed } = this.embedFactory.buildEventCancelled(
-        payload.event,
-        context,
-      );
+    for (const record of records) {
+      try {
+        const { embed } = this.embedFactory.buildEventCancelled(
+          payload.event,
+          context,
+        );
 
-      // Edit to cancelled state with no buttons
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-      );
+        await this.clientService.editEmbed(
+          record.channelId,
+          record.messageId,
+          embed,
+        );
 
-      // Update state to cancelled
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({
-          embedState: EMBED_STATES.CANCELLED,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.discordEventMessages.id, record.id));
+        await this.db
+          .update(schema.discordEventMessages)
+          .set({
+            embedState: EMBED_STATES.CANCELLED,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.discordEventMessages.id, record.id));
 
-      this.logger.log(
-        `Cancelled event embed for event ${payload.eventId} (msg: ${record.messageId})`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to cancel event embed for event ${payload.eventId}:`,
-        error,
-      );
+        this.logger.log(
+          `Cancelled event embed for event ${payload.eventId} (msg: ${record.messageId})`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to cancel event embed for event ${payload.eventId} (msg: ${record.messageId}):`,
+          error,
+        );
+      }
     }
   }
 
@@ -220,33 +217,30 @@ export class DiscordEventListener {
           eq(schema.discordEventMessages.eventId, payload.eventId),
           eq(schema.discordEventMessages.guildId, guildId),
         ),
-      )
-      .limit(1);
+      );
 
     if (records.length === 0) return;
 
-    const record = records[0];
+    for (const record of records) {
+      try {
+        await this.clientService.deleteMessage(
+          record.channelId,
+          record.messageId,
+        );
+        this.logger.log(
+          `Deleted Discord message for event ${payload.eventId} (msg: ${record.messageId})`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to delete Discord message for event ${payload.eventId} (msg: ${record.messageId}):`,
+          error,
+        );
+      }
 
-    try {
-      await this.clientService.deleteMessage(
-        record.channelId,
-        record.messageId,
-      );
-      this.logger.log(
-        `Deleted Discord message for event ${payload.eventId} (msg: ${record.messageId})`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to delete Discord message for event ${payload.eventId}:`,
-        error,
-      );
+      await this.db
+        .delete(schema.discordEventMessages)
+        .where(eq(schema.discordEventMessages.id, record.id));
     }
-
-    // The DB record will be cleaned up by CASCADE on events deletion,
-    // but if we need explicit cleanup:
-    await this.db
-      .delete(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.id, record.id));
   }
 
   /**
@@ -271,44 +265,44 @@ export class DiscordEventListener {
           eq(schema.discordEventMessages.eventId, eventId),
           eq(schema.discordEventMessages.guildId, guildId),
         ),
-      )
-      .limit(1);
+      );
 
     if (records.length === 0) return;
 
-    const record = records[0];
+    const context = await this.buildContext();
 
-    try {
-      const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventUpdate(
-        event,
-        context,
-        newState,
-      );
+    for (const record of records) {
+      try {
+        const { embed, row } = this.embedFactory.buildEventEmbed(
+          event,
+          context,
+          { state: newState },
+        );
 
-      await this.clientService.editEmbed(
-        record.channelId,
-        record.messageId,
-        embed,
-        row,
-      );
+        await this.clientService.editEmbed(
+          record.channelId,
+          record.messageId,
+          embed,
+          row,
+        );
 
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({
-          embedState: newState,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.discordEventMessages.id, record.id));
+        await this.db
+          .update(schema.discordEventMessages)
+          .set({
+            embedState: newState,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.discordEventMessages.id, record.id));
 
-      this.logger.log(
-        `Updated embed state for event ${eventId} to ${newState}`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to update embed state for event ${eventId}:`,
-        error,
-      );
+        this.logger.log(
+          `Updated embed state for event ${eventId} to ${newState} (msg: ${record.messageId})`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to update embed state for event ${eventId} (msg: ${record.messageId}):`,
+          error,
+        );
+      }
     }
   }
 

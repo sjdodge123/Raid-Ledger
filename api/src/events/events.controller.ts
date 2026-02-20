@@ -18,6 +18,7 @@ import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
+import { ShareService } from './share.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -41,6 +42,7 @@ import {
   AggregateGameTimeResponse,
   PugSlotResponseDto,
   PugSlotListResponseDto,
+  ShareEventResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -83,6 +85,7 @@ export class EventsController {
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
     private readonly pugsService: PugsService,
+    private readonly shareService: ShareService,
   ) {}
 
   /**
@@ -458,6 +461,27 @@ export class EventsController {
     );
   }
 
+  /**
+   * Share event to bound Discord channels (ROK-263).
+   * Posts announcement embed to all game-bound text channels.
+   * Requires authentication. Only creator, operator, or admin.
+   */
+  @Post(':id/share')
+  @UseGuards(AuthGuard('jwt'))
+  async shareEvent(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<ShareEventResponseDto> {
+    // Verify the event exists and user has permission
+    const event = await this.eventsService.findOne(eventId);
+    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
+      throw new BadRequestException(
+        'Only event creator or admin/operator can share events',
+      );
+    }
+    return this.shareService.shareToDiscordChannels(eventId);
+  }
+
   // ============================================================
   // PUG Slot Endpoints (ROK-262)
   // ============================================================
@@ -521,6 +545,25 @@ export class EventsController {
     } catch (error) {
       handleValidationError(error);
     }
+  }
+
+  /**
+   * Regenerate invite code for a PUG slot (ROK-263).
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Post(':id/pugs/:pugId/regenerate-code')
+  @UseGuards(AuthGuard('jwt'))
+  async regeneratePugInviteCode(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('pugId', ParseUUIDPipe) pugId: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<PugSlotResponseDto> {
+    return this.pugsService.regenerateInviteCode(
+      eventId,
+      pugId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
   }
 
   /**
