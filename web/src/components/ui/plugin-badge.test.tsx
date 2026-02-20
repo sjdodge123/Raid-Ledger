@@ -20,8 +20,8 @@ describe('PluginBadge', () => {
         );
         const span = container.querySelector('span');
         expect(span?.className).toContain('bg-blue-500/20');
-        expect(span?.className).toContain('text-blue-400');
-        expect(span?.className).toContain('border-blue-500/30');
+        expect(span?.className).toContain('text-blue-300');
+        expect(span?.className).toContain('border-blue-500/40');
     });
 
     it('applies known color classes for amber', () => {
@@ -30,7 +30,7 @@ describe('PluginBadge', () => {
         );
         const span = container.querySelector('span');
         expect(span?.className).toContain('bg-amber-500/20');
-        expect(span?.className).toContain('text-amber-400');
+        expect(span?.className).toContain('text-amber-300');
     });
 
     it('falls back to gray for unknown color', () => {
@@ -39,7 +39,7 @@ describe('PluginBadge', () => {
         );
         const span = container.querySelector('span');
         expect(span?.className).toContain('bg-gray-500/20');
-        expect(span?.className).toContain('text-gray-400');
+        expect(span?.className).toContain('text-gray-300');
     });
 
     it('has aria-label for accessibility', () => {
@@ -56,11 +56,11 @@ describe('PluginBadge', () => {
         expect(iconSpan?.textContent).toBe('Z');
     });
 
-    it('renders as a small pill with rounded-full', () => {
+    it('renders as a small pill with rounded-md', () => {
         const { container } = render(
             <PluginBadge icon="P" color="purple" label="Pill" />,
         );
         const span = container.querySelector('span');
-        expect(span?.className).toContain('rounded-full');
+        expect(span?.className).toContain('rounded-md');
     });
 });
