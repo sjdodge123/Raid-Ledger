@@ -324,7 +324,6 @@ function PluginSection({
             onMouseEnter={markSeen}
             actions={actionButtons}
             description={plugin.description ?? ''}
-            isPlugin
         >
             {plugin.status === 'active' ? (
                 <PluginSlot

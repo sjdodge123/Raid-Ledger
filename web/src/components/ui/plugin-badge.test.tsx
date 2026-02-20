@@ -1,66 +1,92 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
 import { PluginBadge } from './plugin-badge';
 
 describe('PluginBadge', () => {
-    it('renders the icon', () => {
-        render(<PluginBadge icon="WoW" color="blue" label="Test Plugin" />);
-        expect(screen.getByText('WoW')).toBeInTheDocument();
+    it('renders emoji icon as text', () => {
+        const { container } = render(<PluginBadge icon="WoW" label="Test Plugin" />);
+        expect(container.textContent).toContain('WoW');
     });
 
-    it('shows label as title tooltip', () => {
-        render(<PluginBadge icon="X" color="blue" label="My Plugin" />);
-        const badge = screen.getByLabelText('My Plugin');
-        expect(badge).toHaveAttribute('title', 'My Plugin');
-    });
-
-    it('applies known color classes for blue', () => {
+    it('renders image icon as img element', () => {
         const { container } = render(
-            <PluginBadge icon="B" color="blue" label="Blue" />,
+            <PluginBadge icon="/plugins/blizzard/badge.jpg" label="Blizzard" />,
         );
-        const span = container.querySelector('span');
-        expect(span?.className).toContain('bg-blue-500/20');
-        expect(span?.className).toContain('text-blue-300');
-        expect(span?.className).toContain('border-blue-500/40');
+        const img = container.querySelector('img');
+        expect(img).toBeInTheDocument();
+        expect(img?.getAttribute('src')).toBe('/plugins/blizzard/badge.jpg');
     });
 
-    it('applies known color classes for amber', () => {
+    it('uses iconSmall for sm size when provided', () => {
         const { container } = render(
-            <PluginBadge icon="A" color="amber" label="Amber" />,
+            <PluginBadge
+                icon="/plugins/blizzard/badge.jpg"
+                iconSmall="/plugins/blizzard/badge-32.jpg"
+                label="Blizzard"
+                size="sm"
+            />,
         );
-        const span = container.querySelector('span');
-        expect(span?.className).toContain('bg-amber-500/20');
-        expect(span?.className).toContain('text-amber-300');
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toBe('/plugins/blizzard/badge-32.jpg');
     });
 
-    it('falls back to gray for unknown color', () => {
+    it('uses main icon for md size even when iconSmall provided', () => {
         const { container } = render(
-            <PluginBadge icon="?" color="chartreuse" label="Unknown" />,
+            <PluginBadge
+                icon="/plugins/blizzard/badge.jpg"
+                iconSmall="/plugins/blizzard/badge-32.jpg"
+                label="Blizzard"
+                size="md"
+            />,
         );
-        const span = container.querySelector('span');
-        expect(span?.className).toContain('bg-gray-500/20');
-        expect(span?.className).toContain('text-gray-300');
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toBe('/plugins/blizzard/badge.jpg');
     });
 
-    it('has aria-label for accessibility', () => {
-        render(<PluginBadge icon="X" color="red" label="Accessible" />);
-        expect(screen.getByLabelText('Accessible')).toBeInTheDocument();
+    it('renders sm size with 24x24 dimensions', () => {
+        const { container } = render(
+            <PluginBadge icon="/plugins/test/badge.png" label="Test" size="sm" />,
+        );
+        const img = container.querySelector('img');
+        expect(img?.className).toContain('w-6');
+        expect(img?.className).toContain('h-6');
+    });
+
+    it('renders md size with 32x32 dimensions', () => {
+        const { container } = render(
+            <PluginBadge icon="/plugins/test/badge.png" label="Test" size="md" />,
+        );
+        const img = container.querySelector('img');
+        expect(img?.className).toContain('w-8');
+        expect(img?.className).toContain('h-8');
+    });
+
+    it('has no background, border, or text label', () => {
+        const { container } = render(
+            <PluginBadge icon="/plugins/test/badge.png" label="Test" />,
+        );
+        const img = container.querySelector('img');
+        expect(img).toBeInTheDocument();
+        // No wrapping span with bg/border classes
+        expect(container.innerHTML).not.toContain('bg-');
+        expect(container.innerHTML).not.toContain('border-');
+        // No text content besides the img
+        expect(container.textContent).toBe('');
     });
 
     it('marks icon as aria-hidden', () => {
         const { container } = render(
-            <PluginBadge icon="Z" color="emerald" label="Test" />,
+            <PluginBadge icon="/plugins/test/badge.png" label="Test" />,
         );
-        const iconSpan = container.querySelector('[aria-hidden="true"]');
-        expect(iconSpan).toBeInTheDocument();
-        expect(iconSpan?.textContent).toBe('Z');
+        const img = container.querySelector('[aria-hidden="true"]');
+        expect(img).toBeInTheDocument();
     });
 
-    it('renders as a small pill with rounded-md', () => {
+    it('sets title attribute for tooltip', () => {
         const { container } = render(
-            <PluginBadge icon="P" color="purple" label="Pill" />,
+            <PluginBadge icon="/plugins/test/badge.png" label="My Plugin" />,
         );
-        const span = container.querySelector('span');
-        expect(span?.className).toContain('rounded-md');
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('title')).toBe('My Plugin');
     });
 });

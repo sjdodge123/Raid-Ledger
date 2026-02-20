@@ -8,13 +8,11 @@ interface AdminPluginCardProps {
     description: string;
     status?: 'active' | 'inactive' | 'not_installed';
     badge?: ReactNode;
-    /** Plugin badge metadata — renders a prominent badge with image/icon next to the title */
+    /** Plugin badge metadata — renders an image badge in the top-right corner */
     pluginBadge?: PluginBadgeMeta;
     onMouseEnter?: () => void;
     actions?: ReactNode;
     children?: ReactNode;
-    /** When true, applies the indigo plugin color scheme (left border + subtle tint) */
-    isPlugin?: boolean;
 }
 
 const STATUS_STYLES = {
@@ -43,40 +41,33 @@ export function AdminPluginSection({
     onMouseEnter,
     actions,
     children,
-    isPlugin = false,
 }: AdminPluginCardProps) {
     return (
         <div
-            className={`backdrop-blur-sm rounded-xl overflow-hidden border ${
-                isPlugin
-                    ? 'bg-indigo-500/5 border-edge/50 border-l-2 border-l-indigo-400/60'
-                    : 'bg-panel/50 border-edge/50'
-            }`}
+            className="relative backdrop-blur-sm rounded-xl overflow-hidden border bg-panel/50 border-edge/50"
             onMouseEnter={onMouseEnter}
         >
+            {/* Plugin badge — top-right corner */}
+            {pluginBadge && (
+                <div className="absolute top-3 right-3 z-10">
+                    <PluginBadge
+                        icon={pluginBadge.icon}
+                        iconSmall={pluginBadge.iconSmall}
+                        label={pluginBadge.label}
+                        size="md"
+                    />
+                </div>
+            )}
+
             {/* Header */}
             <div className="px-5 pt-5 pb-3">
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2.5 flex-wrap">
-                            {pluginBadge && (
-                                <PluginBadge
-                                    icon={pluginBadge.icon}
-                                    iconSmall={pluginBadge.iconSmall}
-                                    color={pluginBadge.color}
-                                    label={pluginBadge.label}
-                                    size="md"
-                                />
-                            )}
                             <h3 className="text-lg font-semibold text-foreground truncate">{title}</h3>
                             {version && (
                                 <span className="text-xs text-dim bg-overlay px-2 py-0.5 rounded-full whitespace-nowrap">
                                     v{version}
-                                </span>
-                            )}
-                            {isPlugin && !pluginBadge && (
-                                <span className="px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap bg-indigo-500/20 text-indigo-400">
-                                    Plugin
                                 </span>
                             )}
                             {status && (
@@ -89,9 +80,9 @@ export function AdminPluginSection({
                         <p className="text-sm text-muted mt-1">{description}</p>
                     </div>
 
-                    {/* Action buttons */}
+                    {/* Action buttons — offset right to avoid badge overlap */}
                     {actions && (
-                        <div className="flex gap-2 flex-shrink-0">
+                        <div className={`flex gap-2 flex-shrink-0 ${pluginBadge ? 'mt-10' : ''}`}>
                             {actions}
                         </div>
                     )}
@@ -100,9 +91,7 @@ export function AdminPluginSection({
 
             {/* Body content — always visible */}
             {children && (
-                <div className={`px-5 pb-5 pt-1 space-y-4 border-t mt-2 ${
-                    isPlugin ? 'border-indigo-400/20' : 'border-edge/50'
-                }`}>
+                <div className="px-5 pb-5 pt-1 space-y-4 border-t mt-2 border-edge/50">
                     {children}
                 </div>
             )}
