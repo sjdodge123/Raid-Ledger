@@ -44,26 +44,22 @@ export function AdminPluginSection({
 }: AdminPluginCardProps) {
     return (
         <div
-            className="relative backdrop-blur-sm rounded-xl overflow-hidden border bg-panel/50 border-edge/50"
+            className="backdrop-blur-sm rounded-xl overflow-hidden border bg-panel/50 border-edge/50"
             onMouseEnter={onMouseEnter}
         >
-            {/* Plugin badge — top-right corner */}
-            {pluginBadge && (
-                <div className="absolute top-3 right-3 z-10">
-                    <PluginBadge
-                        icon={pluginBadge.icon}
-                        iconSmall={pluginBadge.iconSmall}
-                        label={pluginBadge.label}
-                        size="md"
-                    />
-                </div>
-            )}
-
             {/* Header */}
             <div className="px-5 pt-5 pb-3">
                 <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2.5 flex-wrap">
+                            {pluginBadge && (
+                                <PluginBadge
+                                    icon={pluginBadge.icon}
+                                    iconSmall={pluginBadge.iconSmall}
+                                    label={pluginBadge.label}
+                                    size="md"
+                                />
+                            )}
                             <h3 className="text-lg font-semibold text-foreground truncate">{title}</h3>
                             {version && (
                                 <span className="text-xs text-dim bg-overlay px-2 py-0.5 rounded-full whitespace-nowrap">
@@ -80,9 +76,9 @@ export function AdminPluginSection({
                         <p className="text-sm text-muted mt-1">{description}</p>
                     </div>
 
-                    {/* Action buttons — offset right to avoid badge overlap */}
+                    {/* Action buttons */}
                     {actions && (
-                        <div className={`flex gap-2 flex-shrink-0 ${pluginBadge ? 'mt-10' : ''}`}>
+                        <div className="flex gap-2 flex-shrink-0">
                             {actions}
                         </div>
                     )}

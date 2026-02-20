@@ -32,27 +32,25 @@ export function IntegrationCard({
 }: IntegrationCardProps) {
     return (
         <div
-            className="relative bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 overflow-hidden"
+            className="bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 overflow-hidden"
             onMouseEnter={onMouseEnter}
         >
-            {/* Plugin badge — top-right corner */}
-            {pluginBadge && (
-                <div className="absolute top-3 right-3 z-10">
-                    <PluginBadge
-                        icon={pluginBadge.icon}
-                        iconSmall={pluginBadge.iconSmall}
-                        label={pluginBadge.label}
-                        size="md"
-                    />
-                </div>
-            )}
-
             {/* Header */}
             <div className="p-4 flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg flex items-center justify-center">
-                        {icon}
-                    </div>
+                    {/* Plugin badge replaces default icon when present */}
+                    {pluginBadge ? (
+                        <PluginBadge
+                            icon={pluginBadge.icon}
+                            iconSmall={pluginBadge.iconSmall}
+                            label={pluginBadge.label}
+                            size="md"
+                        />
+                    ) : (
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center">
+                            {icon}
+                        </div>
+                    )}
                     <div className="text-left">
                         <div className="flex items-center gap-2">
                             <h2 className="text-lg font-semibold text-foreground">{title}</h2>
