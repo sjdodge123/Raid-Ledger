@@ -86,6 +86,7 @@ export const InviteCodeResolveResponseSchema = z.object({
         game: z.object({
             name: z.string(),
             coverUrl: z.string().nullable().optional(),
+            hasRoles: z.boolean().optional(),
         }).nullable().optional(),
     }).optional(),
     slot: z.object({

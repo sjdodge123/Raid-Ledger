@@ -5,12 +5,14 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  Optional,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SignupsService } from './signups.service';
+import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
 /**
@@ -24,6 +26,8 @@ export class InviteService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly signupsService: SignupsService,
+    @Optional()
+    private readonly pugInviteService: PugInviteService | null,
   ) {}
 
   /**
@@ -68,12 +72,17 @@ export class InviteService {
     }
 
     // Resolve game info — prefer IGDB coverUrl, fallback to registry iconUrl
-    let game: { name: string; coverUrl?: string | null } | null = null;
+    let game: {
+      name: string;
+      coverUrl?: string | null;
+      hasRoles?: boolean;
+    } | null = null;
     if (event.registryGameId) {
       const [registryRow] = await this.db
         .select({
           name: schema.gameRegistry.name,
           iconUrl: schema.gameRegistry.iconUrl,
+          hasRoles: schema.gameRegistry.hasRoles,
         })
         .from(schema.gameRegistry)
         .where(eq(schema.gameRegistry.id, event.registryGameId))
@@ -97,7 +106,28 @@ export class InviteService {
         game = {
           name: registryRow.name,
           coverUrl: igdbCoverUrl || registryRow.iconUrl,
+          hasRoles: registryRow.hasRoles,
         };
+      }
+    } else if (event.gameId) {
+      // IGDB-only event (no registry entry) — resolve name + cover from IGDB
+      const gameId = parseInt(String(event.gameId), 10);
+      if (!isNaN(gameId)) {
+        const [igdbGame] = await this.db
+          .select({
+            name: schema.games.name,
+            coverUrl: schema.games.coverUrl,
+          })
+          .from(schema.games)
+          .where(eq(schema.games.igdbId, gameId))
+          .limit(1);
+        if (igdbGame) {
+          game = {
+            name: igdbGame.name,
+            coverUrl: igdbGame.coverUrl,
+            hasRoles: false,
+          };
+        }
       }
     }
 
@@ -123,11 +153,19 @@ export class InviteService {
    * 1. User has RL account with Discord ID? -> create normal signup, delete PUG slot
    * 2. New user? -> claim PUG slot, set claimedByUserId
    * 3. Already signed up? -> return error
+   *
+   * Returns discordServerInviteUrl for external PUG users who may need
+   * to join the Discord server (ROK-394).
    */
   async claimInvite(
     code: string,
     userId: number,
-  ): Promise<{ type: 'signup' | 'claimed'; eventId: number }> {
+    roleOverride?: 'tank' | 'healer' | 'dps',
+  ): Promise<{
+    type: 'signup' | 'claimed';
+    eventId: number;
+    discordServerInviteUrl?: string;
+  }> {
     const [slot] = await this.db
       .select()
       .from(schema.pugSlots)
@@ -185,11 +223,15 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
 
+    // Use role override from user selection, falling back to slot's preset role (ROK-394)
+    const effectiveRole =
+      roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps');
+
     if (user?.discordId) {
       // Existing RL member — create normal signup, delete PUG slot
       try {
         await this.signupsService.signup(slot.eventId, userId, {
-          slotRole: slot.role as 'tank' | 'healer' | 'dps',
+          slotRole: effectiveRole,
         });
       } catch (err) {
         this.logger.warn(
@@ -211,7 +253,16 @@ export class InviteService {
         slot.eventId,
       );
 
-      return { type: 'signup', eventId: slot.eventId };
+      // Generate Discord server invite for PUG users who might not be in the server (ROK-394)
+      const discordServerInviteUrl = await this.tryGenerateServerInvite(
+        slot.eventId,
+      );
+
+      return {
+        type: 'signup',
+        eventId: slot.eventId,
+        discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+      };
     }
 
     // No Discord ID — claim the PUG slot directly
@@ -232,5 +283,25 @@ export class InviteService {
     );
 
     return { type: 'claimed', eventId: slot.eventId };
+  }
+
+  /**
+   * Try to generate a Discord server invite URL for claim responses (ROK-394).
+   * Only generates if PugInviteService is available and user is not already in the server.
+   */
+  private async tryGenerateServerInvite(
+    eventId: number,
+  ): Promise<string | null> {
+    if (!this.pugInviteService) return null;
+
+    try {
+      return await this.pugInviteService.generateServerInvite(eventId);
+    } catch (err) {
+      this.logger.warn(
+        'Failed to generate server invite for claim response: %s',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+      return null;
+    }
   }
 }

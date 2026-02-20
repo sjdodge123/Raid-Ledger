@@ -934,11 +934,21 @@ export async function resolveInviteCode(
 
 /**
  * Claim an invite code — requires auth.
+ * Optional role override lets user select their preferred role (ROK-394).
+ * Returns discordServerInviteUrl for PUG users who may need to join the server.
  */
 export async function claimInviteCode(
     code: string,
-): Promise<{ type: 'signup' | 'claimed'; eventId: number }> {
-    return fetchApi(`/invite/${code}/claim`, { method: 'POST' });
+    role?: 'tank' | 'healer' | 'dps',
+): Promise<{
+    type: 'signup' | 'claimed';
+    eventId: number;
+    discordServerInviteUrl?: string;
+}> {
+    return fetchApi(`/invite/${code}/claim`, {
+        method: 'POST',
+        body: JSON.stringify(role ? { role } : {}),
+    });
 }
 
 /**
