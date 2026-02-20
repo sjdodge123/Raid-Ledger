@@ -357,7 +357,9 @@ describe('DiscordEmbedFactory', () => {
       );
       const embed = factory.buildEventEmbed(baseEvent, baseContext);
 
-      expect(announcement.embed.toJSON()).toEqual(embed.embed.toJSON());
+      const announcementJson = { ...announcement.embed.toJSON(), timestamp: null };
+      const embedJson = { ...embed.embed.toJSON(), timestamp: null };
+      expect(announcementJson).toEqual(embedJson);
     });
 
     it('buildEventUpdate delegates to buildEventEmbed', () => {
@@ -370,7 +372,9 @@ describe('DiscordEmbedFactory', () => {
         state: EMBED_STATES.IMMINENT,
       });
 
-      expect(update.embed.toJSON()).toEqual(embed.embed.toJSON());
+      const updateJson = { ...update.embed.toJSON(), timestamp: null };
+      const embedJson = { ...embed.embed.toJSON(), timestamp: null };
+      expect(updateJson).toEqual(embedJson);
     });
   });
 

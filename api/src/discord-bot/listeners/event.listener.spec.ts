@@ -55,8 +55,10 @@ describe('DiscordEventListener', () => {
       chain.values = jest.fn().mockReturnValue(chain);
       chain.returning = jest.fn().mockResolvedValue(resolvedValue);
       // Make the chain itself awaitable (thenable)
-      chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve(resolvedValue).then(resolve, reject);
+      chain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve(resolvedValue).then(resolve, reject);
       return chain;
     };
 
@@ -209,11 +211,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock | unknown> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve([mockRecord]).then(resolve, reject);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};
@@ -248,11 +252,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock | unknown> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve([mockRecord]).then(resolve, reject);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};
@@ -285,11 +291,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock | unknown> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve([mockRecord]).then(resolve, reject);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const deleteChain: Record<string, jest.Mock> = {};
@@ -320,11 +328,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock | unknown> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve([mockRecord]).then(resolve, reject);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const deleteChain: Record<string, jest.Mock> = {};
@@ -353,11 +363,13 @@ describe('DiscordEventListener', () => {
         embedState: EMBED_STATES.POSTED,
       };
 
-      const selectChain: Record<string, jest.Mock | unknown> = {};
+      const selectChain: Record<string, unknown> = {};
       selectChain.from = jest.fn().mockReturnValue(selectChain);
       selectChain.where = jest.fn().mockReturnValue(selectChain);
-      selectChain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-        Promise.resolve([mockRecord]).then(resolve, reject);
+      selectChain.then = (
+        resolve: (v: unknown) => void,
+        reject: (e: unknown) => void,
+      ) => Promise.resolve([mockRecord]).then(resolve, reject);
       mockDb.select.mockReturnValue(selectChain);
 
       const updateChain: Record<string, jest.Mock> = {};

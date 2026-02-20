@@ -96,15 +96,17 @@ describe('SignupInteractionListener', () => {
 
   /** Default chain mock for DB queries returning empty */
   function makeChain(result: unknown[] = []) {
-    const chain: Record<string, jest.Mock | unknown> = {};
+    const chain: Record<string, unknown> = {};
     chain.from = jest.fn().mockReturnValue(chain);
     chain.where = jest.fn().mockReturnValue(chain);
     chain.limit = jest.fn().mockResolvedValue(result);
     chain.leftJoin = jest.fn().mockReturnValue(chain);
     chain.groupBy = jest.fn().mockResolvedValue(result);
     // Make the chain itself awaitable (thenable) so queries without .limit() resolve
-    chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
-      Promise.resolve(result).then(resolve, reject);
+    chain.then = (
+      resolve: (v: unknown) => void,
+      reject: (e: unknown) => void,
+    ) => Promise.resolve(result).then(resolve, reject);
     return chain;
   }
 
