@@ -92,7 +92,10 @@ Message the lead with a structured report:
 - <description> — <why this can't be auto-fixed>
 
 ### Commit SHA (if fixes applied): <sha>
+⚠️ UNPUSHED — lead MUST push before creating PR
 ```
+
+**IMPORTANT:** If your verdict is APPROVED WITH FIXES, explicitly remind the lead that your auto-fix commits are LOCAL ONLY and must be pushed to remote before creating the PR. This prevents unreviewed code from reaching main via auto-merge.
 
 ### Critical Rules
 - You CAN edit source code — but ONLY to fix critical issues found during review
