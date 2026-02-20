@@ -1,4 +1,6 @@
 import type { PluginInfoDto } from '@raid-ledger/contract';
+import { getPluginBadge } from '../../plugins/plugin-registry';
+import { PluginBadge } from '../ui/plugin-badge';
 
 interface PluginCardProps {
     plugin: PluginInfoDto;
@@ -41,11 +43,22 @@ export function PluginCard({
     onDeactivate,
     isPending,
 }: PluginCardProps) {
+    const badge = getPluginBadge(plugin.slug);
+
     return (
         <div className="bg-panel/50 backdrop-blur-sm rounded-xl border border-edge/50 p-5">
             {/* Header row */}
             <div className="flex items-start justify-between gap-3 mb-2">
                 <div className="flex items-center gap-2 min-w-0">
+                    {badge && (
+                        <PluginBadge
+                            icon={badge.icon}
+                            iconSmall={badge.iconSmall}
+                            color={badge.color}
+                            label={badge.label}
+                            size="md"
+                        />
+                    )}
                     <h3 className="text-lg font-semibold text-foreground truncate">
                         {plugin.name}
                     </h3>

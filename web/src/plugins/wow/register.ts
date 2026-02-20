@@ -1,4 +1,4 @@
-import { registerSlotComponent, registerPlugin } from '../plugin-registry';
+import { registerPlugin } from '../plugin-registry';
 import { CharacterDetailSections } from './slots/character-detail-sections';
 import { CharacterDetailHeaderBadges } from './slots/character-detail-header-badges';
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
@@ -14,72 +14,20 @@ let registered = false;
 if (!registered) {
     registered = true;
 
-    registerPlugin('blizzard', {
-        icon: '\u2694\uFE0F',
+    const blizzard = registerPlugin('blizzard', {
+        icon: '/plugins/blizzard/badge.jpg',
+        iconSmall: '/plugins/blizzard/badge-32.jpg',
         color: 'blue',
         label: 'World of Warcraft Plugin',
     });
 
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'character-detail:sections',
-        component: CharacterDetailSections,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'character-detail:header-badges',
-        component: CharacterDetailHeaderBadges,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'character-create:import-form',
-        component: CharacterCreateImportForm,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'character-create:inline-import',
-        component: CharacterCreateInlineImport,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'event-create:content-browser',
-        component: EventCreateContentBrowser,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'event-detail:content-sections',
-        component: EventDetailContentSections,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'event-detail:signup-warnings',
-        component: EventDetailSignupWarnings,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'admin-settings:plugin-content',
-        component: BlizzardIntegrationSlot,
-        priority: 0,
-    });
-
-    registerSlotComponent({
-        pluginSlug: 'blizzard',
-        slotName: 'profile:character-actions',
-        component: ProfileCharacterActions,
-        priority: 0,
-    });
+    blizzard.registerSlot('character-detail:sections', CharacterDetailSections);
+    blizzard.registerSlot('character-detail:header-badges', CharacterDetailHeaderBadges);
+    blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
+    blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
+    blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
+    blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
+    blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings);
+    blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
+    blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
 }

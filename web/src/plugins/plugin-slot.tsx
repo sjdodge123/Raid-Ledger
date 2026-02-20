@@ -32,8 +32,13 @@ export function PluginSlot({ name, context, fallback, className }: PluginSlotPro
         return (
             <div key={`${r.pluginSlug}:${r.slotName}:${i}`} className="relative">
                 {badge && (
-                    <div className="absolute top-1 right-1 z-10">
-                        <PluginBadge icon={badge.icon} color={badge.color} label={badge.label} />
+                    <div className="absolute top-1.5 right-1.5 z-10">
+                        <PluginBadge
+                            icon={badge.icon}
+                            iconSmall={badge.iconSmall}
+                            color={badge.color}
+                            label={badge.label}
+                        />
                     </div>
                 )}
                 <r.component {...context} />

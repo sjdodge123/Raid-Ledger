@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useNewBadge } from '../../hooks/use-new-badge';
+import { getPluginBadge } from '../../plugins/plugin-registry';
 import { AdminPluginSection } from '../../components/admin/AdminPluginSection';
 import { NewBadge } from '../../components/ui/new-badge';
 import { Modal } from '../../components/ui/modal';
@@ -173,6 +174,7 @@ function PluginCard({
     onUninstall,
 }: PluginCardProps) {
     const { isNew, markSeen } = useNewBadge(`plugin-seen:${plugin.slug}`);
+    const pluginBadge = getPluginBadge(plugin.slug);
 
     const actionButtons = (
         <>
@@ -222,6 +224,7 @@ function PluginCard({
             description={plugin.description}
             status={plugin.status}
             badge={<NewBadge visible={isNew} />}
+            pluginBadge={pluginBadge}
             onMouseEnter={markSeen}
             actions={actionButtons}
             isPlugin

@@ -14,7 +14,7 @@ import { DemoDataCard } from '../components/admin/DemoDataCard';
 import { RoleManagementCard } from '../components/admin/RoleManagementCard';
 import { NewBadge } from '../components/ui/new-badge';
 import { Modal } from '../components/ui/modal';
-import { PluginSlot } from '../plugins';
+import { PluginSlot, getPluginBadge } from '../plugins';
 import { UpdateBanner } from '../components/admin/UpdateBanner';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
@@ -271,6 +271,7 @@ function PluginSection({
     onUninstall,
 }: PluginSectionProps) {
     const { isNew, markSeen } = useNewBadge(`plugin-seen:${plugin.slug}`);
+    const pluginBadge = getPluginBadge(plugin.slug);
 
     const actionButtons = (
         <>
@@ -319,6 +320,7 @@ function PluginSection({
             version={plugin.version}
             status={plugin.status}
             badge={<NewBadge visible={isNew} />}
+            pluginBadge={pluginBadge}
             onMouseEnter={markSeen}
             actions={actionButtons}
             description={plugin.description ?? ''}
