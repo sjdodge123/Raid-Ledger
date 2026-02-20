@@ -68,6 +68,7 @@ export class DiscordBotClientService {
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildPresences,
         GatewayIntentBits.DirectMessages,
+        GatewayIntentBits.MessageContent,
       ],
     });
 
@@ -344,9 +345,7 @@ export class DiscordBotClientService {
    */
   async searchGuildMembers(
     query: string,
-  ): Promise<
-    { discordId: string; username: string; avatar: string | null }[]
-  > {
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
     if (!this.client?.isReady()) return [];
 
     const guild = this.client.guilds.cache.first();
@@ -379,9 +378,7 @@ export class DiscordBotClientService {
    */
   async listGuildMembers(
     limit = 25,
-  ): Promise<
-    { discordId: string; username: string; avatar: string | null }[]
-  > {
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
     if (!this.client?.isReady()) return [];
 
     const guild = this.client.guilds.cache.first();

@@ -25,6 +25,8 @@ import { RosterViewCommand } from './commands/roster-view.command';
 import { BindCommand } from './commands/bind.command';
 import { UnbindCommand } from './commands/unbind.command';
 import { BindingsCommand } from './commands/bindings.command';
+import { InviteCommand } from './commands/invite.command';
+import { EventLinkListener } from './listeners/event-link.listener';
 
 @Module({
   imports: [
@@ -34,7 +36,11 @@ import { BindingsCommand } from './commands/bindings.command';
     forwardRef(() => AuthModule),
     CharactersModule,
   ],
-  controllers: [DiscordBotSettingsController, DiscordMemberController, ChannelBindingsController],
+  controllers: [
+    DiscordBotSettingsController,
+    DiscordMemberController,
+    ChannelBindingsController,
+  ],
   providers: [
     DiscordBotService,
     DiscordBotClientService,
@@ -47,6 +53,7 @@ import { BindingsCommand } from './commands/bindings.command';
     InteractionListener,
     SignupInteractionListener,
     PugInviteListener,
+    EventLinkListener,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,
@@ -54,6 +61,7 @@ import { BindingsCommand } from './commands/bindings.command';
     BindCommand,
     UnbindCommand,
     BindingsCommand,
+    InviteCommand,
   ],
   exports: [
     DiscordBotService,

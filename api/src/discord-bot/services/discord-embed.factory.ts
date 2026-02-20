@@ -274,6 +274,123 @@ export class DiscordEmbedFactory {
   }
 
   /**
+   * Build a compact event preview embed (ROK-380).
+   * Used when auto-unfurling event links posted in Discord channels.
+   * Shows title, game, date/time, signup count, and a "View Event" link button.
+   */
+  buildEventPreview(
+    event: EmbedEventData,
+    context: EmbedContext,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const startDate = new Date(event.startTime);
+    const dateStr = startDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    const bodyLines: string[] = [];
+    if (event.game?.name) {
+      bodyLines.push(`🎮 **${event.game.name}**`);
+    }
+    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
+    bodyLines.push(`👥 **${event.signupCount}** signed up`);
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.ANNOUNCEMENT)
+      .setTitle(`📅 ${event.title}`)
+      .setDescription(bodyLines.join('\n'))
+      .setFooter({
+        text: context.communityName || 'Raid Ledger',
+      })
+      .setTimestamp();
+
+    if (event.game?.coverUrl) {
+      embed.setThumbnail(event.game.coverUrl);
+    }
+
+    const baseUrl = context.clientUrl || process.env.CLIENT_URL;
+    if (baseUrl) {
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('View Event')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${baseUrl}/events/${event.id}`),
+      );
+      return { embed, row };
+    }
+
+    return { embed };
+  }
+
+  /**
+   * Build an event invite DM embed (ROK-380).
+   * Used by the /invite slash command to send a rich invite to a Discord user.
+   */
+  buildEventInvite(
+    event: EmbedEventData,
+    context: EmbedContext,
+    inviterUsername: string,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const startDate = new Date(event.startTime);
+    const dateStr = startDate.toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+    });
+    const timeStr = startDate.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      timeZoneName: 'short',
+    });
+
+    const bodyLines: string[] = [];
+    if (event.game?.name) {
+      bodyLines.push(`🎮 **${event.game.name}**`);
+    }
+    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
+    if (event.description) {
+      const excerpt =
+        event.description.length > 200
+          ? event.description.slice(0, 200) + '...'
+          : event.description;
+      bodyLines.push('');
+      bodyLines.push(excerpt);
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.PUG_INVITE)
+      .setTitle(`You're invited to **${event.title}**!`)
+      .setDescription(bodyLines.join('\n'))
+      .setFooter({
+        text: `Sent by ${inviterUsername} via ${context.communityName || 'Raid Ledger'}`,
+      })
+      .setTimestamp();
+
+    if (event.game?.coverUrl) {
+      embed.setThumbnail(event.game.coverUrl);
+    }
+
+    const baseUrl = context.clientUrl || process.env.CLIENT_URL;
+    if (baseUrl) {
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('View Event')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${baseUrl}/events/${event.id}`),
+      );
+      return { embed, row };
+    }
+
+    return { embed };
+  }
+
+  /**
    * Build signup action buttons for the embed (ROK-137).
    * Includes: Sign Up (green), Tentative (yellow), Decline (red), View Event (link).
    */

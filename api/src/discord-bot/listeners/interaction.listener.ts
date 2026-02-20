@@ -14,6 +14,7 @@ import { RosterViewCommand } from '../commands/roster-view.command';
 import { BindCommand } from '../commands/bind.command';
 import { UnbindCommand } from '../commands/unbind.command';
 import { BindingsCommand } from '../commands/bindings.command';
+import { InviteCommand } from '../commands/invite.command';
 
 /**
  * Describes a command that can handle slash command interactions.
@@ -41,6 +42,7 @@ export class InteractionListener {
     private readonly bindCommand: BindCommand,
     private readonly unbindCommand: UnbindCommand,
     private readonly bindingsCommand: BindingsCommand,
+    private readonly inviteCommand: InviteCommand,
   ) {}
 
   private getHandlers(): CommandInteractionHandler[] {
@@ -51,6 +53,7 @@ export class InteractionListener {
       this.bindCommand,
       this.unbindCommand,
       this.bindingsCommand,
+      this.inviteCommand,
     ];
   }
 

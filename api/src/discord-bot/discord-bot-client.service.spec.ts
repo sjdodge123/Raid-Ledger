@@ -59,6 +59,7 @@ jest.mock('discord.js', () => {
       GuildVoiceStates: 16,
       GuildPresences: 32,
       DirectMessages: 64,
+      MessageContent: 128,
     },
     Events: {
       ClientReady: 'ready',

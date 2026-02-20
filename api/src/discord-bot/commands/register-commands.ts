@@ -14,6 +14,7 @@ import { RosterViewCommand } from './roster-view.command';
 import { BindCommand } from './bind.command';
 import { UnbindCommand } from './unbind.command';
 import { BindingsCommand } from './bindings.command';
+import { InviteCommand } from './invite.command';
 
 /**
  * Describes a slash command handler that can be registered with Discord.
@@ -40,6 +41,7 @@ export class RegisterCommandsService {
     private readonly bindCommand: BindCommand,
     private readonly unbindCommand: UnbindCommand,
     private readonly bindingsCommand: BindingsCommand,
+    private readonly inviteCommand: InviteCommand,
   ) {}
 
   /**
@@ -53,6 +55,7 @@ export class RegisterCommandsService {
       this.bindCommand,
       this.unbindCommand,
       this.bindingsCommand,
+      this.inviteCommand,
     ];
   }
 
