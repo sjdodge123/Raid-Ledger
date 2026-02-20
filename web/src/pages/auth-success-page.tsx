@@ -52,12 +52,16 @@ export function AuthSuccessPage() {
             sessionStorage.setItem(`oauth_processed_${code}`, '1');
             (async () => {
                 try {
-                    // Exchange one-time code for JWT token
+                    // Exchange one-time code for JWT token (15s timeout for mobile resilience)
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 15_000);
                     const exchangeResponse = await fetch(`${API_BASE_URL}/auth/exchange-code`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ code }),
+                        signal: controller.signal,
                     });
+                    clearTimeout(timeout);
 
                     if (!exchangeResponse.ok) {
                         throw new Error('Failed to exchange auth code');
@@ -65,21 +69,18 @@ export function AuthSuccessPage() {
 
                     const { access_token: token } = await exchangeResponse.json() as { access_token: string };
 
-                    // Store token and wait for auth state to update (refetchQueries awaits)
-                    const success = await login(token);
+                    // Store token and fetch user data in one step
+                    const user = await login(token);
+
+                    if (!user) {
+                        throw new Error('Failed to authenticate');
+                    }
 
                     // ROK-219: Redirect new non-admin users to onboarding wizard
-                    if (success) {
-                        // Fetch fresh user data to check onboarding status
-                        const authData = await fetch(`${API_BASE_URL}/auth/me`, {
-                            headers: { Authorization: `Bearer ${token}` },
-                        }).then((r) => r.json()) as { role?: string; onboardingCompletedAt?: string | null };
-
-                        if (authData.role !== 'admin' && !authData.onboardingCompletedAt) {
-                            toast.success('Welcome! Let\'s get you set up.');
-                            navigate('/onboarding', { replace: true });
-                            return;
-                        }
+                    if (user.role !== 'admin' && !user.onboardingCompletedAt) {
+                        toast.success('Welcome! Let\'s get you set up.');
+                        navigate('/onboarding', { replace: true });
+                        return;
                     }
 
                     // ROK-137: Check for stored join intent from Discord signup flow

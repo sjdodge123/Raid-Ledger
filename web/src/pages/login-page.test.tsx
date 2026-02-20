@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { LoginPage } from './login-page';
 import * as useSystemStatusModule from '../hooks/use-system-status';
@@ -36,7 +36,7 @@ describe('LoginPage', () => {
         vi.clearAllMocks();
     });
 
-    it('renders login form with username field', () => {
+    it('renders login form with username field when Discord not configured', () => {
         mockSystemStatus({ isFirstRun: false, discordConfigured: false });
 
         renderWithRouter(<LoginPage />);
@@ -51,7 +51,7 @@ describe('LoginPage', () => {
 
         renderWithRouter(<LoginPage />);
 
-        expect(screen.queryByText(/login with discord/i)).not.toBeInTheDocument();
+        expect(screen.queryByText(/continue with discord/i)).not.toBeInTheDocument();
     });
 
     it('shows Discord button when discordConfigured is true', () => {
@@ -59,7 +59,42 @@ describe('LoginPage', () => {
 
         renderWithRouter(<LoginPage />);
 
-        expect(screen.getByText(/login with discord/i)).toBeInTheDocument();
+        expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
+    });
+
+    it('hides local login form by default when Discord is configured', () => {
+        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
+
+        renderWithRouter(<LoginPage />);
+
+        expect(screen.queryByLabelText(/username/i)).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
+        expect(screen.getByText(/sign in with username instead/i)).toBeInTheDocument();
+    });
+
+    it('shows local login form when toggle is clicked', () => {
+        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
+
+        renderWithRouter(<LoginPage />);
+
+        const toggle = screen.getByText(/sign in with username instead/i);
+        fireEvent.click(toggle);
+
+        expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
+        expect(screen.getByLabelText('Password')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+        expect(screen.getByText(/hide username login/i)).toBeInTheDocument();
+    });
+
+    it('auto-expands local login on first run with Discord configured', () => {
+        mockSystemStatus({ isFirstRun: true, discordConfigured: true });
+
+        renderWithRouter(<LoginPage />);
+
+        // Both Discord and local login should be visible
+        expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
+        expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
+        expect(screen.getByLabelText('Password')).toBeInTheDocument();
     });
 
     it('displays community name from env variable', () => {

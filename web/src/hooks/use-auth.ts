@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import type { UserRole } from '@raid-ledger/contract';
@@ -91,20 +92,20 @@ export function useAuth() {
         retry: false, // Don't retry auth failures
     });
 
-    const login = async (token: string): Promise<boolean> => {
+    const login = useCallback(async (token: string): Promise<User | null> => {
         localStorage.setItem(TOKEN_KEY, token);
         try {
             // Fetch user and populate cache directly to avoid race condition
             // between refetchQueries and useQuery observers mounting on navigation
             const user = await fetchCurrentUser();
             queryClient.setQueryData(['auth', 'me'], user);
-            return !!user;
+            return user;
         } catch (error) {
             // Token is stored — will be fetched on next page load
             console.error('Failed to fetch user after login:', error);
-            return false;
+            return null;
         }
-    };
+    }, [queryClient]);
 
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
