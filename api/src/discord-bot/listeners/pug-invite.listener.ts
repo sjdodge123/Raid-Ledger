@@ -5,8 +5,6 @@ import {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   type GuildMember,
   type ButtonInteraction,
   type StringSelectMenuInteraction,
@@ -77,9 +75,7 @@ export class PugInviteListener {
         });
       });
       this.guildMemberAddRegistered = true;
-      this.logger.log(
-        'Registered guildMemberAdd listener for PUG invite flow',
-      );
+      this.logger.log('Registered guildMemberAdd listener for PUG invite flow');
     }
 
     // ROK-292: Register interaction handler for PUG accept/decline buttons + select menus
@@ -194,10 +190,7 @@ export class PugInviteListener {
     const pugSlotId = parts[1];
 
     // Only handle PUG buttons
-    if (
-      action !== PUG_BUTTON_IDS.ACCEPT &&
-      action !== PUG_BUTTON_IDS.DECLINE
-    ) {
+    if (action !== PUG_BUTTON_IDS.ACCEPT && action !== PUG_BUTTON_IDS.DECLINE) {
       return;
     }
 
@@ -299,7 +292,12 @@ export class PugInviteListener {
 
       if (characters.length > 0) {
         // Show character selection (like signup embed)
-        await this.showPugCharacterSelect(interaction, slot.id, event.title, characters);
+        await this.showPugCharacterSelect(
+          interaction,
+          slot.id,
+          event.title,
+          characters,
+        );
         return;
       }
     }
@@ -423,7 +421,8 @@ export class PugInviteListener {
       await this.handlePugCharacterSelectMenu(interaction, pugSlotId);
     } else if (action === PUG_BUTTON_IDS.ROLE_SELECT) {
       // Third segment is optional character name (from character → role flow)
-      const characterName = parts.length >= 3 ? parts.slice(2).join(':') : undefined;
+      const characterName =
+        parts.length >= 3 ? parts.slice(2).join(':') : undefined;
       await this.handlePugRoleSelectMenu(interaction, pugSlotId, characterName);
     } else if (action === MEMBER_INVITE_BUTTON_IDS.CHARACTER_SELECT) {
       // parts[1] is eventId for member invites
@@ -491,7 +490,7 @@ export class PugInviteListener {
 
       const slotConfig = event?.slotConfig as Record<string, unknown> | null;
       if (slotConfig?.type === 'mmo') {
-        await this.showPugRoleSelect(interaction, pugSlotId, event!.title, {
+        await this.showPugRoleSelect(interaction, pugSlotId, event.title, {
           name: character.name,
           role: character.roleOverride ?? character.role ?? null,
         });
@@ -633,7 +632,8 @@ export class PugInviteListener {
       // Create signup + roster assignment for the accepted PUG
       await this.createPugSignup(slot, selectedRole);
 
-      const roleDisplay = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
+      const roleDisplay =
+        selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
       const charDisplay = characterName ? ` as **${characterName}**` : '';
 
       const acceptedEmbed = new EmbedBuilder()
@@ -705,7 +705,15 @@ export class PugInviteListener {
         const result = await this.signupsService.signup(
           slot.eventId,
           linkedUser.id,
-          { slotRole: role as 'tank' | 'healer' | 'dps' | 'flex' | 'player' | 'bench' },
+          {
+            slotRole: role as
+              | 'tank'
+              | 'healer'
+              | 'dps'
+              | 'flex'
+              | 'player'
+              | 'bench',
+          },
         );
         this.logger.log(
           'Created signup %d for PUG %s (linked user %d) on event %d',
@@ -910,7 +918,7 @@ export class PugInviteListener {
     const parts = interaction.customId.split(':');
     if (parts.length < 3) return;
 
-    const [action, eventIdStr, _notificationId] = parts;
+    const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
 
     await interaction.deferReply({ ephemeral: true });
@@ -955,7 +963,8 @@ export class PugInviteListener {
 
     if (!linkedUser) {
       await interaction.editReply({
-        content: 'Could not find your linked account. Please sign up via the web app.',
+        content:
+          'Could not find your linked account. Please sign up via the web app.',
       });
       return;
     }
@@ -968,7 +977,9 @@ export class PugInviteListener {
       .limit(1);
 
     if (!event || event.cancelledAt) {
-      await interaction.editReply({ content: 'This event is no longer available.' });
+      await interaction.editReply({
+        content: 'This event is no longer available.',
+      });
       return;
     }
 
@@ -1002,7 +1013,12 @@ export class PugInviteListener {
     }
 
     // Non-MMO, no characters — sign up immediately
-    await this.finalizeMemberAccept(interaction, eventId, linkedUser.id, event.title);
+    await this.finalizeMemberAccept(
+      interaction,
+      eventId,
+      linkedUser.id,
+      event.title,
+    );
   }
 
   /**
@@ -1114,7 +1130,9 @@ export class PugInviteListener {
 
     let content: string;
     if (characterInfo) {
-      const roleHint = characterInfo.role ? ` (current: ${characterInfo.role})` : '';
+      const roleHint = characterInfo.role
+        ? ` (current: ${characterInfo.role})`
+        : '';
       content = `Playing as **${characterInfo.name}**${roleHint} for **${eventTitle}** — select your role:`;
     } else {
       const clientUrl = process.env.CLIENT_URL ?? '';
@@ -1170,7 +1188,7 @@ export class PugInviteListener {
 
       const slotConfig = event?.slotConfig as Record<string, unknown> | null;
       if (slotConfig?.type === 'mmo') {
-        await this.showMemberRoleSelect(interaction, eventId, event!.title, {
+        await this.showMemberRoleSelect(interaction, eventId, event.title, {
           id: characterId,
           name: character.name,
           role: character.roleOverride ?? character.role ?? null,
@@ -1182,9 +1200,13 @@ export class PugInviteListener {
       const effectiveRole = character.roleOverride ?? character.role ?? 'dps';
       let signupResult;
       try {
-        signupResult = await this.signupsService.signup(eventId, linkedUser.id, {
-          slotRole: effectiveRole as 'tank' | 'healer' | 'dps',
-        });
+        signupResult = await this.signupsService.signup(
+          eventId,
+          linkedUser.id,
+          {
+            slotRole: effectiveRole,
+          },
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to sign up';
         await interaction.editReply({ content: msg, components: [] });
@@ -1269,9 +1291,13 @@ export class PugInviteListener {
       // Create signup with role preference for automatic roster slot assignment
       let signupResult;
       try {
-        signupResult = await this.signupsService.signup(eventId, linkedUser.id, {
-          slotRole: selectedRole,
-        });
+        signupResult = await this.signupsService.signup(
+          eventId,
+          linkedUser.id,
+          {
+            slotRole: selectedRole,
+          },
+        );
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to sign up';
         await interaction.editReply({ content: msg, components: [] });
@@ -1298,7 +1324,8 @@ export class PugInviteListener {
         }
       }
 
-      const roleDisplay = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
+      const roleDisplay =
+        selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1);
       const charDisplay = characterName ? ` as **${characterName}**` : '';
 
       const acceptedEmbed = new EmbedBuilder()
@@ -1366,9 +1393,7 @@ export class PugInviteListener {
     const acceptedEmbed = new EmbedBuilder()
       .setColor(EMBED_COLORS.SIGNUP_CONFIRMATION)
       .setTitle('Invite Accepted!')
-      .setDescription(
-        `You signed up for **${eventTitle}**! See you there!`,
-      )
+      .setDescription(`You signed up for **${eventTitle}**! See you there!`)
       .setTimestamp();
 
     try {

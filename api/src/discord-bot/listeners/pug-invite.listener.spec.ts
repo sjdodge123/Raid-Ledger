@@ -110,18 +110,14 @@ describe('PugInviteListener', () => {
     });
 
     it('should handle claim errors gracefully', async () => {
-      pugInviteService.claimPugSlots.mockRejectedValue(
-        new Error('DB error'),
-      );
+      pugInviteService.claimPugSlots.mockRejectedValue(new Error('DB error'));
 
       const payload: DiscordLoginPayload = {
         userId: 10,
         discordId: 'disc-user-456',
       };
 
-      await expect(
-        listener.handleDiscordLogin(payload),
-      ).resolves.not.toThrow();
+      await expect(listener.handleDiscordLogin(payload)).resolves.not.toThrow();
     });
   });
 
@@ -155,7 +151,7 @@ describe('PugInviteListener', () => {
 
       // guildMemberAdd registered once, interactionCreate re-registered each time
       const guildMemberCalls = mockOn.mock.calls.filter(
-        ([event]: [string]) => event === Events.GuildMemberAdd,
+        ([event]: [string]) => event === (Events.GuildMemberAdd as string),
       );
       expect(guildMemberCalls).toHaveLength(1);
     });
@@ -179,9 +175,9 @@ describe('PugInviteListener', () => {
 
       // Get the callback registered on guildMemberAdd
       const guildMemberCall = mockOn.mock.calls.find(
-        ([event]: [string]) => event === Events.GuildMemberAdd,
-      );
-      const [, callback] = guildMemberCall as [string, (member: unknown) => Promise<void>];
+        ([event]: [string]) => event === (Events.GuildMemberAdd as string),
+      ) as [string, (member: unknown) => Promise<void>];
+      const callback = guildMemberCall[1];
       const mockMember = {
         user: {
           id: 'new-user-id',
@@ -213,7 +209,7 @@ describe('PugInviteListener', () => {
 
       // guildMemberAdd should be registered twice (once per connect after disconnect reset)
       const guildMemberCalls = mockOn.mock.calls.filter(
-        ([event]: [string]) => event === Events.GuildMemberAdd,
+        ([event]: [string]) => event === (Events.GuildMemberAdd as string),
       );
       expect(guildMemberCalls).toHaveLength(2);
     });
