@@ -1,4 +1,4 @@
-# Step 6: PR + Auto-Merge Pipeline (as teammates complete)
+# Step 6: CI + Push Pipeline (as teammates complete)
 
 **This step is EVENT-DRIVEN, not sequential. The lead reacts to messages from teammates — it does NOT synchronously wait or block on any agent. Stay responsive to the operator and other teammates at all times.**
 
@@ -15,9 +15,9 @@ When a dev teammate messages the lead that their story is complete:
 2. **Immediately return to delegate mode** — handle other messages, respond to the operator
 3. The test agent runs independently in the dev's worktree, writes tests, and messages the lead when done
 
-## 6b. When a Test Agent Completes -> Validate CI -> Push + PR -> Update Linear
+## 6b. When a Test Agent Completes -> Validate CI -> Push -> Update Linear
 
-When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and create a PR**. Each story gets its own individual PR.
+When a test agent messages the lead that tests are written and passing, **run the full CI pipeline, push, and update Linear**. Do NOT create a PR — the lead handles PRs later after code review passes (Step 8).
 
 **1. Delegate push pipeline to the build agent:**
 
@@ -39,18 +39,11 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
 ```
 After fixes, ask the build agent to push again. Repeat until CI passes and push succeeds.
 
-**2. After build agent confirms push succeeded — create PR and update Linear (MANDATORY):**
-
-```bash
-gh pr create --base main --head rok-<num>-<short-name> \
-  --title "feat(ROK-<num>): <short description>" \
-  --body "<summary of changes>"
-gh pr merge <number> --auto --squash
-```
+**2. After build agent confirms push succeeded — update Linear → "In Review" (MANDATORY):**
 
 ```
 mcp__linear__update_issue(id: <issue_id>, state: "In Review")
-mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing. PR #<num> created.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
+mcp__linear__create_comment(issueId: <issue_id>, body: "Implementation + tests complete. CI passing. Branch pushed.\nTest locally with: deploy_dev.sh --branch rok-<num>-<short-name>")
 ```
 
 **The operator uses Linear "In Review" to know what needs testing. If Linear isn't updated, the operator has no visibility into what changed. This is NOT optional.**

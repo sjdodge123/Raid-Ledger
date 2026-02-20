@@ -61,13 +61,20 @@ For stories the operator moved to "Code Review" (operator approved):
    This allows the reviewer to claim the task and begin code review.
    Do NOT send a message to the reviewer (they will auto-poll the task list).
 
-**2. Reviewer claims operator-approved tasks** and for each PR:
+**2. Verify Linear status is "Code Review" (MANDATORY):**
+
+The operator moved the story to "Code Review" in Linear. Confirm this before proceeding:
+```
+mcp__linear__get_issue(id: <issue_id>)
+```
+If the status is NOT "Code Review", DO NOT proceed — the operator hasn't approved yet.
+
+**3. Reviewer claims operator-approved tasks** and for each story's branch:
    - **VERIFY the story has "Code Review" status in Linear** (operator approved)
    - If status is NOT "Code Review", DO NOT review — message lead about premature unblock
-   - Run `gh pr diff <number>` to see code changes
+   - Run `git diff main...rok-<num>-<short-name>` to see code changes
    - Check: TypeScript strictness, Zod validation, security, error handling, patterns, naming
-   - Post review: `gh pr review <number> --approve` or `--request-changes --body "..."`
-   - Message the lead with verdict
+   - Message the lead with verdict (approve or request changes)
 
 **Critical:** The reviewer should ONLY review stories that have been moved to
 "Code Review" status by the operator. Code review is gated on operator approval.

@@ -1,9 +1,10 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useBranding } from '../hooks/use-branding';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
-import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
 import './user-profile-page.css';
 
@@ -162,6 +163,75 @@ function GroupedCharacters({
     );
 }
 
+/** Route state passed when navigating to a guest (PUG) user profile (ROK-381). */
+interface GuestRouteState {
+    guest: true;
+    username: string;
+    discordId: string;
+    avatarHash: string | null;
+}
+
+function isGuestRouteState(state: unknown): state is GuestRouteState {
+    return (
+        state != null &&
+        typeof state === 'object' &&
+        (state as Record<string, unknown>).guest === true &&
+        typeof (state as Record<string, unknown>).username === 'string'
+    );
+}
+
+/**
+ * Guest profile page for non-member Discord users (ROK-381).
+ * Shown when navigating to a user profile via a PUG roster slot.
+ */
+function GuestProfile({ username, discordId, avatarHash }: Omit<GuestRouteState, 'guest'>) {
+    const navigate = useNavigate();
+    const { brandingQuery } = useBranding();
+    const communityName = brandingQuery.data?.communityName ?? 'this community';
+    const avatarUrl = buildDiscordAvatarUrl(discordId, avatarHash);
+
+    return (
+        <div className="user-profile-page">
+            <div className="user-profile-card">
+                <div className="user-profile-header">
+                    {avatarUrl ? (
+                        <img
+                            src={avatarUrl}
+                            alt={username}
+                            className="user-profile-avatar"
+                            onError={(e) => {
+                                e.currentTarget.style.display = 'none';
+                            }}
+                        />
+                    ) : (
+                        <div className="user-profile-avatar user-profile-avatar--initials">
+                            {username.charAt(0).toUpperCase()}
+                        </div>
+                    )}
+                    <div className="user-profile-info">
+                        <h1 className="user-profile-name">{username}</h1>
+                        <p className="user-profile-meta">
+                            {username} is not currently a member of {communityName}
+                        </p>
+                        <p className="user-profile-guest-note">
+                            This player was added as a guest via Discord
+                        </p>
+                    </div>
+                </div>
+
+                <div className="user-profile-guest-actions">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="btn btn-primary"
+                    >
+                        Back
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 /**
  * Public user profile page (ROK-181).
  * Shows username, avatar, member since, and characters.
@@ -169,6 +239,7 @@ function GroupedCharacters({
 export function UserProfilePage() {
     const { userId } = useParams<{ userId: string }>();
     const numericId = userId ? parseInt(userId, 10) : undefined;
+    const location = useLocation();
 
     const { data: profile, isLoading, error } = useUserProfile(numericId);
     const { data: heartedGamesData } = useUserHeartedGames(numericId);
@@ -188,6 +259,18 @@ export function UserProfilePage() {
     }
 
     if (error || !profile) {
+        // ROK-381: Show guest profile when route state indicates a PUG user
+        const guestState = location.state as unknown;
+        if (isGuestRouteState(guestState)) {
+            return (
+                <GuestProfile
+                    username={guestState.username}
+                    discordId={guestState.discordId}
+                    avatarHash={guestState.avatarHash}
+                />
+            );
+        }
+
         return (
             <div className="user-profile-page">
                 <div className="user-profile-error">
