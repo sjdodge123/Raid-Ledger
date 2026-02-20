@@ -213,7 +213,7 @@ describe('BindingsCommand', () => {
       );
     });
 
-    it('should label game-voice-monitor bindings as "Voice Monitor"', async () => {
+    it('should label game-voice-monitor bindings as "Event Announcements"', async () => {
       bindingsService.getBindings.mockResolvedValue([
         makeBinding({ bindingPurpose: 'game-voice-monitor', gameId: null }),
       ]);

@@ -69,7 +69,7 @@ describe('BindingConfigForm', () => {
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
   });
 
-  // ── Voice monitor mode (shows all config fields) ──────────────
+  // ── Event Announcements mode (shows all config fields) ────────
 
   it('shows voice monitor fields when bindingPurpose is game-voice-monitor', () => {
     render(
