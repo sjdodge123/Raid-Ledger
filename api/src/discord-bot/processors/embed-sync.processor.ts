@@ -160,7 +160,9 @@ export class EmbedSyncProcessor extends WorkerHost {
     // Get active signup count (exclude declined)
     const signupRows = await this.db
       .select({
-        discordId: sql<string>`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        discordId: sql<
+          string | null
+        >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
       })
@@ -200,7 +202,9 @@ export class EmbedSyncProcessor extends WorkerHost {
     }
 
     const signupMentions = activeSignups
-      .filter((r) => r.discordId)
+      .filter(
+        (r): r is typeof r & { discordId: string } => r.discordId !== null,
+      )
       .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
 
     const eventData: EmbedEventData = {
