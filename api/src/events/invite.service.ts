@@ -6,6 +6,7 @@ import {
   ConflictException,
   BadRequestException,
   Optional,
+  forwardRef,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -27,6 +28,7 @@ export class InviteService {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly signupsService: SignupsService,
     @Optional()
+    @Inject(forwardRef(() => PugInviteService))
     private readonly pugInviteService: PugInviteService | null,
   ) {}
 
@@ -292,6 +294,10 @@ export class InviteService {
   private async tryGenerateServerInvite(
     eventId: number,
   ): Promise<string | null> {
+    this.logger.log(
+      'tryGenerateServerInvite: pugInviteService available = %s',
+      !!this.pugInviteService,
+    );
     if (!this.pugInviteService) return null;
 
     try {
