@@ -4,6 +4,7 @@ import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
+import { TokenResponseSchema } from '@raid-ledger/contract';
 
 /**
  * Handles OAuth callback - exchanges one-time auth code for JWT token.
@@ -67,7 +68,7 @@ export function AuthSuccessPage() {
                         throw new Error('Failed to exchange auth code');
                     }
 
-                    const { access_token: token } = await exchangeResponse.json() as { access_token: string };
+                    const { access_token: token } = TokenResponseSchema.parse(await exchangeResponse.json());
 
                     // Store token and fetch user data in one step
                     const user = await login(token);

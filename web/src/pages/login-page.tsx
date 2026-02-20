@@ -63,6 +63,11 @@ export function LoginPage() {
 
             // Store token and fetch user data in one step
             const user = await login(data.access_token);
+
+            if (!user) {
+                throw new Error('Failed to authenticate');
+            }
+
             toast.success('Logged in successfully!');
 
             // AC-6: First-run welcome toast (shows once)
