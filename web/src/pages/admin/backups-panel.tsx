@@ -478,15 +478,13 @@ export function BackupsPanel() {
                         }
                     }}
                     onConfirm={() => {
-                        // Force sidebar integration badges to Offline immediately
-                        queryClient.setQueryData(['admin', 'settings', 'oauth'], { configured: false });
-                        queryClient.setQueryData(['admin', 'settings', 'discord-bot'], { connected: false, configured: false });
-                        queryClient.setQueryData(['admin', 'settings', 'igdb'], { configured: false });
-                        queryClient.setQueryData(['admin', 'settings', 'blizzard'], { configured: false });
-                        // Prevent refetches that would restore stale "Online" during DB rebuild
-                        queryClient.cancelQueries({ queryKey: ['admin'] });
                         resetInstance.mutate(undefined, {
-                            onSuccess: (data) => setResetResult({ password: data.password }),
+                            onSuccess: async (data) => {
+                                // Refetch all admin queries so sidebar picks up
+                                // the fresh "unconfigured" state from the API
+                                await queryClient.refetchQueries({ queryKey: ['admin'] });
+                                setResetResult({ password: data.password });
+                            },
                             onError: (err) => toast.error(err.message),
                         });
                     }}
