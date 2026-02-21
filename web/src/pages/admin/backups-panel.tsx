@@ -478,21 +478,14 @@ export function BackupsPanel() {
                         }
                     }}
                     onConfirm={() => {
-                        // Cancel all background queries so 401s during DB rebuild
-                        // don't trigger auth redirect before we get the new password
+                        // Cancel all queries and remove cached data so:
+                        // 1. No 401s from background refetches during DB rebuild
+                        // 2. Sidebar badges show loading state (hidden) instead of stale "Online"
                         queryClient.cancelQueries();
-                        queryClient.setDefaultOptions({
-                            queries: { enabled: false },
-                        });
+                        queryClient.removeQueries();
                         resetInstance.mutate(undefined, {
                             onSuccess: (data) => setResetResult({ password: data.password }),
-                            onError: (err) => {
-                                // Re-enable queries on failure
-                                queryClient.setDefaultOptions({
-                                    queries: { enabled: undefined },
-                                });
-                                toast.error(err.message);
-                            },
+                            onError: (err) => toast.error(err.message),
                         });
                     }}
                     isPending={resetInstance.isPending}
