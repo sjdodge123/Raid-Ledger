@@ -28,6 +28,7 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             getStatus: jest.fn(),
             testToken: jest.fn(),
             checkPermissions: jest.fn(),
+            ensureConnected: jest.fn().mockResolvedValue(undefined),
           },
         },
         {

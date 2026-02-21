@@ -89,6 +89,18 @@ export class DiscordBotSettingsController {
 
       this.logger.log('Discord bot configuration updated via admin UI');
 
+      // Directly trigger connection as a reliable fallback.
+      // The event-based path (DISCORD_BOT_UPDATED) also fires, but
+      // ensureConnected is a no-op if a connection is already in progress.
+      this.discordBotService
+        .ensureConnected({ token: config.botToken, enabled: config.enabled })
+        .catch((err: unknown) => {
+          this.logger.error(
+            'Background bot connection failed:',
+            err instanceof Error ? err.message : err,
+          );
+        });
+
       return {
         success: true,
         message: 'Configuration saved.',

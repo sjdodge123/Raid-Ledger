@@ -24,6 +24,7 @@ describe('DiscordBotSettingsController', () => {
           useValue: {
             getStatus: jest.fn(),
             testToken: jest.fn(),
+            ensureConnected: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -178,6 +179,34 @@ describe('DiscordBotSettingsController', () => {
         'token',
         false,
       );
+    });
+
+    it('should trigger ensureConnected after saving config', async () => {
+      const body = {
+        botToken: 'new-bot-token',
+        enabled: true,
+      };
+
+      await controller.updateConfig(body);
+
+      expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
+        token: 'new-bot-token',
+        enabled: true,
+      });
+    });
+
+    it('should trigger ensureConnected even when disabled (ensureConnected handles skip)', async () => {
+      const body = {
+        botToken: 'new-bot-token',
+        enabled: false,
+      };
+
+      await controller.updateConfig(body);
+
+      expect(discordBotService.ensureConnected).toHaveBeenCalledWith({
+        token: 'new-bot-token',
+        enabled: false,
+      });
     });
   });
 
