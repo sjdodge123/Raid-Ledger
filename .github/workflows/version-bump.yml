@@ -1,52 +1,70 @@
 name: Version Bump
 
-# Bumps api/package.json patch version after each merge to main.
-# The version bump commit uses [skip ci] to prevent recursive workflow runs.
+# Bumps api/package.json patch version nightly (batches all merges from the day).
+# Only runs if there are new commits since the last version bump.
+# Can also be triggered manually via workflow_dispatch.
 #
-# NOTE: If branch protection blocks the push, create a PAT with repo scope,
-# store it as the VERSION_BUMP_TOKEN secret, and the workflow will use it
-# instead of the default GITHUB_TOKEN.
+# Requires VERSION_BUMP_TOKEN secret (PAT with repo scope) to create PRs
+# against the protected main branch.
 
 on:
-  push:
-    branches:
-      - main
+  schedule:
+    - cron: '0 8 * * *' # Daily at 8 AM UTC (3 AM EST)
+  workflow_dispatch: # Manual trigger
 
 jobs:
   bump:
-    # Skip version-bump commits to prevent infinite recursion
-    if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.VERSION_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.VERSION_BUMP_TOKEN }}
+          fetch-depth: 0
+
+      - name: Check for new commits since last version bump
+        id: check
+        run: |
+          LAST_BUMP=$(git log --oneline --grep="chore: bump version" -1 --format="%H" || echo "")
+          if [ -z "$LAST_BUMP" ]; then
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          else
+            COMMITS_SINCE=$(git rev-list --count "$LAST_BUMP"..HEAD)
+            if [ "$COMMITS_SINCE" -gt 0 ]; then
+              echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
 
       - name: Setup Node.js
+        if: steps.check.outputs.has_changes == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
       - name: Bump patch version
+        if: steps.check.outputs.has_changes == 'true'
         run: npm version patch --no-git-tag-version -w api
 
-      - name: Commit and push version bump
+      - name: Create version bump PR
+        if: steps.check.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ secrets.VERSION_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.VERSION_BUMP_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           VERSION=$(node -p "require('./api/package.json').version")
-          git add api/package.json
-          git commit -m "chore: bump version to ${VERSION} [skip ci]"
           BRANCH="chore/bump-version-${VERSION}"
           git checkout -b "$BRANCH"
+          git add api/package.json
+          git commit -m "chore: bump version to ${VERSION} [skip ci]"
           git push origin "$BRANCH"
           gh pr create --base main --head "$BRANCH" \
             --title "chore: bump version to ${VERSION}" \
-            --body "Auto-generated version bump to ${VERSION} after merge to main."
+            --body "Auto-generated nightly version bump to ${VERSION}."
           gh pr merge "$BRANCH" --auto --squash
