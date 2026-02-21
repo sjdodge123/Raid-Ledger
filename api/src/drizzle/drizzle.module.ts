@@ -18,7 +18,10 @@ export const DrizzleAsyncProvider = 'drizzleProvider';
         if (!connectionString) {
           throw new Error('DATABASE_URL is undefined');
         }
-        const client = postgres(connectionString);
+        const client = postgres(connectionString, {
+          max: 20,
+          idle_timeout: 30,
+        });
         const db = drizzle(client, { schema });
         return db;
       },

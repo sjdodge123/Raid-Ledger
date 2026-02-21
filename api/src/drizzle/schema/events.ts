@@ -8,6 +8,7 @@ import {
   uuid,
   jsonb,
   boolean,
+  index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { gameRegistry } from './game-registry';
@@ -41,40 +42,48 @@ export const tsrange = customType<{
   },
 });
 
-export const events = pgTable('events', {
-  id: serial('id').primaryKey(),
-  title: text('title').notNull(),
-  description: text('description'),
-  gameId: text('game_id'), // Reference to IGDB (legacy)
-  /** Reference to game registry for game-specific configuration (nullable for backward compatibility) */
-  registryGameId: uuid('registry_game_id').references(() => gameRegistry.id),
-  creatorId: integer('creator_id')
-    .references(() => users.id)
-    .notNull(),
-  // Utilizing tsrange for efficient scheduling and overlap checks
-  duration: tsrange('duration').notNull(),
-  /** Per-event slot configuration override (jsonb). Falls back to genre-based detection if null. */
-  slotConfig: jsonb('slot_config'),
-  /** Maximum number of attendees. Null = unlimited. */
-  maxAttendees: integer('max_attendees'),
-  /** Whether benched players should be auto-promoted when a slot opens. Default true. */
-  autoUnbench: boolean('auto_unbench').default(true),
-  /** UUID linking recurring event instances together. Null for one-off events. */
-  recurrenceGroupId: uuid('recurrence_group_id'),
-  /** Stored recurrence rule (jsonb). E.g. { frequency: 'weekly', until: '...' } */
-  recurrenceRule: jsonb('recurrence_rule'),
-  /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
-  contentInstances: jsonb('content_instances'),
-  /** Send DM reminder 15 minutes before event. Default true (ROK-126). */
-  reminder15min: boolean('reminder_15min').default(true).notNull(),
-  /** Send DM reminder 1 hour before event. Default false (ROK-126). */
-  reminder1hour: boolean('reminder_1hour').default(false).notNull(),
-  /** Send DM reminder 24 hours before event. Default false (ROK-126). */
-  reminder24hour: boolean('reminder_24hour').default(false).notNull(),
-  /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
-  cancelledAt: timestamp('cancelled_at'),
-  /** Optional reason provided when the event was cancelled (ROK-374). */
-  cancellationReason: text('cancellation_reason'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-});
+export const events = pgTable(
+  'events',
+  {
+    id: serial('id').primaryKey(),
+    title: text('title').notNull(),
+    description: text('description'),
+    gameId: text('game_id'), // Reference to IGDB (legacy)
+    /** Reference to game registry for game-specific configuration (nullable for backward compatibility) */
+    registryGameId: uuid('registry_game_id').references(() => gameRegistry.id),
+    creatorId: integer('creator_id')
+      .references(() => users.id)
+      .notNull(),
+    // Utilizing tsrange for efficient scheduling and overlap checks
+    duration: tsrange('duration').notNull(),
+    /** Per-event slot configuration override (jsonb). Falls back to genre-based detection if null. */
+    slotConfig: jsonb('slot_config'),
+    /** Maximum number of attendees. Null = unlimited. */
+    maxAttendees: integer('max_attendees'),
+    /** Whether benched players should be auto-promoted when a slot opens. Default true. */
+    autoUnbench: boolean('auto_unbench').default(true),
+    /** UUID linking recurring event instances together. Null for one-off events. */
+    recurrenceGroupId: uuid('recurrence_group_id'),
+    /** Stored recurrence rule (jsonb). E.g. { frequency: 'weekly', until: '...' } */
+    recurrenceRule: jsonb('recurrence_rule'),
+    /** Selected content instances from Blizzard API (e.g., specific dungeons/raids) */
+    contentInstances: jsonb('content_instances'),
+    /** Send DM reminder 15 minutes before event. Default true (ROK-126). */
+    reminder15min: boolean('reminder_15min').default(true).notNull(),
+    /** Send DM reminder 1 hour before event. Default false (ROK-126). */
+    reminder1hour: boolean('reminder_1hour').default(false).notNull(),
+    /** Send DM reminder 24 hours before event. Default false (ROK-126). */
+    reminder24hour: boolean('reminder_24hour').default(false).notNull(),
+    /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
+    cancelledAt: timestamp('cancelled_at'),
+    /** Optional reason provided when the event was cancelled (ROK-374). */
+    cancellationReason: text('cancellation_reason'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    // Performance indexes for common query patterns
+    index('idx_events_creator_id').on(table.creatorId),
+    index('idx_events_registry_game_id').on(table.registryGameId),
+  ],
+);

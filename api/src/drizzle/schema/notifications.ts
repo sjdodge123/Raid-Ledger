@@ -51,6 +51,8 @@ export const notifications = pgTable(
       table.userId,
       table.readAt,
     ),
+    // Performance index for cleanup queries
+    expiresAtIdx: index('idx_notifications_expires_at').on(table.expiresAt),
   }),
 );
 

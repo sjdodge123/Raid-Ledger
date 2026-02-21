@@ -5,6 +5,7 @@ import {
   varchar,
   timestamp,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { events } from './events';
 import { eventSignups } from './event-signups';
@@ -58,5 +59,8 @@ export const rosterAssignments = pgTable(
     unique('unique_event_signup').on(table.eventId, table.signupId),
     // Each slot can only have one assignment (role + position must be unique per event)
     // Note: This constraint only applies when role is not null (handled in service)
+    // Performance indexes for common query patterns
+    index('idx_roster_assignments_event_id').on(table.eventId),
+    index('idx_roster_assignments_signup_id').on(table.signupId),
   ],
 );
