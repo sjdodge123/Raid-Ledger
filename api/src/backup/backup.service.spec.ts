@@ -51,7 +51,6 @@ describe('BackupService', () => {
             get: jest.fn((key: string) => {
               if (key === 'DATABASE_URL')
                 return 'postgresql://user:pass@localhost:5432/raid_ledger';
-              if (key === 'BACKUP_DIR') return '/data/backups';
               return undefined;
             }),
           },

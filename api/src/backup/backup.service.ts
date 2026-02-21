@@ -26,9 +26,8 @@ const DAILY_RETENTION_DAYS = 30;
 export class BackupService implements OnModuleInit {
   private readonly logger = new Logger(BackupService.name);
   private readonly databaseUrl: string;
-  private readonly backupBase: string;
-  private readonly dailyDir: string;
-  private readonly migrationDir: string;
+  private readonly dailyDir = path.join(DEFAULT_BACKUP_BASE, 'daily');
+  private readonly migrationDir = path.join(DEFAULT_BACKUP_BASE, 'migrations');
 
   constructor(
     private readonly configService: ConfigService,
@@ -39,10 +38,6 @@ export class BackupService implements OnModuleInit {
       throw new Error('DATABASE_URL is required for BackupService');
     }
     this.databaseUrl = url;
-    this.backupBase =
-      this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
-    this.dailyDir = path.join(this.backupBase, 'daily');
-    this.migrationDir = path.join(this.backupBase, 'migrations');
   }
 
   onModuleInit(): void {
@@ -56,7 +51,7 @@ export class BackupService implements OnModuleInit {
     try {
       fs.mkdirSync(this.dailyDir, { recursive: true });
       fs.mkdirSync(this.migrationDir, { recursive: true });
-      this.logger.log(`Backup directories ready at ${this.backupBase}`);
+      this.logger.log(`Backup directories ready at ${DEFAULT_BACKUP_BASE}`);
     } catch (err) {
       this.logger.warn(
         `Could not create backup directories (expected in dev): ${err instanceof Error ? err.message : err}`,
