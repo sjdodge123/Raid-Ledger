@@ -444,7 +444,7 @@ export function InvitePage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={() => setDiscordJoinClicked(true)}
-                                        className="btn btn-secondary w-full flex items-center justify-center gap-2"
+                                        className="btn btn-primary w-full flex items-center justify-center gap-2"
                                     >
                                         {DISCORD_ICON}
                                         {discordJoinLabel}
@@ -460,14 +460,14 @@ export function InvitePage() {
                             </div>
                         )}
 
-                        <div className="space-y-3">
+                        <p className="text-center mt-4">
                             <button
-                                onClick={() => navigate(`/events/${claimResult.eventId}`, { replace: true })}
-                                className="btn btn-primary w-full"
+                                onClick={() => navigate('/onboarding', { replace: true })}
+                                className={`${showDiscordCta ? 'text-xs' : 'text-sm'} text-muted hover:text-foreground transition-colors underline`}
                             >
-                                View Event Details
+                                Continue to set up my Raid Ledger account &rarr;
                             </button>
-                        </div>
+                        </p>
                     </div>
                 </div>
             </div>
