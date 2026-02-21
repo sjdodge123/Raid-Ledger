@@ -90,7 +90,7 @@ function getPlaceholderPath(slug: string | undefined): string {
  * Event card component displaying event info with game cover.
  * ROK-222: Uses resolveAvatar() for creator avatar.
  */
-export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
+export const EventCard = React.memo(function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: EventCardProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
     const gameCoverUrl = event.game?.coverUrl || null;
     const isCancelled = !!event.cancelledAt;
@@ -203,7 +203,7 @@ export function EventCard({ event, signupCount = 0, onClick, matchesGameTime }: 
             </div>
         </div>
     );
-}
+});
 
 /**
  * Skeleton loader for event cards during loading state

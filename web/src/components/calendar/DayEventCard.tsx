@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { format, differenceInMinutes } from 'date-fns';
 import { toast } from '../../lib/toast';
@@ -49,7 +49,7 @@ function findNextAvailablePosition(
  * Day view event card with quick-join/leave actions.
  * Extracted from CalendarView's DayEventComponent callback (ROK-191).
  */
-export function DayEventCard({ event, eventOverlapsGameTime }: DayEventCardProps) {
+export const DayEventCard = React.memo(function DayEventCard({ event, eventOverlapsGameTime }: DayEventCardProps) {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
     const { user, isAuthenticated } = useAuth();
@@ -399,4 +399,4 @@ export function DayEventCard({ event, eventOverlapsGameTime }: DayEventCardProps
             </div>
         </>
     );
-}
+});

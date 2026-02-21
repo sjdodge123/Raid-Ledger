@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   Optional,
 } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
 import { eq, and, isNull, desc, lt, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -16,6 +17,7 @@ import {
   type NotificationType,
 } from '../drizzle/schema/notification-preferences';
 import { DiscordNotificationService } from './discord-notification.service';
+import { CronJobService } from '../cron-jobs/cron-job.service';
 
 export type { ChannelPrefs, NotificationType };
 export type Channel = 'inApp' | 'push' | 'discord';
@@ -68,6 +70,7 @@ export class NotificationService {
     @Optional()
     @Inject(DiscordNotificationService)
     private discordNotificationService: DiscordNotificationService | null,
+    private readonly cronJobService: CronJobService,
   ) {}
 
   /**
@@ -320,9 +323,20 @@ export class NotificationService {
     return this.mapPreferencesToDto(updated);
   }
 
+  @Cron('0 4 * * *', {
+    name: 'NotificationService_cleanupExpiredNotifications',
+  })
+  async cleanupExpiredNotifications(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'NotificationService_cleanupExpiredNotifications',
+      async () => {
+        await this.cleanupExpired();
+      },
+    );
+  }
+
   /**
    * Delete expired notifications (for cleanup jobs).
-   * Should be called periodically by a cron job.
    * @returns Number of deleted notifications
    */
   async cleanupExpired(): Promise<number> {
