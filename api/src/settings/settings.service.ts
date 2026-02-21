@@ -487,4 +487,27 @@ export class SettingsService {
     await this.set(SETTING_KEYS.DISCORD_BOT_TIMEZONE, timezone);
     this.logger.log('Discord bot timezone updated');
   }
+
+  /**
+   * Get the client URL with fallback chain (ROK-408):
+   * 1. Explicit app_settings override (client_url)
+   * 2. Derived from Discord callback URL origin
+   * 3. Legacy process.env.CLIENT_URL
+   * 4. null
+   */
+  async getClientUrl(): Promise<string | null> {
+    const explicit = await this.get(SETTING_KEYS.CLIENT_URL);
+    if (explicit) return explicit;
+
+    const callbackUrl = await this.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
+    if (callbackUrl) {
+      try {
+        return new URL(callbackUrl).origin;
+      } catch {
+        /* invalid URL — fall through */
+      }
+    }
+
+    return process.env.CLIENT_URL ?? null;
+  }
 }

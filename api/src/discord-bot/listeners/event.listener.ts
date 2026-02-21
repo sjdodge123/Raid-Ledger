@@ -310,10 +310,13 @@ export class DiscordEventListener {
    * Build shared embed context from settings.
    */
   private async buildContext(): Promise<EmbedContext> {
-    const branding = await this.settingsService.getBranding();
+    const [branding, clientUrl] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+    ]);
     return {
       communityName: branding.communityName,
-      clientUrl: process.env.CLIENT_URL ?? null,
+      clientUrl,
     };
   }
 }

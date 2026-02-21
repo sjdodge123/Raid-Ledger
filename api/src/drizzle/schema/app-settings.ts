@@ -46,6 +46,7 @@ export const SETTING_KEYS = {
   DISCORD_BOT_SETUP_COMPLETED: 'discord_bot_setup_completed',
   DISCORD_BOT_COMMUNITY_NAME: 'discord_bot_community_name',
   DISCORD_BOT_TIMEZONE: 'discord_bot_timezone',
+  CLIENT_URL: 'client_url',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

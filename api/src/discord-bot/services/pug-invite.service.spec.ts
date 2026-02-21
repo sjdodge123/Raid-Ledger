@@ -175,6 +175,7 @@ describe('PugInviteService', () => {
               communityLogoPath: null,
               communityAccentColor: null,
             }),
+            getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
           },
         },
       ],

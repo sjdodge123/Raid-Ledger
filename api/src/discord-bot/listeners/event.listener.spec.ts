@@ -111,6 +111,7 @@ describe('DiscordEventListener', () => {
               communityLogoPath: null,
               communityAccentColor: null,
             }),
+            getClientUrl: jest.fn().mockResolvedValue(null),
           },
         },
       ],

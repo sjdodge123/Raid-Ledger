@@ -16,7 +16,7 @@ describe('DiscordNotificationProcessor', () => {
   };
 
   const mockEmbedService = {
-    buildNotificationEmbed: jest.fn().mockReturnValue({
+    buildNotificationEmbed: jest.fn().mockResolvedValue({
       embed: { toJSON: () => ({}) },
       row: { toJSON: () => ({}) },
     }),

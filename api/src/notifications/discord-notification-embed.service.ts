@@ -7,6 +7,7 @@ import {
 } from 'discord.js';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
+import { SettingsService } from '../settings/settings.service';
 
 interface NotificationEmbedInput {
   notificationId: string;
@@ -35,19 +36,15 @@ interface EmbedResult {
  */
 @Injectable()
 export class DiscordNotificationEmbedService {
-  private readonly clientUrl: string;
-
-  constructor() {
-    this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
-  }
+  constructor(private readonly settingsService: SettingsService) {}
 
   /**
    * Build a notification embed with action buttons.
    */
-  buildNotificationEmbed(
+  async buildNotificationEmbed(
     input: NotificationEmbedInput,
     communityName: string,
-  ): EmbedResult {
+  ): Promise<EmbedResult> {
     const color = this.getColorForType(input.type);
     const emoji = this.getEmojiForType(input.type);
 
@@ -63,7 +60,8 @@ export class DiscordNotificationEmbedService {
     this.addTypeSpecificFields(embed, input);
 
     // Build action row with primary action + "Adjust Notifications" button
-    const row = this.buildActionRow(input);
+    const clientUrl = await this.resolveClientUrl();
+    const row = this.buildActionRow(input, clientUrl);
 
     return { embed, row };
   }
@@ -71,15 +69,16 @@ export class DiscordNotificationEmbedService {
   /**
    * Build a welcome DM embed (AC-1).
    */
-  buildWelcomeEmbed(
+  async buildWelcomeEmbed(
     communityName: string,
     accentColor?: string | null,
-  ): EmbedResult {
+  ): Promise<EmbedResult> {
     const color = accentColor
       ? parseInt(accentColor.replace('#', ''), 16)
       : EMBED_COLORS.ANNOUNCEMENT;
 
     const name = communityName || 'Raid Ledger';
+    const clientUrl = await this.resolveClientUrl();
 
     const embed = new EmbedBuilder()
       .setAuthor({ name })
@@ -114,15 +113,15 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('View Events')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/events`),
+        .setURL(`${clientUrl}/events`),
       new ButtonBuilder()
         .setLabel('Set Up Profile')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile`),
+        .setURL(`${clientUrl}/profile`),
       new ButtonBuilder()
         .setLabel('Notification Settings')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
+        .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
 
     return { embed, row };
@@ -131,14 +130,15 @@ export class DiscordNotificationEmbedService {
   /**
    * Build embed for batched/summary notifications.
    */
-  buildBatchSummaryEmbed(
+  async buildBatchSummaryEmbed(
     type: NotificationType,
     count: number,
     communityName: string,
-  ): EmbedResult {
+  ): Promise<EmbedResult> {
     const color = this.getColorForType(type);
     const emoji = this.getEmojiForType(type);
     const typeLabel = this.getTypeLabel(type);
+    const clientUrl = await this.resolveClientUrl();
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: communityName || 'Raid Ledger' })
@@ -154,11 +154,11 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('View All')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
+        .setURL(`${clientUrl}/profile/preferences/notifications`),
       new ButtonBuilder()
         .setLabel('Adjust Notifications')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
+        .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
 
     return { embed, row };
@@ -289,13 +289,23 @@ export class DiscordNotificationEmbedService {
     }
   }
 
+  /**
+   * Resolve the client URL from settings with fallback (ROK-408).
+   */
+  private async resolveClientUrl(): Promise<string> {
+    return (
+      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173'
+    );
+  }
+
   private buildActionRow(
     input: NotificationEmbedInput,
+    clientUrl: string,
   ): ActionRowBuilder<ButtonBuilder> {
     const buttons: ButtonBuilder[] = [];
 
     // Primary action button based on type
-    const primaryButton = this.buildPrimaryButton(input);
+    const primaryButton = this.buildPrimaryButton(input, clientUrl);
     if (primaryButton) {
       buttons.push(primaryButton);
     }
@@ -305,7 +315,7 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('Adjust Notifications')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${this.clientUrl}/profile/preferences/notifications`),
+        .setURL(`${clientUrl}/profile/preferences/notifications`),
     );
 
     return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
@@ -313,6 +323,7 @@ export class DiscordNotificationEmbedService {
 
   private buildPrimaryButton(
     input: NotificationEmbedInput,
+    clientUrl: string,
   ): ButtonBuilder | null {
     const payload = input.payload;
     const eventId = payload?.eventId != null ? toStr(payload.eventId) : null;
@@ -326,7 +337,7 @@ export class DiscordNotificationEmbedService {
             .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')
             .setStyle(ButtonStyle.Link)
             .setURL(
-              `${this.clientUrl}/events/${eventId}?notif=${input.notificationId}`,
+              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
             );
         }
         break;
@@ -337,7 +348,7 @@ export class DiscordNotificationEmbedService {
             .setLabel('View Roster')
             .setStyle(ButtonStyle.Link)
             .setURL(
-              `${this.clientUrl}/events/${eventId}?notif=${input.notificationId}`,
+              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
             );
         }
         break;

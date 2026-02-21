@@ -1,4 +1,5 @@
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { SettingsService } from '../settings/settings.service';
 import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
 
 // Mock discord.js so we can test without real Discord connections
@@ -93,15 +94,21 @@ jest.mock('discord.js', () => {
 
 describe('DiscordNotificationEmbedService', () => {
   let service: DiscordNotificationEmbedService;
+  let mockSettingsService: { getClientUrl: jest.Mock };
 
   beforeEach(() => {
     delete process.env.CLIENT_URL;
-    service = new DiscordNotificationEmbedService();
+    mockSettingsService = {
+      getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+    };
+    service = new DiscordNotificationEmbedService(
+      mockSettingsService as unknown as SettingsService,
+    );
   });
 
   describe('buildNotificationEmbed', () => {
-    it('should return an embed and row', () => {
-      const { embed, row } = service.buildNotificationEmbed(
+    it('should return an embed and row', async () => {
+      const { embed, row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -115,8 +122,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(row).toBeDefined();
     });
 
-    it('should use REMINDER color for event_reminder type', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should use REMINDER color for event_reminder type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -129,8 +136,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
-    it('should use ANNOUNCEMENT color for new_event type', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should use ANNOUNCEMENT color for new_event type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-2',
           type: 'new_event',
@@ -143,8 +150,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use ROSTER_UPDATE color for slot_vacated type', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should use ROSTER_UPDATE color for slot_vacated type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
           type: 'slot_vacated',
@@ -157,8 +164,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ROSTER_UPDATE);
     });
 
-    it('should use ROSTER_UPDATE color for bench_promoted type', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should use ROSTER_UPDATE color for bench_promoted type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-4',
           type: 'bench_promoted',
@@ -171,8 +178,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ROSTER_UPDATE);
     });
 
-    it('should use REMINDER color for event_rescheduled type', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should use REMINDER color for event_rescheduled type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-5',
           type: 'event_rescheduled',
@@ -185,9 +192,9 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
-    it('should set community name as author and footer', () => {
+    it('should set community name as author and footer', async () => {
       const communityName = 'My Raid Guild';
-      const { embed } = service.buildNotificationEmbed(
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -205,8 +212,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(json.footer.text).toBe(communityName);
     });
 
-    it('should include emoji in title', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should include emoji in title', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -221,11 +228,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(json.title).toContain('⏰');
     });
 
-    it('should include "Adjust Notifications" button in action row', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildNotificationEmbed(
+    it('should include "Adjust Notifications" button in action row', async () => {
+      const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -242,11 +246,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(adjustButton).toBeDefined();
     });
 
-    it('should include "View Event" button when eventId is in payload for event_reminder', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildNotificationEmbed(
+    it('should include "View Event" button when eventId is in payload for event_reminder', async () => {
+      const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -268,11 +269,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(viewButton?.url).toContain('notif=notif-1');
     });
 
-    it('should include "Sign Up" button for new_event type when eventId present', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildNotificationEmbed(
+    it('should include "Sign Up" button for new_event type when eventId present', async () => {
+      const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-2',
           type: 'new_event',
@@ -293,11 +291,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(signUpButton?.url).toContain('/events/99');
     });
 
-    it('should include "View Roster" button for slot_vacated type', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildNotificationEmbed(
+    it('should include "View Roster" button for slot_vacated type', async () => {
+      const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
           type: 'slot_vacated',
@@ -315,8 +310,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(rosterButton).toBeDefined();
     });
 
-    it('should add eventTitle field for event_reminder when payload has eventTitle', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should add eventTitle field for event_reminder when payload has eventTitle', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -335,8 +330,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(eventField?.value).toBe('Mythic Raid Night');
     });
 
-    it('should add gameName field for new_event when payload has gameName', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should add gameName field for new_event when payload has gameName', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-2',
           type: 'new_event',
@@ -355,8 +350,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(gameField?.value).toBe('World of Warcraft');
     });
 
-    it('should add slotName field for slot_vacated when payload has slotName', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should add slotName field for slot_vacated when payload has slotName', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-3',
           type: 'slot_vacated',
@@ -375,8 +370,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(slotField?.value).toBe('Healer');
     });
 
-    it('should not add fields when payload is not provided', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should not add fields when payload is not provided', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -390,8 +385,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(json.fields).toBeUndefined();
     });
 
-    it('should fall back to "Raid Ledger" when communityName is empty', () => {
-      const { embed } = service.buildNotificationEmbed(
+    it('should fall back to "Raid Ledger" when communityName is empty', async () => {
+      const { embed } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-1',
           type: 'event_reminder',
@@ -411,40 +406,37 @@ describe('DiscordNotificationEmbedService', () => {
   });
 
   describe('buildWelcomeEmbed', () => {
-    it('should return embed and row', () => {
-      const { embed, row } = service.buildWelcomeEmbed('Test Community');
+    it('should return embed and row', async () => {
+      const { embed, row } = await service.buildWelcomeEmbed('Test Community');
       expect(embed).toBeDefined();
       expect(row).toBeDefined();
     });
 
-    it('should use ANNOUNCEMENT color by default', () => {
-      const { embed } = service.buildWelcomeEmbed('Community');
+    it('should use ANNOUNCEMENT color by default', async () => {
+      const { embed } = await service.buildWelcomeEmbed('Community');
       expect(embed.toJSON().color).toBe(EMBED_COLORS.ANNOUNCEMENT);
     });
 
-    it('should use parsed accentColor when provided', () => {
-      const { embed } = service.buildWelcomeEmbed('Community', '#38bdf8');
+    it('should use parsed accentColor when provided', async () => {
+      const { embed } = await service.buildWelcomeEmbed('Community', '#38bdf8');
       // 0x38bdf8 = 3727864
       expect(embed.toJSON().color).toBe(0x38bdf8);
     });
 
-    it('should include community name in title', () => {
-      const { embed } = service.buildWelcomeEmbed('Community');
+    it('should include community name in title', async () => {
+      const { embed } = await service.buildWelcomeEmbed('Community');
       const json = embed.toJSON() as { title: string };
       expect(json.title).toBe('Welcome to Community!');
     });
 
-    it('should include Raid Ledger in description', () => {
-      const { embed } = service.buildWelcomeEmbed('My Guild');
+    it('should include Raid Ledger in description', async () => {
+      const { embed } = await service.buildWelcomeEmbed('My Guild');
       const json = embed.toJSON() as { description: string };
       expect(json.description).toContain('Raid Ledger');
     });
 
-    it('should include "Notification Settings" button in row', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildWelcomeEmbed('Community');
+    it('should include "Notification Settings" button in row', async () => {
+      const { row } = await service.buildWelcomeEmbed('Community');
       const rowJson = row.toJSON() as {
         components: Array<{ label: string; url: string }>;
       };
@@ -457,8 +449,8 @@ describe('DiscordNotificationEmbedService', () => {
       );
     });
 
-    it('should include feature fields', () => {
-      const { embed } = service.buildWelcomeEmbed('Community');
+    it('should include feature fields', async () => {
+      const { embed } = await service.buildWelcomeEmbed('Community');
       const json = embed.toJSON() as { fields: Array<{ name: string }> };
       const browseField = json.fields?.find(
         (f) => f.name === 'Browse & sign up for events',
@@ -474,8 +466,8 @@ describe('DiscordNotificationEmbedService', () => {
   });
 
   describe('buildBatchSummaryEmbed', () => {
-    it('should include count in title', () => {
-      const { embed } = service.buildBatchSummaryEmbed(
+    it('should include count in title', async () => {
+      const { embed } = await service.buildBatchSummaryEmbed(
         'event_reminder',
         5,
         'Community',
@@ -485,11 +477,8 @@ describe('DiscordNotificationEmbedService', () => {
       expect(json.title).toContain('5');
     });
 
-    it('should include "Adjust Notifications" and "View All" buttons', () => {
-      process.env.CLIENT_URL = 'http://localhost:5173';
-      service = new DiscordNotificationEmbedService();
-
-      const { row } = service.buildBatchSummaryEmbed(
+    it('should include "Adjust Notifications" and "View All" buttons', async () => {
+      const { row } = await service.buildBatchSummaryEmbed(
         'event_reminder',
         3,
         'Community',

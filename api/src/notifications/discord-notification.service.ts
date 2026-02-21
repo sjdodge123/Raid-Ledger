@@ -169,7 +169,7 @@ export class DiscordNotificationService {
 
     try {
       const branding = await this.settingsService.getBranding();
-      const { embed, row } = this.embedService.buildWelcomeEmbed(
+      const { embed, row } = await this.embedService.buildWelcomeEmbed(
         branding.communityName ?? 'Raid Ledger',
         branding.communityAccentColor,
       );
