@@ -372,6 +372,13 @@
       "when": 1771611731251,
       "tag": "0052_fine_darkhawk",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1771653281428,
+      "tag": "0053_powerful_iron_monger",
+      "breakpoints": true
     }
   ]
 }
