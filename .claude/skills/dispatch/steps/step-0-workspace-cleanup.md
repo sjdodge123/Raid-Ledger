@@ -25,9 +25,9 @@ Build a map of `ROK-XXX → { linearStatus, hasMergedPR, hasBranch, hasWorktree 
 
 ---
 
-## Phase 2: Inventory Worktrees
+## Phase 2: Inventory & Clean Active Worktrees
 
-List all worktrees:
+List all worktrees git knows about:
 
 ```bash
 git worktree list
@@ -64,6 +64,55 @@ git worktree remove ../Raid-Ledger--rok-<num>
 ```
 
 Use `--force` only for detached HEAD review worktrees. For dirty worktrees that should be removed, stash or commit first if the work looks intentional, then remove.
+
+---
+
+## Phase 2b: Remove Orphaned Worktree Directories
+
+**CRITICAL:** `git worktree list` only shows worktrees git is actively tracking. Previous sessions may have removed the git worktree tracking (via `git worktree remove` or branch deletion) but left the **directory on disk**. These orphaned folders accumulate and clutter the filesystem.
+
+Scan for orphaned directories by comparing what's on disk vs what git tracks:
+
+```bash
+# Get directories git knows about
+TRACKED=$(git worktree list --porcelain | grep '^worktree ' | sed 's/^worktree //')
+
+# Get all Raid-Ledger--rok-* directories on disk
+ALL_DIRS=$(ls -d ../Raid-Ledger--rok-* 2>/dev/null)
+
+# Find orphans: on disk but NOT in git worktree list
+for dir in $ALL_DIRS; do
+  abs_dir=$(cd "$dir" && pwd)
+  if ! echo "$TRACKED" | grep -qF "$abs_dir"; then
+    echo "ORPHAN: $dir"
+  fi
+done
+```
+
+**For each orphaned directory:**
+
+1. Check if it contains any uncommitted work worth preserving:
+   ```bash
+   # Quick check — if there's no .git file, it's fully orphaned
+   ls <orphan-dir>/.git 2>/dev/null
+   ```
+2. If there's no `.git` file or the directory is empty/stale, **delete it directly**:
+   ```bash
+   rm -rf <orphan-dir>
+   ```
+3. If it somehow still has a `.git` pointer, prune and then delete:
+   ```bash
+   git worktree prune
+   rm -rf <orphan-dir>
+   ```
+
+Always run `git worktree prune` after removing orphaned directories to clean up git's internal tracking:
+
+```bash
+git worktree prune
+```
+
+**Count orphans removed** and include in the Phase 6 summary report.
 
 ---
 
@@ -157,6 +206,7 @@ git status                 # Clean, on main
 
 ### Cleaned Up
 - Worktrees removed: <count> (list names)
+- Orphaned directories removed: <count> (list names — were on disk but not tracked by git)
 - Merged branches deleted: <count> (list names)
 - Linear updated to Done: <count> (list ROK-XXX identifiers)
 - Team artifacts: <cleaned / none found>

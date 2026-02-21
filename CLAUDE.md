@@ -186,15 +186,20 @@ When code is committed:
 ### On Story Completion
 When a story (ROK-XXX) is finished — all ACs met, code committed:
 1. **Dev teammate** messages the lead that implementation is complete
-2. **Operator** tests locally on the feature branch with `deploy_dev.sh --branch rok-XXX`
-3. **Lead** pushes the branch, creates a GitHub PR (`gh pr create --base main`), and enables auto-merge (`gh pr merge --auto --squash`)
-4. **Lead** posts PR URL as a Linear comment on the issue, updates Linear → "In Review"
-5. CI passes → PR auto-merges to `main`
-6. **Lead** updates Linear → "Done" with a summary comment:
+2. **Lead** runs tests, CI validation, pushes branch to origin
+3. **Lead** updates Linear → "In Review", deploys feature branch locally for operator
+4. **Operator** tests locally on the feature branch (`deploy_dev.sh --branch rok-XXX`)
+5. **Operator** moves Linear → "Code Review" (approved) or "Changes Requested" (issues found)
+6. **Code review agent** reviews the diff, applies auto-fixes if needed
+7. **Lead** pushes any reviewer commits, creates PR with auto-merge: `gh pr create --base main` + `gh pr merge --auto --squash`
+8. CI passes → PR auto-merges to `main`
+9. **Lead** updates Linear → "Done" with a summary comment:
    - Key files changed
    - Commit SHA(s) and PR number
    - Any notable decisions or deviations from the original spec
-7. Update `task.md` checkbox to `[x]`
+10. Update `task.md` checkbox to `[x]`
+
+**CRITICAL ordering: PR creation happens AFTER operator testing AND code review (step 7), not before. Creating a PR with auto-merge before review causes unreviewed code to ship to main.**
 
 This replaces the need to invoke `/handover` for Linear sync. Agents document their work as they go, not as a separate ceremony.
 
@@ -219,13 +224,18 @@ Before a session is cleared with `/clear`, you MUST:
 
 ### Status Flow
 ```
-Dispatch Ready → In Progress → In Review (PR created, auto-merge enabled)
+Dispatch Ready → In Progress → In Review (branch pushed — NO PR yet)
   → operator tests locally on feature branch →
     Changes Requested (issues found) → In Progress (dev fixes) → In Review
     Code Review (operator approved) → reviewer agent reviews →
       Changes Requested (reviewer issues) → In Progress → In Review
+      Reviewer approves → lead creates PR with auto-merge →
       Done (CI passes, PR auto-merges to main)
 ```
+
+**⛔ PRs are created ONLY after both operator testing AND code review pass.**
+"In Review" means the branch is pushed and waiting for operator testing — NOT that a PR exists.
+Creating a PR with auto-merge before review causes unreviewed code to ship to main.
 
 ## Agent Teams (Parallel Development)
 

@@ -57,6 +57,10 @@ export class DiscordBotService
    */
   @OnEvent(SETTINGS_EVENTS.DISCORD_BOT_UPDATED)
   async handleConfigUpdate(config: DiscordBotConfig | null): Promise<void> {
+    this.logger.log(
+      `handleConfigUpdate called with config: ${config ? `enabled=${String(config.enabled)}` : 'null'}`,
+    );
+
     if (!config || !config.enabled) {
       this.logger.log(
         'Discord bot config cleared or disabled, disconnecting...',
@@ -68,10 +72,37 @@ export class DiscordBotService
     try {
       this.logger.log('Discord bot config updated, reconnecting...');
       await this.clientService.connect(config.token);
+      this.logger.log('Discord bot connected successfully after config update');
     } catch (error) {
       this.logger.error(
         'Failed to reconnect Discord bot after config update:',
-        error,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
+  /**
+   * Directly trigger connection with the given config.
+   * Used by the controller as a reliable connection path that does not
+   * depend on the event bus.  Skips if already connected or connecting.
+   */
+  async ensureConnected(config: DiscordBotConfig): Promise<void> {
+    if (!config.enabled) return;
+    if (this.clientService.isConnected() || this.clientService.isConnecting()) {
+      this.logger.debug(
+        'ensureConnected: already connected or connecting, skipping',
+      );
+      return;
+    }
+
+    try {
+      this.logger.log('ensureConnected: starting bot connection...');
+      await this.clientService.connect(config.token);
+      this.logger.log('ensureConnected: bot connected successfully');
+    } catch (error) {
+      this.logger.error(
+        'ensureConnected: failed to connect bot:',
+        error instanceof Error ? error.message : error,
       );
     }
   }
