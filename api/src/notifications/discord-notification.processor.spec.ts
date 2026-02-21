@@ -102,6 +102,7 @@ describe('DiscordNotificationProcessor', () => {
         '123456789',
         expect.anything(),
         expect.anything(),
+        undefined,
       );
     });
 

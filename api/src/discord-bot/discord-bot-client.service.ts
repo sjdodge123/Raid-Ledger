@@ -198,11 +198,13 @@ export class DiscordBotClientService {
   /**
    * Send a rich embed DM to a user by their Discord ID.
    * Used by the Discord notification system (ROK-180).
+   * Supports multiple action rows (ROK-378: Roach Out button on reminders).
    */
   async sendEmbedDM(
     discordId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    extraRows?: ActionRowBuilder<ButtonBuilder>[],
   ): Promise<void> {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
@@ -215,8 +217,15 @@ export class DiscordBotClientService {
         components?: ActionRowBuilder<ButtonBuilder>[];
       } = { embeds: [embed] };
 
+      const components: ActionRowBuilder<ButtonBuilder>[] = [];
+      if (extraRows) {
+        components.push(...extraRows);
+      }
       if (row) {
-        messagePayload.components = [row];
+        components.push(row);
+      }
+      if (components.length > 0) {
+        messagePayload.components = components;
       }
 
       await user.send(messagePayload);

@@ -43,6 +43,10 @@ jest.mock('discord.js', () => {
   class MockButtonBuilder {
     private data: Record<string, unknown> = {};
 
+    setCustomId(customId: string) {
+      this.data.customId = customId;
+      return this;
+    }
     setLabel(label: string) {
       this.data.label = label;
       return this;
@@ -53,6 +57,14 @@ jest.mock('discord.js', () => {
     }
     setURL(url: string) {
       this.data.url = url;
+      return this;
+    }
+    setEmoji(emoji: string) {
+      this.data.emoji = emoji;
+      return this;
+    }
+    setDisabled(disabled: boolean) {
+      this.data.disabled = disabled;
       return this;
     }
     toJSON() {
@@ -88,6 +100,8 @@ jest.mock('discord.js', () => {
     ActionRowBuilder: MockActionRowBuilder,
     ButtonStyle: {
       Link: 5,
+      Danger: 4,
+      Secondary: 2,
     },
   };
 });

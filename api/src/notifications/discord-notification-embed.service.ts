@@ -5,7 +5,10 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { EMBED_COLORS } from '../discord-bot/discord-bot.constants';
+import {
+  EMBED_COLORS,
+  ROACH_OUT_BUTTON_IDS,
+} from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { SettingsService } from '../settings/settings.service';
 
@@ -28,6 +31,8 @@ function toStr(value: unknown): string {
 interface EmbedResult {
   embed: EmbedBuilder;
   row: ActionRowBuilder<ButtonBuilder>;
+  /** Additional action rows (e.g., Roach Out button on reminders). */
+  rows?: ActionRowBuilder<ButtonBuilder>[];
 }
 
 /**
@@ -63,7 +68,10 @@ export class DiscordNotificationEmbedService {
     const clientUrl = await this.resolveClientUrl();
     const row = this.buildActionRow(input, clientUrl);
 
-    return { embed, row };
+    // ROK-378: Add Roach Out button row for event reminders
+    const rows = this.buildExtraRows(input);
+
+    return { embed, row, rows };
   }
 
   /**
@@ -177,6 +185,29 @@ export class DiscordNotificationEmbedService {
         "We couldn't reach you on Discord — your DMs may be disabled or the bot may be blocked. " +
         'Discord notifications have been paused. Check your DM settings and re-enable in your notification preferences.',
     };
+  }
+
+  /**
+   * Build extra action rows for specific notification types (ROK-378).
+   * Event reminders get a "Roach Out" interactive button.
+   */
+  private buildExtraRows(
+    input: NotificationEmbedInput,
+  ): ActionRowBuilder<ButtonBuilder>[] | undefined {
+    if (input.type !== 'event_reminder') return undefined;
+
+    const eventId = input.payload?.eventId;
+    if (eventId == null) return undefined;
+
+    const roachOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${toStr(eventId)}`)
+        .setLabel('Roach Out')
+        .setStyle(ButtonStyle.Danger)
+        .setEmoji('\uD83E\uDEB3'),
+    );
+
+    return [roachOutRow];
   }
 
   private getColorForType(type: NotificationType): number {
