@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { RosterWithAssignments, RosterAssignmentResponse, UpdateRosterDto } from '@raid-ledger/contract';
-import { getRosterWithAssignments, updateRoster, selfUnassignFromRoster } from '../lib/api-client';
+import { getRosterWithAssignments, updateRoster, selfUnassignFromRoster, adminRemoveUserFromEvent } from '../lib/api-client';
 
 interface MutationContext {
     previousRoster?: RosterWithAssignments;
@@ -74,6 +74,27 @@ export function useSelfUnassign(eventId: number) {
 
     return useMutation<RosterWithAssignments, Error, void>({
         mutationFn: () => selfUnassignFromRoster(eventId),
+        onSettled: () => {
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'roster', 'assignments'],
+            });
+            queryClient.invalidateQueries({
+                queryKey: ['events', eventId, 'roster'],
+            });
+        },
+    });
+}
+
+/**
+ * Mutation hook for admin-removing a signup from an event (ROK-402).
+ * Deletes the signup and roster assignment entirely.
+ * Works for both registered users and anonymous PUG participants.
+ */
+export function useAdminRemoveUser(eventId: number) {
+    const queryClient = useQueryClient();
+
+    return useMutation<void, Error, number>({
+        mutationFn: (signupId: number) => adminRemoveUserFromEvent(eventId, signupId),
         onSettled: () => {
             queryClient.invalidateQueries({
                 queryKey: ['events', eventId, 'roster', 'assignments'],

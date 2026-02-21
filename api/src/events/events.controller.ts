@@ -439,6 +439,28 @@ export class EventsController {
   }
 
   /**
+   * Admin-remove a signup from an event (ROK-402).
+   * Deletes the signup AND roster assignment.
+   * Works for both registered users and anonymous PUG participants.
+   * Only event creator, admin, or operator can perform this action.
+   */
+  @Delete(':id/signups/:signupId')
+  @UseGuards(AuthGuard('jwt'))
+  async adminRemoveSignup(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Param('signupId', ParseIntPipe) signupId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ message: string }> {
+    await this.signupsService.adminRemoveSignup(
+      eventId,
+      signupId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
+    return { message: 'User removed from event successfully' };
+  }
+
+  /**
    * Invite a registered member to an event (ROK-292).
    * Sends a notification instead of creating a PUG slot.
    * Requires authentication.

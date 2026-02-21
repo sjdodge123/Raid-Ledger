@@ -43,6 +43,8 @@ interface AssignmentPopupProps {
     onAssignToSlot?: (signupId: number, role: RosterRole, position: number) => void;
     /** Called when admin clicks "Invite a PUG" — generates invite link (ROK-263) */
     onGenerateInviteLink?: () => void;
+    /** ROK-402: Called when admin removes a signup from the event entirely */
+    onRemoveFromEvent?: (signupId: number, username: string) => void;
 }
 
 
@@ -65,6 +67,7 @@ export function AssignmentPopup({
     availableSlots,
     onAssignToSlot,
     onGenerateInviteLink,
+    onRemoveFromEvent,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
@@ -260,12 +263,25 @@ export function AssignmentPopup({
                                     showRole
                                 />
                             </div>
-                            <button
-                                onClick={() => onRemove(currentOccupant.signupId)}
-                                className="assignment-popup__remove-btn"
-                            >
-                                Remove
-                            </button>
+                            <div className="flex flex-col gap-1 shrink-0">
+                                <button
+                                    onClick={() => onRemove(currentOccupant.signupId)}
+                                    className="assignment-popup__remove-btn"
+                                >
+                                    Unassign
+                                </button>
+                                {onRemoveFromEvent && (
+                                    <button
+                                        onClick={() => {
+                                            onRemoveFromEvent(currentOccupant.signupId, currentOccupant.username);
+                                            handleClose();
+                                        }}
+                                        className="assignment-popup__remove-event-btn"
+                                    >
+                                        Remove from event
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 )}
@@ -282,6 +298,8 @@ export function AssignmentPopup({
                                 player={player}
                                 onAssign={handleAssign}
                                 accentColor={(ROLE_SLOT_COLORS[slotRole] ?? ROLE_SLOT_COLORS.player).border}
+                                onRemoveFromEvent={onRemoveFromEvent}
+                                onClose={handleClose}
                             />
                         ))}
                     </div>
@@ -298,6 +316,8 @@ export function AssignmentPopup({
                                 key={player.signupId}
                                 player={player}
                                 onAssign={handleAssign}
+                                onRemoveFromEvent={onRemoveFromEvent}
+                                onClose={handleClose}
                             />
                         ))}
                     </div>
@@ -347,10 +367,14 @@ function ModalPlayerRow({
     player,
     onAssign,
     accentColor,
+    onRemoveFromEvent,
+    onClose,
 }: {
     player: RosterAssignmentResponse;
     onAssign: (signupId: number) => void;
     accentColor?: string;
+    onRemoveFromEvent?: (signupId: number, username: string) => void;
+    onClose?: () => void;
 }) {
     return (
         <div className="flex items-center gap-2">
@@ -362,12 +386,28 @@ function ModalPlayerRow({
                     matchAccent={accentColor}
                 />
             </div>
-            <button
-                onClick={() => onAssign(player.signupId)}
-                className="assignment-popup__assign-btn"
-            >
-                Assign
-            </button>
+            <div className="flex gap-1 shrink-0">
+                <button
+                    onClick={() => onAssign(player.signupId)}
+                    className="assignment-popup__assign-btn"
+                >
+                    Assign
+                </button>
+                {onRemoveFromEvent && (
+                    <button
+                        onClick={() => {
+                            onRemoveFromEvent(player.signupId, player.username);
+                            onClose?.();
+                        }}
+                        className="assignment-popup__remove-event-btn"
+                        title={`Remove ${player.username} from event`}
+                    >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6" />
+                        </svg>
+                    </button>
+                )}
+            </div>
         </div>
     );
 }

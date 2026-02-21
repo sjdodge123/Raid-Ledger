@@ -151,7 +151,7 @@ describe('AssignmentPopup', () => {
             />
         );
 
-        expect(screen.getByText('Remove')).toBeInTheDocument();
+        expect(screen.getByText('Unassign')).toBeInTheDocument();
         expect(screen.getByText('OccupantPlayer')).toBeInTheDocument();
     });
 

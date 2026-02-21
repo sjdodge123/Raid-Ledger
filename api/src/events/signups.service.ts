@@ -1042,6 +1042,118 @@ export class SignupsService {
     return this.getRosterWithAssignments(eventId);
   }
 
+  /**
+   * Admin-remove a signup from an event (ROK-402).
+   * Deletes their signup (cascade removes roster assignment) and cleans up PUG slots.
+   * Sends a notification to the removed user (if registered).
+   * Works for both registered users and anonymous PUG participants.
+   * @param eventId - Event ID
+   * @param signupId - Signup row ID to remove
+   * @param requesterId - User performing the removal (for authorization)
+   * @param isAdmin - Whether requester is admin/operator
+   */
+  async adminRemoveSignup(
+    eventId: number,
+    signupId: number,
+    requesterId: number,
+    isAdmin: boolean,
+  ): Promise<void> {
+    // Verify event exists and requester has permission
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) {
+      throw new NotFoundException(`Event with ID ${eventId} not found`);
+    }
+
+    if (event.creatorId !== requesterId && !isAdmin) {
+      throw new ForbiddenException(
+        'Only event creator or admin/operator can remove users from an event',
+      );
+    }
+
+    // Find the signup by ID
+    const [signup] = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.id, signupId),
+          eq(schema.eventSignups.eventId, eventId),
+        ),
+      )
+      .limit(1);
+
+    if (!signup) {
+      throw new NotFoundException(
+        `Signup ${signupId} not found for event ${eventId}`,
+      );
+    }
+
+    // Check for roster assignment (for bench promotion)
+    const [assignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, signup.id))
+      .limit(1);
+
+    // Clean up PUG slots claimed by the removed user (if registered)
+    if (signup.userId) {
+      await this.db
+        .delete(schema.pugSlots)
+        .where(
+          and(
+            eq(schema.pugSlots.eventId, eventId),
+            eq(schema.pugSlots.claimedByUserId, signup.userId),
+          ),
+        );
+    }
+
+    // Delete the signup (cascade removes the roster assignment)
+    await this.db
+      .delete(schema.eventSignups)
+      .where(eq(schema.eventSignups.id, signup.id));
+
+    this.logger.log(
+      `Admin ${requesterId} removed signup ${signupId} from event ${eventId}`,
+    );
+
+    this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
+      eventId,
+      userId: signup.userId,
+      signupId: signup.id,
+      action: 'admin_removed',
+    });
+
+    // Notify the removed user (only if they have a registered account)
+    if (signup.userId) {
+      await this.notificationService.create({
+        userId: signup.userId,
+        type: 'slot_vacated',
+        title: 'Removed from Event',
+        message: `You were removed from ${event.title}`,
+        payload: { eventId },
+      });
+    }
+
+    // Schedule bench promotion if the user held a non-bench roster slot
+    if (
+      assignment &&
+      assignment.role &&
+      assignment.role !== 'bench' &&
+      (await this.benchPromotionService.isEligible(eventId))
+    ) {
+      await this.benchPromotionService.schedulePromotion(
+        eventId,
+        assignment.role,
+        assignment.position,
+      );
+    }
+  }
+
   // ============================================================
   // Roster Assignment Methods (ROK-114)
   // ============================================================

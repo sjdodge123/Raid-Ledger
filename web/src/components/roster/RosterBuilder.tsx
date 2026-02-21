@@ -54,6 +54,8 @@ interface RosterBuilderProps {
     onRegeneratePugLink?: (pugId: string) => void;
     /** ROK-292: Event ID (needed for member invite endpoint in AssignmentPopup) */
     eventId?: number;
+    /** ROK-402: Called when admin removes a signup from the event entirely */
+    onRemoveFromEvent?: (signupId: number, username: string) => void;
 }
 
 // MMO-style role slots
@@ -95,6 +97,7 @@ export const RosterBuilder = memo(function RosterBuilder({
     onEditPug,
     onRegeneratePugLink,
     eventId,
+    onRemoveFromEvent,
 }: RosterBuilderProps) {
     const { announce } = useAriaLive();
 
@@ -512,6 +515,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                 onGenerateInviteLink={onGenerateInviteLink && assignmentTarget ? () => {
                     onGenerateInviteLink(assignmentTarget.role);
                 } : undefined}
+                onRemoveFromEvent={onRemoveFromEvent}
             />
         </div>
     );
