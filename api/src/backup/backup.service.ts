@@ -266,9 +266,13 @@ export class BackupService implements OnModuleInit {
       this.logger.log(`Database restore complete from: ${filename}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      // pg_restore exits with code 1 for warnings (e.g. objects that don't exist)
-      // Only treat as failure if stderr contains actual errors
-      if (message.includes('pg_restore: error:')) {
+      // pg_restore exits with code 1 for warnings (e.g. objects that don't exist,
+      // unrecognized config parameters from version mismatches). These are harmless
+      // when the restore summary says "errors ignored on restore".
+      const isFatal =
+        message.includes('pg_restore: error:') &&
+        !message.includes('errors ignored on restore');
+      if (isFatal) {
         this.logger.error(`pg_restore failed: ${message}`);
         throw new InternalServerErrorException(
           `Database restore failed: ${message}`,
