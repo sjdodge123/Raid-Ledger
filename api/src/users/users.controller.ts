@@ -41,6 +41,7 @@ import {
   UserEventSignupsResponseDto,
   UpdateUserProfileSchema,
   CheckDisplayNameQuerySchema,
+  DeleteAccountSchema,
 } from '@raid-ledger/contract';
 import type { UserRole } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
@@ -50,6 +51,7 @@ interface AuthenticatedRequest {
   user: {
     id: number;
     role: UserRole;
+    impersonatedBy?: number | null;
   };
 }
 
@@ -305,6 +307,54 @@ export class UsersController {
     );
 
     return { data: preferencesMap };
+  }
+
+  /**
+   * ROK-405: Self-delete account.
+   * Requires user to type their display name or username to confirm.
+   * Cascades all related data and reassigns events to the instance admin.
+   */
+  @Delete('me')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async deleteMyAccount(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ) {
+    if (req.user.impersonatedBy) {
+      throw new ForbiddenException(
+        'Cannot delete account while impersonating',
+      );
+    }
+
+    const dto = DeleteAccountSchema.parse(body);
+
+    const user = await this.usersService.findById(req.user.id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Confirm name must match display name or username
+    const expectedName = user.displayName || user.username;
+    if (dto.confirmName !== expectedName) {
+      throw new BadRequestException(
+        'Confirmation name does not match your display name',
+      );
+    }
+
+    // Find instance admin for event reassignment
+    const admin = await this.usersService.findAdmin();
+    // Reassign to admin, or if this user IS the admin, skip reassignment
+    // (shouldn't happen in practice since admin is protected)
+    const reassignTo =
+      admin && admin.id !== req.user.id ? admin.id : req.user.id;
+
+    // Delete custom avatar file from disk
+    if (user.customAvatarUrl) {
+      await this.avatarService.delete(user.customAvatarUrl);
+    }
+
+    await this.usersService.deleteUser(req.user.id, reassignTo);
   }
 
   /**
@@ -592,6 +642,40 @@ export class UsersController {
         role: updated.role,
       },
     };
+  }
+
+  /**
+   * ROK-405: Admin-remove a user.
+   * Cannot delete yourself or another admin.
+   * Cascades all related data and reassigns events to the requesting admin.
+   */
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
+  @HttpCode(204)
+  async adminRemoveUser(
+    @Param('id', ParseIntPipe) id: number,
+    @Request() req: AuthenticatedRequest,
+  ) {
+    if (id === req.user.id) {
+      throw new BadRequestException('Cannot delete yourself');
+    }
+
+    const targetUser = await this.usersService.findById(id);
+    if (!targetUser) {
+      throw new NotFoundException('User not found');
+    }
+
+    if (targetUser.role === 'admin') {
+      throw new ForbiddenException('Cannot delete another admin');
+    }
+
+    // Delete custom avatar file from disk
+    if (targetUser.customAvatarUrl) {
+      await this.avatarService.delete(targetUser.customAvatarUrl);
+    }
+
+    // Reassign events to the admin performing the deletion
+    await this.usersService.deleteUser(id, req.user.id);
   }
 
   /**

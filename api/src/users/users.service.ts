@@ -1,4 +1,4 @@
-import { Inject, Injectable, ConflictException } from '@nestjs/common';
+import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -13,6 +13,8 @@ export const RECENT_MEMBER_LIMIT = 10;
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
@@ -459,5 +461,78 @@ export class UsersService {
       .orderBy(asc(schema.games.name));
 
     return rows;
+  }
+
+  /**
+   * ROK-405: Delete a user and cascade all related data in a transaction.
+   * Tables with ON DELETE CASCADE are handled by Postgres automatically.
+   * Tables without cascade are cleaned up manually before deleting the user row.
+   *
+   * @param userId - The ID of the user to delete
+   * @param reassignToUserId - User ID to reassign created events to
+   */
+  async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      // 1. Delete sessions (no cascade)
+      await tx
+        .delete(schema.sessions)
+        .where(eq(schema.sessions.userId, userId));
+
+      // 2. Delete local credentials (no cascade)
+      await tx
+        .delete(schema.localCredentials)
+        .where(eq(schema.localCredentials.userId, userId));
+
+      // 3. Delete availability windows (no cascade)
+      await tx
+        .delete(schema.availability)
+        .where(eq(schema.availability.userId, userId));
+
+      // 4. Delete event templates (no cascade)
+      await tx
+        .delete(schema.eventTemplates)
+        .where(eq(schema.eventTemplates.userId, userId));
+
+      // 5. PUG slots: set claimed_by_user_id to NULL where user claimed
+      await tx
+        .update(schema.pugSlots)
+        .set({ claimedByUserId: null })
+        .where(eq(schema.pugSlots.claimedByUserId, userId));
+
+      // 6. PUG slots: delete unclaimed slots created by this user,
+      //    reassign claimed ones to the event creator
+      //    For simplicity, set created_by to reassignToUserId for all slots created by this user
+      await tx
+        .update(schema.pugSlots)
+        .set({ createdBy: reassignToUserId })
+        .where(eq(schema.pugSlots.createdBy, userId));
+
+      // 7. Reassign events created by this user (events are community content)
+      await tx
+        .update(schema.events)
+        .set({ creatorId: reassignToUserId, updatedAt: new Date() })
+        .where(eq(schema.events.creatorId, userId));
+
+      // 8. Delete the user row — cascading tables handle the rest
+      //    (characters, event_signups, notifications, user_notification_preferences,
+      //     user_preferences, game_interests, game_time_templates, game_time_overrides,
+      //     game_time_absences, feedback, event_reminders_sent)
+      await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    });
+
+    this.logger.log(
+      `User ${userId} deleted. Events reassigned to user ${reassignToUserId}.`,
+    );
+  }
+
+  /**
+   * Find the instance admin (first admin user by ID).
+   * Used as fallback for event reassignment on self-delete.
+   */
+  async findAdmin(): Promise<{ id: number } | undefined> {
+    return this.db.query.users.findFirst({
+      where: eq(schema.users.role, 'admin'),
+      columns: { id: true },
+    });
   }
 }

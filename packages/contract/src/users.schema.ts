@@ -202,3 +202,17 @@ export const UserEventSignupsResponseSchema = z.object({
 });
 
 export type UserEventSignupsResponseDto = z.infer<typeof UserEventSignupsResponseSchema>;
+
+// ==========================================
+// Account Deletion (ROK-405)
+// ==========================================
+
+/**
+ * Request body for DELETE /users/me (self-delete).
+ * User must type their display name to confirm deletion.
+ */
+export const DeleteAccountSchema = z.object({
+    confirmName: z.string().min(1),
+});
+
+export type DeleteAccountDto = z.infer<typeof DeleteAccountSchema>;

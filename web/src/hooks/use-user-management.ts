@@ -1,11 +1,11 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUsersForManagement, updateUserRole } from '../lib/api-client';
+import { getUsersForManagement, updateUserRole, adminRemoveUser } from '../lib/api-client';
 import type { UserRole, UserManagementDto } from '@raid-ledger/contract';
 import { useInfiniteList } from './use-infinite-list';
 
 /**
- * Hook for the admin Role Management Panel (ROK-272).
- * Fetches infinite-scroll user list and provides role update mutation.
+ * Hook for the admin Role Management Panel (ROK-272, ROK-405).
+ * Fetches infinite-scroll user list and provides role update + removal mutations.
  */
 export function useUserManagement(params?: {
     search?: string;
@@ -31,10 +31,16 @@ export function useUserManagement(params?: {
             role: Exclude<UserRole, 'admin'>;
         }) => updateUserRole(userId, role),
         onSuccess: () => {
-            // Invalidate user management list to refetch with updated roles
             queryClient.invalidateQueries({ queryKey: ['user-management'] });
         },
     });
 
-    return { users, updateRole };
+    const removeUser = useMutation({
+        mutationFn: (userId: number) => adminRemoveUser(userId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['user-management'] });
+        },
+    });
+
+    return { users, updateRole, removeUser };
 }
