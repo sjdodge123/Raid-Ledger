@@ -322,9 +322,11 @@ export class UsersController {
     @Body() body: unknown,
   ) {
     if (req.user.impersonatedBy) {
-      throw new ForbiddenException(
-        'Cannot delete account while impersonating',
-      );
+      throw new ForbiddenException('Cannot delete account while impersonating');
+    }
+
+    if (req.user.role === 'admin') {
+      throw new ForbiddenException('Admin accounts cannot be self-deleted');
     }
 
     const dto = DeleteAccountSchema.parse(body);
@@ -344,10 +346,10 @@ export class UsersController {
 
     // Find instance admin for event reassignment
     const admin = await this.usersService.findAdmin();
-    // Reassign to admin, or if this user IS the admin, skip reassignment
-    // (shouldn't happen in practice since admin is protected)
-    const reassignTo =
-      admin && admin.id !== req.user.id ? admin.id : req.user.id;
+    if (!admin) {
+      throw new ForbiddenException('No admin found to reassign events to');
+    }
+    const reassignTo = admin.id;
 
     // Delete custom avatar file from disk
     if (user.customAvatarUrl) {
