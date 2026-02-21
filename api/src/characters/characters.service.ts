@@ -412,6 +412,19 @@ export class CharactersService {
       dto.gameVariant,
     );
 
+    // Validate user exists before inserting character (ROK-416)
+    const [user] = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+
+    if (!user) {
+      throw new NotFoundException(
+        `User ${userId} not found — cannot import character`,
+      );
+    }
+
     // Find the game in the registry by slug based on variant
     const slugCandidates = adapter.resolveGameSlugs(dto.gameVariant);
     const [game] = await this.db
