@@ -93,6 +93,7 @@ function makeResolveData(overrides: Record<string, unknown> = {}) {
             id: 42,
             title: 'Mythic Raid Night',
             startTime: '2026-03-01T20:00:00Z',
+            endTime: '2026-03-01T23:00:00Z',
             game: {
                 id: 1,
                 name: 'World of Warcraft',
