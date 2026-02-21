@@ -13,6 +13,8 @@ export const AUTH_EVENTS = {
 export interface DiscordLoginPayload {
   userId: number;
   discordId: string;
+  /** ROK-409: Invite code from PUG invite flow (for anonymous slot matching) */
+  inviteCode?: string;
 }
 
 @Injectable()

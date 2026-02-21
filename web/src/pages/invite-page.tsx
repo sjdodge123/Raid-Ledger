@@ -24,10 +24,10 @@ const CHECK_ICON = (
     </svg>
 );
 
-/** Step labels for the progress indicator (fix #1: "Authenticate" not "Preview") */
-const STEP_LABELS = ['Authenticate', 'Discord', 'Character', 'Join'];
+/** Step labels for the progress indicator (ROK-409: Discord moved to last step) */
+const STEP_LABELS = ['Authenticate', 'Character', 'Join', 'Discord'];
 
-function StepIndicator({ current, total }: { current: number; total: number }) {
+function StepIndicator({ current, total, labels }: { current: number; total: number; labels: string[] }) {
     return (
         <div className="flex items-center justify-center gap-2 mb-6">
             {Array.from({ length: total }, (_, i) => {
@@ -55,7 +55,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
                                 )}
                             </div>
                             <span className={`text-[10px] mt-1 ${isActive ? 'text-foreground' : 'text-muted'}`}>
-                                {STEP_LABELS[i]}
+                                {labels[i]}
                             </span>
                         </div>
                         {i < total - 1 && (
@@ -127,14 +127,12 @@ function CharacterCard({
 }
 
 /**
- * /i/:code route -- Guided PUG invite wizard (ROK-263, ROK-394).
+ * /i/:code route -- Guided PUG invite wizard (ROK-263, ROK-394, ROK-409).
  *
- * Steps:
+ * Steps (ROK-409: Discord moved to after confirm):
  * 1. Authenticate — show event info, "Sign in with Discord" CTA
- * 2. Join Discord Server — Discord server invite link (skip if none)
- * 3. Character / Role — character selector, WoW import, or manual role picker
- * 4. Join Event — confirm claim, success screen
- * 5. (Backend) Discord DM with event link
+ * 2. Character / Role — character selector, WoW import, or manual role picker + Join
+ * 3. Success — confirm claim, success screen + Discord invite CTA
  */
 export function InvitePage() {
     const { code } = useParams<{ code: string }>();
@@ -148,14 +146,14 @@ export function InvitePage() {
     const [error, setError] = useState<string | null>(null);
     const [selectedRole, setSelectedRole] = useState<RoleChoice | null>(null);
     const [showManualRoleSelector, setShowManualRoleSelector] = useState(false);
-    /** Selected character ID for Blizzard games with existing characters (fix #5) */
+    /** Selected character ID for Blizzard games with existing characters */
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
-    /** Show import form even when user has existing characters (fix #5) */
+    /** Show import form even when user has existing characters */
     const [showImportForm, setShowImportForm] = useState(false);
 
-    /** Wizard step (1-4) */
+    /** Wizard step: 1=Auth, 2=Character/Role+Join, 3=Success+Discord */
     const [step, setStep] = useState(1);
-    /** Whether user has clicked the Discord invite link (fix #4) */
+    /** Whether user has clicked the Discord invite link */
     const [discordJoinClicked, setDiscordJoinClicked] = useState(false);
     /** Post-claim success state */
     const [claimResult, setClaimResult] = useState<{
@@ -170,7 +168,7 @@ export function InvitePage() {
     const hasRoles = gameInfo?.hasRoles === true;
     const communityName = resolveData?.communityName;
 
-    // Discord button label — include community name if available (fix #2)
+    // Discord button label — include community name if available
     const discordJoinLabel = communityName
         ? `Join ${communityName}'s Discord`
         : 'Join Discord Server';
@@ -183,7 +181,7 @@ export function InvitePage() {
     const characters = charactersData?.data ?? [];
     const hasCharacterForGame = characters.length > 0;
 
-    // Determine character step mode (fix #5):
+    // Determine character step mode:
     // - Has characters for this Blizzard game -> show character selector
     // - No characters for Blizzard game -> show import form
     // - User clicked "Import another" -> show import form
@@ -219,7 +217,7 @@ export function InvitePage() {
             .finally(() => setIsResolving(false));
     }, [code]);
 
-    // Auto-advance step after OAuth return
+    // Auto-advance step after OAuth return — go straight to Character/Role (step 2)
     useEffect(() => {
         if (authLoading || processedRef.current) return;
         if (!isAuthenticated || !code) return;
@@ -252,7 +250,7 @@ export function InvitePage() {
         try {
             const result = await claimInviteCode(code, roleOverride ?? selectedRole ?? undefined);
             setClaimResult(result);
-            setStep(4);
+            setStep(3);
 
             if (result.type === 'signup') {
                 toast.success("You're signed up!", {
@@ -346,6 +344,13 @@ export function InvitePage() {
     const hasDiscordInvite = !!resolveData.discordServerInviteUrl;
     const requiresRole = hasRoles && !shouldShowImportForm && !shouldShowCharacterSelector;
 
+    // Determine step count: 3 steps if Discord invite exists (Auth, Character, Join+Discord),
+    // otherwise 3 steps without Discord label
+    const totalSteps = hasDiscordInvite ? 4 : 3;
+    const stepLabels = hasDiscordInvite
+        ? STEP_LABELS
+        : STEP_LABELS.slice(0, 3);
+
     // -- Event card header (shared across steps) --
     const eventHeader = (
         <div className="text-center mb-4">
@@ -388,13 +393,17 @@ export function InvitePage() {
     );
 
     // =====================================================================
-    // STEP 4: Success (post-claim)
+    // STEP 3: Success + Discord CTA (ROK-409: Discord moved here)
     // =====================================================================
-    if (step === 4 && claimResult) {
+    if (step === 3 && claimResult) {
+        // Determine Discord invite URL — prefer claim result, fall back to resolve data
+        const discordInviteUrl = claimResult.discordServerInviteUrl ?? resolveData.discordServerInviteUrl;
+        const showDiscordCta = !!discordInviteUrl;
+
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 pt-8">
                 <div className="w-full max-w-md">
-                    <StepIndicator current={4} total={4} />
+                    <StepIndicator labels={stepLabels} current={showDiscordCta ? 4 : 3} total={totalSteps} />
                     <div className="rounded-xl border border-edge bg-surface p-6 text-center shadow-lg">
                         <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500/20 flex items-center justify-center">
                             {CHECK_ICON}
@@ -423,6 +432,34 @@ export function InvitePage() {
                             You'll receive a Discord DM with event details shortly.
                         </p>
 
+                        {/* ROK-409: Discord invite CTA — shown after successful claim */}
+                        {showDiscordCta && (
+                            <div className="mb-4 p-4 rounded-lg bg-[#5865F2]/10 border border-[#5865F2]/30">
+                                <p className="text-sm text-muted mb-3">
+                                    One more thing — join the Discord server for voice comms and team chat:
+                                </p>
+                                {!discordJoinClicked ? (
+                                    <a
+                                        href={discordInviteUrl!}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={() => setDiscordJoinClicked(true)}
+                                        className="btn btn-secondary w-full flex items-center justify-center gap-2"
+                                    >
+                                        {DISCORD_ICON}
+                                        {discordJoinLabel}
+                                    </a>
+                                ) : (
+                                    <div className="p-3 rounded-lg bg-emerald-600/10 border border-emerald-500/30 flex items-center justify-center gap-2 text-sm text-emerald-400">
+                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                        Discord invite opened
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         <div className="space-y-3">
                             <button
                                 onClick={() => navigate(`/events/${claimResult.eventId}`, { replace: true })}
@@ -444,7 +481,7 @@ export function InvitePage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 pt-8">
                 <div className="w-full max-w-md">
-                    <StepIndicator current={1} total={4} />
+                    <StepIndicator labels={stepLabels} current={1} total={totalSteps} />
                     <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
                         {eventHeader}
 
@@ -472,85 +509,15 @@ export function InvitePage() {
     }
 
     // =====================================================================
-    // STEP 2: Join Discord Server
+    // STEP 2: Character / Role + Join (ROK-409: moved from step 3)
     // =====================================================================
     if (step === 2) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 pt-8">
-                <div className="w-full max-w-md">
-                    <StepIndicator current={2} total={4} />
-                    <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
-                        {eventHeader}
-
-                        {hasDiscordInvite ? (
-                            <div className="mt-4">
-                                <p className="text-sm text-muted mb-4 text-center">
-                                    Join the Discord server to chat with the team and hear voice comms during the event.
-                                </p>
-                                {!discordJoinClicked ? (
-                                    <a
-                                        href={resolveData.discordServerInviteUrl!}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={() => setDiscordJoinClicked(true)}
-                                        className="btn btn-primary w-full flex items-center justify-center gap-2 mb-3"
-                                    >
-                                        {DISCORD_ICON}
-                                        {discordJoinLabel}
-                                    </a>
-                                ) : (
-                                    <div className="mb-3 p-3 rounded-lg bg-emerald-600/10 border border-emerald-500/30 flex items-center justify-center gap-2 text-sm text-emerald-400">
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                        Discord invite opened
-                                    </div>
-                                )}
-                                <button
-                                    onClick={() => setStep(3)}
-                                    className="btn btn-secondary w-full"
-                                >
-                                    {hasRoles ? 'Next: Choose Your Role' : 'Next: Join Event'}
-                                </button>
-                                {!discordJoinClicked && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setStep(3)}
-                                        className="mt-2 w-full text-xs text-muted hover:text-foreground transition-colors"
-                                    >
-                                        Skip for now
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="mt-4">
-                                <p className="text-sm text-muted mb-4 text-center">
-                                    You are signed in. Let's get you set up for this event.
-                                </p>
-                                <button
-                                    onClick={() => setStep(3)}
-                                    className="btn btn-primary w-full"
-                                >
-                                    {hasRoles ? 'Next: Choose Your Role' : 'Next: Join Event'}
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
-    // =====================================================================
-    // STEP 3: Load Character / Choose Role
-    // =====================================================================
-    if (step === 3) {
         // For games without roles, show simple join button
         if (!hasRoles) {
             return (
                 <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 pt-8">
                     <div className="w-full max-w-md">
-                        <StepIndicator current={3} total={4} />
+                        <StepIndicator labels={stepLabels} current={2} total={totalSteps} />
                         <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
                             {eventHeader}
 
@@ -575,11 +542,11 @@ export function InvitePage() {
         return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 pt-8">
                 <div className="w-full max-w-md">
-                    <StepIndicator current={3} total={4} />
+                    <StepIndicator labels={stepLabels} current={2} total={totalSteps} />
                     <div className="rounded-xl border border-edge bg-surface p-6 shadow-lg">
                         {eventHeader}
 
-                        {/* Existing character selector for Blizzard games (fix #5) */}
+                        {/* Existing character selector for Blizzard games */}
                         {shouldShowCharacterSelector && (
                             <div className="mt-4">
                                 <p className="text-sm text-muted mb-3 text-center">

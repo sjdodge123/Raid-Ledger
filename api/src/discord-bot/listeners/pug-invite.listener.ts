@@ -147,6 +147,7 @@ export class PugInviteListener {
 
   /**
    * Handle Discord OAuth login — auto-claim matching PUG slots.
+   * ROK-409: Also passes inviteCode for anonymous slot matching.
    */
   @OnEvent(AUTH_EVENTS.DISCORD_LOGIN)
   async handleDiscordLogin(payload: DiscordLoginPayload): Promise<void> {
@@ -154,6 +155,7 @@ export class PugInviteListener {
       await this.pugInviteService.claimPugSlots(
         payload.discordId,
         payload.userId,
+        payload.inviteCode,
       );
     } catch (error) {
       this.logger.error(
