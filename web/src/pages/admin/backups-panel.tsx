@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { BackupFileDto } from '@raid-ledger/contract';
+import { useQueryClient } from '@tanstack/react-query';
 import { useBackups } from '../../hooks/use-backups';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
@@ -249,6 +250,7 @@ function ResetModal({
 
 /* ─── Main Panel ─── */
 export function BackupsPanel() {
+    const queryClient = useQueryClient();
     const { backups, createBackup, deleteBackup, restoreBackup, resetInstance } = useBackups();
     const tz = useTimezoneStore((s) => s.resolved);
     const [filter, setFilter] = useState<FilterType>('all');
@@ -476,9 +478,21 @@ export function BackupsPanel() {
                         }
                     }}
                     onConfirm={() => {
+                        // Cancel all background queries so 401s during DB rebuild
+                        // don't trigger auth redirect before we get the new password
+                        queryClient.cancelQueries();
+                        queryClient.setDefaultOptions({
+                            queries: { enabled: false },
+                        });
                         resetInstance.mutate(undefined, {
                             onSuccess: (data) => setResetResult({ password: data.password }),
-                            onError: (err) => toast.error(err.message),
+                            onError: (err) => {
+                                // Re-enable queries on failure
+                                queryClient.setDefaultOptions({
+                                    queries: { enabled: undefined },
+                                });
+                                toast.error(err.message);
+                            },
                         });
                     }}
                     isPending={resetInstance.isPending}
