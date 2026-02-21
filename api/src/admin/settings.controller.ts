@@ -29,8 +29,9 @@ import {
   DemoDataStatusDto,
   DemoDataResultDto,
 } from '@raid-ledger/contract';
-import { and, eq, ilike, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { buildWordMatchFilters } from '../common/search.util';
 
 export interface OAuthStatusResponse {
   configured: boolean;
@@ -580,9 +581,7 @@ export class AdminSettingsController {
 
     const conditions = [];
     if (search) {
-      conditions.push(
-        ilike(schema.games.name, `%${search.replace(/[%_\\]/g, '\\$&')}%`),
-      );
+      conditions.push(...buildWordMatchFilters(schema.games.name, search));
     }
     // When showHidden is 'only', show hidden and banned games
     // When showHidden is 'true', show all games (no hidden/banned filter)

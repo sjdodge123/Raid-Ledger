@@ -4,6 +4,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { eq, sql, ilike, asc, and, gte, desc, ne } from 'drizzle-orm';
 import type { UserRole } from '@raid-ledger/contract';
+import { buildWordMatchFilters } from '../common/search.util';
 
 /** Number of days to look back for "recently joined" users. */
 export const RECENT_MEMBER_DAYS = 30;
@@ -95,9 +96,11 @@ export class UsersService {
   }> {
     const offset = (page - 1) * limit;
 
-    const conditions = search
-      ? ilike(schema.users.username, `%${search}%`)
-      : undefined;
+    const searchFilters = search
+      ? buildWordMatchFilters(schema.users.username, search)
+      : [];
+    const conditions =
+      searchFilters.length > 0 ? and(...searchFilters) : undefined;
 
     const [countResult] = await this.db
       .select({ count: sql<number>`count(*)` })
@@ -256,9 +259,11 @@ export class UsersService {
 
     // If filtering by gameId, get the set of user IDs who hearted that game
     if (gameId) {
-      const searchCondition = search
-        ? ilike(schema.users.username, `%${search}%`)
-        : undefined;
+      const searchFilters = search
+        ? buildWordMatchFilters(schema.users.username, search)
+        : [];
+      const searchCondition =
+        searchFilters.length > 0 ? and(...searchFilters) : undefined;
 
       const baseQuery = this.db
         .select({
@@ -304,14 +309,18 @@ export class UsersService {
       };
     }
 
-    const conditions = search
-      ? ilike(schema.users.username, `%${search}%`)
-      : undefined;
+    const findAllSearchFilters = search
+      ? buildWordMatchFilters(schema.users.username, search)
+      : [];
+    const findAllConditions =
+      findAllSearchFilters.length > 0
+        ? and(...findAllSearchFilters)
+        : undefined;
 
     const [countResult] = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(schema.users)
-      .where(conditions);
+      .where(findAllConditions);
 
     const rows = await this.db
       .select({
@@ -322,7 +331,7 @@ export class UsersService {
         customAvatarUrl: schema.users.customAvatarUrl,
       })
       .from(schema.users)
-      .where(conditions)
+      .where(findAllConditions)
       .orderBy(asc(schema.users.username))
       .limit(limit)
       .offset(offset);
