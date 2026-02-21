@@ -10,19 +10,19 @@
    git log origin/rok-<num>-<short-name>..HEAD --oneline
    ```
 
-2. **If there are unpushed commits (reviewer applied auto-fixes), push them first:**
+2. **Run full CI (PR-prep) and push — this is the only time full lint + all tests run:**
    ```
    SendMessage(type: "message", recipient: "build-agent",
-     content: "Push ROK-<num> after reviewer auto-fixes. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
-     summary: "Push ROK-<num> reviewer fixes")
+     content: "PR-prep ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
+     summary: "PR-prep ROK-<num>")
    ```
-   **WAIT for the build agent to confirm push succeeded before proceeding.**
-   The build agent will: sync with origin/main (rebase) -> re-run CI -> push.
-   If CI fails after reviewer changes, re-spawn the reviewer or dev to fix.
+   **WAIT for the build agent to confirm everything passes before proceeding.**
+   The build agent will: sync with origin/main (rebase) -> full CI (build all + lint all + test all) -> push.
+   If anything fails, re-spawn the reviewer or dev to fix.
 
-   **DO NOT create the PR until the build agent confirms the push succeeded.**
+   **DO NOT create the PR until the build agent confirms PR-prep succeeded.**
 
-3. **Create PR and enable auto-merge** (only AFTER all commits are on remote):
+3. **Create PR and enable auto-merge** (only AFTER PR-prep passes and all commits are on remote):
    ```bash
    gh pr create --base main --head rok-<num>-<short-name> \
      --title "feat(ROK-<num>): <short description>" \
