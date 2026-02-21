@@ -283,8 +283,29 @@ export class BackupService implements OnModuleInit {
       this.logger.warn(`pg_restore completed with warnings: ${message}`);
     }
 
+    // Run migrations to bring schema up to date if backup is from an older version
+    this.logger.warn('Running post-restore migrations...');
+    const apiRoot = path.resolve(__dirname, '../../..');
+    const isDocker = process.env.NODE_ENV === 'production';
+    try {
+      if (isDocker) {
+        await execFileAsync('node', [
+          path.resolve('drizzle/run-migrations.js'),
+        ]);
+      } else {
+        await execFileAsync('npx', ['drizzle-kit', 'migrate'], {
+          cwd: apiRoot,
+        });
+      }
+      this.logger.log('Post-restore migrations complete');
+    } catch (migErr) {
+      const msg = migErr instanceof Error ? migErr.message : String(migErr);
+      this.logger.warn(`Post-restore migration note: ${msg}`);
+    }
+
     // Force-reload encrypted settings from the restored DB
     this.settingsService.invalidateCache();
+    this.logger.log(`Database restore complete from: ${filename}`);
   }
 
   /**
