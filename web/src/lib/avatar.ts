@@ -47,9 +47,9 @@ export interface AvatarUser {
 }
 
 // ============================================================
-// Current User Overlay (ROK-352)
+// Current User Overlay (ROK-352, ROK-414)
 // ============================================================
-// Module-level cache of the current user's avatar preference and characters.
+// Module-level cache of the current user's avatar preference and resolved avatar URL.
 // Set by CurrentUserAvatarSync (mounted in Layout) so that toAvatarUser()
 // can automatically overlay the current user's preference data onto any
 // user DTO that matches by id — without every component needing useAuth().
@@ -57,7 +57,8 @@ export interface AvatarUser {
 interface CurrentUserAvatarData {
     id: number;
     avatarPreference?: AvatarPreference | null;
-    characters?: Array<{ gameId: string; name?: string; avatarUrl: string | null }>;
+    /** Server-resolved avatar URL for character preference (ROK-414) */
+    resolvedAvatarUrl?: string | null;
     customAvatarUrl?: string | null;
 }
 
@@ -109,9 +110,12 @@ export function buildDiscordAvatarUrl(
  * that have `avatar` as a Discord hash and `discordId` as a separate field.
  *
  * ROK-352: When the user's `id` matches the current logged-in user, automatically
- * overlays `avatarPreference` and `characters` from the cached auth data so the
+ * overlays `avatarPreference` and `resolvedAvatarUrl` from the cached auth data so the
  * current user's avatar preference is honored everywhere — not just in components
  * that use useAuth() directly.
+ *
+ * ROK-414: The overlay now uses `resolvedAvatarUrl` (server-resolved) instead of
+ * a full characters array, avoiding heavy JSONB payloads on /auth/me.
  */
 export function toAvatarUser(user: {
     id?: number;
@@ -130,16 +134,25 @@ export function toAvatarUser(user: {
 
     const avatar = buildDiscordAvatarUrl(user.discordId, user.avatar) ?? (user.avatar?.startsWith('http') ? user.avatar : null);
 
-    // ROK-352: When overlay is active (current user), overlay data is always more
-    // authoritative than partial DTOs (e.g. signupsPreview characters lack `name`,
-    // breaking character-preference lookup). Auth data is the source of truth for
-    // the current user's own preference, characters, and custom avatar.
+    // ROK-352/414: When overlay is active (current user), overlay data is always more
+    // authoritative than partial DTOs. Auth data is the source of truth for
+    // the current user's own preference, resolvedAvatarUrl, and custom avatar.
     if (overlay) {
+        const pref = overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference;
+
+        // ROK-414: Build a synthetic characters entry from resolvedAvatarUrl so
+        // resolveAvatar() can still find the character avatar via its existing
+        // character-preference lookup path.
+        let characters = user.characters;
+        if (pref?.type === 'character' && pref.characterName && overlay.resolvedAvatarUrl) {
+            characters = [{ gameId: '__resolved__', name: pref.characterName, avatarUrl: overlay.resolvedAvatarUrl }];
+        }
+
         return {
             avatar,
             customAvatarUrl: overlay.customAvatarUrl !== undefined ? overlay.customAvatarUrl : user.customAvatarUrl,
-            characters: overlay.characters !== undefined ? overlay.characters : user.characters,
-            avatarPreference: overlay.avatarPreference !== undefined ? overlay.avatarPreference : user.avatarPreference,
+            characters,
+            avatarPreference: pref,
         };
     }
 

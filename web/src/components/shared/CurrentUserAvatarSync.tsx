@@ -4,10 +4,10 @@ import { setCurrentUserAvatarData } from '../../lib/avatar';
 
 /**
  * Headless component that syncs the current user's avatar preference data
- * into the avatar module's global cache (ROK-352).
+ * into the avatar module's global cache (ROK-352, ROK-414).
  *
  * This allows toAvatarUser() to automatically overlay the current user's
- * avatarPreference and characters onto any DTO that matches by id,
+ * avatarPreference and resolvedAvatarUrl onto any DTO that matches by id,
  * so their avatar preference is honored everywhere in the app — not just
  * in components that use useAuth() directly.
  *
@@ -21,7 +21,7 @@ export function CurrentUserAvatarSync(): null {
             setCurrentUserAvatarData({
                 id: user.id,
                 avatarPreference: user.avatarPreference,
-                characters: user.characters,
+                resolvedAvatarUrl: user.resolvedAvatarUrl,
                 customAvatarUrl: user.customAvatarUrl,
             });
         } else {

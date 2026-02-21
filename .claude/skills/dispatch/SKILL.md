@@ -19,6 +19,30 @@ Each step has detailed instructions in a separate file under `steps/`. **Read ea
 
 The dispatch flow is: clean up workspace -> check in-flight work -> finish it -> gather new stories -> present batch -> create worktrees -> spawn parallel team -> operator tests -> review agents -> merge to main.
 
+### ⛔ MANDATORY Pipeline Order (DO NOT SKIP GATES)
+
+```
+Dev completes → Test agent → CI passes → Push branch → Deploy locally
+  → QA agent generates test cases (posts to Linear)
+  → ⛔ Playwright gate — uses QA test cases (if UI changes) ⛔
+    → FAIL: send back to dev → loop until passing
+    → PASS (or skip for non-UI): Linear "In Review"
+  → ⛔ STOP — WAIT for operator to test and update Linear ⛔
+  → Operator moves to "Code Review" (approved) or "Changes Requested" (rework)
+  → Code review agent reviews diff
+  → ⛔ ONLY AFTER reviewer approves → Push reviewer fixes → Create PR → Auto-merge
+  → Linear "Done"
+```
+
+**Three gates before a PR is created:**
+1. **Playwright gate** — automated browser tests must pass before operator sees the story
+2. **Operator gate** — operator must manually test and approve in Linear
+3. **Code review gate** — reviewer must approve the diff
+
+PRs are NEVER created until AFTER all three gates pass (Step 8).
+Creating a PR with auto-merge before review causes unreviewed code to ship to main.
+"In Review" = Playwright passed, branch pushed, awaiting operator — it does NOT mean a PR exists.
+
 ---
 
 ## Parallel Execution via Agent Teams
@@ -53,9 +77,9 @@ Execute steps in order. Read each step's file when you reach it.
 | 3 | `steps/step-3-present-dispatch.md` | Present dispatch summary, assign parallel batches |
 | 4 | `steps/step-4-confirm-dispatch.md` | Get user approval to dispatch |
 | 5 | `steps/step-5-parallel-dispatch.md` | Create worktrees, spawn dev + build teammates |
-| 6 | `steps/step-6-pr-pipeline.md` | Event-driven: test agents, CI validation, Linear updates, deploy |
+| 6 | `steps/step-6-dev-test-pipeline.md` | Event-driven: test agents, CI, push, Playwright gate, then "In Review" |
 | 7 | `steps/step-7-review-pipeline.md` | Poll Linear for operator results, handle changes/approvals |
-| 8 | `steps/step-8-review-outcomes.md` | Handle code review approve/reject, merge or rework |
+| 8 | `steps/step-8-review-outcomes.md` | Handle review outcomes; queue approved stories; batch or individual PRs |
 | 9 | `steps/step-9-batch-completion.md` | Shut down teammates, clean up, present next batch |
 | 10 | `steps/step-10-final-summary.md` | Final dispatch summary after all batches |
 
@@ -71,6 +95,6 @@ All agent prompt templates are in the `templates/` directory. Read the appropria
 | Dev (new) | `templates/dev-new-ready.md` | Step 5c — for Dispatch Ready stories |
 | Build agent | `templates/build-agent.md` | Step 5d — one per batch |
 | Test agent | `templates/test-agent.md` | Step 6a — after dev completes |
-| QA test cases | `templates/qa-test-cases.md` | Step 6b — background, posts to Linear |
-| Playwright tester | `templates/playwright-tester.md` | Step 6f — automated browser testing |
+| QA test cases | `templates/qa-test-cases.md` | Step 6d — blocking, generates test plan for Playwright |
+| Playwright tester | `templates/playwright-tester.md` | Step 6d — Playwright gate (blocking, per-story, before "In Review") |
 | Reviewer | `templates/reviewer.md` | Step 7c — after operator approves |

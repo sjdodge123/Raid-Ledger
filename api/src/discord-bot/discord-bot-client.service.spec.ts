@@ -92,6 +92,7 @@ describe('DiscordBotClientService', () => {
           provide: EventEmitter2,
           useValue: {
             emit: jest.fn(),
+            emitAsync: jest.fn().mockResolvedValue([]),
           },
         },
       ],
@@ -126,7 +127,7 @@ describe('DiscordBotClientService', () => {
       await connectPromise;
 
       expect(mockClient.login).toHaveBeenCalledWith(token);
-      expect(eventEmitter.emit).toHaveBeenCalledWith(
+      expect(eventEmitter.emitAsync).toHaveBeenCalledWith(
         DISCORD_BOT_EVENTS.CONNECTED,
       );
     });

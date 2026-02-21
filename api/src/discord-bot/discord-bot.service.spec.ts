@@ -162,6 +162,60 @@ describe('DiscordBotService', () => {
     });
   });
 
+  describe('ensureConnected', () => {
+    it('should connect when not connected and not connecting', async () => {
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
+
+      await service.ensureConnected(mockDiscordBotConfig);
+
+      expect(clientService.connect).toHaveBeenCalledWith(
+        mockDiscordBotConfig.token,
+      );
+    });
+
+    it('should skip when already connected', async () => {
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(true);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
+
+      await service.ensureConnected(mockDiscordBotConfig);
+
+      expect(clientService.connect).not.toHaveBeenCalled();
+    });
+
+    it('should skip when already connecting', async () => {
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(true);
+
+      await service.ensureConnected(mockDiscordBotConfig);
+
+      expect(clientService.connect).not.toHaveBeenCalled();
+    });
+
+    it('should skip when not enabled', async () => {
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
+
+      await service.ensureConnected({ token: 'test-token', enabled: false });
+
+      expect(clientService.connect).not.toHaveBeenCalled();
+    });
+
+    it('should handle connection errors without crashing', async () => {
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest.spyOn(clientService, 'isConnecting').mockReturnValue(false);
+      jest
+        .spyOn(clientService, 'connect')
+        .mockRejectedValue(new Error('Connection failed'));
+
+      await expect(
+        service.ensureConnected(mockDiscordBotConfig),
+      ).resolves.not.toThrow();
+
+      expect(clientService.connect).toHaveBeenCalled();
+    });
+  });
+
   describe('sendDm', () => {
     it('should delegate to client service', async () => {
       const discordId = '123456789';
