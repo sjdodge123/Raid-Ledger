@@ -8,6 +8,7 @@ import {
   uuid,
   varchar,
   check,
+  index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
@@ -92,5 +93,8 @@ export const eventSignups = pgTable(
       'user_or_discord',
       sql`${table.userId} IS NOT NULL OR ${table.discordUserId} IS NOT NULL`,
     ),
+    // Performance indexes for common query patterns
+    index('idx_event_signups_event_id').on(table.eventId),
+    index('idx_event_signups_discord_user_id').on(table.discordUserId),
   ],
 );
