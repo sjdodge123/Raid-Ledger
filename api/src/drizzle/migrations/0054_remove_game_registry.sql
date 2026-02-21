@@ -51,7 +51,7 @@ ALTER TABLE "event_types" ADD COLUMN "new_game_id" integer;
 UPDATE "event_types" et
 SET "new_game_id" = g."id"
 FROM "game_registry" gr, "games" g
-WHERE et."game_id" = gr."id"::text AND g."slug" = gr."slug";
+WHERE et."game_id" = gr."id" AND g."slug" = gr."slug";
 
 -- 6c: Change event_types.id from UUID to serial
 -- First drop the old PK and constraints
@@ -84,7 +84,7 @@ ALTER TABLE "characters" ADD COLUMN "new_game_id" integer;
 UPDATE "characters" c
 SET "new_game_id" = g."id"
 FROM "game_registry" gr, "games" g
-WHERE c."game_id"::text = gr."id"::text AND g."slug" = gr."slug";
+WHERE c."game_id" = gr."id" AND g."slug" = gr."slug";
 
 -- 7c: Drop old column, rename new
 ALTER TABLE "characters" DROP COLUMN "game_id";
@@ -138,7 +138,7 @@ ALTER TABLE "availability" ADD COLUMN "new_game_id" integer;
 UPDATE "availability" a
 SET "new_game_id" = g."id"
 FROM "game_registry" gr, "games" g
-WHERE a."game_id"::text = gr."id"::text AND g."slug" = gr."slug";
+WHERE a."game_id" = gr."id" AND g."slug" = gr."slug";
 
 -- 9d: Drop old column, rename new
 ALTER TABLE "availability" DROP COLUMN "game_id";
