@@ -37,7 +37,7 @@ FROM node:20-alpine AS production
 WORKDIR /app
 
 # Install PostgreSQL client for pg_dump (used by backup service and entrypoint)
-RUN apk add --no-cache postgresql15-client
+RUN apk add --no-cache postgresql-client
 
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
