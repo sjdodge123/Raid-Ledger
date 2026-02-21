@@ -545,7 +545,7 @@ describe('DiscordNotificationEmbedService', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as {
+      const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string; label: string; style: number }>;
       };
       const roachBtn = rowJson.components[0];
@@ -568,7 +568,7 @@ describe('DiscordNotificationEmbedService', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as {
+      const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
       expect(rowJson.components[0].customId).toBe('event_roachout:123');
@@ -676,7 +676,7 @@ describe('DiscordNotificationEmbedService', () => {
         'Community',
       );
 
-      const rowJson = rows![0].toJSON() as {
+      const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string }>;
       };
       expect(rowJson.components[0].customId).toBe('event_roachout:77');

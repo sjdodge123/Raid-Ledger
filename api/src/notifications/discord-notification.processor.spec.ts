@@ -236,7 +236,10 @@ describe('DiscordNotificationProcessor', () => {
         row: { toJSON: () => ({}) },
         rows: mockRows,
       });
-      const job = buildJob({ type: 'event_reminder', payload: { eventId: '42' } });
+      const job = buildJob({
+        type: 'event_reminder',
+        payload: { eventId: '42' },
+      });
 
       await processor.process(job);
 

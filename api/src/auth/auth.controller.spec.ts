@@ -548,9 +548,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
       makeRequest(1) as any,
     )) as Record<string, unknown>;
 
-    expect(result['resolvedAvatarUrl']).toBe(
-      'https://example.com/thrall.png',
-    );
+    expect(result['resolvedAvatarUrl']).toBe('https://example.com/thrall.png');
     expect(mockCharactersService.getAvatarUrlByName).toHaveBeenCalledWith(
       1,
       'Thrall',

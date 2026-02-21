@@ -54,7 +54,7 @@ function makeButtonInteraction(
 
 describe('RoachOutInteractionListener', () => {
   let module: TestingModule;
-  let listener: any;
+  let listener: any; // Use any to access private methods directly
   let mockClientService: {
     getClient: jest.Mock;
     getGuildId: jest.Mock;
@@ -349,6 +349,7 @@ describe('RoachOutInteractionListener', () => {
       mockClientService.getClient.mockReturnValue(null);
 
       // Should not throw
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
       expect(() => listener.onBotConnected()).not.toThrow();
     });
   });
@@ -364,7 +365,7 @@ describe('RoachOutInteractionListener', () => {
 
       const [, boundHandler] = mockClient.on.mock.calls[0] as [
         string,
-        (interaction: unknown) => void,
+        (interaction: unknown) => Promise<void>,
       ];
 
       const nonButtonInteraction = { isButton: () => false };
@@ -440,7 +441,9 @@ describe('RoachOutInteractionListener', () => {
       const interaction = makeButtonInteraction(
         `${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:42`,
       );
-      interaction.deferReply.mockRejectedValueOnce(new Error('Unknown Interaction'));
+      interaction.deferReply.mockRejectedValueOnce(
+        new Error('Unknown Interaction'),
+      );
 
       await listener['handleButtonInteraction'](interaction);
 
@@ -452,7 +455,9 @@ describe('RoachOutInteractionListener', () => {
       const interaction = makeButtonInteraction(
         `${ROACH_OUT_BUTTON_IDS.CANCEL}:42`,
       );
-      interaction.deferUpdate.mockRejectedValueOnce(new Error('Unknown Interaction'));
+      interaction.deferUpdate.mockRejectedValueOnce(
+        new Error('Unknown Interaction'),
+      );
 
       // Should not throw
       await expect(
@@ -461,7 +466,6 @@ describe('RoachOutInteractionListener', () => {
     });
 
     it('should call safeEditReply with error message when action throws', async () => {
-      const futureDate = new Date(Date.now() + 60000);
       mockDb.limit.mockRejectedValueOnce(new Error('DB Error'));
 
       const interaction = makeButtonInteraction(
@@ -535,7 +539,10 @@ describe('RoachOutInteractionListener', () => {
 
   describe('isDiscordInteractionError', () => {
     it('should return true for error code 40060 (interaction already acknowledged)', () => {
-      const err = { code: 40060, message: 'Interaction has already been acknowledged' };
+      const err = {
+        code: 40060,
+        message: 'Interaction has already been acknowledged',
+      };
       expect(listener['isDiscordInteractionError'](err)).toBe(true);
     });
 
@@ -559,7 +566,9 @@ describe('RoachOutInteractionListener', () => {
     });
 
     it('should return false for object without code property', () => {
-      expect(listener['isDiscordInteractionError']({ message: 'no code' })).toBe(false);
+      expect(
+        listener['isDiscordInteractionError']({ message: 'no code' }),
+      ).toBe(false);
     });
   });
 
@@ -597,9 +606,7 @@ describe('RoachOutInteractionListener', () => {
       mockEventsService.buildEmbedEventData.mockResolvedValue({});
 
       // Should not throw, and should not try to query discordEventMessages
-      await expect(
-        listener['updateChannelEmbeds'](42),
-      ).resolves.not.toThrow();
+      await expect(listener['updateChannelEmbeds'](42)).resolves.not.toThrow();
     });
 
     it('should not call editEmbed when no channel records exist', async () => {
@@ -616,9 +623,7 @@ describe('RoachOutInteractionListener', () => {
       // Replace db for this test
       (listener as unknown as { db: unknown }).db = mockChainNoLimit;
 
-      await expect(
-        listener['updateChannelEmbeds'](42),
-      ).resolves.not.toThrow();
+      await expect(listener['updateChannelEmbeds'](42)).resolves.not.toThrow();
       expect(mockClientService.editEmbed).not.toHaveBeenCalled();
     });
 
@@ -628,9 +633,7 @@ describe('RoachOutInteractionListener', () => {
       );
 
       // Should not throw (error is caught internally)
-      await expect(
-        listener['updateChannelEmbeds'](999),
-      ).resolves.not.toThrow();
+      await expect(listener['updateChannelEmbeds'](999)).resolves.not.toThrow();
     });
   });
 
