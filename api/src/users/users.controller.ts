@@ -322,9 +322,7 @@ export class UsersController {
     @Body() body: unknown,
   ) {
     if (req.user.impersonatedBy) {
-      throw new ForbiddenException(
-        'Cannot delete account while impersonating',
-      );
+      throw new ForbiddenException('Cannot delete account while impersonating');
     }
 
     const dto = DeleteAccountSchema.parse(body);

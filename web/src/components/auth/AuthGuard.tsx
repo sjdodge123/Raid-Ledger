@@ -1,5 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, isAdmin } from '../../hooks/use-auth';
 import { saveAuthRedirect } from '../../lib/auth-redirect';
 
 /**
@@ -11,9 +11,13 @@ import { saveAuthRedirect } from '../../lib/auth-redirect';
  *
  * Public routes (login, OAuth callback) are declared *outside* this guard
  * in the router so they remain accessible without authentication.
+ *
+ * ROK-407: Also enforces FTE onboarding for non-admin users who haven't
+ * completed it yet (e.g. PUG invite users who deferred the FTE).
+ * Invite pages (/i/:code) and the onboarding page itself are exempt.
  */
 export function AuthGuard() {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { user, isAuthenticated, isLoading } = useAuth();
     const location = useLocation();
 
     // Show a full-page spinner while the auth state is being resolved.
@@ -38,6 +42,19 @@ export function AuthGuard() {
             saveAuthRedirect(intended);
         }
         return <Navigate to="/" replace />;
+    }
+
+    // ROK-407: Redirect non-admin users who haven't completed onboarding
+    // to the FTE wizard — unless they're already on the onboarding page.
+    // Invite pages (/i/:code) are public routes outside the AuthGuard,
+    // so they won't hit this check.
+    if (
+        user &&
+        !isAdmin(user) &&
+        !user.onboardingCompletedAt &&
+        location.pathname !== '/onboarding'
+    ) {
+        return <Navigate to="/onboarding" replace />;
     }
 
     // Authenticated -- render the child route

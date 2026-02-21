@@ -79,12 +79,16 @@ export function AuthSuccessPage() {
 
                     // ROK-219: Redirect new non-admin users to onboarding wizard
                     // ROK-394: Preserve invite code so claim happens after onboarding
+                    // ROK-407: PUG invite users bypass FTE — go straight to claim
                     if (user.role !== 'admin' && !user.onboardingCompletedAt) {
                         const pendingInvite = searchParams.get('invite') || sessionStorage.getItem('invite_code');
                         if (pendingInvite) {
-                            // Keep invite code in sessionStorage for post-onboarding claim
-                            sessionStorage.setItem('invite_code', pendingInvite);
+                            // PUG invite flow — bypass FTE, go straight to claim
+                            sessionStorage.removeItem('invite_code');
+                            navigate(`/i/${pendingInvite}?claim=1`, { replace: true });
+                            return;
                         }
+                        // Normal signup — go through FTE
                         toast.success('Welcome! Let\'s get you set up.');
                         navigate('/onboarding', { replace: true });
                         return;
