@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { BackupService } from './backup.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { SettingsService } from '../settings/settings.service';
 import * as fs from 'node:fs';
 import * as childProcess from 'node:child_process';
 
@@ -59,6 +60,10 @@ describe('BackupService', () => {
           },
         },
         { provide: CronJobService, useValue: mockCronJobService },
+        {
+          provide: SettingsService,
+          useValue: { invalidateCache: jest.fn() },
+        },
       ],
     }).compile();
 

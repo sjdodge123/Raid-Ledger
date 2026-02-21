@@ -13,6 +13,7 @@ import { promisify } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { SettingsService } from '../settings/settings.service';
 
 const execFileAsync = promisify(execFile);
 
@@ -33,6 +34,7 @@ export class BackupService implements OnModuleInit {
   constructor(
     private readonly configService: ConfigService,
     private readonly cronJobService: CronJobService,
+    private readonly settingsService: SettingsService,
   ) {
     const url = this.configService.get<string>('DATABASE_URL');
     if (!url) {
@@ -280,6 +282,9 @@ export class BackupService implements OnModuleInit {
       }
       this.logger.warn(`pg_restore completed with warnings: ${message}`);
     }
+
+    // Force-reload encrypted settings from the restored DB
+    this.settingsService.invalidateCache();
   }
 
   /**

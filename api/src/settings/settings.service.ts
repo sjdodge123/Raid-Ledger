@@ -146,6 +146,15 @@ export class SettingsService {
   }
 
   /**
+   * Force-reload the settings cache from DB on the next access.
+   * Useful after pg_restore or other out-of-band DB changes.
+   */
+  invalidateCache(): void {
+    this.cacheLoadedAt = 0;
+    this.logger.debug('Settings cache invalidated');
+  }
+
+  /**
    * Check if a setting exists.
    * Served from in-memory cache.
    */
