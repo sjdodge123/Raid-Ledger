@@ -1,0 +1,44 @@
+name: Version Bump
+
+# Bumps api/package.json patch version after each merge to main.
+# The version bump commit uses [skip ci] to prevent recursive workflow runs.
+#
+# NOTE: If branch protection blocks the push, create a PAT with repo scope,
+# store it as the VERSION_BUMP_TOKEN secret, and the workflow will use it
+# instead of the default GITHUB_TOKEN.
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  bump:
+    # Skip version-bump commits to prevent infinite recursion
+    if: "!contains(github.event.head_commit.message, '[skip ci]')"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.VERSION_BUMP_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Bump patch version
+        run: npm version patch --no-git-tag-version -w api
+
+      - name: Commit and push version bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          VERSION=$(node -p "require('./api/package.json').version")
+          git add api/package.json
+          git commit -m "chore: bump version to ${VERSION} [skip ci]"
+          git push
