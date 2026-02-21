@@ -9,10 +9,11 @@ import {
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { ilike, gte, sql, asc } from 'drizzle-orm';
+import { and, ilike, gte, sql, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { buildWordMatchFilters } from '../../common/search.util';
 import { SignupsService } from '../../events/signups.service';
 import { EMBED_COLORS } from '../discord-bot.constants';
 import type { SlashCommandHandler } from './register-commands';
@@ -187,13 +188,18 @@ export class RosterViewCommand
 
     // Search upcoming events by title
     const now = new Date().toISOString();
+    const titleFilters = buildWordMatchFilters(schema.events.title, query);
+    const upcomingFilter = gte(
+      sql`upper(${schema.events.duration})`,
+      sql`${now}::timestamp`,
+    );
     const events = await this.db
       .select({ id: schema.events.id, title: schema.events.title })
       .from(schema.events)
       .where(
-        query
-          ? sql`${ilike(schema.events.title, `%${query}%`)} AND upper(${schema.events.duration}) >= ${now}::timestamp`
-          : gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
+        titleFilters.length > 0
+          ? and(...titleFilters, upcomingFilter)
+          : upcomingFilter,
       )
       .orderBy(asc(sql`lower(${schema.events.duration})`))
       .limit(25);

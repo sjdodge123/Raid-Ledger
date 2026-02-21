@@ -10,10 +10,11 @@ import {
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { ilike } from 'drizzle-orm';
+import { and, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { buildWordMatchFilters } from '../../common/search.util';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
@@ -168,13 +169,14 @@ export class BindCommand
   ): Promise<void> {
     const focused = interaction.options.getFocused(true);
     if (focused.name === 'game') {
+      const filters = buildWordMatchFilters(schema.games.name, focused.value);
       const results = await this.db
         .select({
           id: schema.games.id,
           name: schema.games.name,
         })
         .from(schema.games)
-        .where(ilike(schema.games.name, `%${focused.value}%`))
+        .where(filters.length > 0 ? and(...filters) : undefined)
         .limit(25);
 
       await interaction.respond(

@@ -345,7 +345,7 @@ describe('IgdbService', () => {
       await service.searchGames('val%heim_test');
 
       // Verify the cache key is normalized
-      expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:val%heim_test');
+      expect(mockRedis.get).toHaveBeenCalledWith('igdb:search:valheimtest');
     });
 
     it('should normalize query for cache keys (lowercase, trim)', async () => {
