@@ -46,18 +46,19 @@ export class DiscordNotificationProcessor extends WorkerHost {
       const branding = await this.settingsService.getBranding();
       const communityName = branding.communityName ?? 'Raid Ledger';
 
-      const { embed, row } = await this.embedService.buildNotificationEmbed(
-        {
-          notificationId,
-          type: type as NotificationType,
-          title,
-          message,
-          payload: payload,
-        },
-        communityName,
-      );
+      const { embed, row, rows } =
+        await this.embedService.buildNotificationEmbed(
+          {
+            notificationId,
+            type: type as NotificationType,
+            title,
+            message,
+            payload: payload,
+          },
+          communityName,
+        );
 
-      await this.clientService.sendEmbedDM(discordId, embed, row);
+      await this.clientService.sendEmbedDM(discordId, embed, row, rows);
 
       // Reset failure count on success
       await this.discordNotificationService.resetFailures(userId);

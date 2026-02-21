@@ -102,6 +102,7 @@ describe('DiscordNotificationProcessor', () => {
         '123456789',
         expect.anything(),
         expect.anything(),
+        undefined,
       );
     });
 
@@ -224,6 +225,66 @@ describe('DiscordNotificationProcessor', () => {
         expect.anything(),
         'Raid Ledger',
       );
+    });
+  });
+
+  describe('process — ROK-378 extra rows (Roach Out button)', () => {
+    it('should pass rows to sendEmbedDM when embed service returns rows', async () => {
+      const mockRows = [{ toJSON: () => ({ components: [] }) }];
+      mockEmbedService.buildNotificationEmbed.mockResolvedValueOnce({
+        embed: { toJSON: () => ({}) },
+        row: { toJSON: () => ({}) },
+        rows: mockRows,
+      });
+      const job = buildJob({
+        type: 'event_reminder',
+        payload: { eventId: '42' },
+      });
+
+      await processor.process(job);
+
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
+        job.data.discordId,
+        expect.anything(),
+        expect.anything(),
+        mockRows,
+      );
+    });
+
+    it('should pass undefined rows to sendEmbedDM when embed service does not return rows', async () => {
+      // Default mock already returns no rows (undefined)
+      const job = buildJob({ type: 'new_event', payload: { eventId: '42' } });
+
+      await processor.process(job);
+
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
+        job.data.discordId,
+        expect.anything(),
+        expect.anything(),
+        undefined,
+      );
+    });
+
+    it('should pass rows for event_reminder type regardless of job type string casing', async () => {
+      const mockRows = [{ toJSON: () => ({ components: [] }) }];
+      mockEmbedService.buildNotificationEmbed.mockResolvedValueOnce({
+        embed: { toJSON: () => ({}) },
+        row: { toJSON: () => ({}) },
+        rows: mockRows,
+      });
+      // Even if job data type happens to have different format
+      const job = buildJob({ type: 'event_reminder' });
+
+      await processor.process(job);
+
+      const sendEmbedDMCall = mockClientService.sendEmbedDM.mock.calls[0] as [
+        string,
+        unknown,
+        unknown,
+        unknown,
+      ];
+      // 4th argument should be mockRows
+      expect(sendEmbedDMCall[3]).toBe(mockRows);
     });
   });
 });
