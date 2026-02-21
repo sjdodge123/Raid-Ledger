@@ -86,11 +86,10 @@ export class AuthController {
   }
 
   /**
-   * Verify and decode signed OAuth state parameter
+   * Verify and decode signed OAuth state parameter.
+   * Returns a generic record so callers can read action-specific fields.
    */
-  private verifyState(
-    state: string,
-  ): { userId: number; action: string; timestamp: number } | null {
+  private verifyState(state: string): Record<string, unknown> | null {
     try {
       const { data, signature } = JSON.parse(
         Buffer.from(state, 'base64').toString(),
@@ -110,18 +109,12 @@ export class AuthController {
         return null; // Signature mismatch - state was tampered with
       }
 
-      const parsed = JSON.parse(data) as {
-        userId: number;
-        action: string;
-        timestamp: number;
-      };
+      const parsed = JSON.parse(data) as Record<string, unknown>;
 
       // Enforce 10-minute expiry on state parameter to prevent replay attacks
       const MAX_STATE_AGE_MS = 10 * 60 * 1000;
-      if (
-        !parsed.timestamp ||
-        Date.now() - parsed.timestamp > MAX_STATE_AGE_MS
-      ) {
+      const timestamp = parsed.timestamp as number | undefined;
+      if (!timestamp || Date.now() - timestamp > MAX_STATE_AGE_MS) {
         this.logger.warn('OAuth state parameter expired');
         return null;
       }
@@ -176,9 +169,66 @@ export class AuthController {
     const authCode = crypto.randomBytes(32).toString('hex');
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
 
-    // Redirect to frontend with one-time code instead of JWT
     const clientUrl = this.getClientUrl(req);
+
+    // Check if this callback originated from the invite flow (ROK-394).
+    // The invite flow uses a signed state param with action: 'invite' and the
+    // invite code. If present, redirect to /auth/success with the invite code
+    // so the frontend can navigate to the invite claim page.
+    const stateParam = (req.query as Record<string, string>).state;
+    if (stateParam) {
+      const stateData = this.verifyState(stateParam);
+      if (stateData?.action === 'invite' && stateData.inviteCode) {
+        const inviteCode = stateData.inviteCode as string;
+        res.redirect(
+          `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(inviteCode)}`,
+        );
+        return;
+      }
+    }
+
+    // Normal login flow — redirect to frontend with one-time code
     res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
+  }
+
+  /**
+   * GET /auth/discord/invite
+   * Initiates Discord OAuth with invite code preserved in signed state (ROK-394).
+   * After OAuth callback, redirects to /i/:code for reliable auto-claim.
+   */
+  @RateLimit('auth')
+  @Get('discord/invite')
+  async discordInviteLogin(
+    @Query('code') inviteCode: string,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const clientUrl = this.getClientUrl(req);
+
+    if (!inviteCode) {
+      res.redirect(`${clientUrl}/calendar`);
+      return;
+    }
+
+    const oauthConfig = await this.settingsService.getDiscordOAuthConfig();
+    if (!oauthConfig) {
+      res.redirect(
+        `${clientUrl}/i/${encodeURIComponent(inviteCode)}?error=discord_not_configured`,
+      );
+      return;
+    }
+
+    // Build signed state with invite code
+    const state = this.signState({
+      action: 'invite',
+      inviteCode,
+      timestamp: Date.now(),
+    });
+
+    // Reuse the existing registered callback URL — differentiate via state param
+    const discordAuthUrl = `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
+
+    res.redirect(discordAuthUrl);
   }
 
   /**
@@ -296,7 +346,8 @@ export class AuthController {
         throw new Error('Invalid or tampered state parameter');
       }
 
-      const { userId, action } = stateData;
+      const userId = stateData.userId as number;
+      const action = stateData.action as string;
 
       if (action !== 'link') {
         throw new Error('Invalid state action');

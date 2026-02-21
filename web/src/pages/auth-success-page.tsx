@@ -78,7 +78,13 @@ export function AuthSuccessPage() {
                     }
 
                     // ROK-219: Redirect new non-admin users to onboarding wizard
+                    // ROK-394: Preserve invite code so claim happens after onboarding
                     if (user.role !== 'admin' && !user.onboardingCompletedAt) {
+                        const pendingInvite = searchParams.get('invite') || sessionStorage.getItem('invite_code');
+                        if (pendingInvite) {
+                            // Keep invite code in sessionStorage for post-onboarding claim
+                            sessionStorage.setItem('invite_code', pendingInvite);
+                        }
                         toast.success('Welcome! Let\'s get you set up.');
                         navigate('/onboarding', { replace: true });
                         return;
@@ -102,10 +108,14 @@ export function AuthSuccessPage() {
                         }
                     }
 
-                    // ROK-263: Check for stored invite code from magic invite link flow
+                    // ROK-394: Check for invite code from state param (preferred) or sessionStorage (fallback)
+                    const inviteCodeFromParam = searchParams.get('invite');
                     const storedInviteCode = sessionStorage.getItem('invite_code');
-                    if (storedInviteCode) {
-                        navigate(`/i/${storedInviteCode}`, { replace: true });
+                    const inviteCode = inviteCodeFromParam || storedInviteCode;
+                    if (inviteCode) {
+                        sessionStorage.removeItem('invite_code');
+                        // Redirect to invite page with ?claim=1 to trigger auto-claim
+                        navigate(`/i/${inviteCode}?claim=1`, { replace: true });
                         return;
                     }
 

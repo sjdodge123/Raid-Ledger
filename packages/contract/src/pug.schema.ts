@@ -86,6 +86,11 @@ export const InviteCodeResolveResponseSchema = z.object({
         game: z.object({
             name: z.string(),
             coverUrl: z.string().nullable().optional(),
+            hasRoles: z.boolean().optional(),
+            registryId: z.string().optional(),
+            isBlizzardGame: z.boolean().optional(),
+            inviterRealm: z.string().nullable().optional(),
+            gameVariant: z.string().nullable().optional(),
         }).nullable().optional(),
     }).optional(),
     slot: z.object({
@@ -93,6 +98,8 @@ export const InviteCodeResolveResponseSchema = z.object({
         role: PugRoleSchema,
         status: PugSlotStatusSchema,
     }).optional(),
+    discordServerInviteUrl: z.string().nullable().optional(),
+    communityName: z.string().nullable().optional(),
     error: z.string().optional(),
 });
 

@@ -3,11 +3,13 @@ import {
   Get,
   Post,
   Param,
+  Body,
   UseGuards,
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InviteService } from './invite.service';
+import { InviteCodeClaimSchema } from '@raid-ledger/contract';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
@@ -35,13 +37,20 @@ export class InviteController {
   /**
    * Claim an invite code — requires authentication.
    * Smart matching: existing members get normal signup, new users claim PUG slot.
+   * Optional role override allows user to select their preferred role (ROK-394).
    */
   @Post(':code/claim')
   @UseGuards(AuthGuard('jwt'))
   async claimInvite(
     @Param('code') code: string,
     @Request() req: AuthenticatedRequest,
-  ): Promise<{ type: 'signup' | 'claimed'; eventId: number }> {
-    return this.inviteService.claimInvite(code, req.user.id);
+    @Body() body: unknown,
+  ): Promise<{
+    type: 'signup' | 'claimed';
+    eventId: number;
+    discordServerInviteUrl?: string;
+  }> {
+    const dto = InviteCodeClaimSchema.parse(body ?? {});
+    return this.inviteService.claimInvite(code, req.user.id, dto.role);
   }
 }

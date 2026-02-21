@@ -223,22 +223,32 @@ export function OnboardingWizardPage() {
         setCurrentStep((prev) => Math.max(prev - 1, 0));
     }, []);
 
+    // ROK-394: After onboarding, redirect to pending invite claim if present
+    const getPostOnboardingRedirect = useCallback(() => {
+        const pendingInvite = sessionStorage.getItem('invite_code');
+        if (pendingInvite) {
+            sessionStorage.removeItem('invite_code');
+            return `/i/${pendingInvite}?claim=1`;
+        }
+        return '/calendar';
+    }, []);
+
     const handleSkipAll = useCallback(() => {
         completeOnboarding.mutate(undefined, {
             onSuccess: () => {
                 toast.info('Setup skipped. You can update your profile anytime.');
-                navigate('/calendar', { replace: true });
+                navigate(getPostOnboardingRedirect(), { replace: true });
             },
         });
-    }, [completeOnboarding, navigate]);
+    }, [completeOnboarding, navigate, getPostOnboardingRedirect]);
 
     const handleComplete = useCallback(() => {
         completeOnboarding.mutate(undefined, {
             onSuccess: () => {
-                navigate('/calendar', { replace: true });
+                navigate(getPostOnboardingRedirect(), { replace: true });
             },
         });
-    }, [completeOnboarding, navigate]);
+    }, [completeOnboarding, navigate, getPostOnboardingRedirect]);
 
     // Keyboard: Escape to dismiss
     useEffect(() => {

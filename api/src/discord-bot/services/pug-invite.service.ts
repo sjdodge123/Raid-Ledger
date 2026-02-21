@@ -596,8 +596,9 @@ export class PugInviteService {
   /**
    * Generate a Discord server invite URL.
    * Creates a temporary invite (24h, single-use) to the default channel.
+   * Public for use by InviteService during claim flow (ROK-394).
    */
-  private async generateServerInvite(eventId: number): Promise<string | null> {
+  async generateServerInvite(eventId: number): Promise<string | null> {
     const client = this.clientService.getClient();
     if (!client?.isReady()) return null;
 
