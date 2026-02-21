@@ -78,7 +78,7 @@ function renderBanner(route = '/events') {
 
 describe('DiscordJoinBanner', () => {
     beforeEach(() => {
-        localStorage.clear();
+        sessionStorage.clear();
         vi.clearAllMocks();
 
         // Sensible defaults: authenticated with Discord, bot online, not a member
@@ -87,7 +87,7 @@ describe('DiscordJoinBanner', () => {
     });
 
     afterEach(() => {
-        localStorage.clear();
+        sessionStorage.clear();
     });
 
     // =========================================================
@@ -289,7 +289,7 @@ describe('DiscordJoinBanner', () => {
             ).not.toBeInTheDocument();
         });
 
-        it('persists dismissal in localStorage', () => {
+        it('persists dismissal in sessionStorage', () => {
             renderBanner('/events');
 
             const btn = screen.getByRole('button', {
@@ -297,26 +297,26 @@ describe('DiscordJoinBanner', () => {
             });
             fireEvent.click(btn);
 
-            expect(localStorage.getItem(DISMISS_KEY)).toBe('true');
+            expect(sessionStorage.getItem(DISMISS_KEY)).toBe('true');
         });
 
-        it('reads dismissed state from localStorage on mount and hides banner', () => {
-            localStorage.setItem(DISMISS_KEY, 'true');
+        it('reads dismissed state from sessionStorage on mount and hides banner', () => {
+            sessionStorage.setItem(DISMISS_KEY, 'true');
 
             const { container } = renderBanner('/events');
 
             expect(container.firstChild).toBeNull();
         });
 
-        it('shows the banner when localStorage dismiss key is absent', () => {
-            // localStorage is cleared in beforeEach — key is absent
+        it('shows the banner when sessionStorage dismiss key is absent', () => {
+            // sessionStorage is cleared in beforeEach — key is absent
             renderBanner('/events');
 
             expect(screen.getByText(/You're not in the/)).toBeInTheDocument();
         });
 
-        it('shows the banner when localStorage dismiss value is not "true"', () => {
-            localStorage.setItem(DISMISS_KEY, 'false');
+        it('shows the banner when sessionStorage dismiss value is not "true"', () => {
+            sessionStorage.setItem(DISMISS_KEY, 'false');
 
             renderBanner('/events');
 

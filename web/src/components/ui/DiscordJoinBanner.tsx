@@ -28,11 +28,11 @@ export function DiscordJoinBanner() {
     const { data } = useDiscordMembership();
 
     const [dismissed, setDismissed] = useState(
-        () => localStorage.getItem(DISMISS_KEY) === 'true',
+        () => sessionStorage.getItem(DISMISS_KEY) === 'true',
     );
 
     const handleDismiss = useCallback(() => {
-        localStorage.setItem(DISMISS_KEY, 'true');
+        sessionStorage.setItem(DISMISS_KEY, 'true');
         setDismissed(true);
     }, []);
 
