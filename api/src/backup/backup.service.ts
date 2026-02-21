@@ -303,8 +303,8 @@ export class BackupService implements OnModuleInit {
       this.logger.warn(`Post-restore migration note: ${msg}`);
     }
 
-    // Force-reload encrypted settings from the restored DB
-    this.settingsService.invalidateCache();
+    // Reload settings and reconnect integrations from restored config
+    await this.settingsService.reloadAndReconnectIntegrations();
     this.logger.log(`Database restore complete from: ${filename}`);
   }
 

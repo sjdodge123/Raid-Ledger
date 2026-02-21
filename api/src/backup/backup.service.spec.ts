@@ -65,6 +65,9 @@ describe('BackupService', () => {
           useValue: {
             invalidateCache: jest.fn(),
             emitAllIntegrationsCleared: jest.fn(),
+            reloadAndReconnectIntegrations: jest
+              .fn()
+              .mockResolvedValue(undefined),
           },
         },
       ],
