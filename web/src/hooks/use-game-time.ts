@@ -12,8 +12,7 @@ export function useGameTime(options?: { enabled?: boolean; week?: string; tzOffs
         queryKey: [...GAME_TIME_QUERY_KEY, options?.week ?? 'current', options?.tzOffset],
         queryFn: () => getMyGameTime(options?.week, options?.tzOffset),
         enabled: options?.enabled ?? true,
-        staleTime: 0,
-        refetchOnMount: 'always',
+        staleTime: 30_000,
     });
 }
 
