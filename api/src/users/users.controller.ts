@@ -51,6 +51,7 @@ interface AuthenticatedRequest {
   user: {
     id: number;
     role: UserRole;
+    impersonatedBy?: number | null;
   };
 }
 
@@ -320,6 +321,12 @@ export class UsersController {
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ) {
+    if (req.user.impersonatedBy) {
+      throw new ForbiddenException(
+        'Cannot delete account while impersonating',
+      );
+    }
+
     const dto = DeleteAccountSchema.parse(body);
 
     const user = await this.usersService.findById(req.user.id);

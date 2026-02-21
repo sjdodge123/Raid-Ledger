@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, isImpersonating } from '../../hooks/use-auth';
 import { deleteMyAccount } from '../../lib/api-client';
 import { Modal } from '../../components/ui/modal';
 import { toast } from '../../lib/toast';
@@ -34,7 +34,7 @@ export function DeleteAccountPanel() {
 
     const isConfirmValid = confirmName === expectedName;
 
-    if (!user) return null;
+    if (!user || isImpersonating()) return null;
 
     return (
         <div className="space-y-6">
