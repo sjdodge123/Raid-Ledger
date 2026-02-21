@@ -8,6 +8,7 @@ import {
   type GuildMember,
   type ButtonInteraction,
   type StringSelectMenuInteraction,
+  type MessageComponentInteraction,
 } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -61,6 +62,49 @@ export class PugInviteListener {
     private readonly signupsService: SignupsService,
     private readonly pugsService: PugsService,
   ) {}
+
+  /**
+   * Safely defer an interaction update, returning false if the interaction is already
+   * acknowledged or the token has expired (ROK-415).
+   */
+  private async safeDeferUpdate(
+    interaction: MessageComponentInteraction,
+  ): Promise<boolean> {
+    if (interaction.replied || interaction.deferred) return true;
+    try {
+      await interaction.deferUpdate();
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        'Failed to defer update for interaction %s: %s',
+        interaction.id,
+        error,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Safely defer a reply, returning false if the interaction is already
+   * acknowledged or the token has expired (ROK-415).
+   */
+  private async safeDeferReply(
+    interaction: MessageComponentInteraction,
+    ephemeral = true,
+  ): Promise<boolean> {
+    if (interaction.replied || interaction.deferred) return true;
+    try {
+      await interaction.deferReply({ ephemeral });
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        'Failed to defer reply for interaction %s: %s',
+        interaction.id,
+        error,
+      );
+      return false;
+    }
+  }
 
   /**
    * When bot connects, register the guildMemberAdd listener on the Discord.js client.
@@ -220,7 +264,7 @@ export class PugInviteListener {
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await this.safeDeferReply(interaction))) return;
 
     try {
       // Look up the PUG slot
@@ -467,7 +511,7 @@ export class PugInviteListener {
     interaction: StringSelectMenuInteraction,
     pugSlotId: string,
   ): Promise<void> {
-    await interaction.deferUpdate();
+    if (!(await this.safeDeferUpdate(interaction))) return;
 
     const characterId = interaction.values[0];
     const discordUserId = interaction.user.id;
@@ -592,7 +636,7 @@ export class PugInviteListener {
     pugSlotId: string,
     characterName?: string,
   ): Promise<void> {
-    await interaction.deferUpdate();
+    if (!(await this.safeDeferUpdate(interaction))) return;
 
     const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
 
@@ -924,7 +968,7 @@ export class PugInviteListener {
     interaction: ButtonInteraction,
     inviteCode: string,
   ): Promise<void> {
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await this.safeDeferReply(interaction))) return;
 
     try {
       const slot = await this.pugsService.findByInviteCode(inviteCode);
@@ -1066,7 +1110,7 @@ export class PugInviteListener {
     const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
 
-    await interaction.deferReply({ ephemeral: true });
+    if (!(await this.safeDeferReply(interaction))) return;
 
     try {
       if (action === MEMBER_INVITE_BUTTON_IDS.ACCEPT) {
@@ -1298,7 +1342,7 @@ export class PugInviteListener {
     interaction: StringSelectMenuInteraction,
     eventIdStr: string,
   ): Promise<void> {
-    await interaction.deferUpdate();
+    if (!(await this.safeDeferUpdate(interaction))) return;
 
     const characterId = interaction.values[0];
     const discordUserId = interaction.user.id;
@@ -1412,7 +1456,7 @@ export class PugInviteListener {
     eventIdStr: string,
     characterId?: string,
   ): Promise<void> {
-    await interaction.deferUpdate();
+    if (!(await this.safeDeferUpdate(interaction))) return;
 
     const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
     const discordUserId = interaction.user.id;
