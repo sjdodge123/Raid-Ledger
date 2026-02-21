@@ -58,6 +58,40 @@ docker run -d -p 8080:80 ghcr.io/sjdodge123/raid-ledger:main
 
 ---
 
+## Database Backups
+
+Raid Ledger automatically backs up your PostgreSQL database to `/data/backups/` inside the Docker volume.
+
+### How it works
+
+- **Daily backups** — A `pg_dump` runs every night at 2 AM and stores compressed `.dump` files in `/data/backups/daily/`. Backups older than 30 days are automatically deleted.
+- **Pre-migration snapshots** — Before every schema migration at container startup, a snapshot is saved to `/data/backups/migrations/`. These are not auto-rotated and should be cleaned up manually when no longer needed.
+
+### Accessing backups
+
+```bash
+# List available backups
+docker exec raid-ledger-api ls /data/backups/daily/
+docker exec raid-ledger-api ls /data/backups/migrations/
+
+# Copy a backup to the host
+docker cp raid-ledger-api:/data/backups/daily/raid_ledger_2024-01-15_020001.dump ./restore.dump
+```
+
+### Restoring a backup
+
+```bash
+# Restore from a custom-format dump
+pg_restore --host localhost --port 5432 --username user --dbname raid_ledger \
+  --no-owner --no-privileges ./restore.dump
+```
+
+### Backup preservation across --fresh resets
+
+Both `deploy_dev.sh --fresh` and `deploy_prod.sh --fresh` automatically preserve and restore the `/data/backups/` directory across the volume wipe — your backup history is never lost during a fresh reset.
+
+---
+
 ## Health Check
 
 ```

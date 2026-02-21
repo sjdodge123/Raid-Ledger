@@ -146,6 +146,82 @@ export class SettingsService {
   }
 
   /**
+   * Force-reload the settings cache from DB on the next access.
+   * Useful after pg_restore or other out-of-band DB changes.
+   */
+  invalidateCache(): void {
+    this.cacheLoadedAt = 0;
+    this.logger.debug('Settings cache invalidated');
+  }
+
+  /**
+   * Emit "cleared" events for all integrations so live services
+   * (Discord bot, etc.) disconnect after a DB reset or restore.
+   */
+  emitAllIntegrationsCleared(): void {
+    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, null);
+    this.logger.debug('All integration events emitted as cleared');
+  }
+
+  /**
+   * Reload the settings cache and re-emit integration events so live
+   * services reconnect with restored configuration.
+   */
+  async reloadAndReconnectIntegrations(): Promise<void> {
+    this.cacheLoadedAt = 0;
+    await this.ensureCache();
+
+    // Discord bot
+    const botToken = this.cache.get(SETTING_KEYS.DISCORD_BOT_TOKEN);
+    const botEnabled = this.cache.get(SETTING_KEYS.DISCORD_BOT_ENABLED);
+    if (botToken && botEnabled === 'true') {
+      this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, {
+        token: botToken,
+        enabled: true,
+      });
+    }
+
+    // Discord OAuth
+    const oauthId = this.cache.get(SETTING_KEYS.DISCORD_CLIENT_ID);
+    const oauthSecret = this.cache.get(SETTING_KEYS.DISCORD_CLIENT_SECRET);
+    const oauthCallback = this.cache.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
+    if (oauthId && oauthSecret && oauthCallback) {
+      this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, {
+        clientId: oauthId,
+        clientSecret: oauthSecret,
+        callbackUrl: oauthCallback,
+      });
+    }
+
+    // IGDB
+    const igdbId = this.cache.get(SETTING_KEYS.IGDB_CLIENT_ID);
+    const igdbSecret = this.cache.get(SETTING_KEYS.IGDB_CLIENT_SECRET);
+    if (igdbId && igdbSecret) {
+      this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, {
+        clientId: igdbId,
+        clientSecret: igdbSecret,
+      });
+    }
+
+    // Blizzard
+    const blizId = this.cache.get(SETTING_KEYS.BLIZZARD_CLIENT_ID);
+    const blizSecret = this.cache.get(SETTING_KEYS.BLIZZARD_CLIENT_SECRET);
+    if (blizId && blizSecret) {
+      this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, {
+        clientId: blizId,
+        clientSecret: blizSecret,
+      });
+    }
+
+    this.logger.log(
+      'Integration reconnect events emitted from restored config',
+    );
+  }
+
+  /**
    * Check if a setting exists.
    * Served from in-memory cache.
    */

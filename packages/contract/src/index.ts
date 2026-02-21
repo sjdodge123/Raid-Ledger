@@ -75,3 +75,6 @@ export * from './channel-bindings.schema.js';
 
 // Auth (ROK-389)
 export * from './auth.schema.js';
+
+// Backups
+export * from './backup.schema.js';

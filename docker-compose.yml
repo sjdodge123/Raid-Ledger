@@ -48,14 +48,14 @@ services:
     environment:
       DATABASE_URL: postgresql://user:password@db:5432/raid_ledger
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: dev-secret-change-in-prod
+      JWT_SECRET: "${JWT_SECRET:-dev-secret-change-in-prod}"
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
       # ROK-306: Sentry telemetry opt-out — uncomment to disable error tracking.
       # DISABLE_TELEMETRY: "true"
     volumes:
-      - avatar_data:/data/avatars
+      - avatar_data:/data
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:
