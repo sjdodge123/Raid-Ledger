@@ -33,12 +33,15 @@ describe('BackupService', () => {
 
     // Mock execFile to call callback with success
     (mockChildProcess.execFile as unknown as jest.Mock).mockImplementation(
-      (
-        _cmd: string,
-        _args: string[],
-        callback: (err: Error | null) => void,
-      ) => {
-        callback(null);
+      (...args: unknown[]) => {
+        // Find the callback (last function argument)
+        const callback = args.find((a) => typeof a === 'function') as (
+          err: Error | null,
+          result?: { stdout: string; stderr: string },
+        ) => void;
+        if (callback) {
+          callback(null, { stdout: '', stderr: '' });
+        }
       },
     );
 
@@ -177,6 +180,53 @@ describe('BackupService', () => {
     });
   });
 
+  describe('resetInstance', () => {
+    it('should create a safety backup, drop schemas, run migrations, and return password', async () => {
+      (mockFs.statSync as jest.Mock).mockReturnValue({
+        size: 1024,
+        birthtime: new Date(),
+      });
+
+      // Make bootstrap-admin output contain a password
+      (mockChildProcess.execFile as unknown as jest.Mock).mockImplementation(
+        (...args: unknown[]) => {
+          const cmd = args[0] as string;
+          const cmdArgs = args[1] as string[];
+          const callback = args.find((a) => typeof a === 'function') as (
+            err: Error | null,
+            result?: { stdout: string; stderr: string },
+          ) => void;
+          if (callback) {
+            const isBootstrap =
+              cmd === 'npx' &&
+              cmdArgs.some((a: string) => a.includes('bootstrap-admin'));
+            callback(null, {
+              stdout: isBootstrap ? '  Password: testPassword123\n' : '',
+              stderr: '',
+            });
+          }
+        },
+      );
+
+      const result = await service.resetInstance();
+      expect(result.password).toBe('testPassword123');
+
+      const execFileCalls = (mockChildProcess.execFile as unknown as jest.Mock)
+        .mock.calls;
+
+      // Should have called psql to drop schemas
+      const psqlCall = execFileCalls.find(
+        (call: unknown[]) => call[0] === 'psql',
+      ) as unknown[] | undefined;
+      expect(psqlCall).toBeDefined();
+      expect(psqlCall![1]).toEqual(
+        expect.arrayContaining([
+          expect.stringContaining('DROP SCHEMA public CASCADE'),
+        ]),
+      );
+    });
+  });
+
   describe('restoreFromBackup', () => {
     it('should reject path traversal attempts', async () => {
       await expect(
@@ -201,14 +251,13 @@ describe('BackupService', () => {
       await service.restoreFromBackup('daily', 'test.dump');
 
       // pg_dump called twice: once for pre-restore snapshot, once already in daily backup setup
-      const execFileCalls = (
-        mockChildProcess.execFile as unknown as jest.Mock
-      ).mock.calls;
+      const execFileCalls = (mockChildProcess.execFile as unknown as jest.Mock)
+        .mock.calls;
       const pgRestoreCall = execFileCalls.find(
         (call: unknown[]) => call[0] === 'pg_restore',
-      );
+      ) as unknown[] | undefined;
       expect(pgRestoreCall).toBeDefined();
-      expect(pgRestoreCall[1]).toEqual(
+      expect(pgRestoreCall![1]).toEqual(
         expect.arrayContaining(['--clean', '--if-exists']),
       );
     });

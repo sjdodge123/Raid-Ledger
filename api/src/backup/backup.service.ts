@@ -26,8 +26,9 @@ const DAILY_RETENTION_DAYS = 30;
 export class BackupService implements OnModuleInit {
   private readonly logger = new Logger(BackupService.name);
   private readonly databaseUrl: string;
-  private readonly dailyDir = path.join(DEFAULT_BACKUP_BASE, 'daily');
-  private readonly migrationDir = path.join(DEFAULT_BACKUP_BASE, 'migrations');
+  private readonly backupBase: string;
+  private readonly dailyDir: string;
+  private readonly migrationDir: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -38,6 +39,10 @@ export class BackupService implements OnModuleInit {
       throw new Error('DATABASE_URL is required for BackupService');
     }
     this.databaseUrl = url;
+    this.backupBase =
+      this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
+    this.dailyDir = path.join(this.backupBase, 'daily');
+    this.migrationDir = path.join(this.backupBase, 'migrations');
   }
 
   onModuleInit(): void {
@@ -51,7 +56,7 @@ export class BackupService implements OnModuleInit {
     try {
       fs.mkdirSync(this.dailyDir, { recursive: true });
       fs.mkdirSync(this.migrationDir, { recursive: true });
-      this.logger.log(`Backup directories ready at ${DEFAULT_BACKUP_BASE}`);
+      this.logger.log(`Backup directories ready at ${this.backupBase}`);
     } catch (err) {
       this.logger.warn(
         `Could not create backup directories (expected in dev): ${err instanceof Error ? err.message : err}`,
@@ -271,6 +276,82 @@ export class BackupService implements OnModuleInit {
       }
       this.logger.warn(`pg_restore completed with warnings: ${message}`);
     }
+  }
+
+  /**
+   * Factory-reset the instance: drop all data, re-run migrations, reseed.
+   * Creates a pre-reset safety backup first.
+   * Returns new admin credentials.
+   */
+  async resetInstance(): Promise<{ password: string }> {
+    this.logger.warn('FACTORY RESET initiated — creating safety backup...');
+    await this.createMigrationSnapshot('factory-reset');
+
+    this.logger.warn('Dropping all database schemas...');
+    await execFileAsync('psql', [
+      this.databaseUrl,
+      '-c',
+      'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;',
+    ]);
+
+    this.logger.warn('Running database migrations...');
+    const isDocker = process.env.NODE_ENV === 'production';
+    if (isDocker) {
+      await execFileAsync('node', [path.resolve('drizzle/run-migrations.js')]);
+    } else {
+      await execFileAsync('npx', ['drizzle-kit', 'migrate'], {
+        cwd: path.resolve(__dirname, '../..'),
+      });
+    }
+
+    this.logger.warn('Bootstrapping admin account...');
+    const runner = isDocker ? 'node' : 'npx';
+    const runnerArgs = isDocker
+      ? [path.resolve(`dist/scripts/bootstrap-admin.js`), '--reset']
+      : [
+          'ts-node',
+          path.resolve(__dirname, '../../scripts/bootstrap-admin.ts'),
+          '--reset',
+        ];
+
+    const { stdout: adminOutput } = await execFileAsync(runner, runnerArgs, {
+      cwd: path.resolve(__dirname, '../..'),
+      env: { ...process.env, RESET_PASSWORD: 'true' },
+    });
+
+    // Extract password from bootstrap output
+    const passwordMatch = adminOutput.match(/Password:\s+(.+)/);
+    const password = passwordMatch ? passwordMatch[1].trim() : '';
+    if (!password) {
+      this.logger.error(
+        'Could not extract admin password from bootstrap output',
+      );
+      throw new InternalServerErrorException(
+        'Reset completed but failed to extract new admin credentials',
+      );
+    }
+
+    this.logger.warn('Seeding game data...');
+    const seedRunner = isDocker ? 'node' : 'npx';
+    const seedGamesArgs = isDocker
+      ? [path.resolve('dist/scripts/seed-games.js')]
+      : ['ts-node', path.resolve(__dirname, '../../scripts/seed-games.ts')];
+    const seedIgdbArgs = isDocker
+      ? [path.resolve('dist/scripts/seed-igdb-games.js')]
+      : [
+          'ts-node',
+          path.resolve(__dirname, '../../scripts/seed-igdb-games.ts'),
+        ];
+
+    await execFileAsync(seedRunner, seedGamesArgs, {
+      cwd: path.resolve(__dirname, '../..'),
+    });
+    await execFileAsync(seedRunner, seedIgdbArgs, {
+      cwd: path.resolve(__dirname, '../..'),
+    });
+
+    this.logger.warn('FACTORY RESET complete — instance has been reset');
+    return { password };
   }
 
   /**

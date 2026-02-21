@@ -77,5 +77,19 @@ export function useBackups() {
         },
     });
 
-    return { backups, createBackup, deleteBackup, restoreBackup };
+    const resetInstance = useMutation<
+        { success: boolean; message: string; password: string },
+        Error
+    >({
+        mutationFn: async () => {
+            const response = await fetch(
+                `${API_BASE_URL}/admin/backups/reset-instance`,
+                { method: 'POST', headers: getHeaders() },
+            );
+            if (!response.ok) throw new Error('Failed to reset instance');
+            return response.json();
+        },
+    });
+
+    return { backups, createBackup, deleteBackup, restoreBackup, resetInstance };
 }

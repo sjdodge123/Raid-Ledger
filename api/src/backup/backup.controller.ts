@@ -59,6 +59,16 @@ export class BackupController {
     };
   }
 
+  @Post('reset-instance')
+  async resetInstance() {
+    const { password } = await this.backupService.resetInstance();
+    return {
+      success: true,
+      message: 'Instance has been reset to factory defaults',
+      password,
+    };
+  }
+
   private validateType(type: string): void {
     if (type !== 'daily' && type !== 'migration') {
       throw new BadRequestException('Type must be "daily" or "migration"');
