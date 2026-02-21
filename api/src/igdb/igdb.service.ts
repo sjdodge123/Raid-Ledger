@@ -11,6 +11,10 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import {
+  stripSearchPunctuation,
+  buildWordMatchFilters,
+} from '../common/search.util';
+import {
   IgdbGameDto,
   GameDetailDto,
   IgdbSyncStatusDto,
@@ -424,21 +428,14 @@ export class IgdbService {
   }
 
   /**
-   * Escape special characters in LIKE/ILIKE patterns to prevent injection
-   * @param input - User input string to escape
-   * @returns Escaped string safe for LIKE patterns
-   */
-  private escapeLikePattern(input: string): string {
-    return input.replace(/[%_\\]/g, '\\$&');
-  }
-
-  /**
-   * Normalize query for consistent cache keys
+   * Normalize query for consistent cache keys.
+   * Strips punctuation so "halo: combat" and "halo combat" share the
+   * same cache key.
    * @param query - Raw search query
-   * @returns Normalized query (lowercase, trimmed)
+   * @returns Normalized query (lowercase, trimmed, punctuation-stripped)
    */
   private normalizeQuery(query: string): string {
-    return query.toLowerCase().trim();
+    return stripSearchPunctuation(query).toLowerCase().trim();
   }
 
   /**
@@ -544,10 +541,9 @@ export class IgdbService {
     const cacheKey = this.getCacheKey(query);
 
     // Build DB filters for hidden/banned/adult (reused across layers)
-    const escapedQuery = this.escapeLikePattern(normalizedQuery);
     const adultFilterEnabled = await this.isAdultFilterEnabled();
     const dbFilters = [
-      ilike(schema.games.name, `%${escapedQuery}%`),
+      ...buildWordMatchFilters(schema.games.name, normalizedQuery),
       eq(schema.games.hidden, false),
       eq(schema.games.banned, false),
     ];
@@ -677,11 +673,10 @@ export class IgdbService {
    * @returns Local search results
    */
   async searchLocalGames(query: string): Promise<SearchResult> {
-    const escapedQuery = this.escapeLikePattern(query);
     const adultFilterEnabled = await this.isAdultFilterEnabled();
 
     const filters = [
-      ilike(schema.games.name, `%${escapedQuery}%`),
+      ...buildWordMatchFilters(schema.games.name, query),
       eq(schema.games.hidden, false),
       eq(schema.games.banned, false),
     ];

@@ -9,10 +9,11 @@ import {
   ButtonBuilder,
   ButtonStyle,
 } from 'discord.js';
-import { ilike } from 'drizzle-orm';
+import { and, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { buildWordMatchFilters } from '../../common/search.util';
 import { EventsService } from '../../events/events.service';
 import { UsersService } from '../../users/users.service';
 import { PreferencesService } from '../../users/preferences.service';
@@ -307,10 +308,11 @@ export class EventCreateCommand
     interaction: AutocompleteInteraction,
     query: string,
   ): Promise<void> {
+    const filters = buildWordMatchFilters(schema.games.name, query);
     const results = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
-      .where(ilike(schema.games.name, `%${query}%`))
+      .where(filters.length > 0 ? and(...filters) : undefined)
       .limit(25);
 
     await interaction.respond(
