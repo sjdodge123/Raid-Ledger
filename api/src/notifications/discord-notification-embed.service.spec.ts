@@ -515,4 +515,171 @@ describe('DiscordNotificationEmbedService', () => {
       expect(result.message).toContain("couldn't reach you on Discord");
     });
   });
+
+  describe('buildExtraRows — Roach Out button (ROK-378)', () => {
+    it('should return a rows array with Roach Out button for event_reminder with eventId', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeDefined();
+      expect(rows).toHaveLength(1);
+    });
+
+    it('should set customId with ROACH_OUT prefix and eventId for the button', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          payload: { eventId: 99 },
+        },
+        'Community',
+      );
+
+      const rowJson = rows![0].toJSON() as {
+        components: Array<{ customId: string; label: string; style: number }>;
+      };
+      const roachBtn = rowJson.components[0];
+      expect(roachBtn.customId).toContain('event_roachout');
+      expect(roachBtn.customId).toContain('99');
+      expect(roachBtn.label).toBe('Roach Out');
+      // ButtonStyle.Danger = 4
+      expect(roachBtn.style).toBe(4);
+    });
+
+    it('should handle numeric eventId correctly in customId', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Event soon',
+          payload: { eventId: 123 },
+        },
+        'Community',
+      );
+
+      const rowJson = rows![0].toJSON() as {
+        components: Array<{ customId: string }>;
+      };
+      expect(rowJson.components[0].customId).toBe('event_roachout:123');
+    });
+
+    it('should return undefined rows for event_reminder without eventId', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          // no payload.eventId
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should return undefined rows for new_event type', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-2',
+          type: 'new_event',
+          title: 'New Event',
+          message: 'New event created',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should return undefined rows for slot_vacated type', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-3',
+          type: 'slot_vacated',
+          title: 'Slot Open',
+          message: 'A slot opened',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should return undefined rows for bench_promoted type', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-4',
+          type: 'bench_promoted',
+          title: 'Promoted!',
+          message: 'You were promoted',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should return undefined rows for event_rescheduled type', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-5',
+          type: 'event_rescheduled',
+          title: 'Rescheduled',
+          message: 'Event rescheduled',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should return undefined rows for event_reminder when payload.eventId is null', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          payload: { eventId: null },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+
+    it('should handle string eventId in payload (toStr conversion)', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Event soon',
+          payload: { eventId: '77' },
+        },
+        'Community',
+      );
+
+      const rowJson = rows![0].toJSON() as {
+        components: Array<{ customId: string }>;
+      };
+      expect(rowJson.components[0].customId).toBe('event_roachout:77');
+    });
+  });
 });
