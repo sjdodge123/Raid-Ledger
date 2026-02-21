@@ -838,6 +838,26 @@ export async function updateUserRole(
     });
 }
 
+/**
+ * ROK-405: Self-delete current user's account.
+ * Requires confirmation by typing display name.
+ */
+export async function deleteMyAccount(confirmName: string): Promise<void> {
+    return fetchApi('/users/me', {
+        method: 'DELETE',
+        body: JSON.stringify({ confirmName }),
+    });
+}
+
+/**
+ * ROK-405: Admin-remove a user (admin-only).
+ */
+export async function adminRemoveUser(userId: number): Promise<void> {
+    return fetchApi(`/users/${userId}`, {
+        method: 'DELETE',
+    });
+}
+
 // ============================================================
 // PUG Slots API (ROK-262)
 // ============================================================

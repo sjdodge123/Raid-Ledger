@@ -4,21 +4,23 @@ import { useDebouncedValue } from '../../hooks/use-debounced-value';
 import { useAuth } from '../../hooks/use-auth';
 import { RoleBadge } from '../ui/role-badge';
 import { InfiniteScrollSentinel } from '../ui/infinite-scroll-sentinel';
+import { Modal } from '../ui/modal';
 import { toast } from '../../lib/toast';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { UserRole } from '@raid-ledger/contract';
 
 /**
- * Role Management Card for admin settings (ROK-272 AC-2).
- * Shows a searchable table of users with role dropdowns.
- * Admin can promote/demote between member and operator.
+ * Role Management Card for admin settings (ROK-272 AC-2, ROK-405).
+ * Shows a searchable table of users with role dropdowns and removal action.
+ * Admin can promote/demote between member and operator, and remove non-admin members.
  */
 export function RoleManagementCard() {
     const { user: currentUser } = useAuth();
     const [search, setSearch] = useState('');
     const debouncedSearch = useDebouncedValue(search, 300);
+    const [removeTarget, setRemoveTarget] = useState<{ id: number; username: string } | null>(null);
 
-    const { users, updateRole } = useUserManagement({
+    const { users, updateRole, removeUser } = useUserManagement({
         search: debouncedSearch || undefined,
     });
 
@@ -30,6 +32,17 @@ export function RoleManagementCard() {
             toast.success(`${username} is now ${newRole === 'operator' ? 'an operator' : 'a member'}`);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : 'Failed to update role');
+        }
+    };
+
+    const handleRemoveConfirm = async () => {
+        if (!removeTarget) return;
+        try {
+            await removeUser.mutateAsync(removeTarget.id);
+            toast.success('User removed');
+            setRemoveTarget(null);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to remove user');
         }
     };
 
@@ -125,28 +138,57 @@ export function RoleManagementCard() {
                                     )}
                                 </div>
 
-                                {/* Role Selector */}
-                                <div className="ml-auto flex-shrink-0">
+                                {/* Role Selector + Remove */}
+                                <div className="ml-auto flex-shrink-0 flex items-center gap-2">
                                     {isAdmin ? (
                                         <span className="text-xs text-dim px-3 py-1.5">
                                             Protected
                                         </span>
                                     ) : (
-                                        <select
-                                            value={u.role}
-                                            disabled={isDisabled}
-                                            onChange={(e) =>
-                                                handleRoleChange(
-                                                    u.id,
-                                                    u.username,
-                                                    e.target.value as Exclude<UserRole, 'admin'>,
-                                                )
-                                            }
-                                            className="text-sm bg-surface border border-edge rounded-lg px-3 py-1.5 text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
-                                        >
-                                            <option value="member">Member</option>
-                                            <option value="operator">Operator</option>
-                                        </select>
+                                        <>
+                                            <select
+                                                value={u.role}
+                                                disabled={isDisabled}
+                                                onChange={(e) =>
+                                                    handleRoleChange(
+                                                        u.id,
+                                                        u.username,
+                                                        e.target.value as Exclude<UserRole, 'admin'>,
+                                                    )
+                                                }
+                                                className="text-sm bg-surface border border-edge rounded-lg px-3 py-1.5 text-foreground disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                                            >
+                                                <option value="member">Member</option>
+                                                <option value="operator">Operator</option>
+                                            </select>
+                                            {!isCurrentUser && (
+                                                <button
+                                                    onClick={() =>
+                                                        setRemoveTarget({
+                                                            id: u.id,
+                                                            username: u.username,
+                                                        })
+                                                    }
+                                                    disabled={removeUser.isPending}
+                                                    className="p-1.5 text-dim hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                                                    title="Remove user"
+                                                >
+                                                    <svg
+                                                        className="w-4 h-4"
+                                                        fill="none"
+                                                        stroke="currentColor"
+                                                        viewBox="0 0 24 24"
+                                                    >
+                                                        <path
+                                                            strokeLinecap="round"
+                                                            strokeLinejoin="round"
+                                                            strokeWidth={2}
+                                                            d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                            )}
+                                        </>
                                     )}
                                 </div>
                             </div>
@@ -170,6 +212,48 @@ export function RoleManagementCard() {
                     />
                 </div>
             )}
+
+            {/* Remove User Confirmation Modal */}
+            <Modal
+                isOpen={!!removeTarget}
+                onClose={() => setRemoveTarget(null)}
+                title="Remove User"
+            >
+                <div className="space-y-4">
+                    <p className="text-secondary">
+                        Remove{' '}
+                        <strong className="text-foreground">
+                            {removeTarget?.username}
+                        </strong>
+                        ? This permanently deletes their account and all
+                        associated data.
+                    </p>
+
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
+                        <p className="text-sm text-red-400">
+                            This action cannot be undone. Their characters,
+                            signups, and preferences will be permanently deleted.
+                            Events they created will be reassigned to you.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-2">
+                        <button
+                            onClick={() => setRemoveTarget(null)}
+                            className="px-4 py-2 text-sm bg-overlay hover:bg-faint text-foreground rounded-lg transition-colors"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            onClick={handleRemoveConfirm}
+                            disabled={removeUser.isPending}
+                            className="px-4 py-2 text-sm bg-red-600 hover:bg-red-500 disabled:bg-red-800 disabled:cursor-not-allowed text-white font-medium rounded-lg transition-colors"
+                        >
+                            {removeUser.isPending ? 'Removing...' : 'Remove'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
         </div>
     );
 }
