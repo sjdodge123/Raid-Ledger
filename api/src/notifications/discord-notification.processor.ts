@@ -46,7 +46,7 @@ export class DiscordNotificationProcessor extends WorkerHost {
       const branding = await this.settingsService.getBranding();
       const communityName = branding.communityName ?? 'Raid Ledger';
 
-      const { embed, row } = this.embedService.buildNotificationEmbed(
+      const { embed, row } = await this.embedService.buildNotificationEmbed(
         {
           notificationId,
           type: type as NotificationType,

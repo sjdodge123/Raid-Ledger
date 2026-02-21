@@ -411,8 +411,10 @@ export class PugInviteService {
     _role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
-    const branding = await this.settingsService.getBranding();
-    const clientUrl = process.env.CLIENT_URL ?? null;
+    const [branding, clientUrl] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+    ]);
     const communityName = branding.communityName || 'Raid Ledger';
 
     const startDate = event.duration[0];
@@ -519,8 +521,10 @@ export class PugInviteService {
       return;
     }
 
-    const branding = await this.settingsService.getBranding();
-    const clientUrl = process.env.CLIENT_URL ?? null;
+    const [branding, clientUrl] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+    ]);
     const communityName = branding.communityName || 'Raid Ledger';
 
     const startDate = event.duration[0];

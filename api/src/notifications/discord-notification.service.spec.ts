@@ -33,7 +33,7 @@ describe('DiscordNotificationService', () => {
   };
 
   const mockEmbedService = {
-    buildWelcomeEmbed: jest.fn().mockReturnValue({
+    buildWelcomeEmbed: jest.fn().mockResolvedValue({
       embed: { toJSON: () => ({}) },
       row: { toJSON: () => ({}) },
     }),

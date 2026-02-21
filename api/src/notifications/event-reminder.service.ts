@@ -6,6 +6,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { SettingsService } from '../settings/settings.service';
 
 /**
  * Reminder window definitions (ROK-126).
@@ -48,16 +49,14 @@ type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 @Injectable()
 export class EventReminderService {
   private readonly logger = new Logger(EventReminderService.name);
-  private readonly clientUrl: string;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly notificationService: NotificationService,
     private readonly cronJobService: CronJobService,
-  ) {
-    this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
-  }
+    private readonly settingsService: SettingsService,
+  ) {}
 
   /**
    * Main cron: runs every 60 seconds (ROK-126 AC-1).

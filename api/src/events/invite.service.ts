@@ -24,7 +24,6 @@ import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 @Injectable()
 export class InviteService {
   private readonly logger = new Logger(InviteService.name);
-  private readonly clientUrl: string;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -37,9 +36,7 @@ export class InviteService {
     @Inject(forwardRef(() => DiscordBotClientService))
     private readonly discordClient: DiscordBotClientService | null,
     private readonly settingsService: SettingsService,
-  ) {
-    this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
-  }
+  ) {}
 
   /**
    * Resolve an invite code — return event + slot context.
@@ -378,7 +375,9 @@ export class InviteService {
 
     if (!user?.discordId) return;
 
-    const eventUrl = `${this.clientUrl}/events/${eventId}`;
+    const clientUrl =
+      (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
+    const eventUrl = `${clientUrl}/events/${eventId}`;
     const message = [
       `You have joined **${eventTitle}**!`,
       `View the event: ${eventUrl}`,

@@ -3,6 +3,7 @@ import { EventReminderService } from './event-reminder.service';
 import { NotificationService } from './notification.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
+import { SettingsService } from '../settings/settings.service';
 
 describe('EventReminderService', () => {
   let service: EventReminderService;
@@ -38,6 +39,12 @@ describe('EventReminderService', () => {
             executeWithTracking: jest.fn(
               (_name: string, fn: () => Promise<void>) => fn(),
             ),
+          },
+        },
+        {
+          provide: SettingsService,
+          useValue: {
+            getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
           },
         },
       ],
