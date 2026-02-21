@@ -360,10 +360,10 @@ export const IGDB_GAME_WEIGHTS: IgdbGameWeight[] = [
   { igdbId: '132516', name: 'Phasmophobia', weight: 1 },
 ];
 
-// ─── IGDB → Registry Slug Mapping ───────────────────────────────────────────
+// ─── IGDB → Game Slug Mapping ───────────────────────────────────────────────
 
-/** Maps IGDB game IDs to registry game slugs (single source of truth) */
-export const IGDB_TO_REGISTRY_SLUG: Record<string, string> = {
+/** Maps IGDB game IDs to games table slugs (single source of truth) */
+export const IGDB_TO_GAME_SLUG: Record<string, string> = {
   '123': 'wow',
   '136210': 'wow-classic',
   '14729': 'ffxiv',
@@ -559,8 +559,8 @@ export interface GeneratedUser {
 export interface GeneratedEvent {
   title: string;
   description: string;
-  registryGameId: string | null;
-  gameId: string;
+  gameId: number | null;
+  igdbId: string;
   startTime: Date;
   endTime: Date;
   maxPlayers: number | null;
@@ -568,7 +568,7 @@ export interface GeneratedEvent {
 
 export interface GeneratedCharacter {
   username: string;
-  registryGameSlug: string;
+  gameSlug: string;
   charName: string;
   class: string;
   spec: string | null;
@@ -657,7 +657,7 @@ export function generateUsernames(
 
 export function generateEvents(
   rng: Rng,
-  registryGames: { id: string; slug: string }[],
+  games: { id: number; slug: string }[],
   baseTime: Date,
   playerCounts?: Map<string, number>,
 ): GeneratedEvent[] {
@@ -665,8 +665,8 @@ export function generateEvents(
   const gameIds = IGDB_GAME_WEIGHTS.map((g) => g.igdbId);
   const weights = IGDB_GAME_WEIGHTS.map((g) => g.weight);
 
-  // Registry game slug → id mapping
-  const registryBySlug = new Map(registryGames.map((g) => [g.slug, g.id]));
+  // Game slug → id mapping
+  const gameBySlug = new Map(games.map((g) => [g.slug, g.id]));
 
   const targetEvents = 70;
 
@@ -674,10 +674,8 @@ export function generateEvents(
   for (const gw of IGDB_GAME_WEIGHTS) {
     const templates = getTemplatesForGame(gw.igdbId);
     const tmpl = pick(rng, templates);
-    const regSlug = IGDB_TO_REGISTRY_SLUG[gw.igdbId];
-    const registryGameId = regSlug
-      ? (registryBySlug.get(regSlug) ?? null)
-      : null;
+    const slug = IGDB_TO_GAME_SLUG[gw.igdbId];
+    const gameId = slug ? (gameBySlug.get(slug) ?? null) : null;
 
     const daysOffset = randInt(rng, -30, 60);
     const hour = randInt(rng, 17, 22);
@@ -690,8 +688,8 @@ export function generateEvents(
     events.push({
       title: `${tmpl.title} — ${gw.name}`,
       description: tmpl.description,
-      registryGameId,
-      gameId: gw.igdbId,
+      gameId,
+      igdbId: gw.igdbId,
       startTime: start,
       endTime: end,
       maxPlayers: playerCounts?.get(gw.igdbId) ?? null,
@@ -704,10 +702,8 @@ export function generateEvents(
     const gw = IGDB_GAME_WEIGHTS.find((g) => g.igdbId === igdbId)!;
     const templates = getTemplatesForGame(igdbId);
     const tmpl = pick(rng, templates);
-    const regSlug = IGDB_TO_REGISTRY_SLUG[igdbId];
-    const registryGameId = regSlug
-      ? (registryBySlug.get(regSlug) ?? null)
-      : null;
+    const slug = IGDB_TO_GAME_SLUG[igdbId];
+    const gameId = slug ? (gameBySlug.get(slug) ?? null) : null;
 
     const daysOffset = randInt(rng, -30, 60);
     const hour = randInt(rng, 17, 22);
@@ -720,8 +716,8 @@ export function generateEvents(
     events.push({
       title: `${tmpl.title} — ${gw.name}`,
       description: tmpl.description,
-      registryGameId,
-      gameId: igdbId,
+      gameId,
+      igdbId,
       startTime: start,
       endTime: end,
       maxPlayers: playerCounts?.get(igdbId) ?? null,
@@ -757,7 +753,7 @@ export function generateCharacters(
       const spec = pick(rng, classDef.specs);
       characters.push({
         username,
-        registryGameSlug: 'wow',
+        gameSlug: 'wow',
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['alt', 'wow', 'main', '']),
         ),
@@ -774,7 +770,7 @@ export function generateCharacters(
         const altSpec = pick(rng, altClass.specs);
         characters.push({
           username,
-          registryGameSlug: 'wow',
+          gameSlug: 'wow',
           charName: uniqueCharName(username.slice(0, 6) + 'Alt'),
           class: altClass.class,
           spec: altSpec.name,
@@ -789,7 +785,7 @@ export function generateCharacters(
       const job = pick(rng, FFXIV_JOBS);
       characters.push({
         username,
-        registryGameSlug: 'ffxiv',
+        gameSlug: 'ffxiv',
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['xiv', 'ff', '', 'char']),
         ),
@@ -805,7 +801,7 @@ export function generateCharacters(
         const altJob = pick(rng, FFXIV_JOBS);
         characters.push({
           username,
-          registryGameSlug: 'ffxiv',
+          gameSlug: 'ffxiv',
           charName: uniqueCharName(username.slice(0, 6) + 'Alt'),
           class: altJob.class,
           spec: null,
@@ -821,7 +817,7 @@ export function generateCharacters(
       const spec = pick(rng, classDef.specs);
       characters.push({
         username,
-        registryGameSlug: 'wow-classic',
+        gameSlug: 'wow-classic',
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['classic', 'era', '', 'old']),
         ),
@@ -846,25 +842,25 @@ export function generateSignups(
 ): GeneratedSignup[] {
   const signups: GeneratedSignup[] = [];
 
-  // Build character lookup: username+registryGameSlug → exists
+  // Build character lookup: username+gameSlug → exists
   const charLookup = new Set(
-    characters.map((c) => `${c.username}:${c.registryGameSlug}`),
+    characters.map((c) => `${c.username}:${c.gameSlug}`),
   );
 
   for (let i = 0; i < events.length; i++) {
     const event = events[i];
     const gameWeight =
-      IGDB_GAME_WEIGHTS.find((g) => g.igdbId === event.gameId)?.weight ?? 1;
+      IGDB_GAME_WEIGHTS.find((g) => g.igdbId === event.igdbId)?.weight ?? 1;
     const baseSignups = randInt(rng, 5, Math.min(25, 5 + gameWeight * 2));
     const maxAllowed = event.maxPlayers ?? allUsernames.length;
     const numSignups = Math.min(baseSignups, maxAllowed, allUsernames.length);
 
     const selected = pickN(rng, allUsernames, numSignups);
-    const regSlug = IGDB_TO_REGISTRY_SLUG[event.gameId];
+    const gameSlug = IGDB_TO_GAME_SLUG[event.igdbId];
 
     for (const username of selected) {
-      const hasChar = regSlug
-        ? charLookup.has(`${username}:${regSlug}`)
+      const hasChar = gameSlug
+        ? charLookup.has(`${username}:${gameSlug}`)
         : false;
 
       signups.push({
@@ -1049,8 +1045,8 @@ export function generateNotifications(
       : null;
 
     const gameName =
-      IGDB_GAME_WEIGHTS.find((g) => g.igdbId === event.gameId)?.name ??
-      event.gameId;
+      IGDB_GAME_WEIGHTS.find((g) => g.igdbId === event.igdbId)?.name ??
+      event.igdbId;
     const message = tmpl.messageTemplate
       .replace('{event}', event.title)
       .replace('{role}', pick(rng, roles))

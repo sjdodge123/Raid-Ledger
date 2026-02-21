@@ -34,8 +34,7 @@ export type RecurrenceDto = z.infer<typeof RecurrenceSchema>;
 export const CreateEventSchema = z.object({
     title: z.string().min(1).max(200),
     description: z.string().max(2000).optional(),
-    gameId: z.number().int().positive().optional(), // IGDB game ID
-    registryGameId: z.string().uuid().optional(), // Game registry UUID (carries gameVariant via slug)
+    gameId: z.number().int().positive().optional(), // ROK-400: Single FK to games.id
     startTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
     endTime: z.string().datetime({ offset: true }), // ISO 8601 datetime (with TZ offset)
     slotConfig: SlotConfigSchema.optional(),
@@ -61,7 +60,6 @@ export const UpdateEventSchema = z.object({
     title: z.string().min(1).max(200).optional(),
     description: z.string().max(2000).optional().nullable(),
     gameId: z.number().int().positive().optional().nullable(),
-    registryGameId: z.string().uuid().optional().nullable(),
     startTime: z.string().datetime({ offset: true }).optional(),
     endTime: z.string().datetime({ offset: true }).optional(),
     slotConfig: SlotConfigSchema.optional().nullable(),
@@ -104,11 +102,10 @@ export type EventCreatorDto = z.infer<typeof EventCreatorSchema>;
 /** Game info embedded in event response */
 export const EventGameSchema = z.object({
     id: z.number(),
-    /** UUID for game registry matching (ROK-194: for character avatar resolution) */
-    registryId: z.string().uuid().nullable().optional(),
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),
+    hasRoles: z.boolean().optional(),
 }).nullable();
 
 export type EventGameDto = z.infer<typeof EventGameSchema>;

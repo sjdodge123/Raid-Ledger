@@ -67,7 +67,7 @@ interface FormState {
     title: string;
     description: string;
     game: IgdbGameDto | null;
-    eventTypeId: string | null;
+    eventTypeId: number | null;
     startDate: string;
     startTime: string;
     durationMinutes: number;
@@ -283,7 +283,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     const eventTypes = eventTypesData?.data ?? [];
 
     // Interest stats
-    const igdbId = form.game?.igdbId;
+    const igdbId = form.game?.igdbId ?? undefined;
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(igdbId);
 
     // WoW content browsing (ROK-238: logic delegated to plugin slot)
@@ -357,8 +357,8 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         });
     }, [computeSuggestion, computeDescriptionSuggestion]);
 
-    function handleEventTypeChange(eventTypeId: string) {
-        if (eventTypeId === 'custom') {
+    function handleEventTypeChange(raw: string) {
+        if (raw === 'custom') {
             setForm((prev) => ({
                 ...prev,
                 eventTypeId: null,
@@ -376,6 +376,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             }));
             return;
         }
+        const eventTypeId = parseInt(raw, 10);
         const et = eventTypes.find((t) => t.id === eventTypeId);
         if (!et) return;
         const updates: Partial<FormState> = { eventTypeId, selectedInstances: [] };
@@ -598,8 +599,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         const dto: CreateEventDto = {
             title: form.title.trim(),
             description: form.description.trim() || undefined,
-            gameId: form.game?.igdbId,
-            registryGameId: registryGameId ?? undefined,
+            gameId: registryGameId ?? undefined,
             startTime: start.toISOString(),
             endTime: end.toISOString(),
             slotConfig: buildSlotConfig(),
@@ -693,7 +693,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                         </label>
                         <select
                             id="eventType"
-                            value={form.eventTypeId ?? 'custom'}
+                            value={form.eventTypeId != null ? String(form.eventTypeId) : 'custom'}
                             onChange={(e) => handleEventTypeChange(e.target.value)}
                             className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
                         >

@@ -142,19 +142,16 @@ export class DemoDataService {
       // Build username → userId map
       const userByName = new Map(allUsers.map((u) => [u.username, u]));
 
-      // ── 3. Look up game registry (all entries) ───────────────────────
-      const registryGames = await this.db.select().from(schema.gameRegistry);
+      // ── 3. Look up games (all entries) ─────────────────────────────
+      const allGames = await this.db.select().from(schema.games);
 
-      const registryBySlug = new Map(registryGames.map((g) => [g.slug, g]));
-
-      // ── 4. Look up IGDB games for game_interests ────────────────────
-      const allIgdbGames = await this.db.select().from(schema.games);
-      const igdbIdsByDbId = new Map(allIgdbGames.map((g) => [g.igdbId, g.id]));
+      const gamesBySlug = new Map(allGames.map((g) => [g.slug, g]));
+      const igdbIdsByDbId = new Map(allGames.map((g) => [g.igdbId, g.id]));
 
       // ── 5. Generate all data ─────────────────────────────────────────
       // Build IGDB ID → max player count map for realistic event sizing
       const igdbPlayerCounts = new Map<string, number>();
-      for (const g of allIgdbGames) {
+      for (const g of allGames) {
         const pc = g.playerCount as { min: number; max: number } | null;
         if (pc?.max) {
           igdbPlayerCounts.set(String(g.igdbId), pc.max);
@@ -163,7 +160,7 @@ export class DemoDataService {
 
       const generatedEvents = generateEvents(
         rng,
-        registryGames,
+        allGames,
         now,
         igdbPlayerCounts,
       );
@@ -192,7 +189,7 @@ export class DemoDataService {
         rng,
         generatedUsernames,
       );
-      const allIgdbIds = allIgdbGames.map((g) => g.igdbId);
+      const allIgdbIds = allGames.map((g) => g.igdbId).filter((id): id is number => id !== null);
       const generatedInterests = generateGameInterests(
         rng,
         generatedUsernames,
@@ -200,11 +197,10 @@ export class DemoDataService {
       );
 
       // ── 6. Insert original hand-crafted events ──────────────────────
-      const origEventDefs = getEventsDefinitions(registryGames);
+      const origEventDefs = getEventsDefinitions(allGames);
       const origEventValues = origEventDefs.map((e) => ({
         title: e.title,
         description: e.description,
-        registryGameId: e.registryGameId,
         gameId: e.gameId,
         creatorId: seedAdmin.id,
         duration: [e.startTime, e.endTime] as [Date, Date],
@@ -214,7 +210,6 @@ export class DemoDataService {
       const genEventValues = generatedEvents.map((e) => ({
         title: e.title,
         description: e.description,
-        registryGameId: e.registryGameId,
         gameId: e.gameId,
         creatorId: seedAdmin.id,
         duration: [e.startTime, e.endTime] as [Date, Date],
@@ -237,7 +232,7 @@ export class DemoDataService {
       const origCharValues: Record<string, unknown>[] = [];
       for (const charData of CHARACTERS_CONFIG) {
         const user = userByName.get(charData.username);
-        const game = registryGames[charData.gameIdx];
+        const game = allGames[charData.gameIdx];
         if (!user || !game) continue;
 
         const isMain = !usersWithMain.has(`${charData.username}:${game.id}`);
@@ -260,7 +255,7 @@ export class DemoDataService {
       const genCharValues: Record<string, unknown>[] = [];
       for (const c of generatedChars) {
         const user = userByName.get(c.username);
-        const game = registryBySlug.get(c.registryGameSlug);
+        const game = gamesBySlug.get(c.gameSlug);
         if (!user || !game) continue;
 
         genCharValues.push({
@@ -306,8 +301,8 @@ export class DemoDataService {
         const selected = shuffled.slice(0, numSignups);
 
         for (const user of selected) {
-          const charKey = event.registryGameId
-            ? `${user.id}:${event.registryGameId}`
+          const charKey = event.gameId
+            ? `${user.id}:${event.gameId}`
             : null;
           const characterId = charKey
             ? (charByUserGame.get(charKey) ?? null)
@@ -329,8 +324,8 @@ export class DemoDataService {
         const user = userByName.get(signup.username);
         if (!event || !user) continue;
 
-        const charKey = event.registryGameId
-          ? `${user.id}:${event.registryGameId}`
+        const charKey = event.gameId
+          ? `${user.id}:${event.gameId}`
           : null;
         const characterId = charKey
           ? (charByUserGame.get(charKey) ?? null)
@@ -377,16 +372,16 @@ export class DemoDataService {
         }
       }
 
-      // Determine which IGDB games are MMOs (genre 36)
-      const mmoIgdbIds = new Set<string>();
-      for (const g of allIgdbGames) {
+      // Determine which games are MMOs (genre 36)
+      const mmoGameIds = new Set<number>();
+      for (const g of allGames) {
         const genres = (g.genres as number[]) ?? [];
         if (genres.includes(36)) {
-          mmoIgdbIds.add(String(g.igdbId));
+          mmoGameIds.add(g.id);
         }
       }
       // Build event → gameId lookup
-      const eventGameId = new Map<number, string | null>();
+      const eventGameId = new Map<number, number | null>();
       for (const ev of createdEvents) {
         eventGameId.set(ev.id, ev.gameId);
       }
@@ -404,7 +399,7 @@ export class DemoDataService {
 
       for (const [eventId, signups] of signupsByEvent) {
         const gId = eventGameId.get(eventId);
-        const isMMO = gId ? mmoIgdbIds.has(gId) : false;
+        const isMMO = gId ? mmoGameIds.has(gId) : false;
         const maxPlayers = eventMaxAttendees.get(eventId) ?? null;
         let playerCount = 0;
 

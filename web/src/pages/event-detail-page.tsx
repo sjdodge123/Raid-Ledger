@@ -62,9 +62,10 @@ export function EventDetailPage() {
     const { data: roster } = useEventRoster(eventId);
     const { games } = useGameRegistry();
 
-    // Look up game registry entry for hasRoles/slug (ROK-234)
+    // Look up game config entry for hasRoles/slug (ROK-234)
+    // ROK-400: event.game.id is now the games table integer ID directly
     const gameRegistryEntry = games.find(
-        (g) => g.id === event?.game?.registryId || g.slug === event?.game?.slug,
+        (g) => g.id === event?.game?.id || g.slug === event?.game?.slug,
     );
 
     useEffect(() => {
@@ -434,7 +435,7 @@ export function EventDetailPage() {
                                         customAvatarUrl: s.user.customAvatarUrl ?? null,
                                         characters: s.user.characters,
                                     }))}
-                                    gameId={event.game?.registryId ?? undefined}
+                                    gameId={event.game?.id ?? undefined}
                                     totalCount={roster!.count}
                                     maxVisible={5}
                                     size="md"
@@ -644,7 +645,7 @@ export function EventDetailPage() {
                                             userId={signup.user.id}
                                             username={signup.user.username}
                                             user={toAvatarUser(signup.user)}
-                                            gameId={event.game?.registryId ?? undefined}
+                                            gameId={event.game?.id ?? undefined}
                                             showAvatar
                                             size="md"
                                         />
@@ -693,7 +694,7 @@ export function EventDetailPage() {
                                             userId={signup.user.id}
                                             username={signup.user.username}
                                             user={toAvatarUser(signup.user)}
-                                            gameId={event.game?.registryId ?? undefined}
+                                            gameId={event.game?.id ?? undefined}
                                             showAvatar
                                             size="md"
                                         />
@@ -737,7 +738,7 @@ export function EventDetailPage() {
                         }}
                         eventId={eventId}
                         signupId={pendingSignupId}
-                        gameId={gameRegistryEntry?.id ?? event.game?.registryId ?? undefined}
+                        gameId={gameRegistryEntry?.id ?? event.game?.id ?? undefined}
                         gameName={event.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event.game?.slug ?? undefined}

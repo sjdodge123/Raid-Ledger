@@ -450,7 +450,7 @@ export class UsersService {
   async getHeartedGames(userId: number): Promise<
     Array<{
       id: number;
-      igdbId: number;
+      igdbId: number | null;
       name: string;
       slug: string;
       coverUrl: string | null;

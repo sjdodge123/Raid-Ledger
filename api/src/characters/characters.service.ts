@@ -76,7 +76,7 @@ export class CharactersService {
    */
   private async checkDuplicateClaim(
     tx: PostgresJsDatabase<typeof schema>,
-    gameId: string,
+    gameId: number,
     userId: number,
     name: string,
     realm?: string | null,
@@ -135,7 +135,7 @@ export class CharactersService {
    */
   async findAllForUser(
     userId: number,
-    gameId?: string,
+    gameId?: number,
   ): Promise<CharacterListResponseDto> {
     const conditions = [eq(schema.characters.userId, userId)];
     if (gameId) {
@@ -193,8 +193,8 @@ export class CharactersService {
     // Verify game exists
     const [game] = await this.db
       .select()
-      .from(schema.gameRegistry)
-      .where(eq(schema.gameRegistry.id, dto.gameId))
+      .from(schema.games)
+      .where(eq(schema.games.id, dto.gameId))
       .limit(1);
 
     if (!game) {
@@ -446,18 +446,16 @@ export class CharactersService {
       );
     }
 
-    // Find the game in the registry by slug based on variant
+    // Find the game by slug based on variant
     const slugCandidates = adapter.resolveGameSlugs(dto.gameVariant);
     const [game] = await this.db
       .select()
-      .from(schema.gameRegistry)
-      .where(inArray(schema.gameRegistry.slug, slugCandidates))
+      .from(schema.games)
+      .where(inArray(schema.games.slug, slugCandidates))
       .limit(1);
 
     if (!game) {
-      throw new NotFoundException(
-        'Game is not registered in the game registry',
-      );
+      throw new NotFoundException('Game not found in the games catalog');
     }
 
     // Create the character with external data

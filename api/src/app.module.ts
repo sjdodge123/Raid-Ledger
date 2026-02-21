@@ -11,7 +11,6 @@ import { AuthModule } from './auth/auth.module';
 import { AdminModule } from './admin/admin.module';
 import { IgdbModule } from './igdb/igdb.module';
 import { EventsModule } from './events/events.module';
-import { GameRegistryModule } from './game-registry/game-registry.module';
 import { CharactersModule } from './characters/characters.module';
 import { AvailabilityModule } from './availability/availability.module';
 import { RedisModule } from './redis/redis.module';
@@ -45,7 +44,6 @@ import { BackupModule } from './backup/backup.module';
     AdminModule,
     IgdbModule,
     EventsModule,
-    GameRegistryModule,
     CharactersModule,
     AvailabilityModule,
     SystemModule,

@@ -1131,7 +1131,9 @@ export class IgdbService {
 
     // Force a fresh IGDB import to restore full data
     try {
-      await this.fetchAndUpsertSingleGame(existing[0].igdbId);
+      if (existing[0].igdbId) {
+        await this.fetchAndUpsertSingleGame(existing[0].igdbId);
+      }
     } catch (err) {
       this.logger.warn(`Failed to refresh game data after unban: ${err}`);
     }

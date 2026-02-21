@@ -12,7 +12,7 @@ interface UserLinkProps {
     /** User object for resolveAvatar() -- when provided, takes priority over avatarUrl (ROK-222) */
     user?: AvatarUser | null;
     /** Game ID for context-aware avatar resolution (ROK-222) */
-    gameId?: string;
+    gameId?: number;
 }
 
 /**

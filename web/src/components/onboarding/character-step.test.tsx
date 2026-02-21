@@ -33,29 +33,29 @@ const mockUseDeleteCharacter = useDeleteCharacter as unknown as ReturnType<typeo
 const mockUseMyCharacters = useMyCharacters as unknown as ReturnType<typeof vi.fn>;
 
 const baseGame: GameRegistryDto = {
-    id: 'wow',
+    id: 1,
     name: 'World of Warcraft',
     shortName: 'WoW',
     slug: 'wow',
     hasRoles: true,
     hasSpecs: true,
-    iconUrl: null,
+    coverUrl: null,
     colorHex: '#F58518',
     maxCharactersPerUser: 10,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    enabled: true,
 };
 
 const nonMmoGame: GameRegistryDto = {
-    id: 'factorio',
+    id: 2,
     name: 'Factorio',
     shortName: null,
     slug: 'factorio',
     hasRoles: false,
     hasSpecs: false,
-    iconUrl: null,
+    coverUrl: null,
     colorHex: '#6B7280',
     maxCharactersPerUser: 5,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    enabled: true,
 };
 
 function createQueryClient() {
@@ -214,7 +214,7 @@ describe('CharacterStep', () => {
             fireEvent.click(submitButton);
 
             expect(mockMutate).toHaveBeenCalledWith(
-                expect.objectContaining({ name: 'Arthas', gameId: 'wow' }),
+                expect.objectContaining({ name: 'Arthas', gameId: 1 }),
                 expect.any(Object),
             );
         });

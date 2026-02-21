@@ -31,7 +31,7 @@ vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: vi.fn(() => ({
         games: [
             {
-                id: 'game-uuid-wow',
+                id: 1,
                 name: 'World of Warcraft',
                 slug: 'wow',
                 hasRoles: true,
@@ -58,7 +58,7 @@ vi.mock('../../plugins', () => ({
 const createArmorySyncedCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-1',
     userId: 1,
-    gameId: 'game-uuid-wow',
+    gameId: 1,
     name: 'Thrall',
     realm: 'Illidan',
     class: 'Shaman',
@@ -88,7 +88,7 @@ const createArmorySyncedCharacter = (overrides: Partial<CharacterDto> = {}): Cha
 const createManualCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-2',
     userId: 1,
-    gameId: 'game-uuid-wow',
+    gameId: 1,
     name: 'Jaina',
     realm: 'Stormwind',
     class: 'Mage',
@@ -127,7 +127,7 @@ function renderModal(props: Partial<Parameters<typeof AddCharacterModal>[0]> = {
     const defaultProps = {
         isOpen: true,
         onClose: vi.fn(),
-        gameId: 'game-uuid-wow',
+        gameId: 1,
         gameName: 'World of Warcraft',
     };
 
@@ -393,7 +393,7 @@ describe('AddCharacterModal — general edit behavior', () => {
     it('shows the game name in static display when editing', () => {
         renderModal({
             editingCharacter: createManualCharacter(),
-            gameId: 'game-uuid-wow',
+            gameId: 1,
             gameName: 'World of Warcraft',
         });
         expect(screen.getByText('World of Warcraft')).toBeInTheDocument();

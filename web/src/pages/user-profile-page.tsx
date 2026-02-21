@@ -105,7 +105,7 @@ function GroupedCharacters({
     games,
 }: {
     characters: CharacterDto[];
-    games: { id: string; name: string }[];
+    games: { id: number; name: string }[];
 }) {
     const gameNameMap = new Map(games.map((g) => [g.id, g.name]));
 
@@ -134,7 +134,7 @@ function GroupedCharacters({
             </h2>
             <div className="space-y-6">
                 {Object.entries(grouped).map(([gameId, chars]) => {
-                    const gameName = gameNameMap.get(gameId) ?? 'Unknown Game';
+                    const gameName = gameNameMap.get(Number(gameId)) ?? 'Unknown Game';
                     return (
                         <div key={gameId}>
                             <div className="flex items-center gap-3 mb-3">

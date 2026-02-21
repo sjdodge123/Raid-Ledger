@@ -23,14 +23,14 @@ export function useGameRegistry() {
 }
 
 /**
- * Hook to fetch event types for a specific registry game.
- * Only fetches when registryGameId is provided.
+ * Hook to fetch event types for a specific game.
+ * ROK-400: gameId is now a number (games.id) instead of string (game_registry.id).
  */
-export function useEventTypes(registryGameId: string | undefined) {
+export function useEventTypes(gameId: number | undefined) {
     return useQuery({
-        queryKey: ['event-types', registryGameId],
-        queryFn: () => getGameEventTypes(registryGameId!),
-        enabled: !!registryGameId,
+        queryKey: ['event-types', gameId],
+        queryFn: () => getGameEventTypes(gameId!),
+        enabled: !!gameId,
         staleTime: 1000 * 60 * 10,
     });
 }

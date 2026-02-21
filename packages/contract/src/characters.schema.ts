@@ -73,7 +73,8 @@ export type CharacterEquipmentDto = z.infer<typeof CharacterEquipmentSchema>;
 export const CharacterSchema = z.object({
     id: z.string().uuid(),
     userId: z.number().int(),
-    gameId: z.string().uuid(),
+    /** ROK-400: games.id (integer) — was UUID referencing game_registry */
+    gameId: z.number().int(),
     name: z.string().min(1).max(100),
     realm: z.string().max(100).nullable(),
     class: z.string().max(50).nullable(),
@@ -110,7 +111,8 @@ export type CharacterDto = z.infer<typeof CharacterSchema>;
  * Request body for POST /users/me/characters
  */
 export const CreateCharacterSchema = z.object({
-    gameId: z.string().uuid(),
+    /** ROK-400: games.id (integer) */
+    gameId: z.number().int().positive(),
     name: z.string().min(1).max(100),
     realm: z.string().max(100).optional(),
     class: z.string().max(50).optional(),
@@ -168,7 +170,7 @@ export type CharacterListResponseDto = z.infer<typeof CharacterListResponseSchem
  * Used by frontend to organize characters into collapsible game sections.
  */
 export const CharactersByGameSchema = z.object({
-    gameId: z.string().uuid(),
+    gameId: z.number().int(),
     gameName: z.string(),
     gameSlug: z.string(),
     characters: z.array(CharacterSchema),

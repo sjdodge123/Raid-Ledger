@@ -311,7 +311,7 @@ describe('DayEventCard', () => {
         mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
 
         const event = createMockEvent({
-            game: { id: 1, name: 'WoW', slug: 'wow', coverUrl: null, registryId: 'wow-registry' },
+            game: { id: 1, name: 'WoW', slug: 'wow', coverUrl: null },
         });
 
         renderCard(event);

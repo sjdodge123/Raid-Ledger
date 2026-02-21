@@ -87,8 +87,8 @@ async function bootstrap() {
         // =====================
         console.log('\n🎭 Creating characters with WoW class icons...\n');
 
-        // Get games from game registry by slug for character creation
-        const registryGames = await db.select().from(schema.gameRegistry);
+        // Get games by slug for character creation
+        const registryGames = await db.select().from(schema.games);
 
         if (registryGames.length > 0) {
             // Characters with WoW class/role assignments and Blizzard CDN class icons
@@ -187,9 +187,9 @@ async function bootstrap() {
 
                 if (!existingSignup) {
                     // Find user's character for this event's game
-                    const userChar = event.registryGameId
+                    const userChar = event.gameId
                         ? allCharacters.find(
-                            (c) => c.userId === user.id && c.gameId === event.registryGameId,
+                            (c) => c.userId === user.id && c.gameId === event.gameId,
                         )
                         : undefined;
 

@@ -42,7 +42,7 @@ export class AvailabilityService {
     options?: {
       from?: string;
       to?: string;
-      gameId?: string;
+      gameId?: number;
       status?: string;
     },
   ): Promise<AvailabilityListResponseDto> {
@@ -256,7 +256,7 @@ export class AvailabilityService {
     userId: number,
     startTime: string,
     endTime: string,
-    excludeGameId?: string,
+    excludeGameId?: number,
     excludeId?: string,
   ): Promise<AvailabilityConflict[]> {
     const rangeStr = `[${new Date(startTime).toISOString()},${new Date(endTime).toISOString()})`;

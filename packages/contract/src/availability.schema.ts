@@ -32,7 +32,7 @@ export const CreateAvailabilityInputSchema = z
         startTime: z.string().datetime({ message: 'Start time must be a valid ISO datetime' }),
         endTime: z.string().datetime({ message: 'End time must be a valid ISO datetime' }),
         status: AvailabilityStatusEnum.default('available'),
-        gameId: z.string().uuid().optional(),
+        gameId: z.number().optional(),
     })
     .refine(
         (data) => new Date(data.endTime) > new Date(data.startTime),
@@ -57,7 +57,7 @@ export const UpdateAvailabilityDtoSchema = z
         startTime: z.string().datetime().optional(),
         endTime: z.string().datetime().optional(),
         status: AvailabilityStatusEnum.optional(),
-        gameId: z.string().uuid().nullable().optional(),
+        gameId: z.number().nullable().optional(),
     })
     .refine(
         (data) => {
@@ -77,7 +77,7 @@ export const AvailabilityConflictSchema = z.object({
     conflictingId: z.string().uuid(),
     timeRange: TimeRangeSchema,
     status: AvailabilityStatusEnum,
-    gameId: z.string().uuid().nullable(),
+    gameId: z.number().nullable(),
 });
 export type AvailabilityConflict = z.infer<typeof AvailabilityConflictSchema>;
 
@@ -89,7 +89,7 @@ export const AvailabilityDtoSchema = z.object({
     userId: z.number(),
     timeRange: TimeRangeSchema,
     status: AvailabilityStatusEnum,
-    gameId: z.string().uuid().nullable(),
+    gameId: z.number().nullable(),
     sourceEventId: z.number().nullable(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
@@ -121,7 +121,7 @@ export type AvailabilityListResponseDto = z.infer<typeof AvailabilityListRespons
 export const AvailabilityQuerySchema = z.object({
     from: z.string().datetime().optional(),
     to: z.string().datetime().optional(),
-    gameId: z.string().uuid().optional(),
+    gameId: z.number().optional(),
     status: AvailabilityStatusEnum.optional(),
 });
 export type AvailabilityQuery = z.infer<typeof AvailabilityQuerySchema>;

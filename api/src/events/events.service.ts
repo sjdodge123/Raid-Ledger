@@ -75,8 +75,7 @@ export class EventsService {
     const baseValues = {
       title: dto.title,
       description: dto.description ?? null,
-      gameId: dto.gameId ? String(dto.gameId) : null,
-      registryGameId: dto.registryGameId ?? null,
+      gameId: dto.gameId ?? null,
       creatorId,
       slotConfig: dto.slotConfig ?? null,
       maxAttendees: dto.maxAttendees ?? null,
@@ -230,7 +229,7 @@ export class EventsService {
 
     // gameId filter
     if (query.gameId) {
-      conditions.push(eq(schema.events.gameId, query.gameId));
+      conditions.push(eq(schema.events.gameId, Number(query.gameId)));
     }
 
     // ROK-213: creatorId filter — "me" resolves to authenticated user
@@ -284,19 +283,11 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
-        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .leftJoin(
         signupCountSubquery,
         eq(schema.events.id, signupCountSubquery.eventId),
@@ -323,7 +314,7 @@ export class EventsService {
         username: string;
         avatar: string | null;
         customAvatarUrl?: string | null;
-        characters?: { gameId: string; avatarUrl: string | null }[];
+        characters?: { gameId: number; avatarUrl: string | null }[];
       }[]
     > = new Map();
     if (query.includeSignups === 'true' && events.length > 0) {
@@ -359,21 +350,13 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
-        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce((
           SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id}
         ), 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .where(eq(schema.events.id, id))
       .limit(1);
 
@@ -408,19 +391,11 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
-        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .leftJoin(
         signupCountSubquery,
         eq(schema.events.id, signupCountSubquery.eventId),
@@ -468,19 +443,11 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
-        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .leftJoin(
         signupCountSubquery,
         eq(schema.events.id, signupCountSubquery.eventId),
@@ -680,19 +647,11 @@ export class EventsService {
         events: schema.events,
         users: schema.users,
         games: schema.games,
-        gameRegistry: schema.gameRegistry,
         signupCount: sql<number>`coalesce(${signupCountSubquery.count}, 0)`,
       })
       .from(schema.events)
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .leftJoin(
         signupCountSubquery,
         eq(schema.events.id, signupCountSubquery.eventId),
@@ -744,10 +703,7 @@ export class EventsService {
 
     if (dto.title !== undefined) updateData.title = dto.title;
     if (dto.description !== undefined) updateData.description = dto.description;
-    if (dto.gameId !== undefined)
-      updateData.gameId = dto.gameId ? String(dto.gameId) : null;
-    if (dto.registryGameId !== undefined)
-      updateData.registryGameId = dto.registryGameId ?? null;
+    if (dto.gameId !== undefined) updateData.gameId = dto.gameId ?? null;
     if (dto.slotConfig !== undefined) updateData.slotConfig = dto.slotConfig;
     if (dto.maxAttendees !== undefined)
       updateData.maxAttendees = dto.maxAttendees;
@@ -1244,7 +1200,7 @@ export class EventsService {
         username: string;
         avatar: string | null;
         customAvatarUrl?: string | null;
-        characters?: { gameId: string; avatarUrl: string | null }[];
+        characters?: { gameId: number; avatarUrl: string | null }[];
       }[]
     >
   > {
@@ -1285,7 +1241,7 @@ export class EventsService {
     // Build character map: userId -> characters[]
     const charactersByUser = new Map<
       number,
-      { gameId: string; avatarUrl: string | null }[]
+      { gameId: number; avatarUrl: string | null }[]
     >();
     for (const char of charactersData) {
       if (!charactersByUser.has(char.userId)) {
@@ -1306,7 +1262,7 @@ export class EventsService {
         username: string;
         avatar: string | null;
         customAvatarUrl?: string | null;
-        characters?: { gameId: string; avatarUrl: string | null }[];
+        characters?: { gameId: number; avatarUrl: string | null }[];
       }[]
     >();
     for (const signup of signups) {
@@ -1340,7 +1296,6 @@ export class EventsService {
       events: typeof schema.events.$inferSelect;
       users: typeof schema.users.$inferSelect | null;
       games: typeof schema.games.$inferSelect | null;
-      gameRegistry: typeof schema.gameRegistry.$inferSelect | null;
       signupCount: number;
     },
     signupsPreview?: {
@@ -1349,39 +1304,21 @@ export class EventsService {
       username: string;
       avatar: string | null;
       customAvatarUrl?: string | null;
-      characters?: { gameId: string; avatarUrl: string | null }[];
+      characters?: { gameId: number; avatarUrl: string | null }[];
     }[],
   ): EventResponseDto {
-    const {
-      events: event,
-      users: creator,
-      games: game,
-      gameRegistry: registry,
-      signupCount,
-    } = row;
+    const { events: event, users: creator, games: game, signupCount } = row;
 
-    // Prefer gameRegistry for slug (color coding) but use IGDB game coverUrl for artwork
-    // Priority: registry slug/name + game coverUrl > game only > registry only
-    // ROK-194: Include registryId (UUID) for character avatar resolution
-    let gameData = null;
-    if (registry) {
-      gameData = {
-        id: game?.id ?? 0, // Use IGDB games PK when available for cross-reference links
-        registryId: registry.id, // ROK-194: UUID for character matching
-        name: registry.name,
-        slug: registry.slug,
-        // Only use IGDB cover art; never fall back to registry iconUrl
-        coverUrl: game?.coverUrl || null,
-      };
-    } else if (game) {
-      gameData = {
-        id: game.id,
-        registryId: null, // No registry ID for IGDB-only games
-        name: game.name,
-        slug: game.slug,
-        coverUrl: game.coverUrl,
-      };
-    }
+    // ROK-400: Single games table — no more registry vs IGDB priority logic
+    const gameData = game
+      ? {
+          id: game.id,
+          name: game.name,
+          slug: game.slug,
+          coverUrl: game.coverUrl,
+          hasRoles: game.hasRoles,
+        }
+      : null;
 
     return {
       id: event.id,

@@ -71,7 +71,11 @@ export class CharactersController {
     @Request() req: AuthenticatedRequest,
     @Query('gameId') gameId?: string,
   ): Promise<CharacterListResponseDto> {
-    return this.charactersService.findAllForUser(req.user.id, gameId);
+    const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
+    return this.charactersService.findAllForUser(
+      req.user.id,
+      parsedGameId || undefined,
+    );
   }
 
   /**

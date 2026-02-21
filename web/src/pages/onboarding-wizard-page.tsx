@@ -206,14 +206,14 @@ export function OnboardingWizardPage() {
     }, []);
 
     // Add another character step for a game — inserts right after current step
-    const addCharacterStep = useCallback((gameId: string) => {
+    const addCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => ({ ...prev, [gameId]: (prev[gameId] ?? 0) + 1 }));
         // Advance to the newly created step (which appears right after current)
         setCurrentStep((prev) => prev + 1);
     }, []);
 
     // Remove an extra character step for a game — collapse back
-    const removeCharacterStep = useCallback((gameId: string) => {
+    const removeCharacterStep = useCallback((gameId: number) => {
         setExtraCharCounts((prev) => {
             const current = prev[gameId] ?? 0;
             if (current <= 0) return prev;

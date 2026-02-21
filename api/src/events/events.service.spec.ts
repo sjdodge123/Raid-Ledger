@@ -52,38 +52,35 @@ describe('EventsService', () => {
       events: mockEvent,
       users: mockUser,
       games: mockGame,
-      gameRegistry: null,
       signupCount: 0,
     };
 
     const selectChain = {
       from: jest.fn().mockImplementation(() => {
-        // Return a chain that supports both 3-leftJoin (findOne) and 4-leftJoin (findAll/findByIds)
+        // Return a chain that supports both 2-leftJoin (findOne) and 3-leftJoin (findAll/findByIds)
         // plus groupBy for subquery construction, and where for raw selects
         return {
           leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
+              // 2 leftJoins: findOne path (ROK-400: removed gameRegistry join)
+              where: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue([defaultRow]),
+              }),
+              // 3 leftJoins: findAll/findByIds path
               leftJoin: jest.fn().mockReturnValue({
-                // 3 leftJoins: findOne path
                 where: jest.fn().mockReturnValue({
                   limit: jest.fn().mockResolvedValue([defaultRow]),
                 }),
-                // 4 leftJoins: findAll/findByIds path
-                leftJoin: jest.fn().mockReturnValue({
-                  where: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockResolvedValue([defaultRow]),
+                orderBy: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockReturnValue({
+                    offset: jest.fn().mockResolvedValue([defaultRow]),
                   }),
+                }),
+                $dynamic: jest.fn().mockReturnValue({
+                  where: jest.fn().mockReturnThis(),
                   orderBy: jest.fn().mockReturnValue({
                     limit: jest.fn().mockReturnValue({
                       offset: jest.fn().mockResolvedValue([defaultRow]),
-                    }),
-                  }),
-                  $dynamic: jest.fn().mockReturnValue({
-                    where: jest.fn().mockReturnThis(),
-                    orderBy: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockReturnValue({
-                        offset: jest.fn().mockResolvedValue([defaultRow]),
-                      }),
                     }),
                   }),
                 }),
@@ -186,10 +183,8 @@ describe('EventsService', () => {
         from: jest.fn().mockReturnValue({
           leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
-              leftJoin: jest.fn().mockReturnValue({
-                where: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue([]),
-                }),
+              where: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue([]),
               }),
             }),
           }),

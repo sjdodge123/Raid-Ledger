@@ -301,12 +301,10 @@ describe('GameTimeService', () => {
         duration: [Date, Date];
         signupId: number;
         confirmationStatus: string;
-        registrySlug: string | null;
-        registryName: string | null;
-        registryIconUrl: string | null;
         gameSlug: string | null;
         gameName: string | null;
         gameCoverUrl: string | null;
+        gameId: number | null;
         creatorId: number | null;
         creatorUsername: string | null;
       }> = {},
@@ -320,12 +318,10 @@ describe('GameTimeService', () => {
       ] as [Date, Date],
       signupId: 10,
       confirmationStatus: 'confirmed',
-      registrySlug: null,
-      registryName: null,
-      registryIconUrl: null,
       gameSlug: null,
       gameName: null,
       gameCoverUrl: null,
+      gameId: null,
       creatorId: null,
       creatorUsername: null,
       ...overrides,
@@ -509,17 +505,15 @@ describe('GameTimeService', () => {
       expect(day1Block).toMatchObject({ startHour: 0, endHour: 2 });
     });
 
-    it('should resolve game data with registry-first priority', async () => {
+    it('should resolve game data from unified games table', async () => {
       setupCompositeViewMocks(
         [],
         [
           makeEventRow({
-            registrySlug: 'wow',
-            registryName: 'World of Warcraft',
-            registryIconUrl: '/registry-icon.png',
-            gameSlug: 'world-of-warcraft',
-            gameName: 'World of Warcraft (IGDB)',
-            gameCoverUrl: '/igdb-cover.jpg',
+            gameSlug: 'wow',
+            gameName: 'World of Warcraft',
+            gameCoverUrl: '/cover.jpg',
+            gameId: 1,
           }),
         ],
       );
@@ -529,9 +523,9 @@ describe('GameTimeService', () => {
       const result = await service.getCompositeView(1, weekStart);
 
       expect(result.events[0]).toMatchObject({
-        gameSlug: 'wow', // registry wins
-        gameName: 'World of Warcraft', // registry wins
-        coverUrl: '/igdb-cover.jpg', // IGDB cover wins over registry icon
+        gameSlug: 'wow',
+        gameName: 'World of Warcraft',
+        coverUrl: '/cover.jpg',
       });
     });
 

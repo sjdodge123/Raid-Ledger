@@ -10,7 +10,7 @@ interface SignupPreview {
     /** Discord user ID for avatar URL resolution (ROK-222) */
     discordId?: string | null;
     /** Optional characters for avatar resolution (ROK-194) */
-    characters?: Array<{ gameId: string; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: number; avatarUrl: string | null }>;
 }
 
 interface AttendeeAvatarsProps {
@@ -25,7 +25,7 @@ interface AttendeeAvatarsProps {
     /** Accent color for avatar borders (from game theme) */
     accentColor?: string;
     /** Optional game ID for context-aware avatar resolution (ROK-194) */
-    gameId?: string;
+    gameId?: number;
 }
 
 /**

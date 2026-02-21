@@ -50,7 +50,8 @@ export const GameTimeEventBlockSchema = z.object({
   title: z.string(),
   gameSlug: z.string().nullable(),
   gameName: z.string().nullable(),
-  gameRegistryId: z.string().nullable().optional(),
+  /** ROK-400: games.id (integer) for character avatar matching */
+  gameId: z.number().nullable().optional(),
   coverUrl: z.string().nullable(),
   signupId: z.number(),
   confirmationStatus: z.enum(['pending', 'confirmed', 'changed']),
@@ -67,7 +68,7 @@ export const GameTimeEventBlockSchema = z.object({
         username: z.string(),
         avatar: z.string().nullable(),
         characters: z
-          .array(z.object({ gameId: z.string(), avatarUrl: z.string().nullable() }))
+          .array(z.object({ gameId: z.number(), avatarUrl: z.string().nullable() }))
           .optional(),
       }),
     )

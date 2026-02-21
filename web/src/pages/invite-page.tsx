@@ -163,7 +163,7 @@ export function InvitePage() {
     } | null>(null);
 
     const gameInfo = resolveData?.event?.game;
-    const registryId = gameInfo?.registryId;
+    const registryId = gameInfo?.gameId;
     const isBlizzardGame = gameInfo?.isBlizzardGame === true;
     const hasRoles = gameInfo?.hasRoles === true;
     const communityName = resolveData?.communityName;

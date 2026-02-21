@@ -1384,7 +1384,7 @@ export class SignupsService {
    * Other games use generic player slots.
    */
   private async getSlotConfigFromGenre(
-    gameId: string | null,
+    gameId: number | null,
   ): Promise<RosterWithAssignments['slots']> {
     // IGDB genre ID for "Massively Multiplayer Online (MMO)"
     const MMO_GENRE_ID = 36;
@@ -1398,7 +1398,7 @@ export class SignupsService {
     const [game] = await this.db
       .select({ genres: schema.games.genres })
       .from(schema.games)
-      .where(eq(schema.games.igdbId, parseInt(gameId, 10)))
+      .where(eq(schema.games.id, gameId))
       .limit(1);
 
     const genres = (game?.genres as number[]) ?? [];

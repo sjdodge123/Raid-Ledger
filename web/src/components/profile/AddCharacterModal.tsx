@@ -12,7 +12,7 @@ interface AddCharacterModalProps {
     isOpen: boolean;
     onClose: () => void;
     /** Pre-selected game ID (used when editing or single-game shortcut) */
-    gameId?: string;
+    gameId?: number;
     /** Display name for the pre-selected game */
     gameName?: string;
     editingCharacter?: CharacterDto | null;

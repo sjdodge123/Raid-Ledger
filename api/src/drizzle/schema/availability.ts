@@ -7,7 +7,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
-import { gameRegistry } from './game-registry';
+import { games } from './games';
 import { events, tsrange } from './events';
 
 /**
@@ -35,8 +35,8 @@ export const availability = pgTable(
     })
       .default('available')
       .notNull(),
-    /** Optional game-specific availability (null = all games) */
-    gameId: uuid('game_id').references(() => gameRegistry.id),
+    /** Optional game-specific availability (null = all games). ROK-400: integer FK to games.id */
+    gameId: integer('game_id').references(() => games.id),
     /** Reference to event if this is a committed slot */
     sourceEventId: integer('source_event_id').references(() => events.id),
     createdAt: timestamp('created_at').defaultNow().notNull(),

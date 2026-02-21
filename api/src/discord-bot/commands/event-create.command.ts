@@ -167,17 +167,6 @@ export class EventCreateCommand
 
     const game = matchedGames[0] ?? null;
 
-    // Also check if there's a matching game_registry entry (for slot configs, event types, etc.)
-    let registryGameId: string | undefined;
-    if (game) {
-      const [registryMatch] = await this.db
-        .select({ id: schema.gameRegistry.id })
-        .from(schema.gameRegistry)
-        .where(ilike(schema.gameRegistry.name, game.name))
-        .limit(1);
-      registryGameId = registryMatch?.id;
-    }
-
     // Use the user's timezone preference, falling back to community default
     const userTzPref = await this.preferencesService.getUserPreference(
       user.id,
@@ -234,8 +223,7 @@ export class EventCreateCommand
         title,
         startTime: startTime.toISOString(),
         endTime: endTime.toISOString(),
-        gameId: game?.igdbId ?? undefined,
-        registryGameId,
+        gameId: game?.id ?? undefined,
         maxAttendees,
         slotConfig,
       });

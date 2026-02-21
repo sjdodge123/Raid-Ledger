@@ -395,13 +395,13 @@ export function getAvailabilityDefinitions(): {
   ];
 }
 
-interface GameRegistryEntry {
-  id: string;
+interface GameEntry {
+  id: number;
   slug: string;
 }
 
-/** Generate event definitions (time-relative, needs game registry IDs) */
-export function getEventsDefinitions(games: GameRegistryEntry[]) {
+/** Generate event definitions (time-relative, needs games table IDs) */
+export function getEventsDefinitions(games: GameEntry[]) {
   const wowGame = games.find((g) => g.slug === 'wow');
   const valheimGame = games.find((g) => g.slug === 'valheim');
   const ffxivGame = games.find((g) => g.slug === 'ffxiv');
@@ -417,48 +417,42 @@ export function getEventsDefinitions(games: GameRegistryEntry[]) {
     {
       title: 'Heroic Amirdrassil Clear',
       description: 'Weekly heroic raid run. All welcome! BE-only pulls.',
-      registryGameId: wowGame?.id ?? null,
-      gameId: '123',
+      gameId: wowGame?.id ?? null,
       startTime: hoursFromNow(-1),
       endTime: hoursFromNow(2),
     },
     {
       title: 'Mythic+ Push Night',
       description: 'High key pushing session. Need 2 DPS, 1 tank.',
-      registryGameId: wowGame?.id ?? null,
-      gameId: '123',
+      gameId: wowGame?.id ?? null,
       startTime: hoursFromNow(2),
       endTime: hoursFromNow(5),
     },
     {
       title: 'Valheim Boss Rush',
       description: 'Taking down all bosses in one session!',
-      registryGameId: valheimGame?.id ?? null,
-      gameId: '104967',
+      gameId: valheimGame?.id ?? null,
       startTime: daysFromNow(1),
       endTime: new Date(daysFromNow(1).getTime() + 3 * 60 * 60 * 1000),
     },
     {
       title: 'FFXIV Savage Prog',
       description: 'M4S progression - Phase 2 onwards. Know the fight!',
-      registryGameId: ffxivGame?.id ?? null,
-      gameId: '14729',
+      gameId: ffxivGame?.id ?? null,
       startTime: daysFromNow(3),
       endTime: new Date(daysFromNow(3).getTime() + 3 * 60 * 60 * 1000),
     },
     {
       title: 'Morning Dungeon Runs',
       description: 'Casual dungeon runs for alts.',
-      registryGameId: wowGame?.id ?? null,
-      gameId: '123',
+      gameId: wowGame?.id ?? null,
       startTime: hoursFromNow(-4),
       endTime: hoursFromNow(-2),
     },
     {
       title: 'Late Night Raids',
       description: 'For the night owls. Normal mode farm.',
-      registryGameId: wowGame?.id ?? null,
-      gameId: '123',
+      gameId: wowGame?.id ?? null,
       startTime: hoursFromNow(6),
       endTime: hoursFromNow(9),
     },

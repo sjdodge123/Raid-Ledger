@@ -143,7 +143,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
             });
             invalidateCalendar();
 
-            if (event.resource?.game?.registryId) {
+            if (event.resource?.game?.id) {
                 toast.success(`Joined ${ROLE_CONFIG[role]?.label ?? role}!`, {
                     description: 'Now confirm your character.',
                 });
@@ -182,7 +182,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
             });
             invalidateCalendar();
 
-            if (event.resource?.game?.registryId) {
+            if (event.resource?.game?.id) {
                 toast.success('Joined!', {
                     description: 'Now confirm your character.',
                 });
@@ -360,7 +360,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
                             totalCount={signupCount}
                             size="md"
                             accentColor={colors.border}
-                            gameId={event.resource?.game?.registryId ?? undefined}
+                            gameId={event.resource?.game?.id ?? undefined}
                         />
                     ) : signupCount > 0 ? (
                         <span className="day-event-signups">
@@ -388,7 +388,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
                     }}
                     eventId={event.id}
                     signupId={pendingSignupId}
-                    gameId={event.resource?.game?.registryId ?? undefined}
+                    gameId={event.resource?.game?.id ?? undefined}
                     expectedRole={
                         pendingRole === 'tank' || pendingRole === 'healer' || pendingRole === 'dps'
                             ? (pendingRole as CharacterRole)

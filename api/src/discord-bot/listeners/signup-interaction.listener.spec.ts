@@ -850,12 +850,12 @@ describe('SignupInteractionListener', () => {
   describe('handleButtonInteraction — character select (ROK-138)', () => {
     const mockLinkedUser = { id: 42, discordId: 'user-charselect-1' };
     const mockGameWithRoles = {
-      id: 'game-uuid-1',
+      id: 1,
       hasRoles: true,
       hasSpecs: true,
     };
     const mockGameWithoutRoles = {
-      id: 'game-uuid-2',
+      id: 2,
       hasRoles: false,
       hasSpecs: false,
     };
@@ -912,7 +912,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 800,
         title: 'Mythic Raid',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -948,7 +948,7 @@ describe('SignupInteractionListener', () => {
 
       expect(mockCharactersService.findAllForUser).toHaveBeenCalledWith(
         mockLinkedUser.id,
-        'game-uuid-1',
+        1,
       );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -965,7 +965,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 801,
         title: 'Heroic Raid',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -1015,7 +1015,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 802,
         title: 'Raid Night',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -1053,7 +1053,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 803,
         title: 'Phasmo Night',
-        registryGameId: 'game-uuid-2',
+        gameId: 2,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -1085,12 +1085,12 @@ describe('SignupInteractionListener', () => {
       );
     });
 
-    it('should do plain signup when event has no registryGameId', async () => {
+    it('should do plain signup when event has no gameId', async () => {
       const userId = 'user-charselect-nogame';
       const event = {
         id: 804,
         title: 'Casual Game Night',
-        registryGameId: null,
+        gameId: null,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -1114,7 +1114,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 810,
         title: 'Mythic Raid',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
         slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
       };
 
@@ -1157,7 +1157,7 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 811,
         title: 'Mythic Prog',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
         slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
       };
 
@@ -1415,7 +1415,7 @@ describe('SignupInteractionListener', () => {
             limit: jest
               .fn()
               .mockResolvedValue([
-                { id: 2001, title: 'Race Test', registryGameId: null },
+                { id: 2001, title: 'Race Test', gameId: null },
               ]),
           }),
         }),
@@ -1625,11 +1625,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1001,
         title: 'Raid Night',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -1683,11 +1683,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1002,
         title: 'Casual Night',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -1736,11 +1736,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1003,
         title: 'Alt Run',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -1790,11 +1790,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1004,
         title: 'Big Roster Night',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       const characters = Array.from({ length: 25 }, (_, i) => ({
         id: `char-${i}`,
@@ -1836,11 +1836,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1005,
         title: 'Overflow Event',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       // 30 characters — should be capped at 25
       const characters = Array.from({ length: 30 }, (_, i) => ({
@@ -1939,10 +1939,10 @@ describe('SignupInteractionListener', () => {
       const event1 = {
         id: 1006,
         title: 'Concurrent Event',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
       setupLinkedUserAndEvent(userId, event1);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -2049,13 +2049,13 @@ describe('SignupInteractionListener', () => {
     // registryGameId is null — fallback behavior
     // ----------------------------------------------------------
 
-    it('should do plain signup (no character flow) when event registryGameId is null', async () => {
+    it('should do plain signup (no character flow) when event gameId is null', async () => {
       const userId = 'user-adv-nullgameid';
 
       const event = {
         id: 1009,
         title: 'Game Night',
-        registryGameId: null,
+        gameId: null,
       };
 
       setupLinkedUserAndEvent(userId, event);
@@ -2089,11 +2089,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1010,
         title: 'Null Roles Game',
-        registryGameId: 'game-uuid-3',
+        gameId: 3,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-3', hasRoles: null });
+      setupGameRegistryQuery({ id: 3, hasRoles: null });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [],
@@ -2127,11 +2127,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1011,
         title: 'No Roles Game',
-        registryGameId: 'game-uuid-4',
+        gameId: 4,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-4', hasRoles: false });
+      setupGameRegistryQuery({ id: 4, hasRoles: false });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [],
@@ -2161,11 +2161,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1012,
         title: 'Raid Night',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [],
@@ -2202,11 +2202,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1013,
         title: 'No Main Event',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -2255,11 +2255,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1014,
         title: 'With Main Event',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockResolvedValueOnce({
         data: [
@@ -2391,11 +2391,11 @@ describe('SignupInteractionListener', () => {
       const event = {
         id: 1016,
         title: 'Error Event',
-        registryGameId: 'game-uuid-1',
+        gameId: 1,
       };
 
       setupLinkedUserAndEvent(userId, event);
-      setupGameRegistryQuery({ id: 'game-uuid-1', hasRoles: true });
+      setupGameRegistryQuery({ id: 1, hasRoles: true });
 
       mockCharactersService.findAllForUser.mockRejectedValueOnce(
         new Error('Database timeout'),

@@ -28,7 +28,7 @@ export function ProfilePage() {
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingCharacter, setEditingCharacter] = useState<CharacterDto | null>(null);
-    const [selectedGameId, setSelectedGameId] = useState<string>('');
+    const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
 
     // Scroll to hash anchor (e.g., #game-time from modal link)
     useEffect(() => {
@@ -78,7 +78,7 @@ export function ProfilePage() {
     function handleCloseCharacterModal() {
         setShowAddModal(false);
         setEditingCharacter(null);
-        setSelectedGameId('');
+        setSelectedGameId(null);
     }
 
     return (

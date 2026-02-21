@@ -25,6 +25,8 @@ import {
   GameDiscoverResponseDto,
   GameStreamsResponseDto,
   GameInterestResponseDto,
+  GameRegistryListResponseDto,
+  EventTypesResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 import { RateLimit } from '../throttler/rate-limit.decorator';
@@ -244,6 +246,80 @@ export class IgdbController {
 
     // Filter out empty rows
     return { rows: rows.filter((r) => r.games.length > 0) };
+  }
+
+  /**
+   * GET /games/configured
+   * Returns enabled games with their config columns (replaces GET /game-registry).
+   * ROK-400: Reads from the unified games table instead of the removed game_registry table.
+   */
+  @Get('configured')
+  async getConfiguredGames(): Promise<GameRegistryListResponseDto> {
+    const db = this.igdbService.database;
+    const rows = await db
+      .select({
+        id: schema.games.id,
+        slug: schema.games.slug,
+        name: schema.games.name,
+        shortName: schema.games.shortName,
+        coverUrl: schema.games.coverUrl,
+        colorHex: schema.games.colorHex,
+        hasRoles: schema.games.hasRoles,
+        hasSpecs: schema.games.hasSpecs,
+        enabled: schema.games.enabled,
+        maxCharactersPerUser: schema.games.maxCharactersPerUser,
+      })
+      .from(schema.games)
+      .where(eq(schema.games.enabled, true))
+      .orderBy(schema.games.name);
+
+    return {
+      data: rows,
+      meta: { total: rows.length },
+    };
+  }
+
+  /**
+   * GET /games/:id/event-types
+   * Returns event types for a specific game (replaces GET /game-registry/:id/event-types).
+   * ROK-400: Reads from event_types table using integer games.id FK.
+   */
+  @Get(':id/event-types')
+  async getGameEventTypes(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<EventTypesResponseDto> {
+    const db = this.igdbService.database;
+
+    const gameRows = await db
+      .select({ id: schema.games.id, name: schema.games.name })
+      .from(schema.games)
+      .where(eq(schema.games.id, id))
+      .limit(1);
+
+    if (gameRows.length === 0) {
+      throw new NotFoundException('Game not found');
+    }
+
+    const game = gameRows[0];
+    const types = await db
+      .select()
+      .from(schema.eventTypes)
+      .where(eq(schema.eventTypes.gameId, id))
+      .orderBy(schema.eventTypes.name);
+
+    return {
+      data: types.map((t) => ({
+        ...t,
+        defaultPlayerCap: t.defaultPlayerCap ?? null,
+        defaultDurationMinutes: t.defaultDurationMinutes ?? null,
+        createdAt: t.createdAt.toISOString(),
+      })),
+      meta: {
+        total: types.length,
+        gameId: game.id,
+        gameName: game.name,
+      },
+    };
   }
 
   /**
