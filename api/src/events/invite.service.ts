@@ -287,11 +287,17 @@ export class InviteService {
       .where(eq(schema.users.id, userId))
       .limit(1);
 
+    if (!user) {
+      throw new NotFoundException(
+        `User ${userId} not found — cannot claim invite`,
+      );
+    }
+
     // Use role override from user selection, falling back to slot's preset role (ROK-394)
     const effectiveRole =
       roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps');
 
-    if (user?.discordId) {
+    if (user.discordId) {
       // Existing RL member — create normal signup, delete PUG slot
       try {
         await this.signupsService.signup(slot.eventId, userId, {
