@@ -83,6 +83,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
     DiscordEventListener,
     SetupWizardService,
     ChannelBindingsService,
+    ChannelResolverService,
     PugInviteService,
   ],
 })

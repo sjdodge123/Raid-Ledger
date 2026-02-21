@@ -7,6 +7,8 @@ import { PreferencesService } from './preferences.service';
 import { GameTimeService } from './game-time.service';
 import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { RecentPlayersResponseSchema } from '@raid-ledger/contract';
 
 describe('UsersController', () => {
@@ -107,6 +109,20 @@ describe('UsersController', () => {
           provide: EventsService,
           useValue: {
             findUpcomingByUser: jest.fn(),
+          },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: {
+            isConnected: jest.fn().mockReturnValue(false),
+            getGuildInfo: jest.fn().mockReturnValue(null),
+            getClient: jest.fn().mockReturnValue(null),
+          },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: {
+            resolveChannelForEvent: jest.fn().mockResolvedValue(null),
           },
         },
       ],
