@@ -15,6 +15,7 @@ import * as schema from '../drizzle/schema';
 import { SignupsService } from './signups.service';
 import { PugInviteService } from '../discord-bot/services/pug-invite.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { SettingsService } from '../settings/settings.service';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
 /**
@@ -35,6 +36,7 @@ export class InviteService {
     @Optional()
     @Inject(forwardRef(() => DiscordBotClientService))
     private readonly discordClient: DiscordBotClientService | null,
+    private readonly settingsService: SettingsService,
   ) {
     this.clientUrl = process.env.CLIENT_URL ?? 'http://localhost:5173';
   }
@@ -185,6 +187,15 @@ export class InviteService {
       slot.eventId,
     );
 
+    // Fetch community name for Discord button labels (ROK-394)
+    let communityName: string | null = null;
+    try {
+      const branding = await this.settingsService.getBranding();
+      communityName = branding.communityName;
+    } catch {
+      // Ignore — communityName is optional
+    }
+
     return {
       valid: true,
       event: {
@@ -200,6 +211,7 @@ export class InviteService {
         status: slot.status as 'pending' | 'invited' | 'accepted' | 'claimed',
       },
       discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+      communityName: communityName ?? undefined,
     };
   }
 

@@ -99,6 +99,7 @@ export const InviteCodeResolveResponseSchema = z.object({
         status: PugSlotStatusSchema,
     }).optional(),
     discordServerInviteUrl: z.string().nullable().optional(),
+    communityName: z.string().nullable().optional(),
     error: z.string().optional(),
 });
 
