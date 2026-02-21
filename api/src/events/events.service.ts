@@ -114,16 +114,17 @@ export class EventsService {
         `Recurring event created: ${events.length} instances by user ${creatorId} (group ${recurrenceGroupId})`,
       );
 
-      // Return the first instance with all IDs for controller to auto-signup
-      const response = await this.findOne(events[0].id);
+      // Batch-fetch all recurring instances in a single query
+      const allResponses = await this.findByIds(events.map((e) => e.id));
 
       // Emit event.created for each recurring instance
-      for (const evt of events) {
-        const evtResponse =
-          evt.id === events[0].id ? response : await this.findOne(evt.id);
+      for (const evtResponse of allResponses) {
         this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, evtResponse);
       }
 
+      // Return the first instance with all IDs for controller to auto-signup
+      const response =
+        allResponses.find((r) => r.id === events[0].id) ?? allResponses[0];
       return { ...response, allEventIds: events.map((e) => e.id) };
     }
 
@@ -353,13 +354,52 @@ export class EventsService {
    * @throws NotFoundException if event not found
    */
   async findOne(id: number): Promise<EventResponseDto> {
-    // Subquery to count signups for this event
+    const results = await this.db
+      .select({
+        events: schema.events,
+        users: schema.users,
+        games: schema.games,
+        gameRegistry: schema.gameRegistry,
+        signupCount: sql<number>`coalesce((
+          SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id}
+        ), 0)`,
+      })
+      .from(schema.events)
+      .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
+      .leftJoin(
+        schema.games,
+        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
+      )
+      .leftJoin(
+        schema.gameRegistry,
+        eq(schema.events.registryGameId, schema.gameRegistry.id),
+      )
+      .where(eq(schema.events.id, id))
+      .limit(1);
+
+    if (results.length === 0) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+
+    return this.mapToResponse(results[0]);
+  }
+
+  /**
+   * Batch-fetch multiple events by IDs in a single query.
+   * Uses the same JOINs as findOne() but with inArray filter.
+   * @param ids - Event IDs to fetch
+   * @returns Array of event response DTOs
+   */
+  async findByIds(ids: number[]): Promise<EventResponseDto[]> {
+    if (ids.length === 0) return [];
+
     const signupCountSubquery = this.db
       .select({
         eventId: schema.eventSignups.eventId,
         count: sql<number>`count(*)`.as('signup_count'),
       })
       .from(schema.eventSignups)
+      .where(inArray(schema.eventSignups.eventId, ids))
       .groupBy(schema.eventSignups.eventId)
       .as('signup_counts');
 
@@ -385,14 +425,9 @@ export class EventsService {
         signupCountSubquery,
         eq(schema.events.id, signupCountSubquery.eventId),
       )
-      .where(eq(schema.events.id, id))
-      .limit(1);
+      .where(inArray(schema.events.id, ids));
 
-    if (results.length === 0) {
-      throw new NotFoundException(`Event with ID ${id} not found`);
-    }
-
-    return this.mapToResponse(results[0]);
+    return results.map((row) => this.mapToResponse(row));
   }
 
   /**

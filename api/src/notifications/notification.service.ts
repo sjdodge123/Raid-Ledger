@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   Optional,
 } from '@nestjs/common';
-import { eq, and, isNull, desc, lt, not } from 'drizzle-orm';
+import { eq, and, isNull, desc, lt, not, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -176,8 +176,16 @@ export class NotificationService {
    * @returns Unread count
    */
   async getUnreadCount(userId: number): Promise<number> {
-    const unread = await this.getUnread(userId);
-    return unread.length;
+    const [result] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.notifications)
+      .where(
+        and(
+          eq(schema.notifications.userId, userId),
+          isNull(schema.notifications.readAt),
+        ),
+      );
+    return Number(result.count);
   }
 
   /**
