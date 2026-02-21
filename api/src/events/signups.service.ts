@@ -9,7 +9,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, sql, isNull } from 'drizzle-orm';
+import { eq, and, or, sql, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -241,8 +241,27 @@ export class SignupsService {
     });
 
     if (result.isDuplicate) {
+      // ROK-409: Clean up stale PUG slots even for duplicate signups
+      this.cleanupMatchingPugSlots(eventId, userId).catch((err) => {
+        this.logger.warn(
+          'Failed to cleanup PUG slots for user %d on event %d: %s',
+          userId,
+          eventId,
+          err instanceof Error ? err.message : 'Unknown error',
+        );
+      });
       return result.response;
     }
+
+    // ROK-409: Clean up stale PUG slots after successful signup
+    this.cleanupMatchingPugSlots(eventId, userId).catch((err) => {
+      this.logger.warn(
+        'Failed to cleanup PUG slots for user %d on event %d: %s',
+        userId,
+        eventId,
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+    });
 
     this.emitSignupEvent(SIGNUP_EVENTS.CREATED, {
       eventId,
@@ -1400,6 +1419,49 @@ export class SignupsService {
       player: 10,
       bench: 5,
     };
+  }
+
+  /**
+   * ROK-409: Clean up stale PUG slots when a user signs up for an event.
+   * Matches by discordId or discordUsername on unclaimed slots for this event.
+   */
+  private async cleanupMatchingPugSlots(
+    eventId: number,
+    userId: number,
+  ): Promise<void> {
+    const [user] = await this.db
+      .select({
+        discordId: schema.users.discordId,
+        username: schema.users.username,
+      })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+
+    if (!user?.discordId) return;
+
+    const result = await this.db
+      .delete(schema.pugSlots)
+      .where(
+        and(
+          eq(schema.pugSlots.eventId, eventId),
+          or(
+            eq(schema.pugSlots.discordUserId, user.discordId),
+            eq(schema.pugSlots.discordUsername, user.username),
+          ),
+        ),
+      )
+      .returning({ id: schema.pugSlots.id });
+
+    if (result.length > 0) {
+      this.logger.log(
+        'Cleaned up %d stale PUG slot(s) for user %d (discord: %s) on event %d',
+        result.length,
+        userId,
+        user.discordId,
+        eventId,
+      );
+    }
   }
 
   /**

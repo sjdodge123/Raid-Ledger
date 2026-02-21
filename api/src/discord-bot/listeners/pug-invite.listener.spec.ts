@@ -128,6 +128,7 @@ describe('PugInviteListener', () => {
       expect(pugInviteService.claimPugSlots).toHaveBeenCalledWith(
         'disc-user-456',
         10,
+        undefined,
       );
     });
 

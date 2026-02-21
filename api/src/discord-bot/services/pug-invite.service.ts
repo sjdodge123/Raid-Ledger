@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, or, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   EmbedBuilder,
@@ -202,9 +202,30 @@ export class PugInviteService {
 
   /**
    * Claim PUG slots when a user creates an account via Discord OAuth.
-   * Matches by discord_user_id where claimed_by_user_id is null.
+   * Matches by discord_user_id OR invite_code where claimed_by_user_id is null.
+   * ROK-409: Also matches anonymous slots by invite code (discordUserId may be null).
    */
-  async claimPugSlots(discordUserId: string, userId: number): Promise<number> {
+  async claimPugSlots(
+    discordUserId: string,
+    userId: number,
+    inviteCode?: string,
+  ): Promise<number> {
+    const conditions = [
+      and(
+        eq(schema.pugSlots.discordUserId, discordUserId),
+        isNull(schema.pugSlots.claimedByUserId),
+      ),
+    ];
+
+    if (inviteCode) {
+      conditions.push(
+        and(
+          eq(schema.pugSlots.inviteCode, inviteCode),
+          isNull(schema.pugSlots.claimedByUserId),
+        ),
+      );
+    }
+
     const result = await this.db
       .update(schema.pugSlots)
       .set({
@@ -212,20 +233,16 @@ export class PugInviteService {
         status: 'claimed',
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(schema.pugSlots.discordUserId, discordUserId),
-          isNull(schema.pugSlots.claimedByUserId),
-        ),
-      )
+      .where(or(...conditions))
       .returning();
 
     if (result.length > 0) {
       this.logger.log(
-        'Claimed %d PUG slot(s) for Discord user %s (user ID: %d)',
+        'Claimed %d PUG slot(s) for Discord user %s (user ID: %d)%s',
         result.length,
         discordUserId,
         userId,
+        inviteCode ? ` (invite code: ${inviteCode})` : '',
       );
     }
 

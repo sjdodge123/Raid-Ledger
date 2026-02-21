@@ -7,7 +7,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -189,10 +189,16 @@ export class PugsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
+    // ROK-409: Filter out claimed slots — they represent resolved invites
     const pugs = await this.db
       .select()
       .from(schema.pugSlots)
-      .where(eq(schema.pugSlots.eventId, eventId))
+      .where(
+        and(
+          eq(schema.pugSlots.eventId, eventId),
+          ne(schema.pugSlots.status, 'claimed'),
+        ),
+      )
       .orderBy(schema.pugSlots.createdAt);
 
     return {
