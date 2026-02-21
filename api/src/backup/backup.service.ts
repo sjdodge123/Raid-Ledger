@@ -294,28 +294,32 @@ export class BackupService implements OnModuleInit {
       'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;',
     ]);
 
+    // __dirname at runtime = api/dist/src/backup/
+    // Go up 3 levels to reach the api/ root
+    const apiRoot = path.resolve(__dirname, '../../..');
+
     this.logger.warn('Running database migrations...');
     const isDocker = process.env.NODE_ENV === 'production';
     if (isDocker) {
       await execFileAsync('node', [path.resolve('drizzle/run-migrations.js')]);
     } else {
       await execFileAsync('npx', ['drizzle-kit', 'migrate'], {
-        cwd: path.resolve(__dirname, '../..'),
+        cwd: apiRoot,
       });
     }
 
     this.logger.warn('Bootstrapping admin account...');
     const runner = isDocker ? 'node' : 'npx';
     const runnerArgs = isDocker
-      ? [path.resolve(`dist/scripts/bootstrap-admin.js`), '--reset']
+      ? [path.resolve('dist/scripts/bootstrap-admin.js'), '--reset']
       : [
           'ts-node',
-          path.resolve(__dirname, '../../scripts/bootstrap-admin.ts'),
+          path.resolve(apiRoot, 'scripts/bootstrap-admin.ts'),
           '--reset',
         ];
 
     const { stdout: adminOutput } = await execFileAsync(runner, runnerArgs, {
-      cwd: path.resolve(__dirname, '../..'),
+      cwd: apiRoot,
       env: { ...process.env, RESET_PASSWORD: 'true' },
     });
 
@@ -335,20 +339,13 @@ export class BackupService implements OnModuleInit {
     const seedRunner = isDocker ? 'node' : 'npx';
     const seedGamesArgs = isDocker
       ? [path.resolve('dist/scripts/seed-games.js')]
-      : ['ts-node', path.resolve(__dirname, '../../scripts/seed-games.ts')];
+      : ['ts-node', path.resolve(apiRoot, 'scripts/seed-games.ts')];
     const seedIgdbArgs = isDocker
       ? [path.resolve('dist/scripts/seed-igdb-games.js')]
-      : [
-          'ts-node',
-          path.resolve(__dirname, '../../scripts/seed-igdb-games.ts'),
-        ];
+      : ['ts-node', path.resolve(apiRoot, 'scripts/seed-igdb-games.ts')];
 
-    await execFileAsync(seedRunner, seedGamesArgs, {
-      cwd: path.resolve(__dirname, '../..'),
-    });
-    await execFileAsync(seedRunner, seedIgdbArgs, {
-      cwd: path.resolve(__dirname, '../..'),
-    });
+    await execFileAsync(seedRunner, seedGamesArgs, { cwd: apiRoot });
+    await execFileAsync(seedRunner, seedIgdbArgs, { cwd: apiRoot });
 
     this.logger.warn('FACTORY RESET complete — instance has been reset');
     return { password };
