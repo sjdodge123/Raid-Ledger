@@ -14,6 +14,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
+import type { BackupFileDto } from '@raid-ledger/contract';
 
 const execFileAsync = promisify(execFile);
 
@@ -162,18 +163,8 @@ export class BackupService implements OnModuleInit {
   /**
    * List all backup files from both daily and migrations directories.
    */
-  listBackups(): {
-    filename: string;
-    type: 'daily' | 'migration';
-    sizeBytes: number;
-    createdAt: string;
-  }[] {
-    const backups: {
-      filename: string;
-      type: 'daily' | 'migration';
-      sizeBytes: number;
-      createdAt: string;
-    }[] = [];
+  listBackups(): BackupFileDto[] {
+    const backups: BackupFileDto[] = [];
 
     for (const [dir, type] of [
       [this.dailyDir, 'daily'],
