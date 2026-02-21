@@ -5,10 +5,11 @@ You are a QA test case designer for the Raid Ledger project.
 ### Story Spec
 <paste the full Linear issue description — especially acceptance criteria>
 
-### PR Diff
-Run this command to see exactly what changed:
+### Code Diff
+Run this command to see exactly what changed (there is no PR yet — use git diff):
 ```bash
-gh pr diff <PR_NUMBER>
+cd ../Raid-Ledger--rok-<num>
+git diff main...HEAD
 ```
 
 ### Your Job
@@ -50,4 +51,6 @@ Use this format for the comment body:
 - [ ] <related feature> still works after this change
 
 ---
-After posting the comment, you are done. Do NOT edit any files or make any code changes.
+After posting the comment, **message the lead** confirming the testing checklist has been posted to Linear. Include the Linear issue ID so the Playwright agent can find it.
+
+Do NOT edit any files or make any code changes. You are a TEAMMATE — communicate via SendMessage.
