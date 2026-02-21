@@ -654,7 +654,7 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
             expect(result.avatar).toBe(fullUrl);
         });
 
-        it('passes through characters array unchanged', () => {
+        it('passes through characters array unchanged when no overlay', () => {
             const chars = [
                 { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
             ];
@@ -724,7 +724,6 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
-            characters: [{ gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' }],
         });
 
         const result = toAvatarUser({
@@ -738,14 +737,11 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.avatarPreference).toEqual({ type: 'discord' });
     });
 
-    it('overlays characters when user id matches current user', () => {
-        const characters = [
-            { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
-        ];
+    it('builds synthetic characters entry from resolvedAvatarUrl when character preference is set (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
-            avatarPreference: null,
-            characters,
+            avatarPreference: { type: 'character', characterName: 'Thrall' },
+            resolvedAvatarUrl: 'https://example.com/thrall.png',
         });
 
         const result = toAvatarUser({
@@ -755,7 +751,9 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             // No characters from API response
         });
 
-        expect(result.characters).toBe(characters);
+        expect(result.characters).toEqual([
+            { gameId: '__resolved__', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+        ]);
     });
 
     it('overlays customAvatarUrl when field is omitted from DTO', () => {
@@ -796,7 +794,7 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'discord' },
-            characters: [{ gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' }],
+            resolvedAvatarUrl: 'https://example.com/thrall.png',
         });
 
         const result = toAvatarUser({
@@ -892,13 +890,11 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.url).toBe('https://cdn.discordapp.com/avatars/111222333/abc123.png');
     });
 
-    it('end-to-end: current user character preference honored in resolveAvatar', () => {
+    it('end-to-end: current user character preference honored in resolveAvatar via resolvedAvatarUrl (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'character', characterName: 'Thrall' },
-            characters: [
-                { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
-            ],
+            resolvedAvatarUrl: 'https://example.com/thrall.png',
         });
 
         // Simulates a UserPreviewDto (no avatarPreference, no characters)
@@ -914,13 +910,11 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         expect(result.url).toBe('https://example.com/thrall.png');
     });
 
-    it('end-to-end: overlay characters with names fix signupsPreview without names', () => {
+    it('end-to-end: resolvedAvatarUrl overlay fixes signupsPreview without character names (ROK-414)', () => {
         setCurrentUserAvatarData({
             id: 42,
             avatarPreference: { type: 'character', characterName: 'Thrall' },
-            characters: [
-                { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
-            ],
+            resolvedAvatarUrl: 'https://example.com/thrall.png',
         });
 
         // Simulates signupsPreview DTO — has characters but WITHOUT name field
@@ -935,8 +929,8 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
         });
         const result = resolveAvatar(avatarUser);
 
-        // Without fix: API characters (no name) would win, character lookup fails, falls to discord
-        // With fix: overlay characters (with name) win, character lookup succeeds
+        // ROK-414: resolvedAvatarUrl builds a synthetic characters entry with the name,
+        // so resolveAvatar's character-preference lookup succeeds
         expect(result.type).toBe('character');
         expect(result.url).toBe('https://example.com/thrall.png');
     });
