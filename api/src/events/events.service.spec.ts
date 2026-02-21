@@ -48,51 +48,58 @@ describe('EventsService', () => {
     };
 
     // Setup default chain returns
-    // Subquery mock for signup count
-    const subqueryMock = {
-      count: 0,
-      eventId: 1,
+    const defaultRow = {
+      events: mockEvent,
+      users: mockUser,
+      games: mockGame,
+      gameRegistry: null,
+      signupCount: 0,
     };
+
     const selectChain = {
-      from: jest.fn().mockReturnValue({
-        leftJoin: jest.fn().mockReturnValue({
+      from: jest.fn().mockImplementation(() => {
+        // Return a chain that supports both 3-leftJoin (findOne) and 4-leftJoin (findAll/findByIds)
+        // plus groupBy for subquery construction, and where for raw selects
+        return {
           leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
               leftJoin: jest.fn().mockReturnValue({
+                // 3 leftJoins: findOne path
                 where: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue([
-                    {
-                      events: mockEvent,
-                      users: mockUser,
-                      games: mockGame,
-                      gameRegistry: null,
-                      signupCount: 0,
-                    },
-                  ]),
+                  limit: jest.fn().mockResolvedValue([defaultRow]),
                 }),
-                orderBy: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockReturnValue({
-                    offset: jest.fn().mockResolvedValue([
-                      {
-                        events: mockEvent,
-                        users: mockUser,
-                        games: mockGame,
-                        gameRegistry: null,
-                        signupCount: 0,
-                      },
-                    ]),
+                // 4 leftJoins: findAll/findByIds path
+                leftJoin: jest.fn().mockReturnValue({
+                  where: jest.fn().mockReturnValue({
+                    limit: jest.fn().mockResolvedValue([defaultRow]),
+                  }),
+                  orderBy: jest.fn().mockReturnValue({
+                    limit: jest.fn().mockReturnValue({
+                      offset: jest.fn().mockResolvedValue([defaultRow]),
+                    }),
+                  }),
+                  $dynamic: jest.fn().mockReturnValue({
+                    where: jest.fn().mockReturnThis(),
+                    orderBy: jest.fn().mockReturnValue({
+                      limit: jest.fn().mockReturnValue({
+                        offset: jest.fn().mockResolvedValue([defaultRow]),
+                      }),
+                    }),
                   }),
                 }),
               }),
             }),
           }),
-        }),
-        groupBy: jest.fn().mockReturnValue({
-          as: jest.fn().mockReturnValue(subqueryMock),
-        }),
-        where: jest.fn().mockReturnValue({
-          limit: jest.fn().mockResolvedValue([mockEvent]),
-        }),
+          groupBy: jest.fn().mockReturnValue({
+            as: jest.fn().mockReturnValue({ count: 0, eventId: 1 }),
+          }),
+          where: jest.fn().mockReturnValue({
+            groupBy: jest.fn().mockReturnValue({
+              as: jest.fn().mockReturnValue({ count: 0, eventId: 1 }),
+            }),
+            limit: jest.fn().mockResolvedValue([mockEvent]),
+          }),
+        };
       }),
     };
     mockDb.select.mockReturnValue(selectChain);
@@ -175,30 +182,19 @@ describe('EventsService', () => {
     });
 
     it('should throw NotFoundException when event not found', async () => {
-      const subqueryMock = { count: 0, eventId: 1 };
-      mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            groupBy: jest.fn().mockReturnValue({
-              as: jest.fn().mockReturnValue(subqueryMock),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
               leftJoin: jest.fn().mockReturnValue({
-                leftJoin: jest.fn().mockReturnValue({
-                  leftJoin: jest.fn().mockReturnValue({
-                    where: jest.fn().mockReturnValue({
-                      limit: jest.fn().mockResolvedValue([]),
-                    }),
-                  }),
+                where: jest.fn().mockReturnValue({
+                  limit: jest.fn().mockResolvedValue([]),
                 }),
               }),
             }),
           }),
-        });
+        }),
+      });
 
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
     });
