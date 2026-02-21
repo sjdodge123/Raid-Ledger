@@ -79,7 +79,7 @@ Execute steps in order. Read each step's file when you reach it.
 | 5 | `steps/step-5-parallel-dispatch.md` | Create worktrees, spawn dev + build teammates |
 | 6 | `steps/step-6-dev-test-pipeline.md` | Event-driven: test agents, CI, push, Playwright gate, then "In Review" |
 | 7 | `steps/step-7-review-pipeline.md` | Poll Linear for operator results, handle changes/approvals |
-| 8 | `steps/step-8-review-outcomes.md` | Handle code review approve/reject, merge or rework |
+| 8 | `steps/step-8-review-outcomes.md` | Handle review outcomes; queue approved stories; batch or individual PRs |
 | 9 | `steps/step-9-batch-completion.md` | Shut down teammates, clean up, present next batch |
 | 10 | `steps/step-10-final-summary.md` | Final dispatch summary after all batches |
 
