@@ -478,11 +478,13 @@ export function BackupsPanel() {
                         }
                     }}
                     onConfirm={() => {
-                        // Cancel all queries and remove cached data so:
-                        // 1. No 401s from background refetches during DB rebuild
-                        // 2. Sidebar badges show loading state (hidden) instead of stale "Online"
-                        queryClient.cancelQueries();
-                        queryClient.removeQueries();
+                        // Force sidebar integration badges to Offline immediately
+                        queryClient.setQueryData(['admin', 'settings', 'oauth'], { configured: false });
+                        queryClient.setQueryData(['admin', 'settings', 'discord-bot'], { connected: false, configured: false });
+                        queryClient.setQueryData(['admin', 'settings', 'igdb'], { configured: false });
+                        queryClient.setQueryData(['admin', 'settings', 'blizzard'], { configured: false });
+                        // Prevent refetches that would restore stale "Online" during DB rebuild
+                        queryClient.cancelQueries({ queryKey: ['admin'] });
                         resetInstance.mutate(undefined, {
                             onSuccess: (data) => setResetResult({ password: data.password }),
                             onError: (err) => toast.error(err.message),
