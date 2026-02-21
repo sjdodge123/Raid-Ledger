@@ -50,6 +50,10 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   NotificationService_cleanupExpiredNotifications: {
     description: 'Deletes expired notifications daily at 4 AM',
   },
+  BackupService_dailyBackup: {
+    description:
+      'Creates a pg_dump backup and rotates backups older than 30 days (ROK-420)',
+  },
 };
 
 /**

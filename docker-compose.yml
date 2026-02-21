@@ -55,7 +55,7 @@ services:
       # ROK-306: Sentry telemetry opt-out — uncomment to disable error tracking.
       # DISABLE_TELEMETRY: "true"
     volumes:
-      - avatar_data:/data/avatars
+      - avatar_data:/data
     ports:
       - "${API_PORT:-3000}:3000"
     healthcheck:

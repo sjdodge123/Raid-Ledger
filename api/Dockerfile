@@ -36,6 +36,9 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
+# Install PostgreSQL client for pg_dump (used by backup service and entrypoint)
+RUN apk add --no-cache postgresql15-client
+
 # Create non-root user for security
 RUN addgroup --system --gid 1001 nodejs \
     && adduser --system --uid 1001 nestjs
@@ -66,8 +69,9 @@ COPY --from=builder /app/api/dist/scripts ./dist/scripts
 # Copy seed data files (games-seed.json for ROK-160)
 COPY --from=builder /app/api/seeds ./dist/seeds
 
-# Create avatar upload directory
-RUN mkdir -p /data/avatars && chown nestjs:nodejs /data/avatars
+# Create avatar upload directory and backup directories
+RUN mkdir -p /data/avatars /data/backups/daily /data/backups/migrations \
+    && chown -R nestjs:nodejs /data
 
 # Switch to non-root user
 USER nestjs

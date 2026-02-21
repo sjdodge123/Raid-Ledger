@@ -248,7 +248,31 @@ start_dev() {
     # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
         print_warning "Fresh start: wiping database volume..."
+
+        # Preserve backups across volume wipe (ROK-420)
+        local has_backups=false
+        if docker run --rm -v raid-ledger_avatar_data:/data alpine test -d /data/backups 2>/dev/null; then
+            print_warning "Preserving database backups..."
+            docker run --rm \
+                -v raid-ledger_avatar_data:/data \
+                -v /tmp:/host \
+                alpine cp -a /data/backups /host/raid-ledger-backups-preserve 2>/dev/null && has_backups=true
+        fi
+
         docker compose -f "$COMPOSE_FILE" down -v 2>/dev/null || true
+
+        # Restore backups after volume recreation (ROK-420)
+        if [ "$has_backups" = "true" ] && [ -d /tmp/raid-ledger-backups-preserve ]; then
+            print_warning "Restoring database backups..."
+            docker volume create raid-ledger_avatar_data 2>/dev/null || true
+            docker run --rm \
+                -v raid-ledger_avatar_data:/data \
+                -v /tmp:/host \
+                alpine sh -c "mkdir -p /data && cp -a /host/raid-ledger-backups-preserve /data/backups"
+            rm -rf /tmp/raid-ledger-backups-preserve
+            print_success "Database backups restored"
+        fi
+
         print_success "Database wiped. New admin password will be generated on bootstrap."
     fi
 

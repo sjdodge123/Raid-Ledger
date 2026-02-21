@@ -5,8 +5,22 @@ echo "🚀 Starting Raid-Ledger API..."
 
 # Run database migrations if DATABASE_URL is set
 if [ -n "$DATABASE_URL" ]; then
+    # Create backup directories (idempotent)
+    mkdir -p /data/backups/daily /data/backups/migrations 2>/dev/null || true
+
+    # Take a pre-migration snapshot before running migrations (ROK-420)
+    echo "📸 Taking pre-migration database snapshot..."
+    SNAPSHOT_TS=$(date +%Y-%m-%d_%H%M%S)
+    SNAPSHOT_FILE="/data/backups/migrations/pre_migration_${SNAPSHOT_TS}.dump"
+    if pg_dump --format=custom --no-owner --no-privileges --file="$SNAPSHOT_FILE" "$DATABASE_URL" 2>/dev/null; then
+        echo "✅ Pre-migration snapshot saved: $SNAPSHOT_FILE"
+    else
+        echo "⚠️ Pre-migration snapshot skipped (database may not exist yet)"
+        rm -f "$SNAPSHOT_FILE" 2>/dev/null || true
+    fi
+
     echo "📦 Running database migrations..."
-    
+
     # Run drizzle-kit migrate using the compiled config
     # Note: drizzle.config.js is compiled to dist/drizzle.config.js
     node -e "

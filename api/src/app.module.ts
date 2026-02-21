@@ -28,6 +28,7 @@ import { VersionModule } from './version/version.module';
 import { DiscordBotModule } from './discord-bot/discord-bot.module';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { CronJobModule } from './cron-jobs/cron-job.module';
+import { BackupModule } from './backup/backup.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { CronJobModule } from './cron-jobs/cron-job.module';
     DiscordBotModule,
     SentryModule.forRoot(),
     CronJobModule,
+    BackupModule,
   ],
   controllers: [AppController],
   providers: [AppService],
