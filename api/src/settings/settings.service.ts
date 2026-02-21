@@ -579,13 +579,16 @@ export class SettingsService {
   /**
    * Get the client URL with fallback chain (ROK-408):
    * 1. Explicit app_settings override (client_url)
-   * 2. Derived from Discord callback URL origin
-   * 3. Legacy process.env.CLIENT_URL
+   * 2. process.env.CLIENT_URL
+   * 3. Derived from Discord callback URL origin (unreliable — callback
+   *    points to the API, not the web app, so this is a last resort)
    * 4. null
    */
   async getClientUrl(): Promise<string | null> {
     const explicit = await this.get(SETTING_KEYS.CLIENT_URL);
     if (explicit) return explicit;
+
+    if (process.env.CLIENT_URL) return process.env.CLIENT_URL;
 
     const callbackUrl = await this.get(SETTING_KEYS.DISCORD_CALLBACK_URL);
     if (callbackUrl) {
@@ -596,6 +599,6 @@ export class SettingsService {
       }
     }
 
-    return process.env.CLIENT_URL ?? null;
+    return null;
   }
 }
