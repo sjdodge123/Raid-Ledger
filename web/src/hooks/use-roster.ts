@@ -93,12 +93,14 @@ export function buildRosterUpdate(
     assignments: RosterAssignmentResponse[],
 ): UpdateRosterDto {
     return {
-        assignments: assignments.map((a) => ({
-            userId: a.userId,
-            signupId: a.signupId,
-            slot: a.slot,
-            position: a.position,
-            isOverride: a.isOverride,
-        })),
+        assignments: assignments
+            .filter((a) => a.userId > 0)
+            .map((a) => ({
+                userId: a.userId,
+                signupId: a.signupId,
+                slot: a.slot,
+                position: a.position,
+                isOverride: a.isOverride,
+            })),
     };
 }
