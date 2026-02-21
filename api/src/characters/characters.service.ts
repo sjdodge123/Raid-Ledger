@@ -107,6 +107,27 @@ export class CharactersService {
   }
 
   /**
+   * Get the avatar URL for a character by name (ROK-414).
+   * Lightweight query that only fetches avatarUrl — avoids SELECT * with heavy JSONB columns.
+   */
+  async getAvatarUrlByName(
+    userId: number,
+    characterName: string,
+  ): Promise<string | null> {
+    const [result] = await this.db
+      .select({ avatarUrl: schema.characters.avatarUrl })
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.name, characterName),
+        ),
+      )
+      .limit(1);
+    return result?.avatarUrl ?? null;
+  }
+
+  /**
    * Get all characters for a user.
    * @param userId - User ID
    * @param gameId - Optional game ID to filter characters (ROK-131)
