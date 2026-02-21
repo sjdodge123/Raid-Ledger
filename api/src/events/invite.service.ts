@@ -399,7 +399,7 @@ export class InviteService {
   private async tryGenerateServerInvite(
     eventId: number,
   ): Promise<string | null> {
-    this.logger.log(
+    this.logger.debug(
       'tryGenerateServerInvite: pugInviteService available = %s',
       !!this.pugInviteService,
     );
