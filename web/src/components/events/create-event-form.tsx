@@ -5,7 +5,8 @@ import { toast } from '../../lib/toast';
 import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
 import { createEvent, updateEvent } from '../../lib/api-client';
 import { GameSearchInput } from './game-search-input';
-import { TeamAvailabilityPicker } from '../features/heatmap';
+// ROK-406: Hidden — uncomment when Your Availability section is re-enabled
+// import { TeamAvailabilityPicker } from '../features/heatmap';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
@@ -470,13 +471,14 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         });
     }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
 
+    // ROK-406: Hidden — uncomment when Your Availability section is re-enabled
     // Compute ISO strings for availability picker
-    const computedTimes = useMemo(() => {
-        if (!form.startDate || !form.startTime || form.durationMinutes <= 0) return null;
-        const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
-        const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
-        return { startTime: start.toISOString(), endTime: end.toISOString() };
-    }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
+    // const computedTimes = useMemo(() => {
+    //     if (!form.startDate || !form.startTime || form.durationMinutes <= 0) return null;
+    //     const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
+    //     const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
+    //     return { startTime: start.toISOString(), endTime: end.toISOString() };
+    // }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
 
     // Compute total slot count for preview
     const totalSlots = useMemo(() => {
@@ -1146,6 +1148,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             <div className="border-t border-edge-subtle" />
 
             {/* ═══════════ Section 6: Server Automation (stub) ═══════════ */}
+            {/* ROK-406: Hidden — feature not implemented yet. Uncomment when server automation is ready.
             {form.game && (
                 <>
                     <FormSection title="Server Automation">
@@ -1187,8 +1190,10 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     <div className="border-t border-edge-subtle" />
                 </>
             )}
+            */}
 
             {/* ═══════════ Section 6: Your Availability ═══════════ */}
+            {/* ROK-406: Hidden — not useful during event creation. Uncomment when availability-at-creation is needed.
             {computedTimes && (
                 <>
                     <FormSection title="Your Availability">
@@ -1201,6 +1206,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     <div className="border-t border-edge-subtle" />
                 </>
             )}
+            */}
 
             {/* ═══════════ Save as Template ═══════════ */}
             {showSaveTemplate && (
