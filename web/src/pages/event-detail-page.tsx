@@ -4,7 +4,7 @@ import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
-import { useRoster, useUpdateRoster, useSelfUnassign, buildRosterUpdate } from '../hooks/use-roster';
+import { useRoster, useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../hooks/use-roster';
 import type { RosterAssignmentResponse, RosterRole, PugRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
@@ -12,6 +12,7 @@ import { UserLink } from '../components/common/UserLink';
 import { toAvatarUser } from '../lib/avatar';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
 import { AttendeeAvatars } from '../components/calendar/AttendeeAvatars';
+import { Modal } from '../components/ui/modal';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
@@ -108,8 +109,12 @@ export function EventDetailPage() {
     const createPug = useCreatePug(eventId);
     const deletePug = useDeletePug(eventId);
     const regeneratePugCode = useRegeneratePugInviteCode(eventId);
+    const adminRemoveUser = useAdminRemoveUser(eventId);
     const { data: pugData } = usePugs(eventId);
     const pugs = pugData?.pugs ?? [];
+
+    // ROK-402: Admin remove user from event confirmation state
+    const [removeConfirm, setRemoveConfirm] = useState<{ signupId: number; username: string } | null>(null);
 
     // ROK-183: Detect if this is an MMO game (has tank/healer/dps slots)
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
@@ -223,6 +228,25 @@ export function EventDetailPage() {
             }
         } catch (err) {
             toast.error('Failed to regenerate link', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-402: Admin remove user from event — opens confirmation dialog
+    const handleRemoveFromEvent = (signupId: number, username: string) => {
+        setRemoveConfirm({ signupId, username });
+    };
+
+    // ROK-402: Confirmed removal
+    const handleConfirmRemoveFromEvent = async () => {
+        if (!removeConfirm) return;
+        try {
+            await adminRemoveUser.mutateAsync(removeConfirm.signupId);
+            toast.success(`${removeConfirm.username} removed from event`);
+            setRemoveConfirm(null);
+        } catch (err) {
+            toast.error('Failed to remove user', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
@@ -548,6 +572,7 @@ export function EventDetailPage() {
                         onRemovePug={canManageRoster ? handleRemovePug : undefined}
                         onRegeneratePugLink={canManageRoster ? handleRegeneratePugLink : undefined}
                         eventId={eventId}
+                        onRemoveFromEvent={canManageRoster ? handleRemoveFromEvent : undefined}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}
@@ -752,6 +777,38 @@ export function EventDetailPage() {
                     />
                 </Suspense>
             )}
+
+            {/* ROK-402: Remove from event confirmation modal */}
+            <Modal
+                isOpen={removeConfirm !== null}
+                onClose={() => setRemoveConfirm(null)}
+                title="Remove from Event"
+            >
+                {removeConfirm && (
+                    <div className="space-y-4">
+                        <p className="text-sm text-secondary">
+                            Remove <strong className="text-foreground">{removeConfirm.username}</strong> from this event? This will delete their signup and roster assignment.
+                        </p>
+                        <div className="flex justify-end gap-2 pt-2">
+                            <button
+                                type="button"
+                                className="btn btn-secondary btn-sm"
+                                onClick={() => setRemoveConfirm(null)}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                onClick={handleConfirmRemoveFromEvent}
+                                disabled={adminRemoveUser.isPending}
+                            >
+                                {adminRemoveUser.isPending ? 'Removing...' : 'Remove'}
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </Modal>
 
             {/* ROK-292: Invite Modal */}
             {showInviteModal && (

@@ -585,6 +585,20 @@ export async function selfUnassignFromRoster(
     });
 }
 
+/**
+ * Admin-remove a signup from an event (ROK-402).
+ * Deletes the signup and roster assignment entirely.
+ * Works for both registered users and anonymous PUG participants.
+ */
+export async function adminRemoveUserFromEvent(
+    eventId: number,
+    signupId: number,
+): Promise<void> {
+    return fetchApi(`/events/${eventId}/signups/${signupId}`, {
+        method: 'DELETE',
+    });
+}
+
 // ============================================================
 // Discord Integration API (ROK-195)
 // ============================================================

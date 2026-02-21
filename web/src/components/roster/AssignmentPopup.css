@@ -173,6 +173,30 @@
     background: rgba(239, 68, 68, 0.25);
 }
 
+/* ROK-402: Remove from event button */
+.assignment-popup__remove-event-btn {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    color: #fca5a5;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.2);
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s;
+    white-space: nowrap;
+}
+
+.assignment-popup__remove-event-btn:hover {
+    background: rgba(239, 68, 68, 0.3);
+    color: #fecaca;
+    border-color: rgba(239, 68, 68, 0.5);
+}
+
 /* Empty state */
 .assignment-popup__empty {
     text-align: center;
@@ -369,6 +393,17 @@
 [data-scheme="light"] .assignment-popup__role-badge--dps {
     background: rgba(220, 38, 38, 0.12);
     color: #dc2626;
+}
+
+[data-scheme="light"] .assignment-popup__remove-event-btn {
+    color: #dc2626;
+    background: rgba(239, 68, 68, 0.06);
+    border-color: rgba(239, 68, 68, 0.2);
+}
+
+[data-scheme="light"] .assignment-popup__remove-event-btn:hover {
+    background: rgba(239, 68, 68, 0.15);
+    color: #b91c1c;
 }
 
 [data-scheme="light"] .assignment-popup__empty {

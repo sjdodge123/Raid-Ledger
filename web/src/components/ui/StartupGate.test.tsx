@@ -30,6 +30,11 @@ describe('StartupGate', () => {
     beforeEach(() => {
         vi.useFakeTimers();
         setStoreState({ status: 'checking', hasBeenOnline: false, check: vi.fn() });
+        // Default to a non-bypass path
+        Object.defineProperty(window, 'location', {
+            value: { pathname: '/' },
+            writable: true,
+        });
     });
 
     afterEach(() => {
@@ -151,6 +156,25 @@ describe('StartupGate', () => {
             });
 
             expect(screen.queryByRole('button', { name: 'Retry now' })).not.toBeInTheDocument();
+        });
+    });
+
+    describe('bypass for auth callback routes', () => {
+        it('renders children immediately on /auth/success even when API is not online', () => {
+            Object.defineProperty(window, 'location', {
+                value: { pathname: '/auth/success' },
+                writable: true,
+            });
+            setStoreState({ status: 'checking', hasBeenOnline: false });
+
+            render(
+                <StartupGate>
+                    <div>App Content</div>
+                </StartupGate>,
+            );
+
+            expect(screen.getByText('App Content')).toBeInTheDocument();
+            expect(screen.queryByText('Starting up...')).not.toBeInTheDocument();
         });
     });
 

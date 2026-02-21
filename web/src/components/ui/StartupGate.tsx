@@ -4,6 +4,9 @@ import { useConnectivityStore } from '../../stores/connectivity-store';
 const SLOW_THRESHOLD_MS = 30_000;
 const FADE_DURATION_MS = 300;
 
+/** Routes that must bypass the startup gate (time-sensitive auth flows). */
+const BYPASS_PATHS = ['/auth/success'];
+
 export function StartupGate({ children }: { children: ReactNode }) {
     const hasBeenOnline = useConnectivityStore((s) => s.hasBeenOnline);
     const check = useConnectivityStore((s) => s.check);
@@ -32,8 +35,13 @@ export function StartupGate({ children }: { children: ReactNode }) {
         setGateVisible(false);
     }, []);
 
-    // Once the gate is fully gone, just render children
-    if (!gateVisible) {
+    // Auth callback routes bypass the gate entirely — the auth code in Redis
+    // has a 30s TTL, so we can't afford to wait for the health check.
+    // These routes have their own error handling for API unavailability.
+    const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
+
+    // Once the gate is fully gone (or bypassed), just render children
+    if (!gateVisible || isBypassRoute) {
         return <>{children}</>;
     }
 
