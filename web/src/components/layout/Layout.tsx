@@ -7,6 +7,7 @@ import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { ImpersonationBanner } from '../auth';
+import { DiscordJoinBanner } from '../ui/DiscordJoinBanner';
 import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
@@ -44,6 +45,7 @@ export function Layout({ children }: LayoutProps) {
             <CurrentUserAvatarSync />
             <SpaceEffects />
             <ImpersonationBanner />
+            <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />
             <main id="main-content" className="flex-1">
                 {children}

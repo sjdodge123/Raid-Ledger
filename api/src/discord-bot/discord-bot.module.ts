@@ -19,6 +19,7 @@ import { DiscordEventListener } from './listeners/event.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
+import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
 import {
   EmbedSyncQueueService,
@@ -63,6 +64,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
     EmbedSyncProcessor,
     InteractionListener,
     SignupInteractionListener,
+    RoachOutInteractionListener,
     PugInviteListener,
     EventLinkListener,
     RegisterCommandsService,
@@ -81,6 +83,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
     DiscordEventListener,
     SetupWizardService,
     ChannelBindingsService,
+    ChannelResolverService,
     PugInviteService,
   ],
 })

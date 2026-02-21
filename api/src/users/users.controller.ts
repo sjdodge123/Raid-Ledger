@@ -43,9 +43,14 @@ import {
   CheckDisplayNameQuerySchema,
   DeleteAccountSchema,
 } from '@raid-ledger/contract';
-import type { UserRole } from '@raid-ledger/contract';
+import type {
+  UserRole,
+  DiscordMembershipResponseDto,
+} from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { OperatorGuard } from '../auth/operator.guard';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 
 interface AuthenticatedRequest {
   user: {
@@ -68,6 +73,8 @@ export class UsersController {
     private readonly gameTimeService: GameTimeService,
     private readonly charactersService: CharactersService,
     private readonly eventsService: EventsService,
+    private readonly discordBotClientService: DiscordBotClientService,
+    private readonly channelResolver: ChannelResolverService,
   ) {}
 
   /**
@@ -284,6 +291,96 @@ export class UsersController {
   async resetOnboarding(@Request() req: AuthenticatedRequest) {
     await this.usersService.resetOnboarding(req.user.id);
     return { success: true };
+  }
+
+  /**
+   * ROK-425: Check if current user is a member of the bot's Discord guild.
+   * Used by the Discord join banner on the frontend.
+   */
+  @Get('me/discord-membership')
+  @UseGuards(AuthGuard('jwt'))
+  async getDiscordMembership(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<DiscordMembershipResponseDto> {
+    if (!this.discordBotClientService.isConnected()) {
+      return { botConnected: false };
+    }
+
+    const guildInfo = this.discordBotClientService.getGuildInfo();
+    if (!guildInfo) {
+      return { botConnected: false };
+    }
+
+    // Get the user's discord ID
+    const user = await this.usersService.findById(req.user.id);
+    if (
+      !user?.discordId ||
+      user.discordId.startsWith('local:') ||
+      user.discordId.startsWith('unlinked:')
+    ) {
+      return { botConnected: true, guildName: guildInfo.name, isMember: false };
+    }
+
+    // Check if user is in the guild
+    const client = this.discordBotClientService.getClient();
+    const guild = client?.guilds.cache.first();
+    if (!guild) {
+      return { botConnected: false };
+    }
+
+    try {
+      await guild.members.fetch(user.discordId);
+      // Member found — they're in the server
+      return { botConnected: true, guildName: guildInfo.name, isMember: true };
+    } catch {
+      // Member not found (404) — generate invite
+      const inviteUrl = await this.generateJoinInvite(guild);
+      return {
+        botConnected: true,
+        guildName: guildInfo.name,
+        isMember: false,
+        inviteUrl: inviteUrl ?? undefined,
+      };
+    }
+  }
+
+  /**
+   * Generate a Discord server invite for the join banner.
+   * Creates a multi-use invite with 24h expiry.
+   */
+  private async generateJoinInvite(
+    guild: import('discord.js').Guild,
+  ): Promise<string | null> {
+    try {
+      let channelId = await this.channelResolver.resolveChannelForEvent();
+
+      if (!channelId && guild.systemChannelId) {
+        channelId = guild.systemChannelId;
+      }
+
+      if (!channelId) {
+        const firstText = guild.channels.cache.find(
+          (ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased(),
+        );
+        if (firstText) channelId = firstText.id;
+      }
+
+      if (!channelId) return null;
+
+      const channel = await guild.channels.fetch(channelId);
+      if (!channel || !('createInvite' in channel)) return null;
+
+      const invite = await channel.createInvite({
+        maxAge: 86400, // 24 hours
+        maxUses: 0, // unlimited uses
+        unique: false, // reuse existing if available
+        reason: 'Discord join banner invite (ROK-425)',
+      });
+
+      return invite.url;
+    } catch {
+      return null;
+    }
   }
 
   /**
