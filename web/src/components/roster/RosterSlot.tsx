@@ -1,5 +1,5 @@
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
-import { useRef, useEffect } from 'react';
+import React, { useRef, useEffect } from 'react';
 import { RosterCard } from './RosterCard';
 
 interface RosterSlotProps {
@@ -34,7 +34,7 @@ interface RosterSlotProps {
  * The "pending" (Join?) state is controlled by the parent to survive
  * background React Query refetches that would otherwise remount this component.
  */
-export function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove, isPending = false, onPendingChange }: RosterSlotProps) {
+export const RosterSlot = React.memo(function RosterSlot({ role, position, item, color, onJoinClick, isCurrentUser = false, onAdminClick, onRemove, onSelfRemove, isPending = false, onPendingChange }: RosterSlotProps) {
     // Capture the onJoinClick callback so that a React Query refetch
     // that briefly sets onJoinClick=undefined doesn't prevent the
     // confirmation click from firing.
@@ -140,4 +140,4 @@ export function RosterSlot({ role, position, item, color, onJoinClick, isCurrent
             )}
         </div>
     );
-}
+});
