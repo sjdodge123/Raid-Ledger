@@ -44,6 +44,12 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   VersionCheckService_handleCron: {
     description: 'Checks GitHub for new Raid Ledger releases daily',
   },
+  SessionCleanupService_cleanupExpiredSessions: {
+    description: 'Deletes expired sessions daily at 3 AM',
+  },
+  NotificationService_cleanupExpiredNotifications: {
+    description: 'Deletes expired notifications daily at 4 AM',
+  },
 };
 
 /**

@@ -17,6 +17,8 @@ import { SettingsModule } from '../settings/settings.module';
 import { EventsModule } from '../events/events.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { CharactersModule } from '../characters/characters.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
+import { SessionCleanupService } from './session-cleanup.service';
 
 /**
  * Auth module with dynamic Discord OAuth support.
@@ -33,6 +35,7 @@ import { CharactersModule } from '../characters/characters.module';
     forwardRef(() => EventsModule),
     forwardRef(() => NotificationModule),
     CharactersModule,
+    CronJobModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
@@ -50,6 +53,7 @@ import { CharactersModule } from '../characters/characters.module';
     IntentTokenService,
     DynamicDiscordStrategy,
     JwtStrategy,
+    SessionCleanupService,
   ],
   exports: [
     AuthService,
