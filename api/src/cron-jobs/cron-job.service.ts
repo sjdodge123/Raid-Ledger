@@ -33,7 +33,7 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   },
   EventReminderService_handleReminders: {
     description:
-      'Checks for events within reminder windows and sends DM reminders every 60 seconds (ROK-126)',
+      'Checks for events within reminder windows and sends DM reminders every 60 seconds',
   },
   EventReminderService_handleDayOfReminders: {
     description: 'Sends day-of event reminders every 15 minutes',
@@ -52,7 +52,7 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   },
   BackupService_dailyBackup: {
     description:
-      'Creates a pg_dump backup and rotates backups older than 30 days (ROK-420)',
+      'Creates a pg_dump backup and rotates backups older than 30 days',
   },
 };
 
