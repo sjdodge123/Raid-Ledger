@@ -57,6 +57,7 @@ describe('AuthController — redeemIntent', () => {
   };
   let mockCharactersService: {
     findAllForUser: jest.Mock;
+    getAvatarUrlByName: jest.Mock;
   };
 
   const mockUser = {
@@ -116,6 +117,7 @@ describe('AuthController — redeemIntent', () => {
     };
     mockCharactersService = {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+      getAvatarUrlByName: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -341,6 +343,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
   };
   let mockCharactersService: {
     findAllForUser: jest.Mock;
+    getAvatarUrlByName: jest.Mock;
   };
 
   const makeRequest = (userId: number) => ({
@@ -424,6 +427,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
     };
     mockCharactersService = {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+      getAvatarUrlByName: jest.fn().mockResolvedValue(null),
     };
   });
 
@@ -488,15 +492,15 @@ describe('AuthController — getProfile (ROK-352)', () => {
     );
   });
 
-  it('falls back to JWT payload when user not found in DB', async () => {
+  it('throws UnauthorizedException when user not found in DB', async () => {
     mockUsersService.findById.mockResolvedValueOnce(null);
     controller = await buildModule();
 
     const req = makeRequest(1);
-    const result = await controller.getProfile(req as any);
 
-    // Fallback returns req.user — does not include avatarPreference
-    expect(result).toEqual(req.user);
+    await expect(controller.getProfile(req as any)).rejects.toThrow(
+      'User no longer exists',
+    );
   });
 
   it('response includes all required user fields', async () => {
@@ -516,20 +520,57 @@ describe('AuthController — getProfile (ROK-352)', () => {
       customAvatarUrl: null,
       role: 'member',
       avatarPreference: pref,
-      characters: [],
+      resolvedAvatarUrl: null,
     });
   });
 
-  it('includes characters array in response', async () => {
-    mockCharactersService.findAllForUser.mockResolvedValueOnce({
-      data: [
-        {
-          gameId: 'wow',
-          name: 'Thrall',
-          avatarUrl: 'https://example.com/thrall.png',
-        },
-        { gameId: 'ffxiv', name: 'Yshtola', avatarUrl: null },
-      ],
+  it('does not include characters array in response (ROK-414)', async () => {
+    controller = await buildModule();
+
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
+
+    expect(result).not.toHaveProperty('characters');
+  });
+
+  it('resolvedAvatarUrl is character avatarUrl when preference is character', async () => {
+    const pref = { type: 'character', characterName: 'Thrall' };
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
+    mockCharactersService.getAvatarUrlByName.mockResolvedValueOnce(
+      'https://example.com/thrall.png',
+    );
+    controller = await buildModule();
+
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
+
+    expect(result['resolvedAvatarUrl']).toBe(
+      'https://example.com/thrall.png',
+    );
+    expect(mockCharactersService.getAvatarUrlByName).toHaveBeenCalledWith(
+      1,
+      'Thrall',
+    );
+  });
+
+  it('resolvedAvatarUrl is customAvatarUrl when preference is custom', async () => {
+    const pref = { type: 'custom' };
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
+    mockUsersService.findById.mockResolvedValueOnce({
+      id: 1,
+      username: 'testuser',
+      discordId: 'discord-123',
+      displayName: null,
+      avatar: 'abc123',
+      customAvatarUrl: '/avatars/user-1.webp',
+      role: 'member',
+      onboardingCompletedAt: null,
     });
     controller = await buildModule();
 
@@ -537,15 +578,32 @@ describe('AuthController — getProfile (ROK-352)', () => {
       makeRequest(1) as any,
     )) as Record<string, unknown>;
 
-    expect(result).toHaveProperty('characters');
-    expect(result['characters']).toEqual([
-      {
-        gameId: 'wow',
-        name: 'Thrall',
-        avatarUrl: 'https://example.com/thrall.png',
-      },
-      { gameId: 'ffxiv', name: 'Yshtola', avatarUrl: null },
-    ]);
+    expect(result['resolvedAvatarUrl']).toBe('/avatars/user-1.webp');
+  });
+
+  it('resolvedAvatarUrl is null when preference is discord', async () => {
+    const pref = { type: 'discord' };
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce({
+      value: pref,
+    });
+    controller = await buildModule();
+
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
+
+    expect(result['resolvedAvatarUrl']).toBeNull();
+  });
+
+  it('resolvedAvatarUrl is null when no preference stored', async () => {
+    mockPreferencesService.getUserPreference.mockResolvedValueOnce(null);
+    controller = await buildModule();
+
+    const result = (await controller.getProfile(
+      makeRequest(1) as any,
+    )) as Record<string, unknown>;
+
+    expect(result['resolvedAvatarUrl']).toBeNull();
   });
 
   it('does not expose raw DB row columns not in the return shape', async () => {

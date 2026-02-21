@@ -1,18 +1,13 @@
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
-import type { UserRole } from '@raid-ledger/contract';
-
 interface JwtPayload {
   sub: number;
   username: string;
-  role?: UserRole;
-  /** @deprecated Pre-ROK-272 tokens used isAdmin boolean */
-  isAdmin?: boolean;
   impersonatedBy?: number | null;
 }
 
@@ -30,24 +25,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    // Re-fetch role from database to prevent privilege persistence after role changes.
-    // Falls back to JWT claim if user is not found (e.g., deleted user).
-    let role: UserRole = payload.role ?? (payload.isAdmin ? 'admin' : 'member');
-
     const [user] = await this.db
       .select({ role: schema.users.role })
       .from(schema.users)
       .where(eq(schema.users.id, payload.sub))
       .limit(1);
 
-    if (user) {
-      role = user.role;
+    if (!user) {
+      throw new UnauthorizedException('User no longer exists');
     }
 
     return {
       id: payload.sub,
       username: payload.username,
-      role,
+      role: user.role,
       impersonatedBy: payload.impersonatedBy || null,
     };
   }

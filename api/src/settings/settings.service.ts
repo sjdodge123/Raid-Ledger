@@ -476,10 +476,15 @@ export class SettingsService {
       this.set(SETTING_KEYS.DISCORD_BOT_ENABLED, enabled ? 'true' : 'false'),
     ]);
 
-    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, {
-      token,
-      enabled,
-    });
+    // Use emitAsync to properly dispatch to async @OnEvent handlers.
+    // Fire-and-forget: the bot connection happens in the background so we
+    // don't block the HTTP response.  Errors are logged, not re-thrown.
+    this.eventEmitter
+      .emitAsync(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, { token, enabled })
+      .catch((error: unknown) => {
+        this.logger.error('Error in DISCORD_BOT_UPDATED event handler:', error);
+      });
+
     this.logger.log('Discord bot configuration updated');
   }
 
@@ -499,7 +504,14 @@ export class SettingsService {
       this.delete(SETTING_KEYS.DISCORD_BOT_ENABLED),
     ]);
 
-    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
+    this.eventEmitter
+      .emitAsync(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null)
+      .catch((error: unknown) => {
+        this.logger.error(
+          'Error in DISCORD_BOT_UPDATED event handler (clear):',
+          error,
+        );
+      });
     this.logger.log('Discord bot configuration cleared');
   }
 

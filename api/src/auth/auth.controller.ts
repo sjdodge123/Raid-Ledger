@@ -465,17 +465,31 @@ export class AuthController {
     // This ensures the UI reflects updated info (e.g., after Discord linking)
     const user = await this.usersService.findById(req.user.id);
     if (!user) {
-      return req.user; // Fallback to JWT payload if user not found
+      throw new UnauthorizedException('User no longer exists');
     }
 
-    // Fetch avatar preference and characters for avatar resolution (ROK-352)
-    const [avatarPref, charactersResult] = await Promise.all([
-      this.preferencesService.getUserPreference(
+    // Fetch avatar preference for avatar resolution (ROK-352, ROK-414)
+    const avatarPref = await this.preferencesService.getUserPreference(
+      req.user.id,
+      'avatarPreference',
+    );
+
+    // ROK-414: Resolve avatar URL server-side instead of sending all characters
+    let resolvedAvatarUrl: string | null = null;
+    const pref = avatarPref?.value as
+      | { type: string; characterName?: string }
+      | null
+      | undefined;
+
+    if (pref?.type === 'custom' && user.customAvatarUrl) {
+      resolvedAvatarUrl = user.customAvatarUrl;
+    } else if (pref?.type === 'character' && pref.characterName) {
+      resolvedAvatarUrl = await this.charactersService.getAvatarUrlByName(
         req.user.id,
-        'avatarPreference',
-      ),
-      this.charactersService.findAllForUser(req.user.id),
-    ]);
+        pref.characterName,
+      );
+    }
+    // 'discord' type: resolvedAvatarUrl stays null — client uses user.avatar
 
     return {
       id: user.id,
@@ -487,11 +501,7 @@ export class AuthController {
       role: user.role,
       onboardingCompletedAt: user.onboardingCompletedAt?.toISOString() ?? null,
       avatarPreference: avatarPref?.value ?? null,
-      characters: charactersResult.data.map((c) => ({
-        gameId: c.gameId,
-        name: c.name,
-        avatarUrl: c.avatarUrl,
-      })),
+      resolvedAvatarUrl,
     };
   }
 

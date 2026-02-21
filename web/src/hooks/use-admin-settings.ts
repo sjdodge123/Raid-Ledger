@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
@@ -445,6 +446,9 @@ export function useAdminSettings() {
     // Discord Bot (ROK-117)
     // ============================================================
 
+    // Track when a config save occurs so we can poll until the bot connects
+    const botConfigSavedAt = useRef<number>(0);
+
     const discordBotStatus = useQuery<DiscordBotStatusResponse>({
         queryKey: ['admin', 'settings', 'discord-bot'],
         queryFn: async () => {
@@ -456,7 +460,15 @@ export function useAdminSettings() {
         },
         enabled: !!getAuthToken(),
         staleTime: 15_000,
-        refetchInterval: (query) => query.state.data?.connecting ? 2000 : false,
+        refetchInterval: (query) => {
+            // Poll while connecting
+            if (query.state.data?.connecting) return 2000;
+            // Poll for up to 15s after a config save to catch the transition
+            // from offline → connecting → connected
+            const elapsed = Date.now() - botConfigSavedAt.current;
+            if (elapsed < 15_000 && !query.state.data?.connected) return 2000;
+            return false;
+        },
     });
 
     const updateDiscordBot = useMutation<ApiResponse, Error, DiscordBotConfigDto>({
@@ -473,6 +485,7 @@ export function useAdminSettings() {
             return response.json();
         },
         onSuccess: () => {
+            botConfigSavedAt.current = Date.now();
             queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot'] });
         },
     });
