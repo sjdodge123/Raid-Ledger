@@ -216,3 +216,20 @@ export const DeleteAccountSchema = z.object({
 });
 
 export type DeleteAccountDto = z.infer<typeof DeleteAccountSchema>;
+
+// ==========================================
+// Discord Membership Check (ROK-425)
+// ==========================================
+
+/**
+ * Response for GET /users/me/discord-membership
+ * Used by the Discord join banner to check if user is in the bot's guild.
+ */
+export const DiscordMembershipResponseSchema = z.object({
+    botConnected: z.boolean(),
+    guildName: z.string().optional(),
+    isMember: z.boolean().optional(),
+    inviteUrl: z.string().url().optional(),
+});
+
+export type DiscordMembershipResponseDto = z.infer<typeof DiscordMembershipResponseSchema>;

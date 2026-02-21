@@ -8,11 +8,13 @@ import { GameTimeService } from './game-time.service';
 import { UsersController } from './users.controller';
 import { CharactersModule } from '../characters/characters.module';
 import { EventsModule } from '../events/events.module';
+import { DiscordBotModule } from '../discord-bot/discord-bot.module';
 
 @Module({
   imports: [
     forwardRef(() => CharactersModule),
     EventsModule,
+    forwardRef(() => DiscordBotModule),
     MulterModule.register({ storage: multer.memoryStorage() }),
   ],
   controllers: [UsersController],
