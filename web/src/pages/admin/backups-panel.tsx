@@ -186,7 +186,8 @@ function ResetModal({
                     <div className="flex justify-end mt-6">
                         <button
                             onClick={() => {
-                                localStorage.removeItem('auth_token');
+                                localStorage.removeItem('raid_ledger_token');
+                                localStorage.removeItem('raid_ledger_original_token');
                                 window.location.href = '/login';
                             }}
                             className="px-4 py-2 text-sm font-medium bg-accent/20 text-accent border border-accent/40 rounded-lg hover:bg-accent/30 transition-colors"

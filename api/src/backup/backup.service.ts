@@ -380,6 +380,9 @@ export class BackupService implements OnModuleInit {
     await execFileAsync(seedRunner, seedGamesArgs, { cwd: apiRoot });
     await execFileAsync(seedRunner, seedIgdbArgs, { cwd: apiRoot });
 
+    // Invalidate settings cache so API immediately reflects the wiped state
+    this.settingsService.invalidateCache();
+
     this.logger.warn('FACTORY RESET complete — instance has been reset');
     return { password };
   }
