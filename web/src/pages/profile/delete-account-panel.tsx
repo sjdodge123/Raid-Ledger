@@ -34,7 +34,7 @@ export function DeleteAccountPanel() {
 
     const isConfirmValid = confirmName === expectedName;
 
-    if (!user || isImpersonating()) return null;
+    if (!user || isImpersonating() || user.role === 'admin') return null;
 
     return (
         <div className="space-y-6">
