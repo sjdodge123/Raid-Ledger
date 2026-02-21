@@ -492,15 +492,15 @@ describe('AuthController — getProfile (ROK-352)', () => {
     );
   });
 
-  it('falls back to JWT payload when user not found in DB', async () => {
+  it('throws UnauthorizedException when user not found in DB', async () => {
     mockUsersService.findById.mockResolvedValueOnce(null);
     controller = await buildModule();
 
     const req = makeRequest(1);
-    const result = await controller.getProfile(req as any);
 
-    // Fallback returns req.user — does not include avatarPreference
-    expect(result).toEqual(req.user);
+    await expect(controller.getProfile(req as any)).rejects.toThrow(
+      'User no longer exists',
+    );
   });
 
   it('response includes all required user fields', async () => {

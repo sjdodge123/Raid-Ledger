@@ -465,7 +465,7 @@ export class AuthController {
     // This ensures the UI reflects updated info (e.g., after Discord linking)
     const user = await this.usersService.findById(req.user.id);
     if (!user) {
-      return req.user; // Fallback to JWT payload if user not found
+      throw new UnauthorizedException('User no longer exists');
     }
 
     // Fetch avatar preference for avatar resolution (ROK-352, ROK-414)
