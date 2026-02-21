@@ -48,11 +48,12 @@ describe('BackupService', () => {
         {
           provide: ConfigService,
           useValue: {
-            get: jest
-              .fn()
-              .mockReturnValue(
-                'postgresql://user:pass@localhost:5432/raid_ledger',
-              ),
+            get: jest.fn((key: string) => {
+              if (key === 'DATABASE_URL')
+                return 'postgresql://user:pass@localhost:5432/raid_ledger';
+              if (key === 'BACKUP_DIR') return '/data/backups';
+              return undefined;
+            }),
           },
         },
         { provide: CronJobService, useValue: mockCronJobService },
@@ -123,6 +124,94 @@ describe('BackupService', () => {
       const removed = service.rotateDailyBackups();
       expect(removed).toBe(0);
       expect(mockFs.unlinkSync).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listBackups', () => {
+    it('should list .dump files from both directories sorted newest first', () => {
+      const older = new Date('2026-01-01T00:00:00Z');
+      const newer = new Date('2026-02-01T00:00:00Z');
+
+      (mockFs.readdirSync as jest.Mock).mockImplementation((dir: string) => {
+        if (dir.includes('daily')) return ['old.dump', 'skip.txt'];
+        if (dir.includes('migrations')) return ['new.dump'];
+        return [];
+      });
+      (mockFs.statSync as jest.Mock).mockImplementation((filepath: string) => {
+        if (filepath.includes('old.dump'))
+          return { size: 100, birthtime: older };
+        return { size: 200, birthtime: newer };
+      });
+
+      const result = service.listBackups();
+      expect(result).toHaveLength(2);
+      expect(result[0].filename).toBe('new.dump');
+      expect(result[0].type).toBe('migration');
+      expect(result[1].filename).toBe('old.dump');
+      expect(result[1].type).toBe('daily');
+    });
+  });
+
+  describe('deleteBackup', () => {
+    it('should reject path traversal attempts', () => {
+      expect(() => service.deleteBackup('daily', '../etc/passwd')).toThrow(
+        'Invalid filename',
+      );
+      expect(() => service.deleteBackup('daily', 'foo/bar')).toThrow(
+        'Invalid filename',
+      );
+    });
+
+    it('should throw NotFoundException for missing file', () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(false);
+      expect(() => service.deleteBackup('daily', 'missing.dump')).toThrow(
+        'Backup file not found',
+      );
+    });
+
+    it('should delete an existing file', () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      service.deleteBackup('daily', 'test.dump');
+      expect(mockFs.unlinkSync).toHaveBeenCalledWith(
+        expect.stringContaining('test.dump'),
+      );
+    });
+  });
+
+  describe('restoreFromBackup', () => {
+    it('should reject path traversal attempts', async () => {
+      await expect(
+        service.restoreFromBackup('daily', '../bad'),
+      ).rejects.toThrow('Invalid filename');
+    });
+
+    it('should throw NotFoundException for missing file', async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(false);
+      await expect(
+        service.restoreFromBackup('daily', 'missing.dump'),
+      ).rejects.toThrow('Backup file not found');
+    });
+
+    it('should create a pre-restore snapshot then run pg_restore', async () => {
+      (mockFs.existsSync as jest.Mock).mockReturnValue(true);
+      (mockFs.statSync as jest.Mock).mockReturnValue({
+        size: 1024,
+        birthtime: new Date(),
+      });
+
+      await service.restoreFromBackup('daily', 'test.dump');
+
+      // pg_dump called twice: once for pre-restore snapshot, once already in daily backup setup
+      const execFileCalls = (
+        mockChildProcess.execFile as unknown as jest.Mock
+      ).mock.calls;
+      const pgRestoreCall = execFileCalls.find(
+        (call: unknown[]) => call[0] === 'pg_restore',
+      );
+      expect(pgRestoreCall).toBeDefined();
+      expect(pgRestoreCall[1]).toEqual(
+        expect.arrayContaining(['--clean', '--if-exists']),
+      );
     });
   });
 });

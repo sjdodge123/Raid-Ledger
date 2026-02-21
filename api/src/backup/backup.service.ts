@@ -1,4 +1,11 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { execFile } from 'node:child_process';
@@ -9,10 +16,8 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 
 const execFileAsync = promisify(execFile);
 
-/** Directory where all backups are stored (inside the /data Docker volume) */
-const BACKUP_BASE = '/data/backups';
-const DAILY_DIR = path.join(BACKUP_BASE, 'daily');
-const MIGRATION_DIR = path.join(BACKUP_BASE, 'migrations');
+/** Default backup path (inside /data Docker volume in production) */
+const DEFAULT_BACKUP_BASE = '/data/backups';
 
 /** Number of days to retain daily backups */
 const DAILY_RETENTION_DAYS = 30;
@@ -21,6 +26,9 @@ const DAILY_RETENTION_DAYS = 30;
 export class BackupService implements OnModuleInit {
   private readonly logger = new Logger(BackupService.name);
   private readonly databaseUrl: string;
+  private readonly backupBase: string;
+  private readonly dailyDir: string;
+  private readonly migrationDir: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -31,6 +39,10 @@ export class BackupService implements OnModuleInit {
       throw new Error('DATABASE_URL is required for BackupService');
     }
     this.databaseUrl = url;
+    this.backupBase =
+      this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
+    this.dailyDir = path.join(this.backupBase, 'daily');
+    this.migrationDir = path.join(this.backupBase, 'migrations');
   }
 
   onModuleInit(): void {
@@ -42,9 +54,9 @@ export class BackupService implements OnModuleInit {
    */
   private ensureDirectories(): void {
     try {
-      fs.mkdirSync(DAILY_DIR, { recursive: true });
-      fs.mkdirSync(MIGRATION_DIR, { recursive: true });
-      this.logger.log(`Backup directories ready at ${BACKUP_BASE}`);
+      fs.mkdirSync(this.dailyDir, { recursive: true });
+      fs.mkdirSync(this.migrationDir, { recursive: true });
+      this.logger.log(`Backup directories ready at ${this.backupBase}`);
     } catch (err) {
       this.logger.warn(
         `Could not create backup directories (expected in dev): ${err instanceof Error ? err.message : err}`,
@@ -73,7 +85,7 @@ export class BackupService implements OnModuleInit {
   async createDailyBackup(): Promise<string> {
     const timestamp = this.formatTimestamp(new Date());
     const filename = `raid_ledger_${timestamp}.dump`;
-    const filepath = path.join(DAILY_DIR, filename);
+    const filepath = path.join(this.dailyDir, filename);
 
     this.logger.log(`Starting daily backup: ${filename}`);
 
@@ -95,7 +107,7 @@ export class BackupService implements OnModuleInit {
     const timestamp = this.formatTimestamp(new Date());
     const safeName = migrationLabel.replace(/[^a-zA-Z0-9_-]/g, '_');
     const filename = `pre_${safeName}_${timestamp}.dump`;
-    const filepath = path.join(MIGRATION_DIR, filename);
+    const filepath = path.join(this.migrationDir, filename);
 
     this.logger.log(`Starting pre-migration snapshot: ${filename}`);
 
@@ -120,9 +132,9 @@ export class BackupService implements OnModuleInit {
     let removed = 0;
 
     try {
-      const files = fs.readdirSync(DAILY_DIR);
+      const files = fs.readdirSync(this.dailyDir);
       for (const file of files) {
-        const filepath = path.join(DAILY_DIR, file);
+        const filepath = path.join(this.dailyDir, file);
         const stats = fs.statSync(filepath);
         if (stats.mtime < cutoff) {
           fs.unlinkSync(filepath);
@@ -143,6 +155,127 @@ export class BackupService implements OnModuleInit {
     }
 
     return removed;
+  }
+
+  /**
+   * List all backup files from both daily and migrations directories.
+   */
+  listBackups(): {
+    filename: string;
+    type: 'daily' | 'migration';
+    sizeBytes: number;
+    createdAt: string;
+  }[] {
+    const backups: {
+      filename: string;
+      type: 'daily' | 'migration';
+      sizeBytes: number;
+      createdAt: string;
+    }[] = [];
+
+    for (const [dir, type] of [
+      [this.dailyDir, 'daily'],
+      [this.migrationDir, 'migration'],
+    ] as const) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (!file.endsWith('.dump')) continue;
+          const filepath = path.join(dir, file);
+          const stats = fs.statSync(filepath);
+          backups.push({
+            filename: file,
+            type,
+            sizeBytes: stats.size,
+            createdAt: stats.birthtime.toISOString(),
+          });
+        }
+      } catch {
+        // Directory may not exist yet
+      }
+    }
+
+    return backups.sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+    );
+  }
+
+  /**
+   * Delete a specific backup file.
+   */
+  deleteBackup(type: 'daily' | 'migration', filename: string): void {
+    if (
+      filename.includes('/') ||
+      filename.includes('\\') ||
+      filename.includes('..')
+    ) {
+      throw new BadRequestException('Invalid filename');
+    }
+
+    const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
+    const filepath = path.join(dir, filename);
+
+    if (!fs.existsSync(filepath)) {
+      throw new NotFoundException(`Backup file not found: ${filename}`);
+    }
+
+    fs.unlinkSync(filepath);
+    this.logger.log(`Deleted backup: ${type}/${filename}`);
+  }
+
+  /**
+   * Restore the database from a backup file.
+   * Creates a pre-restore safety snapshot first.
+   */
+  async restoreFromBackup(
+    type: 'daily' | 'migration',
+    filename: string,
+  ): Promise<void> {
+    if (
+      filename.includes('/') ||
+      filename.includes('\\') ||
+      filename.includes('..')
+    ) {
+      throw new BadRequestException('Invalid filename');
+    }
+
+    const dir = type === 'daily' ? this.dailyDir : this.migrationDir;
+    const filepath = path.join(dir, filename);
+
+    if (!fs.existsSync(filepath)) {
+      throw new NotFoundException(`Backup file not found: ${filename}`);
+    }
+
+    this.logger.warn(
+      `Creating pre-restore safety snapshot before restoring from ${filename}`,
+    );
+    await this.createMigrationSnapshot('restore');
+
+    this.logger.warn(`Starting database restore from: ${type}/${filename}`);
+
+    try {
+      await execFileAsync('pg_restore', [
+        '--clean',
+        '--if-exists',
+        '--no-owner',
+        '--no-privileges',
+        `--dbname=${this.databaseUrl}`,
+        filepath,
+      ]);
+      this.logger.log(`Database restore complete from: ${filename}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // pg_restore exits with code 1 for warnings (e.g. objects that don't exist)
+      // Only treat as failure if stderr contains actual errors
+      if (message.includes('pg_restore: error:')) {
+        this.logger.error(`pg_restore failed: ${message}`);
+        throw new InternalServerErrorException(
+          `Database restore failed: ${message}`,
+        );
+      }
+      this.logger.warn(`pg_restore completed with warnings: ${message}`);
+    }
   }
 
   /**

@@ -88,6 +88,7 @@ export function buildNavSections(coreIntegrations: NavItem[], pluginIntegrations
                 { to: '/admin/settings/general/roles', label: 'Role Management' },
                 { to: '/admin/settings/general/data', label: 'Demo Data' },
                 { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
+                { to: '/admin/settings/general/backups', label: 'Backups' },
             ]
         },
         {
