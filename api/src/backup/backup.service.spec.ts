@@ -62,7 +62,10 @@ describe('BackupService', () => {
         { provide: CronJobService, useValue: mockCronJobService },
         {
           provide: SettingsService,
-          useValue: { invalidateCache: jest.fn() },
+          useValue: {
+            invalidateCache: jest.fn(),
+            emitAllIntegrationsCleared: jest.fn(),
+          },
         },
       ],
     }).compile();

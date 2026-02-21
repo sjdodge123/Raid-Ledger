@@ -155,6 +155,18 @@ export class SettingsService {
   }
 
   /**
+   * Emit "cleared" events for all integrations so live services
+   * (Discord bot, etc.) disconnect after a DB reset or restore.
+   */
+  emitAllIntegrationsCleared(): void {
+    this.eventEmitter.emit(SETTINGS_EVENTS.DISCORD_BOT_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, null);
+    this.logger.debug('All integration events emitted as cleared');
+  }
+
+  /**
    * Check if a setting exists.
    * Served from in-memory cache.
    */

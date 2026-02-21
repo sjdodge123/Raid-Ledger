@@ -317,6 +317,9 @@ export class BackupService implements OnModuleInit {
     this.logger.warn('FACTORY RESET initiated — creating safety backup...');
     await this.createMigrationSnapshot('factory-reset');
 
+    // Disconnect live integrations before wiping the DB
+    this.settingsService.emitAllIntegrationsCleared();
+
     this.logger.warn('Dropping all database schemas...');
     await execFileAsync('psql', [
       this.databaseUrl,
