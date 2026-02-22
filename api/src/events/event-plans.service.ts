@@ -94,6 +94,17 @@ export class EventPlansService {
       })
       .returning();
 
+    // Look up game name for the embed
+    let gameName: string | null = null;
+    if (dto.gameId) {
+      const [game] = await this.db
+        .select({ name: schema.games.name })
+        .from(schema.games)
+        .where(eq(schema.games.id, dto.gameId))
+        .limit(1);
+      gameName = game?.name ?? null;
+    }
+
     // Post the Discord poll
     try {
       const messageId = await this.postDiscordPoll(
@@ -103,6 +114,13 @@ export class EventPlansService {
         dto.pollOptions,
         dto.pollDurationHours,
         1,
+        {
+          description: dto.description,
+          gameName,
+          durationMinutes: dto.durationMinutes,
+          slotConfig: dto.slotConfig as Record<string, unknown> | null,
+          pollMode: dto.pollMode,
+        },
       );
 
       // Update the plan with the message ID
@@ -432,7 +450,15 @@ export class EventPlansService {
     options: Array<{ date: string; label: string }>,
     durationHours: number,
     round: number,
+    details?: {
+      description?: string | null;
+      gameName?: string | null;
+      durationMinutes?: number;
+      slotConfig?: Record<string, unknown> | null;
+      pollMode?: string;
+    },
   ): Promise<string> {
+    const { EmbedBuilder } = await import('discord.js');
     const client = this.discordClient.getClient();
     if (!client?.isReady()) {
       throw new Error('Discord bot is not connected');
@@ -455,8 +481,64 @@ export class EventPlansService {
         ? `Not everyone was available — here are new time options! (Round ${round})`
         : undefined;
 
+    // Build event details embed
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setColor(0x7c3aed); // violet
+
+    if (details?.description) {
+      embed.setDescription(details.description);
+    }
+
+    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+
+    if (details?.gameName) {
+      fields.push({ name: 'Game', value: details.gameName, inline: true });
+    }
+
+    if (details?.durationMinutes) {
+      const hours = Math.floor(details.durationMinutes / 60);
+      const mins = details.durationMinutes % 60;
+      const duration = hours > 0 && mins > 0
+        ? `${hours}h ${mins}m`
+        : hours > 0
+          ? `${hours}h`
+          : `${mins}m`;
+      fields.push({ name: 'Duration', value: duration, inline: true });
+    }
+
+    if (details?.slotConfig) {
+      const sc = details.slotConfig as Record<string, number | string>;
+      if (sc.type === 'mmo') {
+        const parts: string[] = [];
+        if (sc.tank) parts.push(`${sc.tank} Tank`);
+        if (sc.healer) parts.push(`${sc.healer} Healer`);
+        if (sc.dps) parts.push(`${sc.dps} DPS`);
+        if (sc.flex) parts.push(`${sc.flex} Flex`);
+        if (sc.bench) parts.push(`${sc.bench} Bench`);
+        fields.push({ name: 'Roster', value: parts.join(' · '), inline: true });
+      } else if (sc.player) {
+        const parts = [`${sc.player} Players`];
+        if (sc.bench) parts.push(`${sc.bench} Bench`);
+        fields.push({ name: 'Roster', value: parts.join(' · '), inline: true });
+      }
+    }
+
+    if (details?.pollMode === 'all_or_nothing') {
+      fields.push({
+        name: 'Mode',
+        value: 'All or Nothing — re-polls if anyone can\'t make it',
+        inline: false,
+      });
+    }
+
+    if (fields.length > 0) {
+      embed.addFields(fields);
+    }
+
     const message = await textChannel.send({
       content,
+      embeds: [embed],
       poll: {
         question: { text: `When should we play "${title}"?` },
         answers: pollAnswers,
@@ -570,9 +652,7 @@ export class EventPlansService {
    * Compute total roster slots from slotConfig JSON.
    * Sum of all role slots + bench.
    */
-  private computeTotalRosterSlots(
-    slotConfig: unknown,
-  ): number {
+  private computeTotalRosterSlots(slotConfig: unknown): number {
     if (!slotConfig || typeof slotConfig !== 'object') return 0;
     const config = slotConfig as Record<string, unknown>;
     const type = config.type;
@@ -649,6 +729,17 @@ export class EventPlansService {
 
     const newRound = (plan.pollRound ?? 1) + 1;
 
+    // Look up game name for re-poll embed
+    let gameName: string | null = null;
+    if (plan.gameId) {
+      const [game] = await this.db
+        .select({ name: schema.games.name })
+        .from(schema.games)
+        .where(eq(schema.games.id, plan.gameId))
+        .limit(1);
+      gameName = game?.name ?? null;
+    }
+
     // Post new poll
     let newMessageId: string;
     try {
@@ -659,6 +750,13 @@ export class EventPlansService {
         newOptions,
         plan.pollDurationHours,
         newRound,
+        {
+          description: plan.description,
+          gameName,
+          durationMinutes: plan.durationMinutes,
+          slotConfig: plan.slotConfig as Record<string, unknown> | null,
+          pollMode: plan.pollMode,
+        },
       );
     } catch (error) {
       this.logger.error(`Failed to post re-poll for plan ${plan.id}:`, error);
