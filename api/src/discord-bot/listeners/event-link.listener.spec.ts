@@ -31,6 +31,7 @@ describe('EventLinkListener', () => {
 
     mockSettingsService = {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
+      getDefaultTimezone: jest.fn().mockResolvedValue(null),
     };
 
     mockEventsService = {

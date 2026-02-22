@@ -443,6 +443,41 @@ export function useAdminSettings() {
     });
 
     // ============================================================
+    // Default Timezone (ROK-431)
+    // ============================================================
+
+    const defaultTimezone = useQuery<{ timezone: string | null }>({
+        queryKey: ['admin', 'settings', 'timezone'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/timezone`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch default timezone');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    const updateTimezone = useMutation<ApiResponse, Error, string>({
+        mutationFn: async (timezone) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/timezone`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify({ timezone }),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update timezone' }));
+                throw new Error(error.message || 'Failed to update timezone');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'timezone'] });
+        },
+    });
+
+    // ============================================================
     // Discord Bot (ROK-117)
     // ============================================================
 
@@ -615,6 +650,8 @@ export function useAdminSettings() {
         demoDataStatus,
         installDemoData,
         clearDemoData,
+        defaultTimezone,
+        updateTimezone,
         discordBotStatus,
         updateDiscordBot,
         testDiscordBot,

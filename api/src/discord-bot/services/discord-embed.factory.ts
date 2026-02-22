@@ -46,6 +46,8 @@ export interface EmbedEventData {
 export interface EmbedContext {
   communityName?: string | null;
   clientUrl?: string | null;
+  /** IANA timezone for formatting event times (e.g., 'America/New_York'). Falls back to UTC. */
+  timezone?: string | null;
 }
 
 /** Controls what action row buttons are attached to the embed. */
@@ -143,22 +145,14 @@ export class DiscordEmbedFactory {
     inviterUsername: string,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     const startDate = new Date(event.startTime);
-    const dateStr = startDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-    const timeStr = startDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
+    const startUnix = Math.floor(startDate.getTime() / 1000);
+    const timeDisplay = `<t:${startUnix}:f> (<t:${startUnix}:R>)`;
 
     const bodyLines: string[] = [];
     if (event.game?.name) {
       bodyLines.push(`🎮 **${event.game.name}**`);
     }
-    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}**`);
+    bodyLines.push(`📆 ${timeDisplay}`);
     if (event.description) {
       const excerpt =
         event.description.length > 200
@@ -263,16 +257,8 @@ export class DiscordEmbedFactory {
           : `${durationHours}h`
         : `${durationMinutes}m`;
 
-    const dateStr = startDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-    });
-    const timeStr = startDate.toLocaleTimeString('en-US', {
-      hour: 'numeric',
-      minute: '2-digit',
-      timeZoneName: 'short',
-    });
+    const startUnix = Math.floor(startDate.getTime() / 1000);
+    const timeDisplay = `<t:${startUnix}:f> (<t:${startUnix}:R>)`;
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: 'Raid Ledger' })
@@ -290,7 +276,7 @@ export class DiscordEmbedFactory {
     if (event.game?.name) {
       bodyLines.push(`🎮 **${event.game.name}**`);
     }
-    bodyLines.push(`📆 **${dateStr}**  ⏰ **${timeStr}** (${durationStr})`);
+    bodyLines.push(`📆 ${timeDisplay} (${durationStr})`);
 
     // Roster breakdown
     const rosterLine = this.buildRosterLine(event);
