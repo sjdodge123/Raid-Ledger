@@ -16,6 +16,7 @@ import {
   CreateEventPlanSchema,
   EventPlanResponseDto,
   TimeSuggestionsResponse,
+  PollResultsResponse,
 } from '@raid-ledger/contract';
 import { EventPlansService } from './event-plans.service';
 import { ZodError } from 'zod';
@@ -110,6 +111,19 @@ export class EventPlansController {
   }
 
   /**
+   * Get poll results for an active plan.
+   * Requires authentication. Only the creator can access.
+   */
+  @Get(':id/poll-results')
+  @UseGuards(AuthGuard('jwt'))
+  async getPollResults(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<PollResultsResponse> {
+    return this.eventPlansService.getPollResults(id, req.user.id);
+  }
+
+  /**
    * Cancel an active event plan.
    * Requires authentication. Only the creator can cancel.
    */
@@ -120,5 +134,18 @@ export class EventPlansController {
     @Request() req: AuthenticatedRequest,
   ): Promise<EventPlanResponseDto> {
     return this.eventPlansService.cancel(id, req.user.id);
+  }
+
+  /**
+   * Restart a cancelled or expired plan with a fresh Discord poll.
+   * Requires authentication. Only the creator can restart.
+   */
+  @Patch(':id/restart')
+  @UseGuards(AuthGuard('jwt'))
+  async restart(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<EventPlanResponseDto> {
+    return this.eventPlansService.restart(id, req.user.id);
   }
 }

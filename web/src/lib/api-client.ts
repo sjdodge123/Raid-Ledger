@@ -812,6 +812,7 @@ import type {
     CreateEventPlanDto,
     EventPlanResponseDto,
     TimeSuggestionsResponse,
+    PollResultsResponse,
 } from '@raid-ledger/contract';
 
 /**
@@ -1064,6 +1065,26 @@ export async function cancelEventPlan(
     planId: string,
 ): Promise<EventPlanResponseDto> {
     return fetchApi(`/event-plans/${planId}/cancel`, {
+        method: 'PATCH',
+    });
+}
+
+/**
+ * Get poll results for an active plan.
+ */
+export async function getEventPlanPollResults(
+    planId: string,
+): Promise<PollResultsResponse> {
+    return fetchApi(`/event-plans/${planId}/poll-results`);
+}
+
+/**
+ * Restart a cancelled or expired event plan.
+ */
+export async function restartEventPlan(
+    planId: string,
+): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/${planId}/restart`, {
         method: 'PATCH',
     });
 }

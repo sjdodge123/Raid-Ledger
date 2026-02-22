@@ -7,6 +7,8 @@ import {
     getMyEventPlans,
     getEventPlan,
     cancelEventPlan,
+    getEventPlanPollResults,
+    restartEventPlan,
 } from '../lib/api-client';
 
 /**
@@ -43,11 +45,13 @@ export function useCreateEventPlan() {
 
 /**
  * Fetch current user's event plans.
+ * Auto-refreshes every 30s to keep plan statuses current.
  */
 export function useMyEventPlans() {
     return useQuery({
         queryKey: ['event-plans', 'my-plans'],
         queryFn: getMyEventPlans,
+        refetchInterval: 30_000,
     });
 }
 
@@ -75,6 +79,35 @@ export function useCancelEventPlan() {
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to cancel event plan');
+        },
+    });
+}
+
+/**
+ * Fetch poll results for an active plan (auto-refreshes every 30s).
+ */
+export function useEventPlanPollResults(planId: string | undefined, enabled: boolean) {
+    return useQuery({
+        queryKey: ['event-plans', planId, 'poll-results'],
+        queryFn: () => getEventPlanPollResults(planId!),
+        enabled: !!planId && enabled,
+        refetchInterval: 30_000,
+    });
+}
+
+/**
+ * Restart a cancelled or expired event plan.
+ */
+export function useRestartEventPlan() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: (planId: string) => restartEventPlan(planId),
+        onSuccess: () => {
+            toast.success('Poll restarted!');
+            queryClient.invalidateQueries({ queryKey: ['event-plans'] });
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || 'Failed to restart poll');
         },
     });
 }

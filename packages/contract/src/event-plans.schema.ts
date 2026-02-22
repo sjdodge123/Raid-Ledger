@@ -121,3 +121,36 @@ export const TimeSuggestionsResponseSchema = z.object({
 export type TimeSuggestionsResponse = z.infer<
   typeof TimeSuggestionsResponseSchema
 >;
+
+// ============================================================
+// Poll Results Schemas (ROK-392 enhanced)
+// ============================================================
+
+/** A single voter in poll results. */
+export const PollVoterSchema = z.object({
+  discordId: z.string(),
+  username: z.string().nullable(),
+  isRegistered: z.boolean(),
+});
+export type PollVoter = z.infer<typeof PollVoterSchema>;
+
+/** Poll results for a single answer option. */
+export const PollOptionResultSchema = z.object({
+  index: z.number(),
+  label: z.string(),
+  totalVotes: z.number(),
+  registeredVotes: z.number(),
+  voters: z.array(PollVoterSchema),
+});
+export type PollOptionResult = z.infer<typeof PollOptionResultSchema>;
+
+/** Full poll results response. */
+export const PollResultsResponseSchema = z.object({
+  planId: z.string().uuid(),
+  status: EventPlanStatusSchema,
+  pollOptions: z.array(PollOptionResultSchema),
+  noneOption: PollOptionResultSchema.nullable(),
+  totalRegisteredVoters: z.number(),
+  pollEndsAt: z.string().datetime().nullable(),
+});
+export type PollResultsResponse = z.infer<typeof PollResultsResponseSchema>;

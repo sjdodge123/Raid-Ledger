@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -17,6 +18,8 @@ import {
   EventPlanResponseDto,
   TimeSuggestionsResponse,
   TimeSuggestion,
+  PollResultsResponse,
+  PollOptionResult,
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
@@ -258,6 +261,250 @@ export class EventPlansService {
   }
 
   /**
+   * Get poll results with voter details for a plan.
+   * Only the plan creator can access. Only returns data for 'polling' status.
+   */
+  async getPollResults(
+    planId: string,
+    userId: number,
+  ): Promise<PollResultsResponse> {
+    const [plan] = await this.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundException(`Event plan ${planId} not found`);
+    }
+
+    if (plan.creatorId !== userId) {
+      throw new ForbiddenException(
+        'Only the plan creator can view poll results',
+      );
+    }
+
+    if (plan.status !== 'polling') {
+      return {
+        planId: plan.id,
+        status: plan.status as PollResultsResponse['status'],
+        pollOptions: [],
+        noneOption: null,
+        totalRegisteredVoters: 0,
+        pollEndsAt: plan.pollEndsAt?.toISOString() ?? null,
+      };
+    }
+
+    // Fetch raw poll results from Discord
+    let rawResults: Map<number, PollAnswerResult>;
+    try {
+      rawResults = await this.fetchPollResults(
+        plan.pollChannelId!,
+        plan.pollMessageId!,
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to fetch poll results for plan ${planId}:`,
+        error,
+      );
+      throw new ServiceUnavailableException(
+        'Could not fetch poll results from Discord. The bot may be offline.',
+      );
+    }
+
+    const pollOptions = plan.pollOptions as Array<{
+      date: string;
+      label: string;
+    }>;
+    const noneIndex = pollOptions.length;
+
+    // Collect all registered voter Discord IDs to look up usernames
+    const allRegisteredIds = new Set<string>();
+    for (const result of rawResults.values()) {
+      for (const id of result.registeredVoterIds) {
+        allRegisteredIds.add(id);
+      }
+    }
+
+    // Look up usernames for registered voters
+    const usernameMap = new Map<string, string>();
+    if (allRegisteredIds.size > 0) {
+      const users = await this.db
+        .select({
+          discordId: schema.users.discordId,
+          username: schema.users.username,
+          displayName: schema.users.displayName,
+        })
+        .from(schema.users)
+        .where(inArray(schema.users.discordId, Array.from(allRegisteredIds)));
+
+      for (const u of users) {
+        if (u.discordId) {
+          usernameMap.set(u.discordId, u.displayName ?? u.username);
+        }
+      }
+    }
+
+    // Build poll option results
+    const optionResults: PollOptionResult[] = [];
+    let noneOption: PollOptionResult | null = null;
+
+    for (const [idx, raw] of rawResults.entries()) {
+      const voters = raw.registeredVoterIds.map((discordId) => ({
+        discordId,
+        username: usernameMap.get(discordId) ?? null,
+        isRegistered: true,
+      }));
+
+      const optionResult: PollOptionResult = {
+        index: idx,
+        label:
+          idx < pollOptions.length
+            ? pollOptions[idx].label
+            : 'None of these work',
+        totalVotes: raw.totalVotes,
+        registeredVotes: raw.registeredVotes,
+        voters,
+      };
+
+      if (idx === noneIndex) {
+        noneOption = optionResult;
+      } else if (idx < pollOptions.length) {
+        optionResults.push(optionResult);
+      }
+    }
+
+    return {
+      planId: plan.id,
+      status: plan.status as PollResultsResponse['status'],
+      pollOptions: optionResults,
+      noneOption,
+      totalRegisteredVoters: allRegisteredIds.size,
+      pollEndsAt: plan.pollEndsAt?.toISOString() ?? null,
+    };
+  }
+
+  /**
+   * Restart a cancelled or expired plan by posting a fresh Discord poll.
+   */
+  async restart(planId: string, userId: number): Promise<EventPlanResponseDto> {
+    const [plan] = await this.db
+      .select()
+      .from(schema.eventPlans)
+      .where(eq(schema.eventPlans.id, planId))
+      .limit(1);
+
+    if (!plan) {
+      throw new NotFoundException(`Event plan ${planId} not found`);
+    }
+
+    if (plan.creatorId !== userId) {
+      throw new ForbiddenException('Only the plan creator can restart it');
+    }
+
+    if (plan.status !== 'cancelled' && plan.status !== 'expired') {
+      throw new BadRequestException(
+        `Can only restart plans with status "cancelled" or "expired", got "${plan.status}"`,
+      );
+    }
+
+    // Look up game name for the embed
+    let gameName: string | null = null;
+    if (plan.gameId) {
+      const [game] = await this.db
+        .select({ name: schema.games.name })
+        .from(schema.games)
+        .where(eq(schema.games.id, plan.gameId))
+        .limit(1);
+      gameName = game?.name ?? null;
+    }
+
+    const pollOptions = plan.pollOptions as Array<{
+      date: string;
+      label: string;
+    }>;
+    const newRound = (plan.pollRound ?? 1) + 1;
+
+    // Resolve channel (may have changed since original creation)
+    const channelId =
+      plan.pollChannelId ??
+      (await this.channelResolver.resolveChannelForEvent(plan.gameId));
+
+    if (!channelId) {
+      throw new BadRequestException(
+        'No Discord channel configured for this game.',
+      );
+    }
+
+    // Post a fresh Discord poll
+    let messageId: string;
+    try {
+      messageId = await this.postDiscordPoll(
+        channelId,
+        plan.id,
+        plan.title,
+        pollOptions,
+        plan.pollDurationHours,
+        newRound,
+        {
+          description: plan.description,
+          gameName,
+          durationMinutes: plan.durationMinutes,
+          slotConfig: plan.slotConfig as Record<string, unknown> | null,
+          pollMode: plan.pollMode,
+        },
+      );
+    } catch (error) {
+      this.logger.error(
+        `Failed to post Discord poll for restart of plan ${planId}:`,
+        error,
+      );
+      throw new BadRequestException(
+        'Failed to post Discord poll. The bot may not have Send Polls permission.',
+      );
+    }
+
+    const pollEndsAt = new Date(
+      Date.now() + plan.pollDurationHours * 3600 * 1000,
+    );
+
+    // Update plan record
+    const [updated] = await this.db
+      .update(schema.eventPlans)
+      .set({
+        status: 'polling',
+        pollChannelId: channelId,
+        pollMessageId: messageId,
+        pollRound: newRound,
+        pollStartedAt: new Date(),
+        pollEndsAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.eventPlans.id, planId))
+      .returning();
+
+    // Schedule new BullMQ delayed job
+    await this.queue.add(
+      'poll-closed',
+      { planId: plan.id } satisfies PollClosedJobData,
+      {
+        jobId: `plan-poll-close-${plan.id}`,
+        delay: plan.pollDurationHours * 3600 * 1000,
+        removeOnComplete: true,
+        removeOnFail: 50,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    );
+
+    this.logger.log(
+      `Event plan ${planId} restarted (round ${newRound}) by user ${userId}`,
+    );
+
+    return this.toResponseDto(updated);
+  }
+
+  /**
    * Process a poll close event. Called by the BullMQ processor.
    */
   async processPollClose(planId: string): Promise<void> {
@@ -492,7 +739,9 @@ export class EventPlansService {
     // Add link to plan on web UI
     const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
     if (clientUrl) {
-      descParts.push(`\n📎 [View on Raid Ledger](${clientUrl}/events?tab=plans)`);
+      descParts.push(
+        `\n📎 [View on Raid Ledger](${clientUrl}/events?tab=plans)`,
+      );
     }
 
     if (descParts.length > 0) {
