@@ -59,6 +59,8 @@ export const eventPlans = pgTable(
     createdEventId: integer('created_event_id').references(() => events.id, {
       onDelete: 'set null',
     }),
+    /** Content instances (e.g. selected dungeons/raids) for the auto-created event. */
+    contentInstances: jsonb('content_instances'),
     /** Reminder settings for the auto-created event. */
     reminder15min: boolean('reminder_15min').default(true).notNull(),
     reminder1hour: boolean('reminder_1hour').default(false).notNull(),

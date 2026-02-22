@@ -41,6 +41,18 @@ vi.mock('../../hooks/use-event-plans', () => ({
 
 vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: vi.fn(() => ({ games: [] })),
+    useEventTypes: vi.fn(() => ({ data: undefined })),
+}));
+
+// ─── Plugin mocks ────────────────────────────────────────────────────────────
+
+vi.mock('../../plugins', () => ({
+    PluginSlot: vi.fn(() => null),
+}));
+
+vi.mock('../../plugins/wow/utils', () => ({
+    getWowVariant: vi.fn(() => null),
+    getContentType: vi.fn(() => null),
 }));
 
 // ─── API client mock ──────────────────────────────────────────────────────────

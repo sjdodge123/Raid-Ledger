@@ -1,9 +1,11 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto, SlotConfigDto, CreateEventPlanDto, PollOption } from '@raid-ledger/contract';
 import { useTimeSuggestions, useCreateEventPlan } from '../../hooks/use-event-plans';
 import { GameSearchInput } from './game-search-input';
-import { useGameRegistry } from '../../hooks/use-game-registry';
+import { useGameRegistry, useEventTypes } from '../../hooks/use-game-registry';
+import { PluginSlot } from '../../plugins';
+import { getWowVariant, getContentType } from '../../plugins/wow/utils';
 import '../../pages/event-detail-page.css';
 
 // Duration presets in minutes (shared with create-event-form)
@@ -82,6 +84,7 @@ interface FormState {
     title: string;
     description: string;
     game: IgdbGameDto | null;
+    eventTypeId: number | null;
     durationMinutes: number;
     customDuration: boolean;
     slotType: 'mmo' | 'generic';
@@ -101,6 +104,9 @@ interface FormState {
     reminder15min: boolean;
     reminder1hour: boolean;
     reminder24hour: boolean;
+    selectedInstances: Record<string, unknown>[];
+    titleIsAutoSuggested: boolean;
+    descriptionIsAutoSuggested: boolean;
 }
 
 /**
@@ -115,6 +121,7 @@ export function PlanEventForm() {
         title: '',
         description: '',
         game: null,
+        eventTypeId: null,
         durationMinutes: 120,
         customDuration: false,
         slotType: 'generic',
@@ -134,18 +141,97 @@ export function PlanEventForm() {
         reminder15min: true,
         reminder1hour: false,
         reminder24hour: false,
+        selectedInstances: [],
+        titleIsAutoSuggested: false,
+        descriptionIsAutoSuggested: false,
     });
 
     const [errors, setErrors] = useState<Record<string, string>>({});
 
-    // Resolve registry game ID for time suggestions
-    const registryGameId = useMemo(() => {
-        if (!form.game?.name) return undefined;
-        const found = registryGames.find(
-            (g) => g.name.toLowerCase() === form.game!.name.toLowerCase() || g.slug === form.game!.slug,
+    // Resolve registry game for time suggestions and event types
+    const registryGame = useMemo(() => {
+        if (!form.game?.name && !form.game?.slug) return undefined;
+        return registryGames.find(
+            (g) => (form.game?.name && g.name.toLowerCase() === form.game.name.toLowerCase()) || g.slug === form.game?.slug,
         );
-        return found?.id;
     }, [form.game, registryGames]);
+    const registryGameId = registryGame?.id;
+    const registrySlug = registryGame?.slug;
+
+    // Event types for the selected game
+    const { data: eventTypesData } = useEventTypes(registryGameId);
+    const eventTypes = eventTypesData?.data ?? [];
+
+    // WoW content browsing (same pattern as create-event-form)
+    const wowVariant = registrySlug ? getWowVariant(registrySlug) : null;
+    const selectedEventType = eventTypes.find((t) => t.id === form.eventTypeId);
+    const contentType = selectedEventType?.slug ? getContentType(selectedEventType.slug) : null;
+
+    // Track previous auto-suggestions to detect manual edits
+    const prevSuggestionRef = useRef('');
+    const prevDescSuggestionRef = useRef('');
+
+    // Title auto-suggestion — uses shortNames for concise titles
+    const computeSuggestion = useCallback((): string => {
+        const etName = selectedEventType?.name;
+        const gName = form.game?.name;
+        const instances = form.selectedInstances;
+
+        if (instances.length > 0 && etName) {
+            const names = instances.map((i) => (i.shortName as string) || (i.name as string) || '');
+            const playerCap = selectedEventType?.defaultPlayerCap;
+            const suffix = playerCap ? ` ${playerCap} man` : '';
+            return `${names.join(' + ')}${suffix}`;
+        }
+        if (etName && gName) {
+            return `${etName} \u2014 ${gName}`;
+        }
+        if (gName) {
+            return `${gName} Event`;
+        }
+        return '';
+    }, [selectedEventType?.name, selectedEventType?.defaultPlayerCap, form.game?.name, form.selectedInstances]);
+
+    // Description auto-suggestion — overlapping level range across selected instances
+    const computeDescriptionSuggestion = useCallback((): string => {
+        const instances = form.selectedInstances;
+        if (instances.length === 0) return '';
+        const levels = instances
+            .map((i) => ({ min: i.minimumLevel as number | undefined, max: (i.maximumLevel ?? i.minimumLevel) as number | undefined }))
+            .filter((l): l is { min: number; max: number } => l.min != null);
+        if (levels.length === 0) return '';
+        const overlapMin = Math.max(...levels.map((l) => l.min));
+        const overlapMax = Math.min(...levels.map((l) => l.max));
+        if (overlapMin > overlapMax) {
+            const fullMin = Math.min(...levels.map((l) => l.min));
+            const fullMax = Math.max(...levels.map((l) => l.max));
+            return `Level ${fullMin}-${fullMax} suggested`;
+        }
+        if (overlapMin === overlapMax) return `Level ${overlapMin} suggested`;
+        return `Level ${overlapMin}-${overlapMax} suggested`;
+    }, [form.selectedInstances]);
+
+    // Auto-fill title and description when suggestions change
+    useEffect(() => {
+        const newSuggestion = computeSuggestion();
+        const newDescSuggestion = computeDescriptionSuggestion();
+
+        setForm((prev) => {
+            let next = prev;
+
+            if (newSuggestion && (prev.titleIsAutoSuggested || prev.title === '' || prev.title === prevSuggestionRef.current)) {
+                next = { ...next, title: newSuggestion, titleIsAutoSuggested: true };
+            }
+            prevSuggestionRef.current = newSuggestion;
+
+            if (newDescSuggestion && (prev.descriptionIsAutoSuggested || prev.description === '' || prev.description === prevDescSuggestionRef.current)) {
+                next = { ...next, description: newDescSuggestion, descriptionIsAutoSuggested: true };
+            }
+            prevDescSuggestionRef.current = newDescSuggestion;
+
+            return next === prev ? prev : next;
+        });
+    }, [computeSuggestion, computeDescriptionSuggestion]);
 
     // Fetch time suggestions
     const { data: suggestions, isLoading: suggestionsLoading } = useTimeSuggestions({
@@ -239,6 +325,7 @@ export function PlanEventForm() {
             pollOptions: form.selectedTimeSlots,
             pollDurationHours: form.pollDurationHours,
             pollMode: form.pollMode,
+            contentInstances: form.selectedInstances.length > 0 ? form.selectedInstances : undefined,
             reminder15min: form.reminder15min,
             reminder1hour: form.reminder1hour,
             reminder24hour: form.reminder24hour,
@@ -264,8 +351,60 @@ export function PlanEventForm() {
             <FormSection title="Game & Details">
                 <GameSearchInput
                     value={form.game}
-                    onChange={(game) => setForm((prev) => ({ ...prev, game }))}
+                    onChange={(game) => setForm((prev) => ({
+                        ...prev,
+                        game,
+                        eventTypeId: null,
+                        selectedInstances: [],
+                        titleIsAutoSuggested: prev.titleIsAutoSuggested,
+                    }))}
                 />
+
+                {/* Event Type Dropdown */}
+                {eventTypes.length > 0 && (
+                    <div>
+                        <label htmlFor="planEventType" className="block text-sm font-medium text-secondary mb-2">
+                            Event Type
+                        </label>
+                        <select
+                            id="planEventType"
+                            value={form.eventTypeId != null ? String(form.eventTypeId) : 'custom'}
+                            onChange={(e) => {
+                                if (e.target.value === 'custom') {
+                                    setForm((prev) => ({ ...prev, eventTypeId: null, selectedInstances: [] }));
+                                } else {
+                                    const id = parseInt(e.target.value, 10);
+                                    setForm((prev) => ({ ...prev, eventTypeId: id, selectedInstances: [] }));
+                                }
+                            }}
+                            className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
+                        >
+                            <option value="custom">Custom</option>
+                            {eventTypes.map((et) => (
+                                <option key={et.id} value={et.id}>
+                                    {et.name}
+                                    {et.defaultPlayerCap ? ` (${et.defaultPlayerCap}-player)` : ''}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="mt-1 text-xs text-dim">
+                            Select event type for content browsing
+                        </p>
+                    </div>
+                )}
+
+                {/* Content Selection — plugin-provided (same as create-event-form) */}
+                {wowVariant && contentType && (
+                    <PluginSlot
+                        name="event-create:content-browser"
+                        context={{
+                            wowVariant,
+                            contentType,
+                            selectedInstances: form.selectedInstances,
+                            onInstancesChange: (instances: Record<string, unknown>[]) => setForm(prev => ({...prev, selectedInstances: instances})),
+                        }}
+                    />
+                )}
 
                 <div>
                     <label htmlFor="planTitle" className="block text-sm font-medium text-secondary mb-2">
@@ -275,11 +414,22 @@ export function PlanEventForm() {
                         id="planTitle"
                         type="text"
                         value={form.title}
-                        onChange={(e) => updateField('title', e.target.value)}
-                        placeholder="Weekly Raid Night"
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setForm((prev) => ({
+                                ...prev,
+                                title: val,
+                                titleIsAutoSuggested: false,
+                            }));
+                            if (errors.title) setErrors((prev) => ({ ...prev, title: '' }));
+                        }}
+                        placeholder={computeSuggestion() || 'Weekly Raid Night'}
                         maxLength={200}
                         className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.title ? 'border-red-500' : 'border-edge'}`}
                     />
+                    {form.titleIsAutoSuggested && (
+                        <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>
+                    )}
                     {errors.title && <p className="mt-1 text-sm text-red-400">{errors.title}</p>}
                 </div>
 
@@ -290,12 +440,17 @@ export function PlanEventForm() {
                     <textarea
                         id="planDescription"
                         value={form.description}
-                        onChange={(e) => updateField('description', e.target.value)}
-                        placeholder="Details about this event..."
+                        onChange={(e) => {
+                            setForm((prev) => ({ ...prev, description: e.target.value, descriptionIsAutoSuggested: false }));
+                        }}
+                        placeholder={computeDescriptionSuggestion() || 'Details about this event...'}
                         maxLength={2000}
                         rows={2}
                         className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors resize-none"
                     />
+                    {form.descriptionIsAutoSuggested && (
+                        <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>
+                    )}
                 </div>
             </FormSection>
 

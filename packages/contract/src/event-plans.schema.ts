@@ -57,6 +57,8 @@ export const CreateEventPlanSchema = z.object({
     .max(9, 'Maximum 9 time options (10 total with "None of these work")'),
   pollDurationHours: z.number().int().min(1).max(72),
   pollMode: PollModeSchema.default('standard'),
+  /** Content instances for the auto-created event (e.g. selected dungeons/raids) */
+  contentInstances: z.array(z.record(z.string(), z.unknown())).optional(),
   /** Reminders for the auto-created event */
   reminder15min: z.boolean().optional(),
   reminder1hour: z.boolean().optional(),

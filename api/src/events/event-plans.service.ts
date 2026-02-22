@@ -29,6 +29,13 @@ export interface PollClosedJobData {
   planId: string;
 }
 
+/** Enriched poll result per answer option with registered-user filtering. */
+export interface PollAnswerResult {
+  totalVotes: number;
+  registeredVotes: number;
+  registeredVoterIds: string[];
+}
+
 @Injectable()
 export class EventPlansService {
   private readonly logger = new Logger(EventPlansService.name);
@@ -78,6 +85,7 @@ export class EventPlansService {
         pollMode: dto.pollMode ?? 'standard',
         pollChannelId: channelId,
         status: 'polling',
+        contentInstances: dto.contentInstances ?? null,
         reminder15min: dto.reminder15min ?? true,
         reminder1hour: dto.reminder1hour ?? false,
         reminder24hour: dto.reminder24hour ?? false,
@@ -248,8 +256,8 @@ export class EventPlansService {
       return;
     }
 
-    // Fetch poll results from Discord
-    let results: Map<number, number>;
+    // Fetch poll results from Discord (with registered-user filtering)
+    let results: Map<number, PollAnswerResult>;
     try {
       results = await this.fetchPollResults(
         plan.pollChannelId!,
@@ -272,18 +280,41 @@ export class EventPlansService {
       label: string;
     }>;
     const noneIndex = pollOptions.length; // "None of these work" is always last
-    const noneVotes = results.get(noneIndex) ?? 0;
+    const noneResult = results.get(noneIndex);
+    const noneVotes = noneResult?.registeredVotes ?? 0;
 
     if (plan.pollMode === 'all_or_nothing' && noneVotes > 0) {
-      // Re-poll: shift suggestions forward
-      await this.handleRepoll(plan);
-      return;
+      // Compute total roster size from slotConfig
+      const totalRosterSlots = this.computeTotalRosterSlots(plan.slotConfig);
+
+      // Check if any timeslot has enough registered votes to fill the roster
+      let thresholdMet = false;
+      if (totalRosterSlots > 0) {
+        for (const [idx, result] of results.entries()) {
+          if (idx === noneIndex) continue;
+          if (idx >= pollOptions.length) continue;
+          if (result.registeredVotes >= totalRosterSlots) {
+            thresholdMet = true;
+            break;
+          }
+        }
+      }
+
+      if (!thresholdMet) {
+        // No timeslot meets roster threshold — re-poll
+        await this.handleRepoll(plan);
+        return;
+      }
+      // Threshold met — fall through to winner determination
     }
 
     if (plan.pollMode === 'standard') {
-      // Check if "None" has the most votes
-      const maxVotes = Math.max(...results.values(), 0);
-      if (noneVotes > 0 && noneVotes >= maxVotes) {
+      // Check if "None" has the most registered votes
+      const maxRegisteredVotes = Math.max(
+        ...Array.from(results.values()).map((r) => r.registeredVotes),
+        0,
+      );
+      if (noneVotes > 0 && noneVotes >= maxRegisteredVotes) {
         // "None" wins — no event
         await this.db
           .update(schema.eventPlans)
@@ -298,7 +329,7 @@ export class EventPlansService {
       }
     }
 
-    // Find the winner (highest votes, earliest date breaks ties)
+    // Find the winner (highest registered votes, earliest date breaks ties)
     const winnerIndex = this.determineWinner(results, pollOptions, noneIndex);
 
     if (winnerIndex === null) {
@@ -439,12 +470,13 @@ export class EventPlansService {
 
   /**
    * Fetch poll results from a Discord message.
-   * Returns a Map of answer index -> vote count.
+   * Fetches individual voters and cross-references with registered Raid Ledger users.
+   * Returns a Map of answer index -> enriched result with registered vs total counts.
    */
   private async fetchPollResults(
     channelId: string,
     messageId: string,
-  ): Promise<Map<number, number>> {
+  ): Promise<Map<number, PollAnswerResult>> {
     const client = this.discordClient.getClient();
     if (!client?.isReady()) {
       throw new Error('Discord bot is not connected');
@@ -458,13 +490,47 @@ export class EventPlansService {
     const textChannel = channel as import('discord.js').TextChannel;
     const message = await textChannel.messages.fetch(messageId);
 
-    const results = new Map<number, number>();
+    const results = new Map<number, PollAnswerResult>();
 
     if (message.poll?.answers) {
+      // Collect all voter Discord IDs across all answers
+      const allVoterIds = new Set<string>();
+      const answerVoters = new Map<number, string[]>();
+
       let idx = 0;
       for (const [, answer] of message.poll.answers) {
-        results.set(idx, answer.voteCount);
+        const voters = await answer.voters.fetch();
+        const voterIds = voters.map((user) => user.id);
+        answerVoters.set(idx, voterIds);
+        for (const id of voterIds) {
+          allVoterIds.add(id);
+        }
         idx++;
+      }
+
+      // Batch query: find all registered users matching any voter Discord ID
+      const allVoterIdArray = Array.from(allVoterIds);
+      const registeredUserSet = new Set<string>();
+      if (allVoterIdArray.length > 0) {
+        const registeredUsers = await this.db
+          .select({ discordId: schema.users.discordId })
+          .from(schema.users)
+          .where(inArray(schema.users.discordId, allVoterIdArray));
+        for (const u of registeredUsers) {
+          if (u.discordId) registeredUserSet.add(u.discordId);
+        }
+      }
+
+      // Build results with registered filtering
+      for (const [answerIdx, voterIds] of answerVoters.entries()) {
+        const registeredVoterIds = voterIds.filter((id) =>
+          registeredUserSet.has(id),
+        );
+        results.set(answerIdx, {
+          totalVotes: voterIds.length,
+          registeredVotes: registeredVoterIds.length,
+          registeredVoterIds,
+        });
       }
     }
 
@@ -473,10 +539,10 @@ export class EventPlansService {
 
   /**
    * Determine the winning option index.
-   * Highest votes wins; earliest date breaks ties.
+   * Uses registered vote counts. Highest votes wins; earliest date breaks ties.
    */
   private determineWinner(
-    results: Map<number, number>,
+    results: Map<number, PollAnswerResult>,
     options: Array<{ date: string; label: string }>,
     noneIndex: number,
   ): number | null {
@@ -484,9 +550,10 @@ export class EventPlansService {
     let bestVotes = 0;
     let bestDate = Infinity;
 
-    for (const [idx, votes] of results.entries()) {
+    for (const [idx, result] of results.entries()) {
       if (idx === noneIndex) continue; // skip "None"
       if (idx >= options.length) continue;
+      const votes = result.registeredVotes;
       const optionDate = new Date(options[idx].date).getTime();
 
       if (votes > bestVotes || (votes === bestVotes && optionDate < bestDate)) {
@@ -497,6 +564,31 @@ export class EventPlansService {
     }
 
     return bestIndex;
+  }
+
+  /**
+   * Compute total roster slots from slotConfig JSON.
+   * Sum of all role slots + bench.
+   */
+  private computeTotalRosterSlots(
+    slotConfig: unknown,
+  ): number {
+    if (!slotConfig || typeof slotConfig !== 'object') return 0;
+    const config = slotConfig as Record<string, unknown>;
+    const type = config.type;
+    if (type === 'mmo') {
+      return (
+        (Number(config.tank) || 0) +
+        (Number(config.healer) || 0) +
+        (Number(config.dps) || 0) +
+        (Number(config.flex) || 0) +
+        (Number(config.bench) || 0)
+      );
+    }
+    if (type === 'generic') {
+      return (Number(config.player) || 0) + (Number(config.bench) || 0);
+    }
+    return 0;
   }
 
   /**
@@ -647,6 +739,9 @@ export class EventPlansService {
           | undefined,
         maxAttendees: plan.maxAttendees ?? undefined,
         autoUnbench: plan.autoUnbench,
+        contentInstances: plan.contentInstances
+          ? (plan.contentInstances as Record<string, unknown>[])
+          : undefined,
         reminder15min: plan.reminder15min,
         reminder1hour: plan.reminder1hour,
         reminder24hour: plan.reminder24hour,

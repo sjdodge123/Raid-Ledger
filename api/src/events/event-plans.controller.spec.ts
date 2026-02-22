@@ -84,7 +84,11 @@ describe('EventPlansController', () => {
     it('should call service with parsed gameId and tzOffset', async () => {
       await controller.getTimeSuggestions('5', '-300', '2026-03-01T00:00:00Z');
 
-      expect(service.getTimeSuggestions).toHaveBeenCalledWith(5, -300, '2026-03-01T00:00:00Z');
+      expect(service.getTimeSuggestions).toHaveBeenCalledWith(
+        5,
+        -300,
+        '2026-03-01T00:00:00Z',
+      );
     });
 
     it('should pass undefined when query params are absent', async () => {
@@ -132,7 +136,10 @@ describe('EventPlansController', () => {
       );
 
       expect(result).toEqual(mockPlan);
-      expect(service.create).toHaveBeenCalledWith(CREATOR_ID, expect.any(Object));
+      expect(service.create).toHaveBeenCalledWith(
+        CREATOR_ID,
+        expect.any(Object),
+      );
     });
 
     it('should pass the user id from the request', async () => {
@@ -154,9 +161,7 @@ describe('EventPlansController', () => {
     it('should throw BadRequestException when fewer than 2 pollOptions', async () => {
       const invalidBody = {
         ...validBody,
-        pollOptions: [
-          { date: '2026-03-10T18:00:00.000Z', label: 'Only one' },
-        ],
+        pollOptions: [{ date: '2026-03-10T18:00:00.000Z', label: 'Only one' }],
       };
 
       await expect(

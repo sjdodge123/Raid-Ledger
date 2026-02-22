@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "event_plans" (
 	"status" text DEFAULT 'draft' NOT NULL,
 	"winning_option" smallint,
 	"created_event_id" integer,
+	"content_instances" jsonb,
 	"reminder_15min" boolean DEFAULT true NOT NULL,
 	"reminder_1hour" boolean DEFAULT false NOT NULL,
 	"reminder_24hour" boolean DEFAULT false NOT NULL,
