@@ -324,7 +324,7 @@ export class RelayService {
           .select({ count: sql<number>`count(*)::int` })
           .from(schema.events),
         this.db
-          .select({ count: sql<number>`count(distinct registry_game_id)::int` })
+          .select({ count: sql<number>`count(distinct game_id)::int` })
           .from(schema.events),
       ]);
 
