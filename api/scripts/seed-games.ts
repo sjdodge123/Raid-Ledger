@@ -15,6 +15,7 @@ dotenv.config();
  */
 const GAMES_SEED = [
     {
+        igdbId: 123,
         slug: 'world-of-warcraft',
         name: 'World of Warcraft',
         shortName: 'WoW',
@@ -62,6 +63,7 @@ const GAMES_SEED = [
         ],
     },
     {
+        igdbId: 136210,
         slug: 'world-of-warcraft-classic',
         name: 'World of Warcraft Classic',
         shortName: 'WoW Classic',
@@ -102,6 +104,7 @@ const GAMES_SEED = [
         ],
     },
     {
+        igdbId: 104967,
         slug: 'valheim',
         name: 'Valheim',
         shortName: null,
@@ -135,6 +138,7 @@ const GAMES_SEED = [
         ],
     },
     {
+        igdbId: 14729,
         slug: 'final-fantasy-xiv-online',
         name: 'Final Fantasy XIV Online',
         shortName: 'FFXIV',
@@ -224,10 +228,11 @@ async function bootstrap() {
                     .where(eq(schema.games.slug, game.slug))
                     .limit(1);
                 gameId = existing.id;
-                // Update config columns if they changed
+                // Update config columns + igdbId if they changed
                 await db
                     .update(schema.games)
                     .set({
+                        ...(game.igdbId ? { igdbId: game.igdbId } : {}),
                         shortName: game.shortName,
                         colorHex: game.colorHex,
                         hasRoles: game.hasRoles,
