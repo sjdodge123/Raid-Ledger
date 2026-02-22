@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, or, isNull, sql } from 'drizzle-orm';
+import { eq, and, or, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   EmbedBuilder,
@@ -463,7 +463,7 @@ export class PugInviteService {
       .setTimestamp();
 
     // Add voice channel link if available (resolve voice monitor binding)
-    const gameId = await this.resolveIntegerGameId(event);
+    const gameId = this.resolveIntegerGameId(event);
     const channelId =
       await this.channelResolver.resolveVoiceChannelForEvent(gameId);
     if (channelId) {
@@ -667,21 +667,12 @@ export class PugInviteService {
   }
 
   /**
-   * Resolve the integer games.id from a raw event DB row.
-   * Events store the IGDB ID as text in the legacy `gameId` field;
-   * channel bindings reference the integer `games.id` PK.
+   * ROK-400: events.gameId is now a direct integer FK to games.id.
+   * No lookup needed — just return the value directly.
    */
-  private async resolveIntegerGameId(
+  private resolveIntegerGameId(
     event: typeof schema.events.$inferSelect,
-  ): Promise<number | null> {
-    if (!event.gameId) return null;
-
-    const [game] = await this.db
-      .select({ id: schema.games.id })
-      .from(schema.games)
-      .where(eq(sql`${schema.games.igdbId}::text`, event.gameId))
-      .limit(1);
-
-    return game?.id ?? null;
+  ): number | null {
+    return event.gameId ?? null;
   }
 }
