@@ -225,10 +225,14 @@ export class EventLinkListener {
   }
 
   private async buildContext(): Promise<EmbedContext> {
-    const branding = await this.settingsService.getBranding();
+    const [branding, timezone] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getDefaultTimezone(),
+    ]);
     return {
       communityName: branding.communityName,
       clientUrl: process.env.CLIENT_URL ?? null,
+      timezone,
     };
   }
 }

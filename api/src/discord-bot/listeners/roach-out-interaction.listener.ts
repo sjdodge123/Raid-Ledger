@@ -394,10 +394,14 @@ export class RoachOutInteractionListener {
 
       if (records.length === 0) return;
 
-      const branding = await this.settingsService.getBranding();
+      const [branding, timezone] = await Promise.all([
+        this.settingsService.getBranding(),
+        this.settingsService.getDefaultTimezone(),
+      ]);
       const context: EmbedContext = {
         communityName: branding.communityName,
         clientUrl: process.env.CLIENT_URL ?? null,
+        timezone,
       };
 
       for (const record of records) {

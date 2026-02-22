@@ -46,6 +46,8 @@ export interface EmbedEventData {
 export interface EmbedContext {
   communityName?: string | null;
   clientUrl?: string | null;
+  /** IANA timezone for formatting event times (e.g., 'America/New_York'). Falls back to UTC. */
+  timezone?: string | null;
 }
 
 /** Controls what action row buttons are attached to the embed. */
@@ -143,14 +145,17 @@ export class DiscordEmbedFactory {
     inviterUsername: string,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     const startDate = new Date(event.startTime);
+    const tz = context.timezone || undefined;
     const dateStr = startDate.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      timeZone: tz,
     });
     const timeStr = startDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: tz,
       timeZoneName: 'short',
     });
 
@@ -263,14 +268,17 @@ export class DiscordEmbedFactory {
           : `${durationHours}h`
         : `${durationMinutes}m`;
 
+    const tz = context.timezone || undefined;
     const dateStr = startDate.toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      timeZone: tz,
     });
     const timeStr = startDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
+      timeZone: tz,
       timeZoneName: 'short',
     });
 

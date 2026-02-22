@@ -523,4 +523,65 @@ describe('DiscordEmbedFactory', () => {
       process.env.CLIENT_URL = origEnv;
     });
   });
+
+  describe('timezone support (ROK-431)', () => {
+    it('should format event time in the configured timezone', () => {
+      // Event starts at 2026-02-20T20:00:00.000Z
+      // In America/New_York (EST, UTC-5), that is 3:00 PM
+      const estContext: EmbedContext = {
+        ...baseContext,
+        timezone: 'America/New_York',
+      };
+
+      const { embed } = factory.buildEventEmbed(baseEvent, estContext);
+      const desc = embed.toJSON().description!;
+
+      expect(desc).toContain('3:00 PM');
+      expect(desc).toContain('EST');
+    });
+
+    it('should format event time in Pacific timezone', () => {
+      // In America/Los_Angeles (PST, UTC-8), 20:00 UTC is 12:00 PM
+      const pstContext: EmbedContext = {
+        ...baseContext,
+        timezone: 'America/Los_Angeles',
+      };
+
+      const { embed } = factory.buildEventEmbed(baseEvent, pstContext);
+      const desc = embed.toJSON().description!;
+
+      expect(desc).toContain('12:00 PM');
+      expect(desc).toContain('PST');
+    });
+
+    it('should fall back to system default when no timezone is set', () => {
+      const noTzContext: EmbedContext = {
+        ...baseContext,
+        timezone: null,
+      };
+
+      const { embed } = factory.buildEventEmbed(baseEvent, noTzContext);
+      const desc = embed.toJSON().description!;
+
+      // When no timezone is configured, falls back to system default (not a crash)
+      expect(desc).toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/);
+    });
+
+    it('should apply timezone to invite embeds', () => {
+      const estContext: EmbedContext = {
+        ...baseContext,
+        timezone: 'America/New_York',
+      };
+
+      const { embed } = factory.buildEventInvite(
+        baseEvent,
+        estContext,
+        'inviter',
+      );
+      const desc = embed.toJSON().description!;
+
+      expect(desc).toContain('3:00 PM');
+      expect(desc).toContain('EST');
+    });
+  });
 });
