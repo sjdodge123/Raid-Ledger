@@ -393,6 +393,13 @@
       "when": 1771700100000,
       "tag": "0055_fix_game_slug_mapping",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1771800000000,
+      "tag": "0056_post_event_reminders_sent",
+      "breakpoints": true
     }
   ]
 }

@@ -124,6 +124,17 @@ vi.mock('../hooks/use-system-status', () => ({
     })),
 }));
 
+vi.mock('../hooks/use-discord-onboarding', () => ({
+    useGuildMembership: vi.fn(() => ({
+        data: { isMember: false },
+        isLoading: false,
+    })),
+    useServerInvite: vi.fn(() => ({
+        data: { url: null, guildName: null },
+        isLoading: false,
+    })),
+}));
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 
@@ -174,6 +185,24 @@ describe('OnboardingWizardPage', () => {
         renderWithRouter(<OnboardingWizardPage />);
 
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
+    });
+
+    it('allows admin to access wizard with ?rerun=1', () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: '123',
+                onboardingCompletedAt: '2026-02-01T00:00:00Z',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?rerun=1']);
+
+        expect(screen.queryByText('Calendar Page')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
     });
 
     it('redirects users who already completed onboarding', () => {
@@ -246,6 +275,7 @@ describe('OnboardingWizardPage', () => {
         renderWithRouter(<OnboardingWizardPage />);
 
         // Connect + Games + GameTime + Personalize = 4 steps
+        // Discord join step is NOT shown when user hasn't linked Discord yet (ROK-403)
         expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
