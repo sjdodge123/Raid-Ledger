@@ -1,7 +1,7 @@
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { MobilePageToolbar } from '../layout/mobile-page-toolbar';
 
-export type EventsTab = 'upcoming' | 'past' | 'mine';
+export type EventsTab = 'upcoming' | 'past' | 'mine' | 'plans';
 
 interface EventsMobileToolbarProps {
     activeTab: EventsTab;
@@ -14,6 +14,7 @@ const TABS: { key: EventsTab; label: string }[] = [
     { key: 'upcoming', label: 'Upcoming' },
     { key: 'past', label: 'Past' },
     { key: 'mine', label: 'My Events' },
+    { key: 'plans', label: 'Plans' },
 ];
 
 /**
