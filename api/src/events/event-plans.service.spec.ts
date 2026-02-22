@@ -26,7 +26,13 @@ const baseOptions = [
 ];
 
 // Registered Discord user IDs for testing
-const REGISTERED_USER_IDS = ['discord-user-1', 'discord-user-2', 'discord-user-3', 'discord-user-4', 'discord-user-5'];
+const REGISTERED_USER_IDS = [
+  'discord-user-1',
+  'discord-user-2',
+  'discord-user-3',
+  'discord-user-4',
+  'discord-user-5',
+];
 const UNREGISTERED_USER_IDS = ['unregistered-1', 'unregistered-2'];
 
 function makePlan(overrides: Record<string, unknown> = {}) {
@@ -171,8 +177,7 @@ function setupRegisteredUsersResponse(
     // When this is used as a thenable/awaited directly, return registered users
     const chainWithPromise = {
       ...db._chain,
-      then: (resolve: (value: unknown) => void) =>
-        resolve(registeredResponse),
+      then: (resolve: (value: unknown) => void) => resolve(registeredResponse),
     };
     return chainWithPromise;
   });
@@ -304,8 +309,9 @@ describe('EventPlansService', () => {
     it('should include "None of these work" in poll answers', async () => {
       await service.create(CREATOR_ID, validDto);
 
+      // calls[0] is the embed message; calls[1] is the poll message
       const sendCall = (
-        discordClient._mockTextChannel.send.mock.calls[0] as unknown[]
+        discordClient._mockTextChannel.send.mock.calls[1] as unknown[]
       )[0] as {
         poll: { answers: Array<{ text: string }> };
       };
@@ -320,8 +326,9 @@ describe('EventPlansService', () => {
       // The round 1 create call should have no content prefix
       await service.create(CREATOR_ID, validDto);
 
+      // calls[0] is the embed message; calls[1] is the poll message
       const sendCall = (
-        discordClient._mockTextChannel.send.mock.calls[0] as unknown[]
+        discordClient._mockTextChannel.send.mock.calls[1] as unknown[]
       )[0] as {
         content?: string;
       };
@@ -512,7 +519,13 @@ describe('EventPlansService', () => {
         discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
           poll: {
             answers: new Map([
-              [0, makePollAnswer([REGISTERED_USER_IDS[0], ...UNREGISTERED_USER_IDS])],
+              [
+                0,
+                makePollAnswer([
+                  REGISTERED_USER_IDS[0],
+                  ...UNREGISTERED_USER_IDS,
+                ]),
+              ],
               [1, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
               [2, makePollAnswer([])],
               [3, makePollAnswer([])], // None
@@ -542,7 +555,13 @@ describe('EventPlansService', () => {
               [0, makePollAnswer(REGISTERED_USER_IDS.slice(0, 2))],
               [1, makePollAnswer([])],
               [2, makePollAnswer([])],
-              [3, makePollAnswer([REGISTERED_USER_IDS[3], ...UNREGISTERED_USER_IDS])], // None: 1 reg + 2 unreg
+              [
+                3,
+                makePollAnswer([
+                  REGISTERED_USER_IDS[3],
+                  ...UNREGISTERED_USER_IDS,
+                ]),
+              ], // None: 1 reg + 2 unreg
             ]),
           },
         });
@@ -641,7 +660,14 @@ describe('EventPlansService', () => {
 
     describe('all_or_nothing mode', () => {
       // Plan with roster slots: 1 tank + 1 healer + 3 DPS = 5 total
-      const slotConfig = { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0, bench: 0 };
+      const slotConfig = {
+        type: 'mmo',
+        tank: 1,
+        healer: 1,
+        dps: 3,
+        flex: 0,
+        bench: 0,
+      };
       const allOrNothingPlan = makePlan({
         pollMode: 'all_or_nothing',
         slotConfig,
