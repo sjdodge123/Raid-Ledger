@@ -173,6 +173,7 @@ export class DemoDataService {
         generatedEvents,
         [...generatedUsernames, 'SeedAdmin'],
         generatedChars,
+        allGames,
       );
       const generatedGameTime = generateGameTime(
         rng,

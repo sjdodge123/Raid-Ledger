@@ -80,12 +80,7 @@ export class InviteService {
     }
 
     // ROK-400: Resolve game info directly from unified games table
-    const BLIZZARD_SLUGS = [
-      'wow',
-      'world-of-warcraft',
-      'wow-classic',
-      'wow-classic-era',
-    ];
+    const BLIZZARD_SLUGS = ['world-of-warcraft', 'world-of-warcraft-classic'];
     let game: {
       name: string;
       coverUrl?: string | null;
@@ -109,9 +104,7 @@ export class InviteService {
         .limit(1);
 
       if (gameRow) {
-        const isBlizzardGame = BLIZZARD_SLUGS.some(
-          (s) => gameRow.slug === s || gameRow.slug.startsWith('wow'),
-        );
+        const isBlizzardGame = BLIZZARD_SLUGS.some((s) => gameRow.slug === s);
 
         // Look up inviter's character for realm/gameVariant hints
         let inviterRealm: string | null = null;

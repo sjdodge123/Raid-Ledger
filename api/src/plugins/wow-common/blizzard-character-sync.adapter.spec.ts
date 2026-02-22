@@ -32,44 +32,36 @@ describe('BlizzardCharacterSyncAdapter', () => {
   describe('gameSlugs', () => {
     it('should include all WoW game slugs', () => {
       expect(adapter.gameSlugs).toEqual([
-        'wow',
         'world-of-warcraft',
-        'wow-classic',
-        'wow-classic-era',
+        'world-of-warcraft-classic',
       ]);
     });
   });
 
   describe('resolveGameSlugs()', () => {
     it('should return retail slugs for retail variant', () => {
-      expect(adapter.resolveGameSlugs('retail')).toEqual([
-        'wow',
-        'world-of-warcraft',
-      ]);
+      expect(adapter.resolveGameSlugs('retail')).toEqual(['world-of-warcraft']);
     });
 
     it('should return retail slugs when no variant specified', () => {
-      expect(adapter.resolveGameSlugs()).toEqual(['wow', 'world-of-warcraft']);
+      expect(adapter.resolveGameSlugs()).toEqual(['world-of-warcraft']);
     });
 
     it('should return classic slugs for classic_era variant', () => {
       expect(adapter.resolveGameSlugs('classic_era')).toEqual([
-        'wow-classic',
-        'wow-classic-era',
+        'world-of-warcraft-classic',
       ]);
     });
 
     it('should return classic slugs for classic variant', () => {
       expect(adapter.resolveGameSlugs('classic')).toEqual([
-        'wow-classic',
-        'wow-classic-era',
+        'world-of-warcraft-classic',
       ]);
     });
 
     it('should return classic slugs for classic_anniversary variant', () => {
       expect(adapter.resolveGameSlugs('classic_anniversary')).toEqual([
-        'wow-classic',
-        'wow-classic-era',
+        'world-of-warcraft-classic',
       ]);
     });
 

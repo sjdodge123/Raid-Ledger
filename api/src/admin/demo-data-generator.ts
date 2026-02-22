@@ -360,15 +360,12 @@ export const IGDB_GAME_WEIGHTS: IgdbGameWeight[] = [
   { igdbId: '132516', name: 'Phasmophobia', weight: 1 },
 ];
 
-// ─── IGDB → Game Slug Mapping ───────────────────────────────────────────────
+// ─── Character Game Slug Constants ──────────────────────────────────────────
 
-/** Maps IGDB game IDs to games table slugs (single source of truth) */
-export const IGDB_TO_GAME_SLUG: Record<string, string> = {
-  '123': 'wow',
-  '136210': 'wow-classic',
-  '14729': 'ffxiv',
-  '104967': 'valheim',
-};
+/** IGDB slugs for games that have character generation (must match games table) */
+const WOW_SLUG = 'world-of-warcraft';
+const WOW_CLASSIC_SLUG = 'world-of-warcraft-classic';
+const FFXIV_SLUG = 'final-fantasy-xiv-online';
 
 // ─── Event Title Templates ───────────────────────────────────────────────────
 
@@ -657,7 +654,7 @@ export function generateUsernames(
 
 export function generateEvents(
   rng: Rng,
-  games: { id: number; slug: string }[],
+  games: { id: number; igdbId: number | null }[],
   baseTime: Date,
   playerCounts?: Map<string, number>,
 ): GeneratedEvent[] {
@@ -665,8 +662,10 @@ export function generateEvents(
   const gameIds = IGDB_GAME_WEIGHTS.map((g) => g.igdbId);
   const weights = IGDB_GAME_WEIGHTS.map((g) => g.weight);
 
-  // Game slug → id mapping
-  const gameBySlug = new Map(games.map((g) => [g.slug, g.id]));
+  // IGDB ID → games.id mapping (direct, no slug indirection)
+  const gameByIgdbId = new Map(
+    games.filter((g) => g.igdbId != null).map((g) => [String(g.igdbId), g.id]),
+  );
 
   const targetEvents = 70;
 
@@ -674,8 +673,7 @@ export function generateEvents(
   for (const gw of IGDB_GAME_WEIGHTS) {
     const templates = getTemplatesForGame(gw.igdbId);
     const tmpl = pick(rng, templates);
-    const slug = IGDB_TO_GAME_SLUG[gw.igdbId];
-    const gameId = slug ? (gameBySlug.get(slug) ?? null) : null;
+    const gameId = gameByIgdbId.get(gw.igdbId) ?? null;
 
     const daysOffset = randInt(rng, -30, 60);
     const hour = randInt(rng, 17, 22);
@@ -702,8 +700,7 @@ export function generateEvents(
     const gw = IGDB_GAME_WEIGHTS.find((g) => g.igdbId === igdbId)!;
     const templates = getTemplatesForGame(igdbId);
     const tmpl = pick(rng, templates);
-    const slug = IGDB_TO_GAME_SLUG[igdbId];
-    const gameId = slug ? (gameBySlug.get(slug) ?? null) : null;
+    const gameId = gameByIgdbId.get(igdbId) ?? null;
 
     const daysOffset = randInt(rng, -30, 60);
     const hour = randInt(rng, 17, 22);
@@ -753,7 +750,7 @@ export function generateCharacters(
       const spec = pick(rng, classDef.specs);
       characters.push({
         username,
-        gameSlug: 'wow',
+        gameSlug: WOW_SLUG,
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['alt', 'wow', 'main', '']),
         ),
@@ -770,7 +767,7 @@ export function generateCharacters(
         const altSpec = pick(rng, altClass.specs);
         characters.push({
           username,
-          gameSlug: 'wow',
+          gameSlug: WOW_SLUG,
           charName: uniqueCharName(username.slice(0, 6) + 'Alt'),
           class: altClass.class,
           spec: altSpec.name,
@@ -785,7 +782,7 @@ export function generateCharacters(
       const job = pick(rng, FFXIV_JOBS);
       characters.push({
         username,
-        gameSlug: 'ffxiv',
+        gameSlug: FFXIV_SLUG,
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['xiv', 'ff', '', 'char']),
         ),
@@ -801,7 +798,7 @@ export function generateCharacters(
         const altJob = pick(rng, FFXIV_JOBS);
         characters.push({
           username,
-          gameSlug: 'ffxiv',
+          gameSlug: FFXIV_SLUG,
           charName: uniqueCharName(username.slice(0, 6) + 'Alt'),
           class: altJob.class,
           spec: null,
@@ -817,7 +814,7 @@ export function generateCharacters(
       const spec = pick(rng, classDef.specs);
       characters.push({
         username,
-        gameSlug: 'wow-classic',
+        gameSlug: WOW_CLASSIC_SLUG,
         charName: uniqueCharName(
           username.slice(0, 8) + pick(rng, ['classic', 'era', '', 'old']),
         ),
@@ -839,12 +836,20 @@ export function generateSignups(
   events: GeneratedEvent[],
   allUsernames: string[],
   characters: GeneratedCharacter[],
+  games: { igdbId: number | null; slug: string }[],
 ): GeneratedSignup[] {
   const signups: GeneratedSignup[] = [];
 
   // Build character lookup: username+gameSlug → exists
   const charLookup = new Set(
     characters.map((c) => `${c.username}:${c.gameSlug}`),
+  );
+
+  // IGDB ID → slug mapping for character lookup
+  const slugByIgdbId = new Map(
+    games
+      .filter((g) => g.igdbId != null)
+      .map((g) => [String(g.igdbId), g.slug]),
   );
 
   for (let i = 0; i < events.length; i++) {
@@ -856,7 +861,7 @@ export function generateSignups(
     const numSignups = Math.min(baseSignups, maxAllowed, allUsernames.length);
 
     const selected = pickN(rng, allUsernames, numSignups);
-    const gameSlug = IGDB_TO_GAME_SLUG[event.igdbId];
+    const gameSlug = slugByIgdbId.get(event.igdbId);
 
     for (const username of selected) {
       const hasChar = gameSlug

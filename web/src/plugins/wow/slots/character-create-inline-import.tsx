@@ -8,10 +8,10 @@ interface CharacterCreateInlineImportProps {
     gameSlug?: string;
 }
 
-const WOW_SLUGS = new Set(['wow', 'wow-classic', 'world-of-warcraft', 'world-of-warcraft-classic']);
+const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
 
 function isWowSlug(slug: string): boolean {
-    return WOW_SLUGS.has(slug) || slug.includes('world-of-warcraft');
+    return WOW_SLUGS.has(slug);
 }
 
 /**
@@ -27,7 +27,7 @@ export function CharacterCreateInlineImport({
 
     if (!gameSlug || !isWowSlug(gameSlug)) return null;
 
-    const gameVariant = gameSlug === 'wow-classic' || gameSlug.includes('world-of-warcraft-classic')
+    const gameVariant = gameSlug === 'world-of-warcraft-classic'
         ? 'classic_era' : 'retail';
 
     return (

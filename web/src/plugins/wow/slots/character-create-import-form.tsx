@@ -3,10 +3,10 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
 
-const WOW_SLUGS = new Set(['wow', 'wow-classic', 'world-of-warcraft', 'world-of-warcraft-classic']);
+const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
 
 function isWowSlug(slug: string): boolean {
-    return WOW_SLUGS.has(slug) || slug.includes('world-of-warcraft');
+    return WOW_SLUGS.has(slug);
 }
 
 interface CharacterCreateImportFormProps {
@@ -30,7 +30,7 @@ export function CharacterCreateImportForm({
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
 
     const [wowVariant, setWowVariant] = useState<string>(() => {
-        if (gameSlug === 'wow-classic' || gameSlug.includes('world-of-warcraft-classic')) {
+        if (gameSlug === 'world-of-warcraft-classic') {
             return 'classic_anniversary';
         }
         return 'retail';
@@ -91,7 +91,7 @@ export function CharacterCreateImportForm({
                         onChange={(e) => setWowVariant(e.target.value)}
                         className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
-                        {gameSlug === 'wow-classic' || gameSlug.includes('world-of-warcraft-classic') ? (
+                        {gameSlug === 'world-of-warcraft-classic' ? (
                             <>
                                 <option value="classic_anniversary">Classic Anniversary (TBC)</option>
                                 <option value="classic_era">Classic Era / SoD</option>

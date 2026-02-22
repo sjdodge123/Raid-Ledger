@@ -402,9 +402,9 @@ interface GameEntry {
 
 /** Generate event definitions (time-relative, needs games table IDs) */
 export function getEventsDefinitions(games: GameEntry[]) {
-  const wowGame = games.find((g) => g.slug === 'wow');
+  const wowGame = games.find((g) => g.slug === 'world-of-warcraft');
   const valheimGame = games.find((g) => g.slug === 'valheim');
-  const ffxivGame = games.find((g) => g.slug === 'ffxiv');
+  const ffxivGame = games.find((g) => g.slug === 'final-fantasy-xiv-online');
 
   const now = new Date();
   const baseHour = roundToHour(now);

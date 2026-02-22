@@ -54,10 +54,10 @@ async function bootstrap() {
 
         // Get games from games table
         const games = await db.select().from(schema.games);
-        const wowGame = games.find((g) => g.slug === 'wow');
-        const wowClassicGame = games.find((g) => g.slug === 'wow-classic');
+        const wowGame = games.find((g) => g.slug === 'world-of-warcraft');
+        const wowClassicGame = games.find((g) => g.slug === 'world-of-warcraft-classic');
         const valheimGame = games.find((g) => g.slug === 'valheim');
-        const ffxivGame = games.find((g) => g.slug === 'ffxiv');
+        const ffxivGame = games.find((g) => g.slug === 'final-fantasy-xiv-online');
 
         if (!wowGame) {
             console.error('❌ No games found! Run seed-games.ts first.');

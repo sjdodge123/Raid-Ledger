@@ -1,7 +1,7 @@
-/** Map registry slug to WoW game variant for Blizzard API */
+/** Map game slug to WoW game variant for Blizzard API */
 export function getWowVariant(slug: string): string | null {
-    if (slug === 'wow') return 'retail';
-    if (slug === 'wow-classic') return 'classic';
+    if (slug === 'world-of-warcraft') return 'retail';
+    if (slug === 'world-of-warcraft-classic') return 'classic';
     return null;
 }
 

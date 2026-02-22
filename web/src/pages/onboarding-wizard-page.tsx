@@ -149,9 +149,7 @@ export function OnboardingWizardPage() {
         return !isDiscordLinked(user.discordId);
     }, [user, systemStatus]);
 
-    // Qualifying games = hearted games that exist in the game registry (by name).
-    // We match by name because IGDB slugs differ from registry slugs
-    // (e.g. IGDB: "world-of-warcraft" vs registry: "wow").
+    // Qualifying games = hearted games that have config in the games table (by name).
     const qualifyingGames = useMemo(() => {
         const hearted = heartedGamesData?.data ?? [];
         if (hearted.length === 0 || registryGames.length === 0) return [];
