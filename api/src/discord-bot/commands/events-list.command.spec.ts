@@ -357,10 +357,12 @@ describe('EventsListCommand', () => {
     it('should remove components from reply when collector ends (timeout)', async () => {
       let endHandler: (() => void) | undefined;
       const collectorWithEnd = {
-        on: jest.fn().mockImplementation((event: string, handler: () => void) => {
-          if (event === 'end') endHandler = handler;
-          return collectorWithEnd;
-        }),
+        on: jest
+          .fn()
+          .mockImplementation((event: string, handler: () => void) => {
+            if (event === 'end') endHandler = handler;
+            return collectorWithEnd;
+          }),
       };
       const replyWithCollector = {
         createMessageComponentCollector: jest
@@ -379,7 +381,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(endHandler).toBeDefined();
@@ -388,7 +392,9 @@ describe('EventsListCommand', () => {
       endHandler!();
 
       // editReply should be called again with empty components
-      expect(interaction.editReply).toHaveBeenLastCalledWith({ components: [] });
+      expect(interaction.editReply).toHaveBeenLastCalledWith({
+        components: [],
+      });
     });
 
     it('should register both collect and end handlers on the collector', async () => {
@@ -416,7 +422,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(registeredEvents).toContain('collect');
@@ -424,17 +432,21 @@ describe('EventsListCommand', () => {
     });
 
     it('should filter collector to only handle interactions from the original user', async () => {
-      let capturedFilter: ((i: { user: { id: string } }) => boolean) | undefined;
+      let capturedFilter:
+        | ((i: { user: { id: string } }) => boolean)
+        | undefined;
       const collectorFilter = {
         on: jest.fn().mockReturnThis(),
       };
       const replyFilter = {
         createMessageComponentCollector: jest
           .fn()
-          .mockImplementation((opts: { filter?: (i: { user: { id: string } }) => boolean }) => {
-            capturedFilter = opts.filter;
-            return collectorFilter;
-          }),
+          .mockImplementation(
+            (opts: { filter?: (i: { user: { id: string } }) => boolean }) => {
+              capturedFilter = opts.filter;
+              return collectorFilter;
+            },
+          ),
       };
       const interaction = {
         deferReply: jest.fn().mockResolvedValue(undefined),
@@ -448,7 +460,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(capturedFilter).toBeDefined();
@@ -474,17 +488,17 @@ describe('EventsListCommand', () => {
       discordUserId: string,
       cachedEvents: ReturnType<typeof makeEvent>[],
     ) {
-      let collectHandler:
-        | ((i: Record<string, unknown>) => void)
-        | undefined;
+      let collectHandler: ((i: Record<string, unknown>) => void) | undefined;
 
       const collectorSpy = {
         on: jest
           .fn()
-          .mockImplementation((event: string, handler: (i: Record<string, unknown>) => void) => {
-            if (event === 'collect') collectHandler = handler;
-            return collectorSpy;
-          }),
+          .mockImplementation(
+            (event: string, handler: (i: Record<string, unknown>) => void) => {
+              if (event === 'collect') collectHandler = handler;
+              return collectorSpy;
+            },
+          ),
       };
 
       const updateMock = jest.fn().mockResolvedValue(undefined);
@@ -505,7 +519,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       // Simulate a StringSelectMenu interaction from the collector
@@ -517,7 +533,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler!(selectInteraction as unknown as Record<string, unknown>);
+      collectHandler!(selectInteraction as unknown as Record<string, unknown>);
 
       // Wait for the async handle() inside the collector
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -538,9 +554,9 @@ describe('EventsListCommand', () => {
             expect.objectContaining({
               data: expect.objectContaining({
                 title: 'Dragon Boss Kill',
-              }),
-            }),
-          ]),
+              }) as unknown,
+            }) as unknown,
+          ]) as unknown,
         }),
       );
     });
@@ -555,10 +571,12 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(43, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
-      expect(updateArg.embeds[0].data.description).toContain('Final Fantasy XIV');
+      expect(updateArg.embeds[0].data.description).toContain(
+        'Final Fantasy XIV',
+      );
     });
 
     it('should show "No game" in detail embed when game is null', async () => {
@@ -568,7 +586,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(44, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('No game');
@@ -584,7 +602,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(45, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { thumbnail?: { url: string } } }[];
       };
       expect(updateArg.embeds[0].data.thumbnail?.url).toBe(
@@ -593,13 +611,16 @@ describe('EventsListCommand', () => {
     });
 
     it('should NOT set thumbnail when coverUrl is null', async () => {
-      const event = makeEvent({ id: 46, game: { name: 'WoW', coverUrl: null } });
+      const event = makeEvent({
+        id: 46,
+        game: { name: 'WoW', coverUrl: null },
+      });
       eventsService.findOne = jest.fn().mockResolvedValue(event);
       usersService.findByDiscordId = jest.fn().mockResolvedValue(null);
 
       const { updateMock } = await triggerEventSelect(46, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { thumbnail?: unknown } }[];
       };
       expect(updateArg.embeds[0].data.thumbnail).toBeUndefined();
@@ -613,7 +634,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(47, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       const desc = updateArg.embeds[0].data.description ?? '';
@@ -631,7 +652,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(48, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       const desc = updateArg.embeds[0].data.description ?? '';
@@ -647,7 +668,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(49, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('7/25');
@@ -660,7 +681,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(50, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('4 signed up');
@@ -677,7 +698,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(51, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('1 hour');
@@ -695,7 +716,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(52, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('2 hours');
@@ -712,7 +733,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(53, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('1.5 hours');
@@ -728,7 +749,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(54, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('RaidLeader');
@@ -741,7 +762,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(55, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { description?: string } }[];
       };
       expect(updateArg.embeds[0].data.description).toContain('Unknown');
@@ -754,8 +775,10 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(56, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
-        components: { components: { data: { custom_id?: string; label?: string } }[] }[];
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
+        components: {
+          components: { data: { custom_id?: string; label?: string } }[];
+        }[];
       };
       const allButtons = updateArg.components.flatMap((row) => row.components);
       const backButton = allButtons.find(
@@ -772,7 +795,7 @@ describe('EventsListCommand', () => {
 
       const { updateMock } = await triggerEventSelect(57, 'user-123', [event]);
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         embeds: { data: { color?: number } }[];
       };
       expect(updateArg.embeds[0].data.color).toBe(EMBED_COLORS.ANNOUNCEMENT);
@@ -794,15 +817,19 @@ describe('EventsListCommand', () => {
       const collectorSpy = {
         on: jest
           .fn()
-          .mockImplementation((ev: string, handler: (i: Record<string, unknown>) => void) => {
-            if (ev === 'collect') collectHandler = handler;
-            return collectorSpy;
-          }),
+          .mockImplementation(
+            (ev: string, handler: (i: Record<string, unknown>) => void) => {
+              if (ev === 'collect') collectHandler = handler;
+              return collectorSpy;
+            },
+          ),
       };
 
       const updateMock = jest.fn().mockResolvedValue(undefined);
       const replyMsg = {
-        createMessageComponentCollector: jest.fn().mockReturnValue(collectorSpy),
+        createMessageComponentCollector: jest
+          .fn()
+          .mockReturnValue(collectorSpy),
       };
       const interaction = {
         deferReply: jest.fn().mockResolvedValue(undefined),
@@ -816,7 +843,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const selectInteraction = {
@@ -827,7 +856,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler!(selectInteraction as unknown as Record<string, unknown>);
+      collectHandler!(selectInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       return { updateMock };
@@ -856,7 +885,7 @@ describe('EventsListCommand', () => {
         'https://raidledger.com',
       );
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         components: { components: { data: { url?: string } }[] }[];
       };
       const allButtons = updateArg.components.flatMap((row) => row.components);
@@ -882,7 +911,7 @@ describe('EventsListCommand', () => {
       // Magic link should NOT be called for unlinked users
       expect(magicLinkService.generateLink).not.toHaveBeenCalled();
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         components: { components: { data: { url?: string } }[] }[];
       };
       const allButtons = updateArg.components.flatMap((row) => row.components);
@@ -906,7 +935,7 @@ describe('EventsListCommand', () => {
         event,
       );
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         components: { components: { data: { url?: string } }[] }[];
       };
       const allButtons = updateArg.components.flatMap((row) => row.components);
@@ -927,7 +956,7 @@ describe('EventsListCommand', () => {
         event,
       );
 
-      const updateArg = updateMock.mock.calls[0][0] as {
+      const updateArg = (updateMock.mock.calls as unknown[][])[0][0] as {
         components: { components: { data: { label?: string } }[] }[];
       };
       const allButtons = updateArg.components.flatMap((row) => row.components);
@@ -952,15 +981,19 @@ describe('EventsListCommand', () => {
       const collectorSpy = {
         on: jest
           .fn()
-          .mockImplementation((ev: string, handler: (i: Record<string, unknown>) => void) => {
-            if (ev === 'collect') collectHandler = handler;
-            return collectorSpy;
-          }),
+          .mockImplementation(
+            (ev: string, handler: (i: Record<string, unknown>) => void) => {
+              if (ev === 'collect') collectHandler = handler;
+              return collectorSpy;
+            },
+          ),
       };
 
       const updateMock = jest.fn().mockResolvedValue(undefined);
       const replyMsg = {
-        createMessageComponentCollector: jest.fn().mockReturnValue(collectorSpy),
+        createMessageComponentCollector: jest
+          .fn()
+          .mockReturnValue(collectorSpy),
       };
       const interaction = {
         deferReply: jest.fn().mockResolvedValue(undefined),
@@ -974,7 +1007,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const selectInteraction = {
@@ -985,7 +1020,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler!(selectInteraction as unknown as Record<string, unknown>);
+      collectHandler!(selectInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       return { updateMock };
@@ -999,13 +1034,15 @@ describe('EventsListCommand', () => {
 
       const cachedEvent = makeEvent({ id: 70, title: 'Cached Event' });
       // User selects event 99 but only event 70 is cached — 99 is gone
-      const { updateMock } = await triggerEventSelectAndGetUpdate(99, [cachedEvent]);
+      const { updateMock } = await triggerEventSelectAndGetUpdate(99, [
+        cachedEvent,
+      ]);
 
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringContaining('no longer available'),
-          embeds: expect.arrayContaining([expect.anything()]),
-          components: expect.arrayContaining([expect.anything()]),
+          content: expect.stringContaining('no longer available') as unknown,
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
+          components: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -1018,14 +1055,18 @@ describe('EventsListCommand', () => {
       const cachedEvent = makeEvent({ id: 71, title: 'Still Here' });
       // Select the cached event but findOne fails and cache lookup succeeds
       // (event IS in cache, so it falls back to cache, not the "no longer available" path)
-      eventsService.findOne = jest.fn().mockRejectedValue(new Error('DB error'));
+      eventsService.findOne = jest
+        .fn()
+        .mockRejectedValue(new Error('DB error'));
 
-      const { updateMock } = await triggerEventSelectAndGetUpdate(71, [cachedEvent]);
+      const { updateMock } = await triggerEventSelectAndGetUpdate(71, [
+        cachedEvent,
+      ]);
 
       // Should show detail view using cached data (fallback works)
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -1042,13 +1083,15 @@ describe('EventsListCommand', () => {
       process.env.CLIENT_URL = 'https://raidledger.com';
 
       const cachedEvent = makeEvent({ id: 72 });
-      const { updateMock } = await triggerEventSelectAndGetUpdate(72, [cachedEvent]);
+      const { updateMock } = await triggerEventSelectAndGetUpdate(72, [
+        cachedEvent,
+      ]);
 
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringContaining('Something went wrong'),
-          embeds: expect.arrayContaining([expect.anything()]),
-          components: expect.arrayContaining([expect.anything()]),
+          content: expect.stringContaining('Something went wrong') as unknown,
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
+          components: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -1068,15 +1111,19 @@ describe('EventsListCommand', () => {
       const collectorSpy = {
         on: jest
           .fn()
-          .mockImplementation((ev: string, handler: (i: Record<string, unknown>) => void) => {
-            if (ev === 'collect') collectHandler = handler;
-            return collectorSpy;
-          }),
+          .mockImplementation(
+            (ev: string, handler: (i: Record<string, unknown>) => void) => {
+              if (ev === 'collect') collectHandler = handler;
+              return collectorSpy;
+            },
+          ),
       };
 
       const updateMock = jest.fn().mockResolvedValue(undefined);
       const replyMsg = {
-        createMessageComponentCollector: jest.fn().mockReturnValue(collectorSpy),
+        createMessageComponentCollector: jest
+          .fn()
+          .mockReturnValue(collectorSpy),
       };
       const interaction = {
         deferReply: jest.fn().mockResolvedValue(undefined),
@@ -1090,7 +1137,9 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       return { collectHandler: collectHandler!, updateMock };
@@ -1121,7 +1170,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler(backInteraction as unknown as Record<string, unknown>);
+      collectHandler(backInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Should re-fetch events list
@@ -1129,8 +1178,8 @@ describe('EventsListCommand', () => {
       // Should show list embed with components
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
-          components: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
+          components: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -1155,7 +1204,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler(backInteraction as unknown as Record<string, unknown>);
+      collectHandler(backInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(updateMock).toHaveBeenCalledWith(
@@ -1184,14 +1233,14 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler(backInteraction as unknown as Record<string, unknown>);
+      collectHandler(backInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       // Should still show the list using cached events
       expect(updateMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          embeds: expect.arrayContaining([expect.anything()]),
-          components: expect.arrayContaining([expect.anything()]),
+          embeds: expect.arrayContaining([expect.anything()]) as unknown,
+          components: expect.arrayContaining([expect.anything()]) as unknown,
         }),
       );
     });
@@ -1215,7 +1264,7 @@ describe('EventsListCommand', () => {
         update: updateMock,
       };
 
-      await collectHandler(backInteraction as unknown as Record<string, unknown>);
+      collectHandler(backInteraction as unknown as Record<string, unknown>);
       await new Promise((resolve) => setTimeout(resolve, 0));
 
       expect(updateMock).toHaveBeenCalledWith(
@@ -1242,11 +1291,15 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { value: string } }[] }[] }[];
+        components: {
+          components: { options: { data: { value: string } }[] }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options).toHaveLength(10);
@@ -1260,11 +1313,17 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { value: string; label: string } }[] }[] }[];
+        components: {
+          components: {
+            options: { data: { value: string; label: string } }[];
+          }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options).toHaveLength(1);
@@ -1280,11 +1339,15 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { value: string } }[] }[] }[];
+        components: {
+          components: { options: { data: { value: string } }[] }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options[0].data.value).toBe('999');
@@ -1293,16 +1356,22 @@ describe('EventsListCommand', () => {
     it('should include game name in dropdown option description', async () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
-        data: [makeEvent({ id: 1, game: { name: 'EverQuest', coverUrl: null } })],
+        data: [
+          makeEvent({ id: 1, game: { name: 'EverQuest', coverUrl: null } }),
+        ],
         meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { description: string } }[] }[] }[];
+        components: {
+          components: { options: { data: { description: string } }[] }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options[0].data.description).toContain('EverQuest');
@@ -1316,11 +1385,15 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { description: string } }[] }[] }[];
+        components: {
+          components: { options: { data: { description: string } }[] }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options[0].data.description).toContain('No game');
@@ -1335,11 +1408,15 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { options: { data: { label: string } }[] }[] }[];
+        components: {
+          components: { options: { data: { label: string } }[] }[];
+        }[];
       };
       const selectMenu = call.components[0].components[0];
       expect(selectMenu.options[0].data.label).toHaveLength(100);
@@ -1361,11 +1438,15 @@ describe('EventsListCommand', () => {
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
-        components: { components: { data: { url?: string; label?: string } }[] }[];
+        components: {
+          components: { data: { url?: string; label?: string } }[];
+        }[];
       };
       // Second component row is the View All button
       const buttonRow = call.components[1];
