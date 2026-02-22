@@ -162,7 +162,7 @@ export const EventListQuerySchema = z.object({
     upcoming: z.enum(['true', 'false']).optional(), // Filter to upcoming events only
     startAfter: z.string().datetime({ message: 'startAfter must be a valid ISO8601 datetime' }).optional(),
     endBefore: z.string().datetime({ message: 'endBefore must be a valid ISO8601 datetime' }).optional(),
-    gameId: z.string().optional(), // Filter by game ID (string, since gameId is stored as text)
+    gameId: z.string().optional(), // Filter by integer game ID (string in query param, parsed to number in service)
     /** Include first N signups preview for calendar views (ROK-177) */
     includeSignups: z.enum(['true', 'false']).optional(),
     /** Filter events by creator. Use "me" to resolve to authenticated user (ROK-213) */
