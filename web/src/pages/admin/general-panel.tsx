@@ -65,8 +65,8 @@ export function GeneralPanel() {
                         Default Timezone
                     </h3>
                     <p className="text-xs text-muted mt-1">
-                        Used for Discord embeds and community-wide displays.
-                        Individual users see times in their own browser timezone by default.
+                        Used for community-wide time displays on the web app.
+                        Discord embeds automatically show times in each user's local timezone.
                     </p>
                 </div>
                 {defaultTimezone.isLoading ? (
