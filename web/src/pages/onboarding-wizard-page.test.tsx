@@ -274,8 +274,9 @@ describe('OnboardingWizardPage', () => {
 
         renderWithRouter(<OnboardingWizardPage />);
 
-        // Connect + Discord + Games + GameTime + Personalize = 5 steps (ROK-403 added Discord join step)
-        expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
+        // Connect + Games + GameTime + Personalize = 4 steps
+        // Discord join step is NOT shown when user hasn't linked Discord yet (ROK-403)
+        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 

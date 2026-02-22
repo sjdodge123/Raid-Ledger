@@ -160,10 +160,11 @@ export function OnboardingWizardPage() {
     // and the user is NOT already in the guild server
     const needsDiscordJoin = useMemo(() => {
         if (!discordConfigured) return false;
-        // If we haven't loaded guild membership yet, show the step (it will auto-skip if member)
-        if (!guildMembership) return discordConfigured;
+        if (!user || !isDiscordLinked(user.discordId)) return false;
+        // If guild membership hasn't loaded yet, show the step optimistically
+        if (!guildMembership) return true;
         return !guildMembership.isMember;
-    }, [discordConfigured, guildMembership]);
+    }, [discordConfigured, user, guildMembership]);
 
     // Qualifying games = hearted games that have config in the games table (by name).
     const qualifyingGames = useMemo(() => {
