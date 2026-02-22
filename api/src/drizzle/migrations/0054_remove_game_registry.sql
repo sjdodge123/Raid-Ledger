@@ -25,7 +25,16 @@ ALTER TABLE "games" ALTER COLUMN "igdb_id" DROP NOT NULL;
 -- Step 3: Add unique constraint on games.slug (needed for conflict resolution)
 ALTER TABLE "games" ADD CONSTRAINT "games_slug_unique" UNIQUE ("slug");
 
--- Step 4: Copy config from game_registry to matching games rows (by slug)
+-- Slug mapping: game_registry slugs differ from IGDB slugs for some games
+-- This CTE maps old game_registry slugs to the correct IGDB games slugs
+-- Step 4: Copy config from game_registry to matching games rows (by slug, with mapping)
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 UPDATE "games" g
 SET
   "short_name" = gr."short_name",
@@ -35,23 +44,42 @@ SET
   "enabled" = gr."enabled",
   "max_characters_per_user" = gr."max_characters_per_user"
 FROM "game_registry" gr
-WHERE g."slug" = gr."slug";
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+WHERE g."slug" = COALESCE(sm."games_slug", gr."slug");
 
 -- Step 5: Insert game_registry entries that have no matching games row
+-- Uses the same slug mapping to avoid inserting duplicates for mapped games
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 INSERT INTO "games" ("name", "slug", "cover_url", "cached_at", "short_name", "color_hex", "has_roles", "has_specs", "enabled", "max_characters_per_user")
 SELECT gr."name", gr."slug", gr."icon_url", NOW(), gr."short_name", gr."color_hex", gr."has_roles", gr."has_specs", gr."enabled", gr."max_characters_per_user"
 FROM "game_registry" gr
-WHERE NOT EXISTS (SELECT 1 FROM "games" g WHERE g."slug" = gr."slug");
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+WHERE NOT EXISTS (SELECT 1 FROM "games" g WHERE g."slug" = COALESCE(sm."games_slug", gr."slug"));
 
 -- Step 6: Migrate event_types FK (uuid -> integer)
 -- 6a: Add new integer column
 ALTER TABLE "event_types" ADD COLUMN "new_game_id" integer;
 
 -- 6b: Populate via slug mapping (game_registry.id -> games.id)
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 UPDATE "event_types" et
 SET "new_game_id" = g."id"
-FROM "game_registry" gr, "games" g
-WHERE et."game_id" = gr."id" AND g."slug" = gr."slug";
+FROM "game_registry" gr
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+JOIN "games" g ON g."slug" = COALESCE(sm."games_slug", gr."slug")
+WHERE et."game_id" = gr."id";
 
 -- 6c: Change event_types.id from UUID to serial
 -- First drop the old PK and constraints
@@ -81,10 +109,19 @@ ALTER TABLE "characters" DROP CONSTRAINT IF EXISTS "characters_game_id_game_regi
 
 -- 7b: Add new integer column, populate via slug mapping
 ALTER TABLE "characters" ADD COLUMN "new_game_id" integer;
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 UPDATE "characters" c
 SET "new_game_id" = g."id"
-FROM "game_registry" gr, "games" g
-WHERE c."game_id" = gr."id" AND g."slug" = gr."slug";
+FROM "game_registry" gr
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+JOIN "games" g ON g."slug" = COALESCE(sm."games_slug", gr."slug")
+WHERE c."game_id" = gr."id";
 
 -- 7c: Drop old column, rename new
 ALTER TABLE "characters" DROP COLUMN "game_id";
@@ -105,10 +142,19 @@ ALTER TABLE "events" DROP CONSTRAINT IF EXISTS "events_registry_game_id_game_reg
 ALTER TABLE "events" ADD COLUMN "new_game_id" integer;
 
 -- 8c: Populate from registry_game_id (uuid -> integer via slug mapping)
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 UPDATE "events" e
 SET "new_game_id" = g."id"
-FROM "game_registry" gr, "games" g
-WHERE e."registry_game_id" = gr."id" AND g."slug" = gr."slug";
+FROM "game_registry" gr
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+JOIN "games" g ON g."slug" = COALESCE(sm."games_slug", gr."slug")
+WHERE e."registry_game_id" = gr."id";
 
 -- 8d: For events with legacy text game_id but no registry_game_id, map via igdb_id
 UPDATE "events" e
@@ -135,10 +181,19 @@ ALTER TABLE "availability" DROP CONSTRAINT IF EXISTS "availability_game_id_game_
 ALTER TABLE "availability" ADD COLUMN "new_game_id" integer;
 
 -- 9c: Populate via slug mapping
+WITH slug_map (registry_slug, games_slug) AS (
+  VALUES
+    ('wow', 'world-of-warcraft'),
+    ('wow-classic', 'world-of-warcraft-classic'),
+    ('ffxiv', 'final-fantasy-xiv-online'),
+    ('valheim', 'valheim')
+)
 UPDATE "availability" a
 SET "new_game_id" = g."id"
-FROM "game_registry" gr, "games" g
-WHERE a."game_id" = gr."id" AND g."slug" = gr."slug";
+FROM "game_registry" gr
+LEFT JOIN slug_map sm ON sm."registry_slug" = gr."slug"
+JOIN "games" g ON g."slug" = COALESCE(sm."games_slug", gr."slug")
+WHERE a."game_id" = gr."id";
 
 -- 9d: Drop old column, rename new
 ALTER TABLE "availability" DROP COLUMN "game_id";

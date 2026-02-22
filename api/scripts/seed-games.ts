@@ -15,10 +15,10 @@ dotenv.config();
  */
 const GAMES_SEED = [
     {
-        slug: 'wow',
+        slug: 'world-of-warcraft',
         name: 'World of Warcraft',
         shortName: 'WoW',
-        iconUrl: 'https://assets.blizzard.com/wow/icon.png',
+        iconUrl: null,
         colorHex: '#F58518',
         hasRoles: true,
         hasSpecs: true,
@@ -62,10 +62,10 @@ const GAMES_SEED = [
         ],
     },
     {
-        slug: 'wow-classic',
+        slug: 'world-of-warcraft-classic',
         name: 'World of Warcraft Classic',
         shortName: 'WoW Classic',
-        iconUrl: 'https://assets.blizzard.com/wow/icon.png',
+        iconUrl: null,
         colorHex: '#C79C6E',
         hasRoles: true,
         hasSpecs: true,
@@ -135,7 +135,7 @@ const GAMES_SEED = [
         ],
     },
     {
-        slug: 'ffxiv',
+        slug: 'final-fantasy-xiv-online',
         name: 'Final Fantasy XIV Online',
         shortName: 'FFXIV',
         iconUrl: null,
