@@ -21,7 +21,7 @@ export type SlotConfigDto = z.infer<typeof SlotConfigSchema>;
 /** Recurrence rule for repeating events */
 export const RecurrenceSchema = z.object({
     frequency: z.enum(['weekly', 'biweekly', 'monthly']),
-    until: z.string().datetime(), // End date for recurrence
+    until: z.string().datetime({ offset: true }), // End date for recurrence
 });
 
 export type RecurrenceDto = z.infer<typeof RecurrenceSchema>;
