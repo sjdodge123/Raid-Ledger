@@ -226,7 +226,7 @@ describe('EventPlansService', () => {
 
       expect(queue.add).toHaveBeenCalledWith(
         'poll-closed',
-        { planId: expect.any(String) },
+        { planId: expect.any(String) as string },
         expect.objectContaining({
           delay: validDto.pollDurationHours * 3600 * 1000,
           attempts: 3,
@@ -249,10 +249,11 @@ describe('EventPlansService', () => {
     it('should include "None of these work" in poll answers', async () => {
       await service.create(CREATOR_ID, validDto);
 
-      const sendCall =
-        discordClient._mockTextChannel.send.mock.calls[0][0] as {
-          poll: { answers: Array<{ text: string }> };
-        };
+      const sendCall = (
+        discordClient._mockTextChannel.send.mock.calls[0] as unknown[]
+      )[0] as {
+        poll: { answers: Array<{ text: string }> };
+      };
 
       const lastAnswer =
         sendCall.poll.answers[sendCall.poll.answers.length - 1];
@@ -264,7 +265,9 @@ describe('EventPlansService', () => {
       // The round 1 create call should have no content prefix
       await service.create(CREATOR_ID, validDto);
 
-      const sendCall = discordClient._mockTextChannel.send.mock.calls[0][0] as {
+      const sendCall = (
+        discordClient._mockTextChannel.send.mock.calls[0] as unknown[]
+      )[0] as {
         content?: string;
       };
       expect(sendCall.content).toBeUndefined();
@@ -351,7 +354,9 @@ describe('EventPlansService', () => {
 
     it('should delete Discord poll message on cancel', async () => {
       db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+      db._chain.returning.mockResolvedValue([
+        makePlan({ status: 'cancelled' }),
+      ]);
 
       await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -363,7 +368,9 @@ describe('EventPlansService', () => {
 
     it('should remove queued BullMQ job on cancel', async () => {
       db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+      db._chain.returning.mockResolvedValue([
+        makePlan({ status: 'cancelled' }),
+      ]);
 
       await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -373,7 +380,9 @@ describe('EventPlansService', () => {
 
     it('should update plan status to cancelled', async () => {
       db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+      db._chain.returning.mockResolvedValue([
+        makePlan({ status: 'cancelled' }),
+      ]);
 
       const result = await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -383,7 +392,9 @@ describe('EventPlansService', () => {
 
     it('should proceed even if Discord message deletion fails', async () => {
       db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+      db._chain.returning.mockResolvedValue([
+        makePlan({ status: 'cancelled' }),
+      ]);
       discordClient.deleteMessage.mockRejectedValue(new Error('Message gone'));
 
       // Should not throw
@@ -606,7 +617,10 @@ describe('EventPlansService', () => {
 
         await service.processPollClose(PLAN_ID);
 
-        const createCall = eventsService.create.mock.calls[0];
+        const createCall = eventsService.create.mock.calls[0] as [
+          number,
+          { startTime: string },
+        ];
         // The winning option is index 1 → date '2026-03-11T18:00:00.000Z'
         expect(createCall[1].startTime).toBe('2026-03-11T18:00:00.000Z');
       });
@@ -626,7 +640,10 @@ describe('EventPlansService', () => {
 
         await service.processPollClose(PLAN_ID);
 
-        const createCall = eventsService.create.mock.calls[0];
+        const createCall = eventsService.create.mock.calls[0] as [
+          number,
+          { startTime: string },
+        ];
         // Tie-break: option 0 has the earliest date
         expect(createCall[1].startTime).toBe('2026-03-10T18:00:00.000Z');
       });
@@ -733,7 +750,9 @@ describe('EventPlansService', () => {
       );
 
       result.suggestions.forEach((s) => {
-        expect(new Date(s.date).getTime()).toBeGreaterThan(futureDate.getTime());
+        expect(new Date(s.date).getTime()).toBeGreaterThan(
+          futureDate.getTime(),
+        );
       });
     });
   });
@@ -763,7 +782,7 @@ describe('EventPlansService', () => {
       expect(updateCalls.length).toBeGreaterThan(0);
 
       // Find the set call that includes pollRound
-      const setCall = db._chain.set.mock.calls.find(
+      const setCall = (db._chain.set.mock.calls as unknown[][]).find(
         (call: unknown[]) =>
           call[0] &&
           typeof call[0] === 'object' &&
