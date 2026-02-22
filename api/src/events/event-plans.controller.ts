@@ -89,15 +89,13 @@ export class EventPlansController {
   }
 
   /**
-   * List the current user's event plans.
-   * Requires authentication.
+   * List all event plans. All authenticated users can view.
+   * Action permissions (cancel, restart) are enforced on individual endpoints.
    */
   @Get('my-plans')
   @UseGuards(AuthGuard('jwt'))
-  async myPlans(
-    @Request() req: AuthenticatedRequest,
-  ): Promise<EventPlanResponseDto[]> {
-    return this.eventPlansService.findByCreator(req.user.id, req.user.role);
+  async listPlans(): Promise<EventPlanResponseDto[]> {
+    return this.eventPlansService.findAll();
   }
 
   /**

@@ -6,6 +6,7 @@ import {
     useRestartEventPlan,
 } from '../../hooks/use-event-plans';
 import { useGameRegistry } from '../../hooks/use-game-registry';
+import { useAuth } from '../../hooks/use-auth';
 import type {
     EventPlanResponseDto,
     EventPlanStatus,
@@ -204,6 +205,7 @@ function PlanCard({
     isCancelling,
     onRestart,
     isRestarting,
+    canManage,
 }: {
     plan: EventPlanResponseDto;
     gameName: string | null;
@@ -211,6 +213,7 @@ function PlanCard({
     isCancelling: boolean;
     onRestart: (planId: string) => void;
     isRestarting: boolean;
+    canManage: boolean;
 }) {
     const [showResults, setShowResults] = useState(plan.status === 'polling');
     const statusStyle = STATUS_STYLES[plan.status] ?? STATUS_STYLES.draft;
@@ -308,29 +311,31 @@ function PlanCard({
                 </div>
             )}
 
-            {/* Action buttons */}
-            <div className="flex flex-wrap gap-2 pt-1">
-                {plan.status === 'polling' && (
-                    <button
-                        type="button"
-                        onClick={handleCancel}
-                        disabled={isCancelling}
-                        className="px-4 py-2 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isCancelling ? 'Cancelling...' : 'Cancel Plan'}
-                    </button>
-                )}
-                {canRestart && (
-                    <button
-                        type="button"
-                        onClick={handleRestart}
-                        disabled={isRestarting}
-                        className="px-4 py-2 text-sm font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                        {isRestarting ? 'Restarting...' : 'Restart Poll'}
-                    </button>
-                )}
-            </div>
+            {/* Action buttons — only shown to creator/admin/operator */}
+            {canManage && (
+                <div className="flex flex-wrap gap-2 pt-1">
+                    {plan.status === 'polling' && (
+                        <button
+                            type="button"
+                            onClick={handleCancel}
+                            disabled={isCancelling}
+                            className="px-4 py-2 text-sm font-medium text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isCancelling ? 'Cancelling...' : 'Cancel Plan'}
+                        </button>
+                    )}
+                    {canRestart && (
+                        <button
+                            type="button"
+                            onClick={handleRestart}
+                            disabled={isRestarting}
+                            className="px-4 py-2 text-sm font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {isRestarting ? 'Restarting...' : 'Restart Poll'}
+                        </button>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -338,8 +343,11 @@ function PlanCard({
 export function EventPlansList() {
     const { data: plans, isLoading, error } = useMyEventPlans();
     const { games } = useGameRegistry();
+    const { user } = useAuth();
     const cancelMutation = useCancelEventPlan();
     const restartMutation = useRestartEventPlan();
+
+    const isPrivileged = user?.role === 'admin' || user?.role === 'operator';
 
     const gameMap = useMemo(() => {
         const map = new Map<number, string>();
@@ -412,6 +420,7 @@ export function EventPlansList() {
                     isCancelling={cancelMutation.isPending && cancelMutation.variables === plan.id}
                     onRestart={(planId) => restartMutation.mutate(planId)}
                     isRestarting={restartMutation.isPending && restartMutation.variables === plan.id}
+                    canManage={isPrivileged || plan.creatorId === user?.id}
                 />
             ))}
         </div>

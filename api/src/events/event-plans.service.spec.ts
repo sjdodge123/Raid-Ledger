@@ -357,22 +357,22 @@ describe('EventPlansService', () => {
     });
   });
 
-  // ─── findByCreator ───────────────────────────────────────────────────────────
+  // ─── findAll ─────────────────────────────────────────────────────────────────
 
-  describe('findByCreator', () => {
-    it('should return array of plans for a user', async () => {
+  describe('findAll', () => {
+    it('should return array of all plans', async () => {
       db._chain.orderBy.mockResolvedValue([makePlan(), makePlan()]);
 
-      const results = await service.findByCreator(CREATOR_ID);
+      const results = await service.findAll();
 
       expect(Array.isArray(results)).toBe(true);
       expect(results).toHaveLength(2);
     });
 
-    it('should return empty array when user has no plans', async () => {
+    it('should return empty array when no plans exist', async () => {
       db._chain.orderBy.mockResolvedValue([]);
 
-      const results = await service.findByCreator(CREATOR_ID);
+      const results = await service.findAll();
 
       expect(results).toEqual([]);
     });

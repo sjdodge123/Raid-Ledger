@@ -357,20 +357,14 @@ export class EventPlansService {
   }
 
   /**
-   * List plans. Admins/operators see all plans; regular users see only their own.
+   * List all plans. All authenticated users can view plans.
+   * Action permissions (cancel, restart) are enforced separately.
    */
-  async findByCreator(
-    creatorId: number,
-    userRole?: string,
-  ): Promise<EventPlanResponseDto[]> {
-    const isPrivileged = userRole === 'admin' || userRole === 'operator';
-
-    const query = this.db.select().from(schema.eventPlans);
-    const plans = isPrivileged
-      ? await query.orderBy(schema.eventPlans.createdAt)
-      : await query
-          .where(eq(schema.eventPlans.creatorId, creatorId))
-          .orderBy(schema.eventPlans.createdAt);
+  async findAll(): Promise<EventPlanResponseDto[]> {
+    const plans = await this.db
+      .select()
+      .from(schema.eventPlans)
+      .orderBy(schema.eventPlans.createdAt);
 
     return plans.map((p) => this.toResponseDto(p));
   }

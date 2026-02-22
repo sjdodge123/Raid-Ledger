@@ -52,7 +52,11 @@ export function EventsPage() {
   const gameIdFilter = searchParams.get("gameId") || undefined;
 
   // Filter state — shared between mobile toolbar and desktop tabs
-  const [activeTab, setActiveTab] = useState<EventsTab>('upcoming');
+  // Initialize from ?tab= URL param so deep links like /events?tab=plans work
+  const tabParam = searchParams.get('tab') as EventsTab | null;
+  const [activeTab, setActiveTab] = useState<EventsTab>(
+    tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
+  );
   const [searchQuery, setSearchQuery] = useState('');
 
   // Build query params based on the active mobile tab (ROK-329)
@@ -188,7 +192,7 @@ export function EventsPage() {
                   {filteredGameName
                     ? `Showing events for ${filteredGameName}`
                     : activeTab === 'plans'
-                      ? 'Your event planning polls'
+                      ? 'Community event planning polls'
                       : activeTab === 'past'
                         ? 'Browse completed gaming sessions'
                         : activeTab === 'mine'

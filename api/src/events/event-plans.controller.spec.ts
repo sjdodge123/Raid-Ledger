@@ -61,7 +61,7 @@ describe('EventPlansController', () => {
     service = {
       create: jest.fn().mockResolvedValue(mockPlan),
       findOne: jest.fn().mockResolvedValue(mockPlan),
-      findByCreator: jest.fn().mockResolvedValue([mockPlan]),
+      findAll: jest.fn().mockResolvedValue([mockPlan]),
       cancel: jest.fn().mockResolvedValue({ ...mockPlan, status: 'cancelled' }),
       getTimeSuggestions: jest.fn().mockResolvedValue(mockTimeSuggestions),
     };
@@ -200,20 +200,20 @@ describe('EventPlansController', () => {
     });
   });
 
-  // ─── myPlans ─────────────────────────────────────────────────────────────────
+  // ─── listPlans ──────────────────────────────────────────────────────────────
 
-  describe('myPlans', () => {
-    it('should return list of plans for the authenticated user', async () => {
-      const result = await controller.myPlans(mockReq as AuthenticatedRequest);
+  describe('listPlans', () => {
+    it('should return list of all plans', async () => {
+      const result = await controller.listPlans();
 
       expect(result).toEqual([mockPlan]);
-      expect(service.findByCreator).toHaveBeenCalledWith(CREATOR_ID, 'member');
+      expect(service.findAll).toHaveBeenCalled();
     });
 
-    it('should return empty array when user has no plans', async () => {
-      (service.findByCreator as jest.Mock).mockResolvedValue([]);
+    it('should return empty array when no plans exist', async () => {
+      (service.findAll as jest.Mock).mockResolvedValue([]);
 
-      const result = await controller.myPlans(mockReq as AuthenticatedRequest);
+      const result = await controller.listPlans();
 
       expect(result).toEqual([]);
     });
@@ -250,7 +250,11 @@ describe('EventPlansController', () => {
       );
 
       expect(result.status).toBe('cancelled');
-      expect(service.cancel).toHaveBeenCalledWith(PLAN_ID, CREATOR_ID, 'member');
+      expect(service.cancel).toHaveBeenCalledWith(
+        PLAN_ID,
+        CREATOR_ID,
+        'member',
+      );
     });
 
     it('should propagate NotFoundException when plan does not exist', async () => {
