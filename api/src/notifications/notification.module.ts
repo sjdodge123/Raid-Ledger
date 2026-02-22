@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
 import { EventReminderService } from './event-reminder.service';
+import { PostEventReminderService } from './post-event-reminder.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
@@ -24,6 +25,7 @@ import { SettingsModule } from '../settings/settings.module';
   providers: [
     NotificationService,
     EventReminderService,
+    PostEventReminderService,
     DiscordNotificationService,
     DiscordNotificationProcessor,
     DiscordNotificationEmbedService,

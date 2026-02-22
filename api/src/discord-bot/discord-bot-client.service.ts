@@ -434,6 +434,26 @@ export class DiscordBotClientService {
   }
 
   /**
+   * Check if a Discord user is a member of the bot's guild (ROK-403).
+   * @param discordUserId The Discord user ID to check
+   * @returns true if the user is in the guild, false otherwise
+   */
+  async isGuildMember(discordUserId: string): Promise<boolean> {
+    if (!this.client?.isReady()) return false;
+
+    const guild = this.client.guilds.cache.first();
+    if (!guild) return false;
+
+    try {
+      const member = await guild.members.fetch(discordUserId);
+      return !!member;
+    } catch {
+      // GuildMember not found throws DiscordAPIError — that means not a member
+      return false;
+    }
+  }
+
+  /**
    * Check whether the bot has every required permission in its guild.
    */
   checkPermissions(): PermissionCheckResult[] {

@@ -9,10 +9,12 @@ import { useSystemStatus } from '../hooks/use-system-status';
 import { toast } from '../lib/toast';
 import { isDiscordLinked } from '../lib/avatar';
 import { ConnectStep } from '../components/onboarding/connect-step';
+import { DiscordJoinStep } from '../components/onboarding/discord-join-step';
 import { GamesStep } from '../components/onboarding/games-step';
 import { CharacterStep } from '../components/onboarding/character-step';
 import { GameTimeStep } from '../components/onboarding/gametime-step';
 import { AvatarThemeStep } from '../components/onboarding/avatar-theme-step';
+import { useGuildMembership } from '../hooks/use-discord-onboarding';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 
 interface StepDef {
@@ -142,12 +144,26 @@ export function OnboardingWizardPage() {
     const isRerun = searchParams.get('rerun') === '1';
 
     // Determine if user needs the connect step (no OAuth linked AND Discord is configured)
+    const discordConfigured = systemStatus?.discordConfigured ?? false;
     const needsConnect = useMemo(() => {
         if (!user) return false;
-        const discordConfigured = systemStatus?.discordConfigured ?? false;
         if (!discordConfigured) return false;
         return !isDiscordLinked(user.discordId);
-    }, [user, systemStatus]);
+    }, [user, discordConfigured]);
+
+    // Check if user is already in the Discord server (ROK-403)
+    const { data: guildMembership } = useGuildMembership(
+        discordConfigured && !!user && isDiscordLinked(user.discordId),
+    );
+
+    // Show the "Join Discord" step when Discord is configured, user has linked Discord,
+    // and the user is NOT already in the guild server
+    const needsDiscordJoin = useMemo(() => {
+        if (!discordConfigured) return false;
+        // If we haven't loaded guild membership yet, show the step (it will auto-skip if member)
+        if (!guildMembership) return discordConfigured;
+        return !guildMembership.isMember;
+    }, [discordConfigured, guildMembership]);
 
     // Qualifying games = hearted games that have config in the games table (by name).
     const qualifyingGames = useMemo(() => {
@@ -165,6 +181,7 @@ export function OnboardingWizardPage() {
     const steps: StepDef[] = useMemo(() => {
         const s: StepDef[] = [];
         if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
+        if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
         s.push({ key: 'games', label: 'Games' });
         // Character steps: 1 initial + extras per qualifying hearted game
         qualifyingGames.forEach((game) => {
@@ -182,7 +199,7 @@ export function OnboardingWizardPage() {
         s.push({ key: 'gametime', label: 'Game Time' });
         s.push({ key: 'avatar', label: 'Personalize' });
         return s;
-    }, [needsConnect, qualifyingGames, extraCharCounts]);
+    }, [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts]);
 
     const maxStep = steps.length - 1;
     const currentStepDef = steps[currentStep];
@@ -396,6 +413,9 @@ export function OnboardingWizardPage() {
                 <div className="flex-1 overflow-y-auto px-6 pb-6">
                     {currentStepDef?.key === 'connect' && (
                         <ConnectStep />
+                    )}
+                    {currentStepDef?.key === 'discord-join' && (
+                        <DiscordJoinStep />
                     )}
                     {currentStepDef?.key === 'games' && (
                         <GamesStep />

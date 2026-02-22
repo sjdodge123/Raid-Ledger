@@ -25,7 +25,20 @@ export const DiscordBotTestResultSchema = z.object({
     message: z.string(),
 });
 
+/** Response from GET /discord/server-invite (ROK-403) */
+export const ServerInviteResponseSchema = z.object({
+    url: z.string().nullable(),
+    guildName: z.string().nullable(),
+});
+
+/** Response from GET /discord/guild-membership (ROK-403) */
+export const GuildMembershipResponseSchema = z.object({
+    isMember: z.boolean(),
+});
+
 export type DiscordBotConfigDto = z.infer<typeof DiscordBotConfigSchema>;
 export type DiscordBotTestConnectionDto = z.infer<typeof DiscordBotTestConnectionSchema>;
 export type DiscordBotStatusResponse = z.infer<typeof DiscordBotStatusSchema>;
 export type DiscordBotTestResult = z.infer<typeof DiscordBotTestResultSchema>;
+export type ServerInviteResponseDto = z.infer<typeof ServerInviteResponseSchema>;
+export type GuildMembershipResponseDto = z.infer<typeof GuildMembershipResponseSchema>;

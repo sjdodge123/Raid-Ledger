@@ -10,6 +10,7 @@ import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordMemberController } from './discord-member.controller';
+import { DiscordUserController } from './discord-user.controller';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
@@ -50,6 +51,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
   controllers: [
     DiscordBotSettingsController,
     DiscordMemberController,
+    DiscordUserController,
     ChannelBindingsController,
   ],
   providers: [
