@@ -2,6 +2,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventsListCommand } from './events-list.command';
 import { EventsService } from '../../events/events.service';
+import { UsersService } from '../../users/users.service';
+import { MagicLinkService } from '../../auth/magic-link.service';
 import { EMBED_COLORS } from '../discord-bot.constants';
 
 describe('EventsListCommand', () => {
@@ -11,9 +13,18 @@ describe('EventsListCommand', () => {
 
   const originalClientUrl = process.env.CLIENT_URL;
 
+  const mockCollector = {
+    on: jest.fn().mockReturnThis(),
+  };
+
+  const mockReplyMessage = {
+    createMessageComponentCollector: jest.fn().mockReturnValue(mockCollector),
+  };
+
   const mockInteraction = () => ({
     deferReply: jest.fn().mockResolvedValue(undefined),
-    editReply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(mockReplyMessage),
+    user: { id: '123456' },
   });
 
   const makeEvent = (overrides = {}) => ({
@@ -37,6 +48,19 @@ describe('EventsListCommand', () => {
           provide: EventsService,
           useValue: {
             findAll: jest.fn(),
+            findOne: jest.fn(),
+          },
+        },
+        {
+          provide: UsersService,
+          useValue: {
+            findByDiscordId: jest.fn(),
+          },
+        },
+        {
+          provide: MagicLinkService,
+          useValue: {
+            generateLink: jest.fn(),
           },
         },
       ],
@@ -75,7 +99,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -91,7 +115,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [],
-        meta: { total: 0, page: 1, limit: 5, totalPages: 0 },
+        meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -105,11 +129,11 @@ describe('EventsListCommand', () => {
       );
     });
 
-    it('should call findAll with upcoming filter and limit 5', async () => {
+    it('should call findAll with upcoming filter and limit 10', async () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -120,7 +144,7 @@ describe('EventsListCommand', () => {
 
       expect(eventsService.findAll).toHaveBeenCalledWith({
         upcoming: 'true',
-        limit: 5,
+        limit: 10,
         page: 1,
       });
     });
@@ -129,7 +153,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -149,7 +173,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -168,7 +192,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent({ game: null })],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -187,7 +211,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent({ signupCount: 5, maxAttendees: 20 })],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -206,7 +230,7 @@ describe('EventsListCommand', () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent({ signupCount: 3, maxAttendees: null })],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -221,12 +245,12 @@ describe('EventsListCommand', () => {
       expect(call.embeds[0].data.description).toContain('3 signed up');
     });
 
-    it('should include button to view all events when CLIENT_URL is set', async () => {
+    it('should include select menu and button when CLIENT_URL is set', async () => {
       process.env.CLIENT_URL = 'https://raidledger.com';
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -238,15 +262,16 @@ describe('EventsListCommand', () => {
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
-      expect(call.components.length).toBeGreaterThan(0);
+      // Select menu row + View All button row
+      expect(call.components.length).toBe(2);
     });
 
-    it('should not include button when CLIENT_URL is not set', async () => {
+    it('should include only select menu when CLIENT_URL is not set', async () => {
       delete process.env.CLIENT_URL;
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent()],
-        meta: { total: 1, page: 1, limit: 5, totalPages: 1 },
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -258,14 +283,15 @@ describe('EventsListCommand', () => {
       const call = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
         components: unknown[];
       };
-      expect(call.components).toHaveLength(0);
+      // Only the select menu row
+      expect(call.components).toHaveLength(1);
     });
 
     it('should include total count in the footer', async () => {
       const interaction = mockInteraction();
       eventsService.findAll.mockResolvedValue({
         data: [makeEvent(), makeEvent({ id: 2, title: 'Event 2' })],
-        meta: { total: 10, page: 1, limit: 5, totalPages: 2 },
+        meta: { total: 10, page: 1, limit: 10, totalPages: 2 },
       } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
 
       await command.handleInteraction(
@@ -292,6 +318,28 @@ describe('EventsListCommand', () => {
 
       expect(interaction.editReply).toHaveBeenCalledWith(
         'Failed to fetch upcoming events. Please try again later.',
+      );
+    });
+
+    it('should attach a component collector on the reply message', async () => {
+      const interaction = mockInteraction();
+      eventsService.findAll.mockResolvedValue({
+        data: [makeEvent()],
+        meta: { total: 1, page: 1, limit: 10, totalPages: 1 },
+      } as unknown as Awaited<ReturnType<EventsService['findAll']>>);
+
+      await command.handleInteraction(
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
+      );
+
+      expect(
+        mockReplyMessage.createMessageComponentCollector,
+      ).toHaveBeenCalledWith(
+        expect.objectContaining({
+          time: 5 * 60 * 1000,
+        }),
       );
     });
   });
