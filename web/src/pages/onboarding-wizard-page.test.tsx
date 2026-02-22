@@ -124,6 +124,17 @@ vi.mock('../hooks/use-system-status', () => ({
     })),
 }));
 
+vi.mock('../hooks/use-discord-onboarding', () => ({
+    useGuildMembership: vi.fn(() => ({
+        data: { isMember: false },
+        isLoading: false,
+    })),
+    useServerInvite: vi.fn(() => ({
+        data: { url: null, guildName: null },
+        isLoading: false,
+    })),
+}));
+
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 
@@ -245,8 +256,8 @@ describe('OnboardingWizardPage', () => {
 
         renderWithRouter(<OnboardingWizardPage />);
 
-        // Connect + Games + GameTime + Personalize = 4 steps
-        expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
+        // Connect + Discord + Games + GameTime + Personalize = 5 steps (ROK-403 added Discord join step)
+        expect(screen.getByText(/step 1 of 5/i)).toBeInTheDocument();
         expect(screen.getByText(/connect your account/i)).toBeInTheDocument();
     });
 
