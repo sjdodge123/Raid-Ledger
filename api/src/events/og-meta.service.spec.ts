@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OgMetaService } from './og-meta.service';
 import { InviteService } from './invite.service';
+import { InviteController } from './invite.controller';
 import { SettingsService } from '../settings/settings.service';
 
 // ---------------------------------------------------------------------------
@@ -8,12 +9,14 @@ import { SettingsService } from '../settings/settings.service';
 // ---------------------------------------------------------------------------
 
 /** Build a minimal valid resolveInvite response for a valid invite. */
-function makeValidInvite(overrides: {
-  title?: string;
-  startTime?: string;
-  endTime?: string;
-  game?: { name: string; coverUrl?: string | null } | null;
-} = {}) {
+function makeValidInvite(
+  overrides: {
+    title?: string;
+    startTime?: string;
+    endTime?: string;
+    game?: { name: string; coverUrl?: string | null } | null;
+  } = {},
+) {
   return {
     valid: true,
     event: {
@@ -21,7 +24,13 @@ function makeValidInvite(overrides: {
       title: overrides.title ?? 'Test Event',
       startTime: overrides.startTime ?? '2026-03-02T20:00:00.000Z',
       endTime: overrides.endTime ?? '2026-03-02T23:00:00.000Z',
-      game: overrides.game !== undefined ? overrides.game : { name: 'World of Warcraft', coverUrl: 'https://images.igdb.com/cover.jpg' },
+      game:
+        overrides.game !== undefined
+          ? overrides.game
+          : {
+              name: 'World of Warcraft',
+              coverUrl: 'https://images.igdb.com/cover.jpg',
+            },
     },
     slot: { id: 1, role: 'dps', status: 'pending' },
   };
@@ -235,7 +244,10 @@ describe('OgMetaService', () => {
         makeValidInvite({
           title: 'Mythic+ Monday',
           startTime: '2026-03-02T20:00:00.000Z',
-          game: { name: 'World of Warcraft', coverUrl: 'https://images.igdb.com/cover.jpg' },
+          game: {
+            name: 'World of Warcraft',
+            coverUrl: 'https://images.igdb.com/cover.jpg',
+          },
         }),
       );
     });
@@ -295,7 +307,10 @@ describe('OgMetaService', () => {
       inviteService.resolveInvite.mockResolvedValue(
         makeValidInvite({
           title: 'Weekend Raid',
-          game: { name: 'FFXIV', coverUrl: 'https://images.igdb.com/ffxiv.jpg' },
+          game: {
+            name: 'FFXIV',
+            coverUrl: 'https://images.igdb.com/ffxiv.jpg',
+          },
         }),
       );
     });
@@ -332,7 +347,9 @@ describe('OgMetaService', () => {
     });
 
     it('twitter:image should be absent when game is null', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('tw3');
       expect(html).not.toContain('twitter:image');
     });
@@ -382,7 +399,9 @@ describe('OgMetaService', () => {
 
     it('should escape ampersands in game name', async () => {
       inviteService.resolveInvite.mockResolvedValue(
-        makeValidInvite({ game: { name: 'Dungeons & Dragons', coverUrl: null } }),
+        makeValidInvite({
+          game: { name: 'Dungeons & Dragons', coverUrl: null },
+        }),
       );
       const html = await service.renderInviteOgHtml('xss5');
       expect(html).toContain('Dungeons &amp; Dragons');
@@ -405,7 +424,10 @@ describe('OgMetaService', () => {
     it('should escape angle brackets in game cover URL', async () => {
       inviteService.resolveInvite.mockResolvedValue(
         makeValidInvite({
-          game: { name: 'Test Game', coverUrl: 'https://cdn.example.com/<evil>.jpg' },
+          game: {
+            name: 'Test Game',
+            coverUrl: 'https://cdn.example.com/<evil>.jpg',
+          },
         }),
       );
       const html = await service.renderInviteOgHtml('xss7');
@@ -415,7 +437,10 @@ describe('OgMetaService', () => {
 
     it('should handle unicode characters without escaping them', async () => {
       inviteService.resolveInvite.mockResolvedValue(
-        makeValidInvite({ title: 'Café Raider \u2014 Ōkami Night', game: null }),
+        makeValidInvite({
+          title: 'Café Raider \u2014 Ōkami Night',
+          game: null,
+        }),
       );
       const html = await service.renderInviteOgHtml('xss8');
       // Unicode should pass through intact (not double-encoded)
@@ -425,7 +450,10 @@ describe('OgMetaService', () => {
 
     it('should not render a raw <script> tag anywhere in the output', async () => {
       inviteService.resolveInvite.mockResolvedValue(
-        makeValidInvite({ title: '<script>document.cookie</script>', game: null }),
+        makeValidInvite({
+          title: '<script>document.cookie</script>',
+          game: null,
+        }),
       );
       const html = await service.renderInviteOgHtml('xss9');
       // Only the one legitimate <script>-free <head> and body tags should exist
@@ -465,7 +493,9 @@ describe('OgMetaService', () => {
     });
 
     it('should handle an event with no game at all (null game field)', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('nogame');
       expect(html).not.toContain('og:image');
       expect(html).not.toContain('twitter:image');
@@ -483,7 +513,9 @@ describe('OgMetaService', () => {
     });
 
     it('should not include "Game:" line in description when game is null', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('nodesc');
       // "Game:" label should only appear when a game name is present
       expect(html).not.toContain('Game:');
@@ -498,14 +530,19 @@ describe('OgMetaService', () => {
     });
 
     it('should encode special characters in invite code in canonical URL', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('code with spaces');
       // The code should be percent-encoded in the URL
       expect(html).toContain('/i/code%20with%20spaces');
     });
 
     it('should handle resolve returning valid:true but event is null/undefined', async () => {
-      inviteService.resolveInvite.mockResolvedValue({ valid: true, event: null });
+      inviteService.resolveInvite.mockResolvedValue({
+        valid: true,
+        event: null,
+      });
       const html = await service.renderInviteOgHtml('nullevent');
       // Should fall back gracefully
       expect(html).toContain('Raid Ledger');
@@ -625,7 +662,9 @@ describe('OgMetaService', () => {
   // =========================================================================
   describe('Meta refresh redirect tag', () => {
     it('should have http-equiv="refresh" pointing to canonical URL for valid invite', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('refresh1');
       expect(html).toMatch(
         /http-equiv="refresh" content="0;url=https:\/\/raid\.example\.com\/i\/refresh1"/,
@@ -643,7 +682,9 @@ describe('OgMetaService', () => {
     });
 
     it('should redirect to URL with encoded invite code', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('code&special=1');
       expect(html).toContain('code%26special%3D1');
     });
@@ -654,25 +695,33 @@ describe('OgMetaService', () => {
   // =========================================================================
   describe('HTML structure validity', () => {
     it('should start with <!DOCTYPE html>', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('struct1');
       expect(html.trimStart()).toMatch(/^<!DOCTYPE html>/i);
     });
 
     it('should contain <html lang="en">', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('struct2');
       expect(html).toContain('<html lang="en">');
     });
 
     it('should have a <head> section with charset UTF-8', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('struct3');
       expect(html).toContain('charset="UTF-8"');
     });
 
     it('should have a <body> with a redirect anchor', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('struct4');
       expect(html).toContain('<body>');
       expect(html).toContain('</body>');
@@ -685,11 +734,15 @@ describe('OgMetaService', () => {
       );
       const html = await service.renderInviteOgHtml('struct5');
       // Both <title> and og:title should carry the escaped event title
-      expect(html).toMatch(/<title>You&#39;re invited to: Struct Event<\/title>/);
+      expect(html).toMatch(
+        /<title>You&#39;re invited to: Struct Event<\/title>/,
+      );
     });
 
     it('should have a <meta name="description"> tag', async () => {
-      inviteService.resolveInvite.mockResolvedValue(makeValidInvite({ game: null }));
+      inviteService.resolveInvite.mockResolvedValue(
+        makeValidInvite({ game: null }),
+      );
       const html = await service.renderInviteOgHtml('struct6');
       expect(html).toContain('name="description"');
     });
@@ -711,8 +764,9 @@ describe('OgMetaService', () => {
     // that the decorator metadata is configured correctly.
 
     it('should return the HTML produced by OgMetaService', async () => {
-      const { InviteController } = await import('./invite.controller');
-      const mockOgMetaService = { renderInviteOgHtml: jest.fn().mockResolvedValue('<html>ok</html>') };
+      const mockOgMetaService = {
+        renderInviteOgHtml: jest.fn().mockResolvedValue('<html>ok</html>'),
+      };
       const mockInviteService = {
         resolveInvite: jest.fn(),
         claimInvite: jest.fn(),
@@ -729,15 +783,17 @@ describe('OgMetaService', () => {
       const controller = module.get(InviteController);
       const result = await controller.renderOgMeta('testcode');
 
-      expect(mockOgMetaService.renderInviteOgHtml).toHaveBeenCalledWith('testcode');
+      expect(mockOgMetaService.renderInviteOgHtml).toHaveBeenCalledWith(
+        'testcode',
+      );
       expect(result).toBe('<html>ok</html>');
     });
 
-    it('renderOgMeta route is registered before :code to avoid shadowing', async () => {
-      const { InviteController } = await import('./invite.controller');
+    it('renderOgMeta route is registered before :code to avoid shadowing', () => {
       // Verify the OG endpoint uses ':code/og' path which is more specific
       // than the plain ':code' resolve route. We check via Reflect metadata.
-      const metadataKeys = Reflect.getMetadataKeys(InviteController.prototype.renderOgMeta);
+      const proto = InviteController.prototype as Record<string, unknown>;
+      const metadataKeys = Reflect.getMetadataKeys(proto['renderOgMeta']);
       expect(metadataKeys.length).toBeGreaterThan(0);
     });
   });
