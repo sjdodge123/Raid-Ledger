@@ -98,15 +98,17 @@ export class EventPlansService {
       })
       .returning();
 
-    // Look up game name for the embed
+    // Look up game name and cover for the embed
     let gameName: string | null = null;
+    let gameCoverUrl: string | null = null;
     if (dto.gameId) {
       const [game] = await this.db
-        .select({ name: schema.games.name })
+        .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
         .from(schema.games)
         .where(eq(schema.games.id, dto.gameId))
         .limit(1);
       gameName = game?.name ?? null;
+      gameCoverUrl = game?.coverUrl ?? null;
     }
 
     // Post the Discord poll
@@ -121,6 +123,7 @@ export class EventPlansService {
         {
           description: dto.description,
           gameName,
+          gameCoverUrl,
           durationMinutes: dto.durationMinutes,
           slotConfig: dto.slotConfig as Record<string, unknown> | null,
           pollMode: dto.pollMode,
@@ -254,18 +257,7 @@ export class EventPlansService {
       })
       .returning();
 
-    // Look up game name for the embed
-    let gameName: string | null = null;
-    if (event.game?.id) {
-      const [game] = await this.db
-        .select({ name: schema.games.name })
-        .from(schema.games)
-        .where(eq(schema.games.id, event.game.id))
-        .limit(1);
-      gameName = game?.name ?? null;
-    }
-
-    // Post Discord poll
+    // Post Discord poll (game info comes from the event DTO directly)
     try {
       const messageId = await this.postDiscordPoll(
         channelId,
@@ -276,7 +268,8 @@ export class EventPlansService {
         1,
         {
           description: event.description,
-          gameName,
+          gameName: event.game?.name ?? null,
+          gameCoverUrl: event.game?.coverUrl ?? null,
           durationMinutes,
           slotConfig: event.slotConfig as Record<string, unknown> | null,
           pollMode: 'standard',
@@ -596,15 +589,17 @@ export class EventPlansService {
       );
     }
 
-    // Look up game name for the embed
+    // Look up game name and cover for the embed
     let gameName: string | null = null;
+    let gameCoverUrl: string | null = null;
     if (plan.gameId) {
       const [game] = await this.db
-        .select({ name: schema.games.name })
+        .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
         .from(schema.games)
         .where(eq(schema.games.id, plan.gameId))
         .limit(1);
       gameName = game?.name ?? null;
+      gameCoverUrl = game?.coverUrl ?? null;
     }
 
     const pollOptions = plan.pollOptions as Array<{
@@ -637,6 +632,7 @@ export class EventPlansService {
         {
           description: plan.description,
           gameName,
+          gameCoverUrl,
           durationMinutes: plan.durationMinutes,
           slotConfig: plan.slotConfig as Record<string, unknown> | null,
           pollMode: plan.pollMode,
@@ -888,6 +884,7 @@ export class EventPlansService {
     details?: {
       description?: string | null;
       gameName?: string | null;
+      gameCoverUrl?: string | null;
       durationMinutes?: number;
       slotConfig?: Record<string, unknown> | null;
       pollMode?: string;
@@ -916,72 +913,80 @@ export class EventPlansService {
         ? `Not everyone was available — here are new time options! (Round ${round})`
         : undefined;
 
-    // Build event details embed and send BEFORE the poll so it appears above
-    const embed = new EmbedBuilder().setTitle(title).setColor(0x7c3aed); // violet
+    // Build event details embed matching the standard event embed styling
+    // (see discord-embed.factory.ts for the canonical layout)
+    const embed = new EmbedBuilder()
+      .setAuthor({ name: 'Raid Ledger' })
+      .setTitle(`📅 ${title}`)
+      .setColor(0x8b5cf6); // EMBED_COLORS.ROSTER_UPDATE (purple — planning context)
 
-    const descParts: string[] = [];
-    if (details?.description) {
-      descParts.push(details.description);
-    }
-
-    // Add link to plan on web UI
     const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
     if (clientUrl) {
-      descParts.push(
-        `\n📎 [View on Raid Ledger](${clientUrl}/events?tab=plans)`,
-      );
+      embed.setURL(`${clientUrl}/events?tab=plans`);
     }
 
-    if (descParts.length > 0) {
-      embed.setDescription(descParts.join('\n'));
-    }
-
-    const fields: Array<{ name: string; value: string; inline: boolean }> = [];
+    // Body: same emoji-prefixed layout as event embeds
+    const bodyLines: string[] = [];
 
     if (details?.gameName) {
-      fields.push({ name: 'Game', value: details.gameName, inline: true });
+      bodyLines.push(`🎮 **${details.gameName}**`);
     }
 
     if (details?.durationMinutes) {
       const hours = Math.floor(details.durationMinutes / 60);
       const mins = details.durationMinutes % 60;
-      const duration =
+      const durationStr =
         hours > 0 && mins > 0
           ? `${hours}h ${mins}m`
           : hours > 0
             ? `${hours}h`
             : `${mins}m`;
-      fields.push({ name: 'Duration', value: duration, inline: true });
+      bodyLines.push(`⏱️ **Duration:** ${durationStr}`);
     }
 
+    // Roster breakdown matching event embed format
     if (details?.slotConfig) {
       const sc = details.slotConfig as Record<string, number | string>;
       if (sc.type === 'mmo') {
-        const parts: string[] = [];
-        if (sc.tank) parts.push(`${sc.tank} Tank`);
-        if (sc.healer) parts.push(`${sc.healer} Healer`);
-        if (sc.dps) parts.push(`${sc.dps} DPS`);
-        if (sc.flex) parts.push(`${sc.flex} Flex`);
-        if (sc.bench) parts.push(`${sc.bench} Bench`);
-        fields.push({ name: 'Roster', value: parts.join(' · '), inline: true });
+        const tankMax = Number(sc.tank) || 0;
+        const healerMax = Number(sc.healer) || 0;
+        const dpsMax = Number(sc.dps) || 0;
+        const flexMax = Number(sc.flex) || 0;
+        const totalMax = tankMax + healerMax + dpsMax + flexMax;
+        const rosterParts: string[] = [];
+        rosterParts.push(`── ROSTER: 0/${totalMax} ──`);
+        if (tankMax > 0) rosterParts.push(`🛡️ Tanks (0/${tankMax}): —`);
+        if (healerMax > 0) rosterParts.push(`💚 Healers (0/${healerMax}): —`);
+        if (dpsMax > 0) rosterParts.push(`⚔️ DPS (0/${dpsMax}): —`);
+        bodyLines.push('');
+        bodyLines.push(rosterParts.join('\n'));
       } else if (sc.player) {
-        const parts = [`${sc.player} Players`];
-        if (sc.bench) parts.push(`${sc.bench} Bench`);
-        fields.push({ name: 'Roster', value: parts.join(' · '), inline: true });
+        const playerMax = Number(sc.player) || 0;
+        bodyLines.push('');
+        bodyLines.push(`── ROSTER: 0/${playerMax} ──`);
       }
     }
 
-    if (details?.pollMode === 'all_or_nothing') {
-      fields.push({
-        name: 'Mode',
-        value: "All or Nothing — re-polls if anyone can't make it",
-        inline: false,
-      });
+    if (details?.description) {
+      bodyLines.push('');
+      bodyLines.push(details.description);
     }
 
-    if (fields.length > 0) {
-      embed.addFields(fields);
+    if (details?.pollMode === 'all_or_nothing') {
+      bodyLines.push('');
+      bodyLines.push("🔄 **All or Nothing** — re-polls if anyone can't make it");
     }
+
+    embed.setDescription(bodyLines.join('\n'));
+
+    // Game cover thumbnail
+    if (details?.gameCoverUrl) {
+      embed.setThumbnail(details.gameCoverUrl);
+    }
+
+    // Footer with community name (matches event embeds)
+    embed.setFooter({ text: 'Raid Ledger' });
+    embed.setTimestamp();
 
     // Send embed as a separate message first so it appears ABOVE the poll
     await textChannel.send({ content, embeds: [embed] });
@@ -1178,15 +1183,17 @@ export class EventPlansService {
 
     const newRound = (plan.pollRound ?? 1) + 1;
 
-    // Look up game name for re-poll embed
+    // Look up game name and cover for re-poll embed
     let gameName: string | null = null;
+    let gameCoverUrl: string | null = null;
     if (plan.gameId) {
       const [game] = await this.db
-        .select({ name: schema.games.name })
+        .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
         .from(schema.games)
         .where(eq(schema.games.id, plan.gameId))
         .limit(1);
       gameName = game?.name ?? null;
+      gameCoverUrl = game?.coverUrl ?? null;
     }
 
     // Post new poll
@@ -1202,6 +1209,7 @@ export class EventPlansService {
         {
           description: plan.description,
           gameName,
+          gameCoverUrl,
           durationMinutes: plan.durationMinutes,
           slotConfig: plan.slotConfig as Record<string, unknown> | null,
           pollMode: plan.pollMode,
