@@ -809,6 +809,10 @@ import type {
     PugSlotListResponseDto,
     InviteCodeResolveResponseDto,
     ShareEventResponseDto,
+    CreateEventPlanDto,
+    EventPlanResponseDto,
+    TimeSuggestionsResponse,
+    PollResultsResponse,
 } from '@raid-ledger/contract';
 
 /**
@@ -1005,5 +1009,96 @@ export async function regeneratePugInviteCode(
 ): Promise<PugSlotResponseDto> {
     return fetchApi(`/events/${eventId}/pugs/${pugId}/regenerate-code`, {
         method: 'POST',
+    });
+}
+
+// ============================================================
+// Event Plans API (ROK-392)
+// ============================================================
+
+/**
+ * Get smart time suggestions for poll-based scheduling.
+ */
+export async function getTimeSuggestions(params?: {
+    gameId?: number;
+    tzOffset?: number;
+    afterDate?: string;
+}): Promise<TimeSuggestionsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.gameId) searchParams.set('gameId', String(params.gameId));
+    if (params?.tzOffset !== undefined) searchParams.set('tzOffset', String(params.tzOffset));
+    if (params?.afterDate) searchParams.set('afterDate', params.afterDate);
+    const query = searchParams.toString();
+    return fetchApi(`/event-plans/time-suggestions${query ? `?${query}` : ''}`);
+}
+
+/**
+ * Create an event plan (posts Discord poll).
+ */
+export async function createEventPlan(
+    dto: CreateEventPlanDto,
+): Promise<EventPlanResponseDto> {
+    return fetchApi('/event-plans', {
+        method: 'POST',
+        body: JSON.stringify(dto),
+    });
+}
+
+/**
+ * Get current user's event plans.
+ */
+export async function getMyEventPlans(): Promise<EventPlanResponseDto[]> {
+    return fetchApi('/event-plans/my-plans');
+}
+
+/**
+ * Get a single event plan by ID.
+ */
+export async function getEventPlan(planId: string): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/${planId}`);
+}
+
+/**
+ * Cancel an active event plan.
+ */
+export async function cancelEventPlan(
+    planId: string,
+): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/${planId}/cancel`, {
+        method: 'PATCH',
+    });
+}
+
+/**
+ * Get poll results for an active plan.
+ */
+export async function getEventPlanPollResults(
+    planId: string,
+): Promise<PollResultsResponse> {
+    return fetchApi(`/event-plans/${planId}/poll-results`);
+}
+
+/**
+ * Restart a cancelled or expired event plan.
+ */
+export async function restartEventPlan(
+    planId: string,
+): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/${planId}/restart`, {
+        method: 'PATCH',
+    });
+}
+
+/**
+ * Convert an existing event to an event plan (poll-based scheduling).
+ * Posts a Discord poll and optionally soft-cancels the original event.
+ */
+export async function convertEventToPlan(
+    eventId: number,
+    options?: { cancelOriginal?: boolean; pollDurationHours?: number },
+): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/from-event/${eventId}`, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
     });
 }

@@ -1,9 +1,11 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { GameTimeGrid } from '../features/game-time/GameTimeGrid';
 import { useAggregateGameTime, useRescheduleEvent } from '../../hooks/use-reschedule';
+import { useConvertEventToPlan } from '../../hooks/use-event-plans';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import type { GameTimePreviewBlock, GameTimeEventBlock } from '../features/game-time/GameTimeGrid';
 
@@ -85,6 +87,8 @@ export function RescheduleModal({
 }: RescheduleModalProps) {
     const { data: gameTimeData, isLoading } = useAggregateGameTime(eventId, isOpen);
     const reschedule = useRescheduleEvent(eventId);
+    const convertToPlan = useConvertEventToPlan();
+    const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 767px)');
     // New start time — null means nothing selected yet
     const [newStartTime, setNewStartTime] = useState<string | null>(null);
@@ -230,6 +234,19 @@ export function RescheduleModal({
         onClose();
     };
 
+    const handlePollForBestTime = async () => {
+        try {
+            await convertToPlan.mutateAsync({
+                eventId,
+                options: { cancelOriginal: true },
+            });
+            handleClose();
+            navigate('/events?tab=plans');
+        } catch {
+            // Error toast handled by the mutation's onError
+        }
+    };
+
     const signupCount = gameTimeData?.totalUsers ?? 0;
 
     // Formatted summary of the selected time for display
@@ -239,6 +256,20 @@ export function RescheduleModal({
 
     const content = (
         <div className="space-y-3">
+            {/* Poll for Best Time callout */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
+                <p className="text-sm text-foreground flex-1">
+                    Let your community decide — post a Discord poll for the best time
+                </p>
+                <button
+                    onClick={handlePollForBestTime}
+                    disabled={convertToPlan.isPending}
+                    className="shrink-0 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-3 py-1.5 text-sm font-medium text-white transition-colors"
+                >
+                    {convertToPlan.isPending ? 'Converting...' : 'Poll for Best Time'}
+                </button>
+            </div>
+
             {/* Legend */}
             <div className="flex items-center gap-4 text-xs text-muted">
                 {gridSelection && (

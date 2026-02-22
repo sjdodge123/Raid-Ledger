@@ -7,6 +7,7 @@ import { EventCard, EventCardSkeleton } from "../components/events/event-card";
 import { MobileEventCard, MobileEventCardSkeleton } from "../components/events/mobile-event-card";
 import { EventsEmptyState } from "../components/events/events-empty-state";
 import { EventsMobileToolbar, type EventsTab } from "../components/events/events-mobile-toolbar";
+import { EventPlansList } from "../components/events/event-plans-list";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
@@ -51,7 +52,11 @@ export function EventsPage() {
   const gameIdFilter = searchParams.get("gameId") || undefined;
 
   // Filter state — shared between mobile toolbar and desktop tabs
-  const [activeTab, setActiveTab] = useState<EventsTab>('upcoming');
+  // Initialize from ?tab= URL param so deep links like /events?tab=plans work
+  const tabParam = searchParams.get('tab') as EventsTab | null;
+  const [activeTab, setActiveTab] = useState<EventsTab>(
+    tabParam && ['upcoming', 'past', 'mine', 'plans'].includes(tabParam) ? tabParam : 'upcoming',
+  );
   const [searchQuery, setSearchQuery] = useState('');
 
   // Build query params based on the active mobile tab (ROK-329)
@@ -175,42 +180,67 @@ export function EventsPage() {
                 <h1 className="text-3xl font-bold text-foreground mb-2">
                   {filteredGameName
                     ? `${filteredGameName} Events`
-                    : activeTab === 'past'
-                      ? 'Past Events'
-                      : activeTab === 'mine'
-                        ? 'My Events'
-                        : 'Upcoming Events'}
+                    : activeTab === 'plans'
+                      ? 'Event Plans'
+                      : activeTab === 'past'
+                        ? 'Past Events'
+                        : activeTab === 'mine'
+                          ? 'My Events'
+                          : 'Upcoming Events'}
                 </h1>
                 <p className="text-muted">
                   {filteredGameName
                     ? `Showing events for ${filteredGameName}`
-                    : activeTab === 'past'
-                      ? 'Browse completed gaming sessions'
-                      : activeTab === 'mine'
-                        ? 'Events you\'ve signed up for'
-                        : 'Discover and sign up for gaming sessions'}
+                    : activeTab === 'plans'
+                      ? 'Community event planning polls'
+                      : activeTab === 'past'
+                        ? 'Browse completed gaming sessions'
+                        : activeTab === 'mine'
+                          ? 'Events you\'ve signed up for'
+                          : 'Discover and sign up for gaming sessions'}
                 </p>
               </div>
               {isAuthenticated && (
-                <Link
-                  to="/events/new"
-                  className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
+                <div className="flex items-center gap-3">
+                  <Link
+                    to="/events/plan"
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-violet-600 hover:bg-violet-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-violet-600/25"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 4v16m8-8H4"
-                    />
-                  </svg>
-                  Create Event
-                </Link>
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                      />
+                    </svg>
+                    Plan Event
+                  </Link>
+                  <Link
+                    to="/events/new"
+                    className="inline-flex items-center gap-2 px-5 py-3 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-lg transition-colors shadow-lg shadow-emerald-600/25"
+                  >
+                    <svg
+                      className="w-5 h-5"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M12 4v16m8-8H4"
+                      />
+                    </svg>
+                    Create Event
+                  </Link>
+                </div>
               )}
             </div>
 
@@ -218,7 +248,7 @@ export function EventsPage() {
             {isAuthenticated && (
               <div className="hidden md:flex items-center gap-4 mb-6">
                 <div className="flex gap-1 bg-panel rounded-lg p-1">
-                  {([['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events']] as const).map(([key, label]) => (
+                  {([['upcoming', 'Upcoming'], ['past', 'Past'], ['mine', 'My Events'], ['plans', 'Plans']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => setActiveTab(key)}
@@ -248,151 +278,158 @@ export function EventsPage() {
               </div>
             )}
 
-            {/* Game Filter Chip */}
-            {gameIdFilter && (
-              <div className="mb-4">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
-                  {filteredGameName ?? "Loading..."}
-                  <button
-                    onClick={() => {
-                      const next = new URLSearchParams(searchParams);
-                      next.delete("gameId");
-                      setSearchParams(next);
-                    }}
-                    className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors"
-                    aria-label="Clear game filter"
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M6 18L18 6M6 6l12 12"
-                      />
-                    </svg>
-                  </button>
-                </span>
-              </div>
-            )}
+            {activeTab === 'plans' ? (
+              /* Plans View */
+              <EventPlansList />
+            ) : (
+              <>
+                {/* Game Filter Chip */}
+                {gameIdFilter && (
+                  <div className="mb-4">
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30">
+                      {filteredGameName ?? "Loading..."}
+                      <button
+                        onClick={() => {
+                          const next = new URLSearchParams(searchParams);
+                          next.delete("gameId");
+                          setSearchParams(next);
+                        }}
+                        className="flex items-center justify-center min-w-[44px] min-h-[44px] -mr-3 rounded-full hover:bg-violet-500/30 transition-colors"
+                        aria-label="Clear game filter"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
+                    </span>
+                  </div>
+                )}
 
-            {/* Game Time Filter */}
-            {slotSet && (
-              <div className="mb-6">
-                <button
-                  onClick={() => setFilterGameTime((v) => !v)}
-                  className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${filterGameTime
-                    ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40"
-                    : "bg-surface text-muted border-edge hover:text-foreground hover:border-dim"
-                    }`}
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
-                  Inside Game Time
-                  {overlapSet && (
-                    <span
-                      className={`px-1.5 py-0.5 text-xs rounded-full ${filterGameTime ? "bg-cyan-500/30" : "bg-panel"
+                {/* Game Time Filter */}
+                {slotSet && (
+                  <div className="mb-6">
+                    <button
+                      onClick={() => setFilterGameTime((v) => !v)}
+                      className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border transition-colors ${filterGameTime
+                        ? "bg-cyan-500/15 text-cyan-300 border-cyan-500/40"
+                        : "bg-surface text-muted border-edge hover:text-foreground hover:border-dim"
                         }`}
                     >
-                      {overlapSet.size}
-                    </span>
+                      <svg
+                        className="w-4 h-4"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                        />
+                      </svg>
+                      Inside Game Time
+                      {overlapSet && (
+                        <span
+                          className={`px-1.5 py-0.5 text-xs rounded-full ${filterGameTime ? "bg-cyan-500/30" : "bg-panel"
+                            }`}
+                        >
+                          {overlapSet.size}
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* Events Grid — Desktop (>=md) */}
+                <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                  {isLoading ? (
+                    Array.from({ length: 8 }).map((_, i) => (
+                      <EventCardSkeleton key={i} />
+                    ))
+                  ) : displayEvents.length === 0 ? (
+                    filterGameTime ? (
+                      <div className="col-span-full text-center py-12">
+                        <p className="text-muted">
+                          No events match your game time schedule.
+                        </p>
+                        <button
+                          onClick={() => setFilterGameTime(false)}
+                          className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                        >
+                          Clear filter
+                        </button>
+                      </div>
+                    ) : (
+                      <EventsEmptyState />
+                    )
+                  ) : (
+                    displayEvents.map((event) => (
+                      <EventCard
+                        key={event.id}
+                        event={event}
+                        signupCount={event.signupCount}
+                        matchesGameTime={overlapSet?.has(event.id)}
+                        onClick={() => navigate(`/events/${event.id}`)}
+                      />
+                    ))
                   )}
-                </button>
-              </div>
-            )}
+                </div>
 
-            {/* Events Grid — Desktop (>=md) */}
-            <div className="hidden md:grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-              {isLoading ? (
-                Array.from({ length: 8 }).map((_, i) => (
-                  <EventCardSkeleton key={i} />
-                ))
-              ) : displayEvents.length === 0 ? (
-                filterGameTime ? (
-                  <div className="col-span-full text-center py-12">
-                    <p className="text-muted">
-                      No events match your game time schedule.
-                    </p>
-                    <button
-                      onClick={() => setFilterGameTime(false)}
-                      className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-                    >
-                      Clear filter
-                    </button>
-                  </div>
-                ) : (
-                  <EventsEmptyState />
-                )
-              ) : (
-                displayEvents.map((event) => (
-                  <EventCard
-                    key={event.id}
-                    event={event}
-                    signupCount={event.signupCount}
-                    matchesGameTime={overlapSet?.has(event.id)}
-                    onClick={() => navigate(`/events/${event.id}`)}
+                {/* Events List — Mobile (<md) */}
+                <div className="md:hidden space-y-3">
+                  {isLoading ? (
+                    Array.from({ length: 4 }).map((_, i) => (
+                      <MobileEventCardSkeleton key={i} />
+                    ))
+                  ) : displayEvents.length === 0 ? (
+                    filterGameTime ? (
+                      <div className="text-center py-12">
+                        <p className="text-muted">
+                          No events match your game time schedule.
+                        </p>
+                        <button
+                          onClick={() => setFilterGameTime(false)}
+                          className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
+                        >
+                          Clear filter
+                        </button>
+                      </div>
+                    ) : (
+                      <EventsEmptyState />
+                    )
+                  ) : (
+                    displayEvents.map((event) => (
+                      <MobileEventCard
+                        key={event.id}
+                        event={event}
+                        signupCount={event.signupCount}
+                        matchesGameTime={overlapSet?.has(event.id)}
+                        onClick={() => navigate(`/events/${event.id}`)}
+                      />
+                    ))
+                  )}
+                </div>
+
+                {/* Infinite Scroll Sentinel */}
+                {!isLoading && displayEvents.length > 0 && (
+                  <InfiniteScrollSentinel
+                    sentinelRef={sentinelRef}
+                    isFetchingNextPage={isFetchingNextPage}
+                    hasNextPage={hasNextPage}
                   />
-                ))
-              )}
-            </div>
-
-            {/* Events List — Mobile (<md) */}
-            <div className="md:hidden space-y-3">
-              {isLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <MobileEventCardSkeleton key={i} />
-                ))
-              ) : displayEvents.length === 0 ? (
-                filterGameTime ? (
-                  <div className="text-center py-12">
-                    <p className="text-muted">
-                      No events match your game time schedule.
-                    </p>
-                    <button
-                      onClick={() => setFilterGameTime(false)}
-                      className="mt-2 text-sm text-cyan-400 hover:text-cyan-300 transition-colors"
-                    >
-                      Clear filter
-                    </button>
-                  </div>
-                ) : (
-                  <EventsEmptyState />
-                )
-              ) : (
-                displayEvents.map((event) => (
-                  <MobileEventCard
-                    key={event.id}
-                    event={event}
-                    signupCount={event.signupCount}
-                    matchesGameTime={overlapSet?.has(event.id)}
-                    onClick={() => navigate(`/events/${event.id}`)}
-                  />
-                ))
-              )}
-            </div>
-
-            {/* Infinite Scroll Sentinel */}
-            {!isLoading && displayEvents.length > 0 && (
-              <InfiniteScrollSentinel
-                sentinelRef={sentinelRef}
-                isFetchingNextPage={isFetchingNextPage}
-                hasNextPage={hasNextPage}
-              />
+                )}
+              </>
             )}
           </div>
         </div>

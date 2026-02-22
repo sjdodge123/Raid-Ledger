@@ -23,6 +23,19 @@ vi.mock('../../hooks/use-reschedule', () => ({
     })),
 }));
 
+// Mock useNavigate from react-router-dom
+vi.mock('react-router-dom', () => ({
+    useNavigate: vi.fn(() => vi.fn()),
+}));
+
+// Mock useConvertEventToPlan hook
+vi.mock('../../hooks/use-event-plans', () => ({
+    useConvertEventToPlan: vi.fn(() => ({
+        mutateAsync: vi.fn(),
+        isPending: false,
+    })),
+}));
+
 // Mock useMediaQuery to return desktop by default
 vi.mock('../../hooks/use-media-query', () => ({
     useMediaQuery: vi.fn(() => false), // false = desktop

@@ -792,8 +792,13 @@ describe('OgMetaService', () => {
     it('renderOgMeta route is registered before :code to avoid shadowing', () => {
       // Verify the OG endpoint uses ':code/og' path which is more specific
       // than the plain ':code' resolve route. We check via Reflect metadata.
-      const proto = InviteController.prototype as Record<string, unknown>;
-      const metadataKeys = Reflect.getMetadataKeys(proto['renderOgMeta']);
+      const proto = InviteController.prototype as unknown as Record<
+        string,
+        unknown
+      >;
+      const metadataKeys = Reflect.getMetadataKeys(
+        proto['renderOgMeta'] as object,
+      );
       expect(metadataKeys.length).toBeGreaterThan(0);
     });
   });

@@ -1,34 +1,26 @@
-import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from '../../lib/toast';
 import type { IgdbGameDto, CreateEventDto, UpdateEventDto, SlotConfigDto, RecurrenceDto, TemplateConfigDto, EventResponseDto } from '@raid-ledger/contract';
 import { createEvent, updateEvent } from '../../lib/api-client';
-import { GameSearchInput } from './game-search-input';
-// ROK-406: Hidden — uncomment when Your Availability section is re-enabled
-// import { TeamAvailabilityPicker } from '../features/heatmap';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { getTimezoneAbbr } from '../../lib/timezone-utils';
 import { TZDate } from '@date-fns/tz';
 import { useEventTemplates, useCreateTemplate, useDeleteTemplate } from '../../hooks/use-event-templates';
-import { useGameRegistry, useEventTypes } from '../../hooks/use-game-registry';
 import { useWantToPlay } from '../../hooks/use-want-to-play';
-import { PluginSlot } from '../../plugins';
-import { getWowVariant, getContentType } from '../../plugins/wow/utils';
 import '../../pages/event-detail-page.css';
-
-// Duration presets in minutes
-const DURATION_PRESETS = [
-    { label: '1h', minutes: 60 },
-    { label: '1.5h', minutes: 90 },
-    { label: '2h', minutes: 120 },
-    { label: '3h', minutes: 180 },
-    { label: '4h', minutes: 240 },
-] as const;
-
-// Default slot counts for each mode
-const MMO_DEFAULTS: SlotConfigDto = { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 5, bench: 0 };
-const GENERIC_DEFAULTS: SlotConfigDto = { type: 'generic', player: 10, bench: 5 };
+import {
+    DURATION_PRESETS,
+    MMO_DEFAULTS,
+    GENERIC_DEFAULTS,
+    type SlotState,
+} from './shared/event-form-constants';
+import { GameDetailsSection } from './shared/game-details-section';
+import { useRegistryGameId } from './shared/use-registry-game-id';
+import { DurationSection } from './shared/duration-section';
+import { RosterSection } from './shared/roster-section';
+import { RemindersSection } from './shared/reminders-section';
 
 // Recurrence options
 const RECURRENCE_OPTIONS = [
@@ -39,29 +31,16 @@ const RECURRENCE_OPTIONS = [
 ] as const;
 
 /**
- * Map a player cap to MMO composition slot counts.
- * Known breakpoints use hand-tuned values; unknown caps use proportional scaling.
+ * Section wrapper for visual grouping in the form.
  */
-function getCompositionForCap(cap: number): Pick<FormState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex' | 'slotBench'> {
-    const known: Record<number, Pick<FormState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex' | 'slotBench'>> = {
-        5:  { slotTank: 1, slotHealer: 1, slotDps: 3, slotFlex: 0, slotBench: 0 },
-        8:  { slotTank: 1, slotHealer: 2, slotDps: 5, slotFlex: 0, slotBench: 0 },
-        10: { slotTank: 2, slotHealer: 2, slotDps: 5, slotFlex: 1, slotBench: 0 },
-        20: { slotTank: 2, slotHealer: 4, slotDps: 12, slotFlex: 2, slotBench: 0 },
-        24: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 2, slotBench: 0 },
-        25: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 3, slotBench: 0 },
-        30: { slotTank: 2, slotHealer: 6, slotDps: 18, slotFlex: 4, slotBench: 0 },
-        40: { slotTank: 4, slotHealer: 10, slotDps: 22, slotFlex: 4, slotBench: 0 },
-    };
-    if (known[cap]) return known[cap];
-    const tank = Math.max(1, Math.round(cap * 0.1));
-    const healer = Math.max(1, Math.round(cap * 0.2));
-    const flex = Math.round(cap * 0.15);
-    const dps = cap - tank - healer - flex;
-    return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: flex, slotBench: 0 };
+function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
+    return (
+        <div className="space-y-4">
+            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">{title}</h3>
+            <div className="space-y-4">{children}</div>
+        </div>
+    );
 }
-
-// getWowVariant and getContentType imported from plugin slot (ROK-238)
 
 interface FormState {
     title: string;
@@ -103,68 +82,6 @@ interface FormErrors {
     duration?: string;
     maxAttendees?: string;
     recurrenceUntil?: string;
-}
-
-/**
- * Section wrapper for visual grouping in the form.
- */
-function FormSection({ title, children }: { title: string; children: React.ReactNode }) {
-    return (
-        <div className="space-y-4">
-            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">{title}</h3>
-            <div className="space-y-4">{children}</div>
-        </div>
-    );
-}
-
-/**
- * Number stepper for slot counts.
- */
-function SlotStepper({ label, value, onChange, color, min = 0, max = 99 }: {
-    label: string;
-    value: number;
-    onChange: (v: number) => void;
-    color: string;
-    min?: number;
-    max?: number;
-}) {
-    return (
-        <div className="flex items-center justify-between gap-3 py-2 min-h-[44px] sm:min-h-0">
-            <div className="flex items-center gap-2">
-                <div className={`w-3 h-3 rounded-full ${color}`} />
-                <span className="text-sm text-secondary font-medium">{label}</span>
-            </div>
-            <div className="flex items-center gap-1">
-                <button
-                    type="button"
-                    onClick={() => onChange(Math.max(min, value - 1))}
-                    disabled={value <= min}
-                    className="w-11 h-11 sm:w-8 sm:h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
-                >
-                    -
-                </button>
-                <input
-                    type="number"
-                    min={min}
-                    max={max}
-                    value={value}
-                    onChange={(e) => {
-                        const v = parseInt(e.target.value);
-                        if (!isNaN(v)) onChange(Math.max(min, Math.min(max, v)));
-                    }}
-                    className="w-14 h-11 sm:w-12 sm:h-8 bg-panel border border-edge rounded-md text-foreground text-center text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-                <button
-                    type="button"
-                    onClick={() => onChange(Math.min(max, value + 1))}
-                    disabled={value >= max}
-                    className="w-11 h-11 sm:w-8 sm:h-8 rounded-md bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center text-lg font-medium"
-                >
-                    +
-                </button>
-            </div>
-        </div>
-    );
 }
 
 interface EventFormProps {
@@ -255,11 +172,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     const [errors, setErrors] = useState<FormErrors>({});
     const [saveTemplateName, setSaveTemplateName] = useState('');
     const [showSaveTemplate, setShowSaveTemplate] = useState(false);
-    // Content search state moved to plugin slot (ROK-238)
-
-    // Track previous auto-suggestions to detect manual edits
-    const prevSuggestionRef = useRef('');
-    const prevDescSuggestionRef = useRef('');
 
     // Templates
     const { data: templatesData } = useEventTemplates();
@@ -267,141 +179,12 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     const deleteTemplateMutation = useDeleteTemplate();
     const templates = templatesData?.data ?? [];
 
-    // Event type auto-populate
-    const { games: registryGames } = useGameRegistry();
-    const gameName = form.game?.name;
-    const gameSlug = form.game?.slug;
-    const registryGame = useMemo(() => {
-        if (!gameName && !gameSlug) return undefined;
-        return registryGames.find(
-            (g) => (gameName && g.name.toLowerCase() === gameName.toLowerCase()) || g.slug === gameSlug,
-        );
-    }, [gameName, gameSlug, registryGames]);
-    const registryGameId = registryGame?.id;
-    const registrySlug = registryGame?.slug;
-    const { data: eventTypesData } = useEventTypes(registryGameId);
-    const eventTypes = eventTypesData?.data ?? [];
+    // Registry game ID for submission
+    const registryGameId = useRegistryGameId(form.game);
 
     // Interest stats
     const igdbId = form.game?.igdbId ?? undefined;
     const { count: interestCount, isLoading: interestLoading } = useWantToPlay(igdbId);
-
-    // WoW content browsing (ROK-238: logic delegated to plugin slot)
-    const wowVariant = registrySlug ? getWowVariant(registrySlug) : null;
-    const selectedEventType = eventTypes.find((t) => t.id === form.eventTypeId);
-    const contentType = selectedEventType?.slug ? getContentType(selectedEventType.slug) : null;
-
-    // Title auto-suggestion — uses shortNames for concise titles
-    const computeSuggestion = useCallback((): string => {
-        const etName = selectedEventType?.name;
-        const gName = form.game?.name;
-        const instances = form.selectedInstances;
-
-        if (instances.length > 0 && etName) {
-            const names = instances.map((i) => (i.shortName as string) || (i.name as string) || '');
-            const playerCap = selectedEventType?.defaultPlayerCap;
-            const suffix = playerCap ? ` ${playerCap} man` : '';
-            return `${names.join(' + ')}${suffix}`;
-        }
-        if (etName && gName) {
-            return `${etName} \u2014 ${gName}`;
-        }
-        if (gName) {
-            return `${gName} Event`;
-        }
-        return '';
-    }, [selectedEventType?.name, selectedEventType?.defaultPlayerCap, form.game?.name, form.selectedInstances]);
-
-    // Description auto-suggestion — overlapping level range across selected instances
-    const computeDescriptionSuggestion = useCallback((): string => {
-        const instances = form.selectedInstances;
-        if (instances.length === 0) return '';
-        const levels = instances
-            .map((i) => ({ min: i.minimumLevel as number | undefined, max: (i.maximumLevel ?? i.minimumLevel) as number | undefined }))
-            .filter((l): l is { min: number; max: number } => l.min != null);
-        if (levels.length === 0) return '';
-        // Intersection: highest min to lowest max = range where all dungeons are appropriate
-        const overlapMin = Math.max(...levels.map((l) => l.min));
-        const overlapMax = Math.min(...levels.map((l) => l.max));
-        if (overlapMin > overlapMax) {
-            // No overlap — fall back to full range
-            const fullMin = Math.min(...levels.map((l) => l.min));
-            const fullMax = Math.max(...levels.map((l) => l.max));
-            return `Level ${fullMin}-${fullMax} suggested`;
-        }
-        if (overlapMin === overlapMax) return `Level ${overlapMin} suggested`;
-        return `Level ${overlapMin}-${overlapMax} suggested`;
-    }, [form.selectedInstances]);
-
-    // Auto-fill title and description when suggestions change (if user hasn't manually edited)
-    useEffect(() => {
-        const newSuggestion = computeSuggestion();
-        const newDescSuggestion = computeDescriptionSuggestion();
-
-        setForm((prev) => {
-            let next = prev;
-
-            // Title auto-fill
-            if (newSuggestion && (prev.titleIsAutoSuggested || prev.title === '' || prev.title === prevSuggestionRef.current)) {
-                next = { ...next, title: newSuggestion, titleIsAutoSuggested: true };
-            }
-            prevSuggestionRef.current = newSuggestion;
-
-            // Description auto-fill
-            if (newDescSuggestion && (prev.descriptionIsAutoSuggested || prev.description === '' || prev.description === prevDescSuggestionRef.current)) {
-                next = { ...next, description: newDescSuggestion, descriptionIsAutoSuggested: true };
-            }
-            prevDescSuggestionRef.current = newDescSuggestion;
-
-            return next === prev ? prev : next;
-        });
-    }, [computeSuggestion, computeDescriptionSuggestion]);
-
-    function handleEventTypeChange(raw: string) {
-        if (raw === 'custom') {
-            setForm((prev) => ({
-                ...prev,
-                eventTypeId: null,
-                selectedInstances: [],
-                durationMinutes: 120,
-                customDuration: false,
-                slotType: 'generic',
-                slotTank: MMO_DEFAULTS.tank!,
-                slotHealer: MMO_DEFAULTS.healer!,
-                slotDps: MMO_DEFAULTS.dps!,
-                slotFlex: MMO_DEFAULTS.flex!,
-                slotPlayer: GENERIC_DEFAULTS.player!,
-                slotBench: GENERIC_DEFAULTS.bench!,
-                maxAttendees: '',
-            }));
-            return;
-        }
-        const eventTypeId = parseInt(raw, 10);
-        const et = eventTypes.find((t) => t.id === eventTypeId);
-        if (!et) return;
-        const updates: Partial<FormState> = { eventTypeId, selectedInstances: [] };
-        if (et.defaultDurationMinutes) {
-            updates.durationMinutes = et.defaultDurationMinutes;
-            updates.customDuration = !DURATION_PRESETS.some((p) => p.minutes === et.defaultDurationMinutes);
-        }
-        if (et.defaultPlayerCap) {
-            updates.maxAttendees = String(et.defaultPlayerCap);
-            if (et.requiresComposition) {
-                updates.slotType = 'mmo';
-                Object.assign(updates, getCompositionForCap(et.defaultPlayerCap));
-            } else {
-                updates.slotType = 'generic';
-                updates.slotPlayer = et.defaultPlayerCap;
-                updates.slotBench = 0;
-            }
-        }
-        if (et.requiresComposition && !et.defaultPlayerCap) {
-            updates.slotType = 'mmo';
-        } else if (!et.requiresComposition) {
-            updates.slotType = 'generic';
-        }
-        setForm((prev) => ({ ...prev, ...updates }));
-    }
 
     // Load template into form
     function loadTemplate(config: TemplateConfigDto) {
@@ -471,23 +254,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             timeZone: resolved,
         });
     }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
-
-    // ROK-406: Hidden — uncomment when Your Availability section is re-enabled
-    // Compute ISO strings for availability picker
-    // const computedTimes = useMemo(() => {
-    //     if (!form.startDate || !form.startTime || form.durationMinutes <= 0) return null;
-    //     const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
-    //     const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
-    //     return { startTime: start.toISOString(), endTime: end.toISOString() };
-    // }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
-
-    // Compute total slot count for preview
-    const totalSlots = useMemo(() => {
-        if (form.slotType === 'mmo') {
-            return form.slotTank + form.slotHealer + form.slotDps + form.slotFlex + form.slotBench;
-        }
-        return form.slotPlayer + form.slotBench;
-    }, [form.slotType, form.slotTank, form.slotHealer, form.slotDps, form.slotFlex, form.slotPlayer, form.slotBench]);
 
     // Compute recurrence count preview
     const recurrenceCount = useMemo(() => {
@@ -632,7 +398,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
 
     return (
         <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-8">
-            {/* ═══════════ Templates Bar ═══════════ */}
+            {/* Templates Bar */}
             {templates.length > 0 && (
                 <div className="flex items-center gap-3 -mb-2">
                     <span className="text-xs text-muted shrink-0">Load template:</span>
@@ -662,130 +428,43 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 </div>
             )}
 
-            {/* ═══════════ Section 1: Game & Content ═══════════ */}
+            {/* Section 1: Game & Content + Section 2: Details */}
             <FormSection title="Game & Content">
-                {/* Game Search — now first */}
-                <GameSearchInput
-                    value={form.game}
-                    onChange={(game) => {
-                        setForm((prev) => ({
-                            ...prev,
-                            game,
-                            eventTypeId: null,
-                            selectedInstances: [],
-                            titleIsAutoSuggested: prev.titleIsAutoSuggested,
-                        }));
+                <GameDetailsSection
+                    game={form.game}
+                    eventTypeId={form.eventTypeId}
+                    title={form.title}
+                    description={form.description}
+                    selectedInstances={form.selectedInstances}
+                    titleIsAutoSuggested={form.titleIsAutoSuggested}
+                    descriptionIsAutoSuggested={form.descriptionIsAutoSuggested}
+                    titleError={errors.title}
+                    titleInputId="title"
+                    eventTypeSelectId="eventType"
+                    showEventType={!isEditMode}
+                    onGameChange={(game) => setForm((prev) => ({ ...prev, game, titleIsAutoSuggested: prev.titleIsAutoSuggested }))}
+                    onEventTypeIdChange={(id) => setForm((prev) => ({ ...prev, eventTypeId: id }))}
+                    onTitleChange={(title, isAuto) => {
+                        setForm((prev) => ({ ...prev, title, titleIsAutoSuggested: isAuto }));
+                        if (!isAuto && errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
                     }}
+                    onDescriptionChange={(description, isAuto) => setForm((prev) => ({ ...prev, description, descriptionIsAutoSuggested: isAuto }))}
+                    onSelectedInstancesChange={(instances) => setForm((prev) => ({ ...prev, selectedInstances: instances }))}
+                    onEventTypeDefaults={(defaults: Partial<SlotState>) => setForm((prev) => ({ ...prev, ...defaults }))}
+                    interestCount={interestCount}
+                    interestLoading={interestLoading}
+                    slotBetween={
+                        <>
+                            <div className="border-t border-edge-subtle -mx-0" />
+                            <h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3>
+                        </>
+                    }
                 />
-
-                {/* Interest Stat */}
-                {form.game && igdbId && !interestLoading && interestCount > 0 && (
-                    <p className="text-xs text-muted -mt-2">
-                        <span className="text-emerald-400 font-medium">{interestCount}</span> player{interestCount !== 1 ? 's' : ''} interested
-                    </p>
-                )}
-
-                {/* Event Type Dropdown */}
-                {!isEditMode && eventTypes.length > 0 && (
-                    <div>
-                        <label htmlFor="eventType" className="block text-sm font-medium text-secondary mb-2">
-                            Event Type
-                        </label>
-                        <select
-                            id="eventType"
-                            value={form.eventTypeId != null ? String(form.eventTypeId) : 'custom'}
-                            onChange={(e) => handleEventTypeChange(e.target.value)}
-                            className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors"
-                        >
-                            <option value="custom">Custom</option>
-                            {eventTypes.map((et) => (
-                                <option key={et.id} value={et.id}>
-                                    {et.name}
-                                    {et.defaultPlayerCap ? ` (${et.defaultPlayerCap}-player)` : ''}
-                                </option>
-                            ))}
-                        </select>
-                        <p className="mt-1 text-xs text-dim">
-                            Auto-fills duration and roster slots based on content type
-                        </p>
-                    </div>
-                )}
-
-                {/* Content Selection — plugin-provided (ROK-238) */}
-                {wowVariant && contentType && (
-                    <PluginSlot
-                        name="event-create:content-browser"
-                        context={{
-                            wowVariant,
-                            contentType,
-                            selectedInstances: form.selectedInstances,
-                            onInstancesChange: (instances: Record<string, unknown>[]) => setForm(prev => ({...prev, selectedInstances: instances})),
-                        }}
-                    />
-                )}
             </FormSection>
 
-            {/* Divider */}
             <div className="border-t border-edge-subtle" />
 
-            {/* ═══════════ Section 2: Details ═══════════ */}
-            <FormSection title="Details">
-                {/* Title */}
-                <div>
-                    <label htmlFor="title" className="block text-sm font-medium text-secondary mb-2">
-                        Event Title <span className="text-red-400">*</span>
-                    </label>
-                    <input
-                        id="title"
-                        type="text"
-                        value={form.title}
-                        onChange={(e) => {
-                            const val = e.target.value;
-                            setForm((prev) => ({
-                                ...prev,
-                                title: val,
-                                titleIsAutoSuggested: false,
-                            }));
-                            if (errors.title) setErrors((prev) => ({ ...prev, title: undefined }));
-                        }}
-                        placeholder={computeSuggestion() || 'Weekly Raid Night'}
-                        maxLength={200}
-                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.title ? 'border-red-500' : 'border-edge'}`}
-                    />
-                    {form.titleIsAutoSuggested && (
-                        <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>
-                    )}
-                    {errors.title && (
-                        <p className="mt-1 text-sm text-red-400">{errors.title}</p>
-                    )}
-                </div>
-
-                {/* Description */}
-                <div>
-                    <label htmlFor="description" className="block text-sm font-medium text-secondary mb-2">
-                        Description
-                    </label>
-                    <textarea
-                        id="description"
-                        value={form.description}
-                        onChange={(e) => {
-                            setForm((prev) => ({ ...prev, description: e.target.value, descriptionIsAutoSuggested: false }));
-                        }}
-                        placeholder={computeDescriptionSuggestion() || 'Add details about this event...'}
-                        maxLength={2000}
-                        rows={3}
-                        className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors resize-none"
-                    />
-                    {form.descriptionIsAutoSuggested && (
-                        <p className="mt-1 text-xs text-dim">Auto-suggested from your selections</p>
-                    )}
-                </div>
-            </FormSection>
-
-            {/* Divider */}
-            <div className="border-t border-edge-subtle" />
-
-            {/* ═══════════ Section 3: When ═══════════ */}
+            {/* Section 2: When */}
             <FormSection title="When">
                 <p className="text-xs text-muted -mt-2">Times in {tzAbbr}</p>
 
@@ -824,84 +503,14 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 </div>
 
                 {/* Duration Picker */}
-                <div>
-                    <label className="block text-sm font-medium text-secondary mb-2">
-                        Duration <span className="text-red-400">*</span>
-                    </label>
-                    <div className="flex flex-wrap gap-2 mb-3">
-                        {DURATION_PRESETS.map((preset) => (
-                            <button
-                                key={preset.minutes}
-                                type="button"
-                                onClick={() => {
-                                    updateField('durationMinutes', preset.minutes);
-                                    updateField('customDuration', false);
-                                    setErrors((prev) => ({ ...prev, duration: undefined }));
-                                }}
-                                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                    !form.customDuration && form.durationMinutes === preset.minutes
-                                        ? 'bg-emerald-600 text-white'
-                                        : 'bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle'
-                                }`}
-                            >
-                                {preset.label}
-                            </button>
-                        ))}
-                        <button
-                            type="button"
-                            onClick={() => updateField('customDuration', true)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                form.customDuration
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-panel border border-edge text-secondary hover:text-foreground hover:border-edge-subtle'
-                            }`}
-                        >
-                            Custom
-                        </button>
-                    </div>
-
-                    {form.customDuration && (
-                        <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 sm:items-center">
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    max={24}
-                                    value={Math.floor(form.durationMinutes / 60)}
-                                    onChange={(e) => {
-                                        const h = Math.max(0, Math.min(24, parseInt(e.target.value) || 0));
-                                        const m = form.durationMinutes % 60;
-                                        updateField('durationMinutes', h * 60 + m);
-                                        setErrors((prev) => ({ ...prev, duration: undefined }));
-                                    }}
-                                    className="w-full sm:w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                                <span className="text-sm text-muted shrink-0">hr</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="number"
-                                    min={0}
-                                    max={59}
-                                    step={5}
-                                    value={form.durationMinutes % 60}
-                                    onChange={(e) => {
-                                        const h = Math.floor(form.durationMinutes / 60);
-                                        const m = Math.max(0, Math.min(59, parseInt(e.target.value) || 0));
-                                        updateField('durationMinutes', h * 60 + m);
-                                        setErrors((prev) => ({ ...prev, duration: undefined }));
-                                    }}
-                                    className="w-full sm:w-16 px-3 py-2 bg-panel border border-edge rounded-lg text-foreground text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                                <span className="text-sm text-muted shrink-0">min</span>
-                            </div>
-                        </div>
-                    )}
-
-                    {errors.duration && (
-                        <p className="mt-1 text-sm text-red-400">{errors.duration}</p>
-                    )}
-                </div>
+                <DurationSection
+                    durationMinutes={form.durationMinutes}
+                    customDuration={form.customDuration}
+                    durationError={errors.duration}
+                    onDurationMinutesChange={(v) => updateField('durationMinutes', v)}
+                    onCustomDurationChange={(v) => updateField('customDuration', v)}
+                    onDurationErrorClear={() => setErrors((prev) => ({ ...prev, duration: undefined }))}
+                />
 
                 {/* End time preview */}
                 {endTimePreview && (
@@ -965,250 +574,54 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 )}
             </FormSection>
 
-            {/* Divider */}
             <div className="border-t border-edge-subtle" />
 
-            {/* ═══════════ Section 4: Roster ═══════════ */}
+            {/* Section 3: Roster */}
             <FormSection title="Roster">
-                {/* Slot Type Toggle */}
-                <div>
-                    <label className="block text-sm font-medium text-secondary mb-2">Slot Type</label>
-                    <div className="flex gap-2">
-                        <button
-                            type="button"
-                            onClick={() => updateField('slotType', 'mmo')}
-                            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                form.slotType === 'mmo'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                            }`}
-                        >
-                            MMO Roles
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => updateField('slotType', 'generic')}
-                            className={`flex-1 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                                form.slotType === 'generic'
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-panel border border-edge text-secondary hover:text-foreground'
-                            }`}
-                        >
-                            Generic Slots
-                        </button>
-                    </div>
-                </div>
-
-                {/* Slot Steppers */}
-                <div className="bg-panel/50 border border-edge-subtle rounded-lg px-4 divide-y divide-edge-subtle">
-                    {form.slotType === 'mmo' ? (
-                        <>
-                            <SlotStepper label="Tank" value={form.slotTank} onChange={(v) => updateField('slotTank', v)} color="bg-blue-500" />
-                            <SlotStepper label="Healer" value={form.slotHealer} onChange={(v) => updateField('slotHealer', v)} color="bg-green-500" />
-                            <SlotStepper label="DPS" value={form.slotDps} onChange={(v) => updateField('slotDps', v)} color="bg-red-500" />
-                            <SlotStepper label="Flex" value={form.slotFlex} onChange={(v) => updateField('slotFlex', v)} color="bg-purple-500" />
-                        </>
-                    ) : (
-                        <SlotStepper label="Players" value={form.slotPlayer} onChange={(v) => updateField('slotPlayer', v)} color="bg-indigo-500" />
-                    )}
-                    <SlotStepper label="Bench" value={form.slotBench} onChange={(v) => updateField('slotBench', v)} color="bg-gray-500" />
-                </div>
-
-                <div className="text-sm text-muted">
-                    Total slots: <span className="text-emerald-400 font-medium">{totalSlots}</span>
-                    {form.slotBench > 0 && (
-                        <span className="text-dim"> (incl. {form.slotBench} bench)</span>
-                    )}
-                </div>
-
-                {/* Max Attendees */}
-                <div>
-                    <label htmlFor="maxAttendees" className="block text-sm font-medium text-secondary mb-2">
-                        Max Attendees
-                    </label>
-                    <input
-                        id="maxAttendees"
-                        type="number"
-                        min={1}
-                        value={form.maxAttendees}
-                        onChange={(e) => {
-                            updateField('maxAttendees', e.target.value);
-                            setErrors((prev) => ({ ...prev, maxAttendees: undefined }));
-                        }}
-                        placeholder="Unlimited"
-                        className={`w-full px-4 py-3 bg-panel border rounded-lg text-foreground placeholder-dim focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-colors ${errors.maxAttendees ? 'border-red-500' : 'border-edge'}`}
-                    />
-                    <p className="mt-1 text-xs text-dim">Leave empty for unlimited</p>
-                    {errors.maxAttendees && (
-                        <p className="mt-1 text-sm text-red-400">{errors.maxAttendees}</p>
-                    )}
-                </div>
-
-                {/* Auto-Unbench Toggle — segmented pill style (matches event detail page) */}
-                <div className="flex items-center justify-between gap-3">
-                    <div>
-                        <span className="text-sm font-medium text-secondary">Auto-promote benched players</span>
-                        <p className="text-xs text-dim mt-0.5">
-                            When a roster slot opens, automatically move the next benched player in
-                        </p>
-                    </div>
-                    <div className="event-detail-autosub-toggle shrink-0">
-                        <div
-                            className="event-detail-autosub-toggle__track"
-                            role="switch"
-                            aria-checked={form.autoUnbench}
-                            aria-label="Auto-promote benched players"
-                            tabIndex={0}
-                            onClick={() => updateField('autoUnbench', !form.autoUnbench)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('autoUnbench', !form.autoUnbench); } }}
-                        >
-                            <span className={`event-detail-autosub-toggle__option ${form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                            <span className={`event-detail-autosub-toggle__option ${!form.autoUnbench ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                        </div>
-                    </div>
-                </div>
+                <RosterSection
+                    slotType={form.slotType}
+                    slotTank={form.slotTank}
+                    slotHealer={form.slotHealer}
+                    slotDps={form.slotDps}
+                    slotFlex={form.slotFlex}
+                    slotPlayer={form.slotPlayer}
+                    slotBench={form.slotBench}
+                    maxAttendees={form.maxAttendees}
+                    autoUnbench={form.autoUnbench}
+                    maxAttendeesError={errors.maxAttendees}
+                    maxAttendeesId="maxAttendees"
+                    onSlotTypeChange={(v) => updateField('slotType', v)}
+                    onSlotTankChange={(v) => updateField('slotTank', v)}
+                    onSlotHealerChange={(v) => updateField('slotHealer', v)}
+                    onSlotDpsChange={(v) => updateField('slotDps', v)}
+                    onSlotFlexChange={(v) => updateField('slotFlex', v)}
+                    onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
+                    onSlotBenchChange={(v) => updateField('slotBench', v)}
+                    onMaxAttendeesChange={(v) => {
+                        updateField('maxAttendees', v);
+                        setErrors((prev) => ({ ...prev, maxAttendees: undefined }));
+                    }}
+                    onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
+                />
             </FormSection>
 
-            {/* Divider */}
             <div className="border-t border-edge-subtle" />
 
-            {/* ═══════════ Section 5: Reminders (ROK-126) ═══════════ */}
+            {/* Section 4: Reminders */}
             <FormSection title="Reminders">
-                <p className="text-xs text-dim -mt-2">
-                    Signed-up members with Discord linked will receive DM reminders before this event.
-                </p>
-                <div className="bg-panel/50 border border-edge-subtle rounded-lg px-4 divide-y divide-edge-subtle">
-                    {/* 15 minutes */}
-                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
-                        <div>
-                            <span className="text-sm text-secondary font-medium">15 minutes before</span>
-                            <p className="text-xs text-dim mt-0.5">Starting soon!</p>
-                        </div>
-                        <div className="event-detail-autosub-toggle shrink-0">
-                            <div
-                                className="event-detail-autosub-toggle__track"
-                                role="switch"
-                                aria-checked={form.reminder15min}
-                                aria-label="15-minute reminder"
-                                tabIndex={0}
-                                onClick={() => updateField('reminder15min', !form.reminder15min)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder15min', !form.reminder15min); } }}
-                            >
-                                <span className={`event-detail-autosub-toggle__option ${form.reminder15min ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                                <span className={`event-detail-autosub-toggle__option ${!form.reminder15min ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                            </div>
-                        </div>
-                    </div>
-                    {/* 1 hour */}
-                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
-                        <div>
-                            <span className="text-sm text-secondary font-medium">1 hour before</span>
-                            <p className="text-xs text-dim mt-0.5">Coming up in 1 hour</p>
-                        </div>
-                        <div className="event-detail-autosub-toggle shrink-0">
-                            <div
-                                className="event-detail-autosub-toggle__track"
-                                role="switch"
-                                aria-checked={form.reminder1hour}
-                                aria-label="1-hour reminder"
-                                tabIndex={0}
-                                onClick={() => updateField('reminder1hour', !form.reminder1hour)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder1hour', !form.reminder1hour); } }}
-                            >
-                                <span className={`event-detail-autosub-toggle__option ${form.reminder1hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                                <span className={`event-detail-autosub-toggle__option ${!form.reminder1hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                            </div>
-                        </div>
-                    </div>
-                    {/* 24 hours */}
-                    <div className="flex items-center justify-between gap-3 py-3 min-h-[44px] sm:min-h-0">
-                        <div>
-                            <span className="text-sm text-secondary font-medium">24 hours before</span>
-                            <p className="text-xs text-dim mt-0.5">Tomorrow's event</p>
-                        </div>
-                        <div className="event-detail-autosub-toggle shrink-0">
-                            <div
-                                className="event-detail-autosub-toggle__track"
-                                role="switch"
-                                aria-checked={form.reminder24hour}
-                                aria-label="24-hour reminder"
-                                tabIndex={0}
-                                onClick={() => updateField('reminder24hour', !form.reminder24hour)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateField('reminder24hour', !form.reminder24hour); } }}
-                            >
-                                <span className={`event-detail-autosub-toggle__option ${form.reminder24hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>On</span>
-                                <span className={`event-detail-autosub-toggle__option ${!form.reminder24hour ? 'event-detail-autosub-toggle__option--active' : ''}`}>Off</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <RemindersSection
+                    reminder15min={form.reminder15min}
+                    reminder1hour={form.reminder1hour}
+                    reminder24hour={form.reminder24hour}
+                    onReminder15minChange={(v) => updateField('reminder15min', v)}
+                    onReminder1hourChange={(v) => updateField('reminder1hour', v)}
+                    onReminder24hourChange={(v) => updateField('reminder24hour', v)}
+                />
             </FormSection>
 
-            {/* Divider */}
             <div className="border-t border-edge-subtle" />
 
-            {/* ═══════════ Section 6: Server Automation (stub) ═══════════ */}
-            {/* ROK-406: Hidden — feature not implemented yet. Uncomment when server automation is ready.
-            {form.game && (
-                <>
-                    <FormSection title="Server Automation">
-                        <div className="bg-panel/30 border border-edge-subtle rounded-lg p-4 space-y-4 opacity-60">
-                            <div className="flex items-center justify-between">
-                                <label className="flex items-center gap-3">
-                                    <input
-                                        type="checkbox"
-                                        disabled
-                                        className="w-4 h-4 rounded border-edge bg-panel"
-                                    />
-                                    <span className="text-sm text-secondary">Auto-start server before event</span>
-                                </label>
-                                <span className="text-xs bg-overlay text-dim px-2 py-0.5 rounded-full">Coming soon</span>
-                            </div>
-                            <div>
-                                <label className="block text-sm text-secondary mb-2">Server Host</label>
-                                <select
-                                    disabled
-                                    className="w-full px-4 py-3 bg-panel border border-edge rounded-lg text-dim cursor-not-allowed"
-                                >
-                                    <option>Select server host...</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm text-secondary mb-2">Pre-start buffer</label>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="number"
-                                        disabled
-                                        value={5}
-                                        className="w-20 px-3 py-2 bg-panel border border-edge rounded-lg text-dim text-center cursor-not-allowed"
-                                    />
-                                    <span className="text-sm text-dim">minutes before event</span>
-                                </div>
-                            </div>
-                        </div>
-                    </FormSection>
-                    <div className="border-t border-edge-subtle" />
-                </>
-            )}
-            */}
-
-            {/* ═══════════ Section 6: Your Availability ═══════════ */}
-            {/* ROK-406: Hidden — not useful during event creation. Uncomment when availability-at-creation is needed.
-            {computedTimes && (
-                <>
-                    <FormSection title="Your Availability">
-                        <TeamAvailabilityPicker
-                            eventStartTime={computedTimes.startTime}
-                            eventEndTime={computedTimes.endTime}
-                            gameId={form.game?.id?.toString()}
-                        />
-                    </FormSection>
-                    <div className="border-t border-edge-subtle" />
-                </>
-            )}
-            */}
-
-            {/* ═══════════ Save as Template ═══════════ */}
+            {/* Save as Template */}
             {showSaveTemplate && (
                 <div className="flex items-center gap-3 bg-panel/50 border border-edge-subtle rounded-lg px-4 py-3">
                     <input
@@ -1239,7 +652,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 </div>
             )}
 
-            {/* ═══════════ Footer ═══════════ */}
+            {/* Footer */}
             <div className="flex items-center justify-between pt-2">
                 <button
                     type="button"

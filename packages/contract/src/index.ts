@@ -78,3 +78,6 @@ export * from './auth.schema.js';
 
 // Backups
 export * from './backup.schema.js';
+
+// Event Plans (ROK-392)
+export * from './event-plans.schema.js';

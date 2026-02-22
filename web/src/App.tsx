@@ -22,6 +22,7 @@ const InvitePage = lazy(() => import('./pages/invite-page').then(m => ({ default
 // -- Lazy loaded pages --
 const CalendarPage = lazy(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
 const CreateEventPage = lazy(() => import('./pages/create-event-page').then(m => ({ default: m.CreateEventPage })));
+const PlanEventPage = lazy(() => import('./pages/plan-event-page').then(m => ({ default: m.PlanEventPage })));
 const EditEventPage = lazy(() => import('./pages/edit-event-page').then(m => ({ default: m.EditEventPage })));
 const GamesPage = lazy(() => import('./pages/games-page').then(m => ({ default: m.GamesPage })));
 const GameDetailPage = lazy(() => import('./pages/game-detail-page').then(m => ({ default: m.GameDetailPage })));
@@ -112,6 +113,7 @@ function App() {
                 {/* ROK-213: My Events dashboard */}
                 <Route path="/event-metrics" element={<MyEventsPage />} />
                 <Route path="/events/new" element={<CreateEventPage />} />
+                <Route path="/events/plan" element={<PlanEventPage />} />
                 <Route path="/events/:id" element={<EventDetailPage />} />
                 <Route path="/events/:id/edit" element={<EditEventPage />} />
                 {/* ROK-181: Public user profiles */}
