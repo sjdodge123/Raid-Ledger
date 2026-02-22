@@ -205,4 +205,191 @@ describe('AssignmentPopup', () => {
 
         expect(screen.queryByText('Assign to Tank 1')).not.toBeInTheDocument();
     });
+
+    // ========== ROK-390: Reassign tests ==========
+
+    const occupant: RosterAssignmentResponse = {
+        id: 1,
+        signupId: 10,
+        userId: 110,
+        discordId: '110',
+        username: 'OccupantPlayer',
+        avatar: null,
+        slot: 'tank' as RosterRole,
+        position: 1,
+        isOverride: false,
+        character: {
+            id: 'c10',
+            name: 'BigTank',
+            className: 'Warrior',
+            role: 'tank',
+            avatarUrl: null,
+        },
+    };
+
+    const allSlots = [
+        { role: 'tank' as RosterRole, position: 1, label: 'Tank', color: 'bg-blue-600', occupantName: 'OccupantPlayer' },
+        { role: 'tank' as RosterRole, position: 2, label: 'Tank', color: 'bg-blue-600' },
+        { role: 'healer' as RosterRole, position: 1, label: 'Healer', color: 'bg-green-600', occupantName: 'SomeHealer' },
+        { role: 'dps' as RosterRole, position: 1, label: 'DPS', color: 'bg-red-600' },
+    ];
+
+    it('shows Reassign button when onReassignToSlot is provided and slot is occupied', () => {
+        const mockReassign = vi.fn();
+
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                onReassignToSlot={mockReassign}
+                availableSlots={allSlots}
+                eventId={1}
+            />
+        );
+
+        expect(screen.getByText('Reassign')).toBeInTheDocument();
+    });
+
+    it('does not show Reassign button when onReassignToSlot is not provided', () => {
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                eventId={1}
+            />
+        );
+
+        expect(screen.queryByText('Reassign')).not.toBeInTheDocument();
+    });
+
+    it('clicking Reassign shows slot picker with current slot disabled', () => {
+        const mockReassign = vi.fn();
+
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                onReassignToSlot={mockReassign}
+                availableSlots={allSlots}
+                eventId={1}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Reassign'));
+
+        // Should show reassign title
+        expect(screen.getByText('Reassign OccupantPlayer')).toBeInTheDocument();
+
+        // Current slot should show "(current)"
+        expect(screen.getByText('(current)')).toBeInTheDocument();
+
+        // Occupied slot should show swap indicator
+        expect(screen.getByText(/SomeHealer/)).toBeInTheDocument();
+    });
+
+    it('clicking Back returns from reassign mode to default view', () => {
+        const mockReassign = vi.fn();
+
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                onReassignToSlot={mockReassign}
+                availableSlots={allSlots}
+                eventId={1}
+            />
+        );
+
+        // Enter reassign mode
+        fireEvent.click(screen.getByText('Reassign'));
+        expect(screen.getByText('Reassign OccupantPlayer')).toBeInTheDocument();
+
+        // Click back
+        fireEvent.click(screen.getByText(/Back/));
+
+        // Should be back to default view with search input
+        expect(screen.getByPlaceholderText('Search by name...')).toBeInTheDocument();
+    });
+
+    it('clicking an empty slot in reassign mode calls onReassignToSlot', () => {
+        const mockReassign = vi.fn();
+
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                onReassignToSlot={mockReassign}
+                availableSlots={allSlots}
+                eventId={1}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Reassign'));
+
+        // Click DPS 1 (empty slot)
+        const dpsSlot = screen.getByText('Dps 1').closest('button');
+        expect(dpsSlot).not.toBeDisabled();
+        fireEvent.click(dpsSlot!);
+
+        expect(mockReassign).toHaveBeenCalledWith(10, 'dps', 1);
+    });
+
+    it('clicking an occupied slot in reassign mode calls onReassignToSlot (swap)', () => {
+        const mockReassign = vi.fn();
+
+        renderWithRouter(
+            <AssignmentPopup
+                isOpen={true}
+                onClose={mockOnClose}
+                slotRole={'tank' as RosterRole}
+                slotPosition={1}
+                unassigned={mockUnassigned}
+                currentOccupant={occupant}
+                onAssign={mockOnAssign}
+                onRemove={mockOnRemove}
+                onReassignToSlot={mockReassign}
+                availableSlots={allSlots}
+                eventId={1}
+            />
+        );
+
+        fireEvent.click(screen.getByText('Reassign'));
+
+        // Click Healer 1 (occupied by SomeHealer)
+        const healerSlot = screen.getByText('Healer 1').closest('button');
+        expect(healerSlot).not.toBeDisabled();
+        fireEvent.click(healerSlot!);
+
+        expect(mockReassign).toHaveBeenCalledWith(10, 'healer', 1);
+    });
 });

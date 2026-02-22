@@ -519,6 +519,57 @@ export class AdminSettingsController {
   }
 
   // ============================================================
+  // Default Timezone (ROK-431)
+  // ============================================================
+
+  /**
+   * GET /admin/settings/timezone
+   * Returns the configured default timezone.
+   */
+  @Get('timezone')
+  async getTimezone(): Promise<{ timezone: string | null }> {
+    const timezone = await this.settingsService.getDefaultTimezone();
+    return { timezone };
+  }
+
+  /**
+   * PUT /admin/settings/timezone
+   * Update the default timezone.
+   */
+  @Put('timezone')
+  @HttpCode(HttpStatus.OK)
+  async updateTimezone(
+    @Body() body: { timezone?: string | null },
+  ): Promise<{ success: boolean; message: string }> {
+    const { timezone } = body;
+
+    // Empty/null/undefined clears the setting (falls back to UTC)
+    if (!timezone) {
+      await this.settingsService.delete(SETTING_KEYS.DEFAULT_TIMEZONE);
+      this.logger.log('Default timezone cleared (UTC fallback) via admin UI');
+      return {
+        success: true,
+        message: 'Default timezone cleared (UTC fallback).',
+      };
+    }
+
+    // Validate the timezone is a valid IANA timezone
+    try {
+      Intl.DateTimeFormat(undefined, { timeZone: timezone });
+    } catch {
+      throw new BadRequestException(`Invalid timezone: ${timezone}`);
+    }
+
+    await this.settingsService.setDefaultTimezone(timezone);
+    this.logger.log(`Default timezone updated to ${timezone} via admin UI`);
+
+    return {
+      success: true,
+      message: `Default timezone set to ${timezone}.`,
+    };
+  }
+
+  // ============================================================
   // ROK-173: IGDB Sync & Game Library
   // ============================================================
 

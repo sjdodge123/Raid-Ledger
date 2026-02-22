@@ -847,6 +847,316 @@ describe('SignupsService', () => {
     });
   });
 
+  describe('updateRoster — ROK-390 role change notifications', () => {
+    it('should include "operator" in the permission error message', async () => {
+      // Event exists, but user is not creator and not admin
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest
+              .fn()
+              .mockResolvedValue([{ ...mockEvent, creatorId: 999 }]),
+          }),
+        }),
+      });
+
+      await expect(
+        service.updateRoster(1, 1, false, { assignments: [] }),
+      ).rejects.toThrow(
+        'Only event creator, admin, or operator can update roster',
+      );
+    });
+
+    it('should notify player when role changes (healer → dps)', async () => {
+      const mockRoster = {
+        eventId: 1,
+        pool: [],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      };
+      jest
+        .spyOn(service, 'getRosterWithAssignments')
+        .mockResolvedValueOnce(mockRoster);
+
+      // Old assignment: user 1 was healer
+      const oldAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'healer',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      };
+
+      mockDb.select
+        // 1. Event exists
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ ...mockEvent, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        // 2. Get signups
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([mockSignup]),
+          }),
+        })
+        // 3. Get old assignments (for diff)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([oldAssignment]),
+          }),
+        });
+
+      // Delete old assignments
+      mockDb.delete.mockReturnValueOnce({
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+
+      // Insert new assignments
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockResolvedValue(undefined),
+      });
+
+      await service.updateRoster(1, 1, true, {
+        assignments: [
+          {
+            userId: 1,
+            signupId: 1,
+            slot: 'dps',
+            position: 3,
+            isOverride: false,
+          },
+        ],
+      });
+
+      // Wait for async notification
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 1,
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          payload: expect.objectContaining({
+            oldRole: 'healer',
+            newRole: 'dps',
+          }),
+        }),
+      );
+    });
+
+    it('should use bench_promoted type when moving from bench to a role', async () => {
+      const mockRoster = {
+        eventId: 1,
+        pool: [],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      };
+      jest
+        .spyOn(service, 'getRosterWithAssignments')
+        .mockResolvedValueOnce(mockRoster);
+
+      const oldAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'bench',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      };
+
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ ...mockEvent, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([mockSignup]),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([oldAssignment]),
+          }),
+        });
+
+      mockDb.delete.mockReturnValueOnce({
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockResolvedValue(undefined),
+      });
+
+      await service.updateRoster(1, 1, true, {
+        assignments: [
+          {
+            userId: 1,
+            signupId: 1,
+            slot: 'tank',
+            position: 1,
+            isOverride: false,
+          },
+        ],
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'bench_promoted',
+          title: 'Promoted from Bench',
+        }),
+      );
+    });
+
+    it('should NOT notify when same-role position changes (DPS 1 → DPS 5)', async () => {
+      const mockRoster = {
+        eventId: 1,
+        pool: [],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      };
+      jest
+        .spyOn(service, 'getRosterWithAssignments')
+        .mockResolvedValueOnce(mockRoster);
+
+      const oldAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'dps',
+        position: 1,
+        eventId: 1,
+        isOverride: 0,
+      };
+
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ ...mockEvent, title: 'Raid' }]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([mockSignup]),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([oldAssignment]),
+          }),
+        });
+
+      mockDb.delete.mockReturnValueOnce({
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockResolvedValue(undefined),
+      });
+
+      await service.updateRoster(1, 1, true, {
+        assignments: [
+          {
+            userId: 1,
+            signupId: 1,
+            slot: 'dps',
+            position: 5,
+            isOverride: false,
+          },
+        ],
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should send roster_reassigned when moved to bench', async () => {
+      const mockRoster = {
+        eventId: 1,
+        pool: [],
+        assignments: [],
+        slots: { player: 10, bench: 5 },
+      };
+      jest
+        .spyOn(service, 'getRosterWithAssignments')
+        .mockResolvedValueOnce(mockRoster);
+
+      const oldAssignment = {
+        id: 10,
+        signupId: 1,
+        role: 'healer',
+        position: 2,
+        eventId: 1,
+        isOverride: 0,
+      };
+
+      mockDb.select
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest
+                .fn()
+                .mockResolvedValue([{ ...mockEvent, title: 'Raid Night' }]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([mockSignup]),
+          }),
+        })
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([oldAssignment]),
+          }),
+        });
+
+      mockDb.delete.mockReturnValueOnce({
+        where: jest.fn().mockResolvedValue(undefined),
+      });
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockResolvedValue(undefined),
+      });
+
+      await service.updateRoster(1, 1, true, {
+        assignments: [
+          {
+            userId: 1,
+            signupId: 1,
+            slot: 'bench',
+            position: 1,
+            isOverride: false,
+          },
+        ],
+      });
+
+      await new Promise((r) => setTimeout(r, 50));
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'roster_reassigned',
+          title: 'Moved to Bench',
+        }),
+      );
+    });
+  });
+
   describe('getRoster', () => {
     it('should return roster for event with character data', async () => {
       const signupWithChar = {

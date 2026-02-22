@@ -149,13 +149,15 @@ export class ShareService {
   }
 
   private async buildContext(): Promise<EmbedContext> {
-    const [branding, clientUrl] = await Promise.all([
+    const [branding, clientUrl, timezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
     ]);
     return {
       communityName: branding.communityName,
       clientUrl,
+      timezone,
     };
   }
 }

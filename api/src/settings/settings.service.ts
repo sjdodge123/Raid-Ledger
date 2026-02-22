@@ -577,6 +577,22 @@ export class SettingsService {
   }
 
   /**
+   * Get the default timezone setting (ROK-431).
+   * Returns an IANA timezone string or null if not configured.
+   */
+  async getDefaultTimezone(): Promise<string | null> {
+    return this.get(SETTING_KEYS.DEFAULT_TIMEZONE);
+  }
+
+  /**
+   * Set the default timezone (ROK-431).
+   */
+  async setDefaultTimezone(timezone: string): Promise<void> {
+    await this.set(SETTING_KEYS.DEFAULT_TIMEZONE, timezone);
+    this.logger.log('Default timezone updated');
+  }
+
+  /**
    * Get the client URL with fallback chain (ROK-408):
    * 1. Explicit app_settings override (client_url)
    * 2. process.env.CLIENT_URL

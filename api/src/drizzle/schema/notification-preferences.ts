@@ -15,6 +15,7 @@ export const NOTIFICATION_TYPES = [
   'event_rescheduled',
   'bench_promoted',
   'event_cancelled',
+  'roster_reassigned',
 ] as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
@@ -43,6 +44,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   event_rescheduled: { inApp: true, push: true, discord: true },
   bench_promoted: { inApp: true, push: true, discord: true },
   event_cancelled: { inApp: true, push: true, discord: true },
+  roster_reassigned: { inApp: true, push: true, discord: true },
 };
 
 /**

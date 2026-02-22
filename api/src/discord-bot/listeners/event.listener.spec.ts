@@ -112,6 +112,7 @@ describe('DiscordEventListener', () => {
               communityAccentColor: null,
             }),
             getClientUrl: jest.fn().mockResolvedValue(null),
+            getDefaultTimezone: jest.fn().mockResolvedValue(null),
           },
         },
       ],
@@ -142,7 +143,7 @@ describe('DiscordEventListener', () => {
       expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledWith(101);
       expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
-        { communityName: 'Test Guild', clientUrl: null },
+        { communityName: 'Test Guild', clientUrl: null, timezone: null },
       );
       expect(clientService.sendEmbed).toHaveBeenCalledWith(
         'channel-789',
@@ -230,7 +231,7 @@ describe('DiscordEventListener', () => {
 
       expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
-        { communityName: 'Test Guild', clientUrl: null },
+        { communityName: 'Test Guild', clientUrl: null, timezone: null },
         { state: EMBED_STATES.POSTED },
       );
       expect(clientService.editEmbed).toHaveBeenCalledWith(
@@ -271,7 +272,7 @@ describe('DiscordEventListener', () => {
 
       expect(embedFactory.buildEventCancelled).toHaveBeenCalledWith(
         mockPayload.event,
-        { communityName: 'Test Guild', clientUrl: null },
+        { communityName: 'Test Guild', clientUrl: null, timezone: null },
       );
       expect(clientService.editEmbed).toHaveBeenCalledWith(
         'channel-789',
@@ -386,7 +387,7 @@ describe('DiscordEventListener', () => {
 
       expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
         mockPayload.event,
-        { communityName: 'Test Guild', clientUrl: null },
+        { communityName: 'Test Guild', clientUrl: null, timezone: null },
         { state: EMBED_STATES.IMMINENT },
       );
       expect(clientService.editEmbed).toHaveBeenCalled();
