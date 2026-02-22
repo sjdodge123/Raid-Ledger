@@ -4,6 +4,7 @@ import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
 import { InviteService } from './invite.service';
+import { OgMetaService } from './og-meta.service';
 import { ShareService } from './share.service';
 import { TemplatesService } from './templates.service';
 import { EventsController } from './events.controller';
@@ -33,6 +34,7 @@ import {
     SignupsService,
     PugsService,
     InviteService,
+    OgMetaService,
     ShareService,
     TemplatesService,
     BenchPromotionService,
