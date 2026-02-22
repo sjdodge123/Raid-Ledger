@@ -28,7 +28,7 @@ export function PlanEventPage() {
                 {/* Back Button */}
                 <button
                     type="button"
-                    onClick={() => navigate(-1)}
+                    onClick={() => (window.history.length > 1 ? navigate(-1) : navigate('/events'))}
                     className="flex items-center gap-2 text-muted hover:text-foreground transition-colors mb-6"
                 >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
