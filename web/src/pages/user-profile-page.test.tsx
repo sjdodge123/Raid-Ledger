@@ -80,7 +80,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         // Default mock for game registry
         vi.spyOn(useGameRegistryHook, 'useGameRegistry').mockReturnValue({
             games: [
-                { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+                { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
                 { id: 2, name: 'Final Fantasy XIV', slug: 'ff14', coverUrl: null },
                 { id: 3, name: 'Elder Scrolls Online', slug: 'eso', coverUrl: null },
             ],

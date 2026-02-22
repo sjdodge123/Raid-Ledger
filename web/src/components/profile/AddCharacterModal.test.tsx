@@ -33,7 +33,7 @@ vi.mock('../../hooks/use-game-registry', () => ({
             {
                 id: 1,
                 name: 'World of Warcraft',
-                slug: 'wow',
+                slug: 'world-of-warcraft',
                 hasRoles: true,
             },
         ],

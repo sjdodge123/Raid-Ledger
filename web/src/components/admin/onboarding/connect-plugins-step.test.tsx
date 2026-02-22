@@ -159,7 +159,7 @@ describe('ConnectPluginsStep', () => {
                             version: '1.0.0',
                             description: 'WoW integration',
                             author: { name: 'Raid Ledger' },
-                            gameSlugs: ['wow'],
+                            gameSlugs: ['world-of-warcraft'],
                             capabilities: ['character-sync'],
                             integrations: [],
                             status: 'not_installed',

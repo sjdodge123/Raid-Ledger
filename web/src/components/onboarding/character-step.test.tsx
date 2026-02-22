@@ -36,7 +36,7 @@ const baseGame: GameRegistryDto = {
     id: 1,
     name: 'World of Warcraft',
     shortName: 'WoW',
-    slug: 'wow',
+    slug: 'world-of-warcraft',
     hasRoles: true,
     hasSpecs: true,
     coverUrl: null,
@@ -254,7 +254,7 @@ describe('CharacterStep', () => {
                             level: 80,
                             race: 'Orc',
                             realm: 'Draenor',
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -282,7 +282,7 @@ describe('CharacterStep', () => {
                             level: 80,
                             race: 'Orc',
                             realm: 'Draenor',
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -313,7 +313,7 @@ describe('CharacterStep', () => {
                             level: null,
                             race: null,
                             realm: null,
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -340,8 +340,8 @@ describe('CharacterStep', () => {
             mockUseMyCharacters.mockReturnValue({
                 data: {
                     data: [
-                        { id: 'char-0', name: 'Char0', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 'wow' },
-                        { id: 'char-1', name: 'Char1', class: null, spec: null, effectiveRole: null, isMain: false, avatarUrl: null, level: null, race: null, realm: null, gameId: 'wow' },
+                        { id: 'char-0', name: 'Char0', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
+                        { id: 'char-1', name: 'Char1', class: null, spec: null, effectiveRole: null, isMain: false, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
                     ],
                 },
             });

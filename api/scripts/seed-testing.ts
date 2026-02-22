@@ -94,26 +94,26 @@ async function bootstrap() {
             // Characters with WoW class/role assignments and Blizzard CDN class icons
             const charactersToCreate = [
                 // WoW Retail characters
-                { username: 'ShadowMage', gameSlug: 'wow', charName: 'Shadowmage', class: 'Mage', spec: 'Arcane', role: 'dps' as const, wowClass: 'mage' },
-                { username: 'DragonSlayer99', gameSlug: 'wow', charName: 'Dragonslayer', class: 'Rogue', spec: 'Assassination', role: 'dps' as const, wowClass: 'rogue' },
-                { username: 'HealzForDayz', gameSlug: 'wow', charName: 'Healzfordays', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
-                { username: 'TankMaster', gameSlug: 'wow', charName: 'Tankmaster', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
-                { username: 'ProRaider', gameSlug: 'wow', charName: 'Deathbringer', class: 'Death Knight', spec: 'Unholy', role: 'dps' as const, wowClass: 'deathknight' },
-                { username: 'NightOwlGamer', gameSlug: 'wow', charName: 'Moonweaver', class: 'Druid', spec: 'Restoration', role: 'healer' as const, wowClass: 'druid' },
-                { username: 'LootGoblin', gameSlug: 'wow', charName: 'Felstrike', class: 'Warlock', spec: 'Destruction', role: 'dps' as const, wowClass: 'warlock' },
-                { username: 'CasualCarl', gameSlug: 'wow', charName: 'Shieldwall', class: 'Paladin', spec: 'Protection', role: 'tank' as const, wowClass: 'paladin' },
+                { username: 'ShadowMage', gameSlug: 'world-of-warcraft', charName: 'Shadowmage', class: 'Mage', spec: 'Arcane', role: 'dps' as const, wowClass: 'mage' },
+                { username: 'DragonSlayer99', gameSlug: 'world-of-warcraft', charName: 'Dragonslayer', class: 'Rogue', spec: 'Assassination', role: 'dps' as const, wowClass: 'rogue' },
+                { username: 'HealzForDayz', gameSlug: 'world-of-warcraft', charName: 'Healzfordays', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
+                { username: 'TankMaster', gameSlug: 'world-of-warcraft', charName: 'Tankmaster', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
+                { username: 'ProRaider', gameSlug: 'world-of-warcraft', charName: 'Deathbringer', class: 'Death Knight', spec: 'Unholy', role: 'dps' as const, wowClass: 'deathknight' },
+                { username: 'NightOwlGamer', gameSlug: 'world-of-warcraft', charName: 'Moonweaver', class: 'Druid', spec: 'Restoration', role: 'healer' as const, wowClass: 'druid' },
+                { username: 'LootGoblin', gameSlug: 'world-of-warcraft', charName: 'Felstrike', class: 'Warlock', spec: 'Destruction', role: 'dps' as const, wowClass: 'warlock' },
+                { username: 'CasualCarl', gameSlug: 'world-of-warcraft', charName: 'Shieldwall', class: 'Paladin', spec: 'Protection', role: 'tank' as const, wowClass: 'paladin' },
                 // WoW Classic characters
-                { username: 'ShadowMage', gameSlug: 'wow-classic', charName: 'Frostbolt', class: 'Mage', spec: 'Frost', role: 'dps' as const, wowClass: 'mage' },
-                { username: 'TankMaster', gameSlug: 'wow-classic', charName: 'Ironfist', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
-                { username: 'HealzForDayz', gameSlug: 'wow-classic', charName: 'Lightbringer', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
-                { username: 'ProRaider', gameSlug: 'wow-classic', charName: 'Backstab', class: 'Rogue', spec: 'Combat', role: 'dps' as const, wowClass: 'rogue' },
+                { username: 'ShadowMage', gameSlug: 'world-of-warcraft-classic', charName: 'Frostbolt', class: 'Mage', spec: 'Frost', role: 'dps' as const, wowClass: 'mage' },
+                { username: 'TankMaster', gameSlug: 'world-of-warcraft-classic', charName: 'Ironfist', class: 'Warrior', spec: 'Protection', role: 'tank' as const, wowClass: 'warrior' },
+                { username: 'HealzForDayz', gameSlug: 'world-of-warcraft-classic', charName: 'Lightbringer', class: 'Priest', spec: 'Holy', role: 'healer' as const, wowClass: 'priest' },
+                { username: 'ProRaider', gameSlug: 'world-of-warcraft-classic', charName: 'Backstab', class: 'Rogue', spec: 'Combat', role: 'dps' as const, wowClass: 'rogue' },
                 // Valheim characters
                 { username: 'ShadowMage', gameSlug: 'valheim', charName: 'Windwalker', class: 'Monk', spec: 'Windwalker', role: 'dps' as const, wowClass: 'monk' },
                 { username: 'TankMaster', gameSlug: 'valheim', charName: 'Earthguard', class: 'Shaman', spec: 'Restoration', role: 'healer' as const, wowClass: 'shaman' },
                 { username: 'ProRaider', gameSlug: 'valheim', charName: 'Hawkeye', class: 'Hunter', spec: 'Marksmanship', role: 'dps' as const, wowClass: 'hunter' },
                 // FFXIV characters
-                { username: 'NightOwlGamer', gameSlug: 'ffxiv', charName: 'Voidcaller', class: 'Evoker', spec: 'Preservation', role: 'healer' as const, wowClass: 'evoker' },
-                { username: 'LootGoblin', gameSlug: 'ffxiv', charName: 'Demonbane', class: 'Demon Hunter', spec: 'Havoc', role: 'dps' as const, wowClass: 'demonhunter' },
+                { username: 'NightOwlGamer', gameSlug: 'final-fantasy-xiv-online', charName: 'Voidcaller', class: 'Evoker', spec: 'Preservation', role: 'healer' as const, wowClass: 'evoker' },
+                { username: 'LootGoblin', gameSlug: 'final-fantasy-xiv-online', charName: 'Demonbane', class: 'Demon Hunter', spec: 'Havoc', role: 'dps' as const, wowClass: 'demonhunter' },
             ];
 
             // Build slug → game map for lookups

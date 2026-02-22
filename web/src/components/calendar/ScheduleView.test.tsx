@@ -14,7 +14,7 @@ function makeMockEventDto(overrides: Partial<EventResponseDto> = {}): EventRespo
         startTime: '2026-02-10T20:00:00Z',
         endTime: '2026-02-10T22:00:00Z',
         creator: { id: 1, username: 'Tester', avatar: null },
-        game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+        game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
         signupCount: 0,
         createdAt: '2026-01-01T00:00:00Z',
         updatedAt: '2026-01-01T00:00:00Z',
@@ -281,7 +281,7 @@ describe('ScheduleView', () => {
 
         it('displays game name alongside time in event block', () => {
             const event = makeCalendarEvent(1, 'WoW Raid', new Date('2026-02-12T15:00:00'), new Date('2026-02-12T17:00:00'), {
-                game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+                game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
             });
 
             render(<ScheduleView {...defaultProps} events={[event]} />);
@@ -291,7 +291,7 @@ describe('ScheduleView', () => {
 
         it('applies game-specific background color via inline style', () => {
             const event = makeCalendarEvent(1, 'WoW Raid', new Date('2026-02-12T15:00:00'), new Date('2026-02-12T17:00:00'), {
-                game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+                game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
             });
 
             render(<ScheduleView {...defaultProps} events={[event]} />);

@@ -510,7 +510,7 @@ describe('GameTimeService', () => {
         [],
         [
           makeEventRow({
-            gameSlug: 'wow',
+            gameSlug: 'world-of-warcraft',
             gameName: 'World of Warcraft',
             gameCoverUrl: '/cover.jpg',
             gameId: 1,
@@ -523,7 +523,7 @@ describe('GameTimeService', () => {
       const result = await service.getCompositeView(1, weekStart);
 
       expect(result.events[0]).toMatchObject({
-        gameSlug: 'wow',
+        gameSlug: 'world-of-warcraft',
         gameName: 'World of Warcraft',
         coverUrl: '/cover.jpg',
       });

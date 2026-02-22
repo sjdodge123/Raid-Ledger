@@ -66,7 +66,7 @@ describe('BlizzardCharacterSyncAdapter', () => {
     });
 
     it('should return empty array for unknown variant', () => {
-      expect(adapter.resolveGameSlugs('ffxiv')).toEqual([]);
+      expect(adapter.resolveGameSlugs('final-fantasy-xiv-online')).toEqual([]);
     });
   });
 

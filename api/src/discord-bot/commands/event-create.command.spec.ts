@@ -509,7 +509,7 @@ describe('EventCreateCommand', () => {
       const mockRespond = jest.fn().mockResolvedValue(undefined);
       const mockAutocompleteInteraction = {
         options: {
-          getFocused: jest.fn().mockReturnValue({ name: 'game', value: 'wow' }),
+          getFocused: jest.fn().mockReturnValue({ name: 'game', value: 'world-of-warcraft' }),
         },
         respond: mockRespond,
       };

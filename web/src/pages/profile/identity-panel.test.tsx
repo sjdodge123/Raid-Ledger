@@ -382,7 +382,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
                 data: {
                     data: [
-                        { name: 'Thrall', avatarUrl: 'https://example.com/thrall.jpg', gameId: 'wow' },
+                        { name: 'Thrall', avatarUrl: 'https://example.com/thrall.jpg', gameId: 'world-of-warcraft' },
                     ],
                 },
                 isLoading: false,

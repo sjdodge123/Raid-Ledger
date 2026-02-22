@@ -264,7 +264,7 @@ describe('RescheduleModal', () => {
     describe('game metadata passthrough', () => {
         it('passes game metadata to current event blocks', () => {
             renderModal({
-                gameSlug: 'wow',
+                gameSlug: 'world-of-warcraft',
                 gameName: 'World of Warcraft',
             });
             const currentDay = new Date(defaultProps.currentStartTime).getDay();

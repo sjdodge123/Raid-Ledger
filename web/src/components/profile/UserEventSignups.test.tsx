@@ -24,7 +24,7 @@ const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventRespon
         id: 1,
 
         name: 'World of Warcraft',
-        slug: 'wow',
+        slug: 'world-of-warcraft',
         coverUrl: 'https://example.com/cover.jpg',
     },
     signupCount: 3,

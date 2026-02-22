@@ -13,7 +13,7 @@ vi.mock('../../hooks/use-games-discover', () => ({
                         {
                             id: 1,
                             name: 'World of Warcraft',
-                            slug: 'wow',
+                            slug: 'world-of-warcraft',
                             coverUrl: null,
                             genres: [36],
                             gameModes: [],
@@ -108,7 +108,7 @@ const DEFAULT_DISCOVER_DATA = {
                     {
                         id: 1,
                         name: 'World of Warcraft',
-                        slug: 'wow',
+                        slug: 'world-of-warcraft',
                         coverUrl: null,
                         genres: [36],
                         gameModes: [],
