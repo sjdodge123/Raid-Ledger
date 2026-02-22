@@ -185,14 +185,20 @@ export class EventPlansService {
   }
 
   /**
-   * List plans for a user. Returns all non-draft plans, most recent first.
+   * List plans. Admins/operators see all plans; regular users see only their own.
    */
-  async findByCreator(creatorId: number): Promise<EventPlanResponseDto[]> {
-    const plans = await this.db
-      .select()
-      .from(schema.eventPlans)
-      .where(eq(schema.eventPlans.creatorId, creatorId))
-      .orderBy(schema.eventPlans.createdAt);
+  async findByCreator(
+    creatorId: number,
+    userRole?: string,
+  ): Promise<EventPlanResponseDto[]> {
+    const isPrivileged = userRole === 'admin' || userRole === 'operator';
+
+    const query = this.db.select().from(schema.eventPlans);
+    const plans = isPrivileged
+      ? await query.orderBy(schema.eventPlans.createdAt)
+      : await query
+          .where(eq(schema.eventPlans.creatorId, creatorId))
+          .orderBy(schema.eventPlans.createdAt);
 
     return plans.map((p) => this.toResponseDto(p));
   }
@@ -200,7 +206,11 @@ export class EventPlansService {
   /**
    * Cancel an active plan.
    */
-  async cancel(planId: string, userId: number): Promise<EventPlanResponseDto> {
+  async cancel(
+    planId: string,
+    userId: number,
+    userRole?: string,
+  ): Promise<EventPlanResponseDto> {
     const [plan] = await this.db
       .select()
       .from(schema.eventPlans)
@@ -211,8 +221,11 @@ export class EventPlansService {
       throw new NotFoundException(`Event plan ${planId} not found`);
     }
 
-    if (plan.creatorId !== userId) {
-      throw new ForbiddenException('Only the plan creator can cancel it');
+    const isPrivileged = userRole === 'admin' || userRole === 'operator';
+    if (plan.creatorId !== userId && !isPrivileged) {
+      throw new ForbiddenException(
+        'Only the plan creator or an admin/operator can cancel it',
+      );
     }
 
     if (plan.status !== 'polling') {
@@ -267,6 +280,7 @@ export class EventPlansService {
   async getPollResults(
     planId: string,
     userId: number,
+    userRole?: string,
   ): Promise<PollResultsResponse> {
     const [plan] = await this.db
       .select()
@@ -278,9 +292,10 @@ export class EventPlansService {
       throw new NotFoundException(`Event plan ${planId} not found`);
     }
 
-    if (plan.creatorId !== userId) {
+    const isPrivileged = userRole === 'admin' || userRole === 'operator';
+    if (plan.creatorId !== userId && !isPrivileged) {
       throw new ForbiddenException(
-        'Only the plan creator can view poll results',
+        'Only the plan creator or an admin/operator can view poll results',
       );
     }
 
@@ -387,7 +402,11 @@ export class EventPlansService {
   /**
    * Restart a cancelled or expired plan by posting a fresh Discord poll.
    */
-  async restart(planId: string, userId: number): Promise<EventPlanResponseDto> {
+  async restart(
+    planId: string,
+    userId: number,
+    userRole?: string,
+  ): Promise<EventPlanResponseDto> {
     const [plan] = await this.db
       .select()
       .from(schema.eventPlans)
@@ -398,8 +417,11 @@ export class EventPlansService {
       throw new NotFoundException(`Event plan ${planId} not found`);
     }
 
-    if (plan.creatorId !== userId) {
-      throw new ForbiddenException('Only the plan creator can restart it');
+    const isPrivileged = userRole === 'admin' || userRole === 'operator';
+    if (plan.creatorId !== userId && !isPrivileged) {
+      throw new ForbiddenException(
+        'Only the plan creator or an admin/operator can restart it',
+      );
     }
 
     if (plan.status !== 'cancelled' && plan.status !== 'expired') {

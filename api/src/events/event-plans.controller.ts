@@ -95,7 +95,7 @@ export class EventPlansController {
   async myPlans(
     @Request() req: AuthenticatedRequest,
   ): Promise<EventPlanResponseDto[]> {
-    return this.eventPlansService.findByCreator(req.user.id);
+    return this.eventPlansService.findByCreator(req.user.id, req.user.role);
   }
 
   /**
@@ -120,7 +120,7 @@ export class EventPlansController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<PollResultsResponse> {
-    return this.eventPlansService.getPollResults(id, req.user.id);
+    return this.eventPlansService.getPollResults(id, req.user.id, req.user.role);
   }
 
   /**
@@ -133,7 +133,7 @@ export class EventPlansController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<EventPlanResponseDto> {
-    return this.eventPlansService.cancel(id, req.user.id);
+    return this.eventPlansService.cancel(id, req.user.id, req.user.role);
   }
 
   /**
@@ -146,6 +146,6 @@ export class EventPlansController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<EventPlanResponseDto> {
-    return this.eventPlansService.restart(id, req.user.id);
+    return this.eventPlansService.restart(id, req.user.id, req.user.role);
   }
 }
