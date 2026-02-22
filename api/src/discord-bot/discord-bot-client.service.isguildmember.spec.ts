@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { EventEmitter } from 'events';
@@ -173,7 +172,9 @@ describe('DiscordBotClientService.isGuildMember (ROK-403)', () => {
     const client = createMockClient();
     client.isReady.mockReturnValue(true);
 
-    const discordApiError = Object.assign(new Error('Unknown Member'), { code: 10007 });
+    const discordApiError = Object.assign(new Error('Unknown Member'), {
+      code: 10007,
+    });
     const mockGuild = {
       members: {
         fetch: jest.fn().mockRejectedValue(discordApiError),

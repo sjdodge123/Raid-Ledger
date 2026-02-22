@@ -9,15 +9,17 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 /**
  * Helper to make a qualifying PUG row from the raw SQL query result shape.
  */
-function makePugRow(overrides: Partial<{
-  pug_slot_id: string;
-  event_id: number;
-  event_title: string;
-  discord_user_id: string | null;
-  claimed_by_user_id: number | null;
-  user_discord_id: string | null;
-  username: string | null;
-}> = {}) {
+function makePugRow(
+  overrides: Partial<{
+    pug_slot_id: string;
+    event_id: number;
+    event_title: string;
+    discord_user_id: string | null;
+    claimed_by_user_id: number | null;
+    user_discord_id: string | null;
+    username: string | null;
+  }> = {},
+) {
   return {
     pug_slot_id: 'slot-uuid-1',
     event_id: 10,
@@ -58,16 +60,22 @@ describe('PostEventReminderService', () => {
     };
 
     mockPugInviteService = {
-      generateServerInvite: jest.fn().mockResolvedValue('https://discord.gg/invite123'),
+      generateServerInvite: jest
+        .fn()
+        .mockResolvedValue('https://discord.gg/invite123'),
     };
 
     mockSettingsService = {
       getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-      getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Community' }),
+      getBranding: jest
+        .fn()
+        .mockResolvedValue({ communityName: 'Test Community' }),
     };
 
     mockCronJobService = {
-      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()),
+      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
+        fn(),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -117,7 +125,11 @@ describe('PostEventReminderService', () => {
     it('should send a DM for each qualifying PUG', async () => {
       const pugs = [
         makePugRow({ pug_slot_id: 'slot-1', event_id: 10 }),
-        makePugRow({ pug_slot_id: 'slot-2', event_id: 11, user_discord_id: '987654321' }),
+        makePugRow({
+          pug_slot_id: 'slot-2',
+          event_id: 11,
+          user_discord_id: '987654321',
+        }),
       ];
       mockDb.execute.mockResolvedValue(pugs);
 
@@ -152,7 +164,9 @@ describe('PostEventReminderService', () => {
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
           onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn().mockResolvedValue(alreadySent ? [] : [{ id: 1 }]),
+            returning: jest
+              .fn()
+              .mockResolvedValue(alreadySent ? [] : [{ id: 1 }]),
           }),
         }),
       });
@@ -178,7 +192,9 @@ describe('PostEventReminderService', () => {
 
       await service.handlePostEventReminders();
 
-      expect(mockClientService.isGuildMember).toHaveBeenCalledWith('user-discord-111');
+      expect(mockClientService.isGuildMember).toHaveBeenCalledWith(
+        'user-discord-111',
+      );
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
         'user-discord-111',
         expect.anything(),
@@ -195,7 +211,9 @@ describe('PostEventReminderService', () => {
 
       await service.handlePostEventReminders();
 
-      expect(mockClientService.isGuildMember).toHaveBeenCalledWith('pug-slot-discord-333');
+      expect(mockClientService.isGuildMember).toHaveBeenCalledWith(
+        'pug-slot-discord-333',
+      );
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
         'pug-slot-discord-333',
         expect.anything(),
@@ -203,7 +221,10 @@ describe('PostEventReminderService', () => {
     });
 
     it('should skip PUG with "local:" prefixed Discord ID', async () => {
-      const pug = makePugRow({ user_discord_id: 'local:someuser', discord_user_id: null });
+      const pug = makePugRow({
+        user_discord_id: 'local:someuser',
+        discord_user_id: null,
+      });
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
 
@@ -213,7 +234,10 @@ describe('PostEventReminderService', () => {
     });
 
     it('should skip PUG with "unlinked:" prefixed Discord ID', async () => {
-      const pug = makePugRow({ user_discord_id: 'unlinked:abc', discord_user_id: null });
+      const pug = makePugRow({
+        user_discord_id: 'unlinked:abc',
+        discord_user_id: null,
+      });
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
 
@@ -247,11 +271,15 @@ describe('PostEventReminderService', () => {
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
       mockClientService.isGuildMember.mockResolvedValue(false);
-      mockPugInviteService.generateServerInvite.mockResolvedValue('https://discord.gg/joinus');
+      mockPugInviteService.generateServerInvite.mockResolvedValue(
+        'https://discord.gg/joinus',
+      );
 
       await service.handlePostEventReminders();
 
-      expect(mockPugInviteService.generateServerInvite).toHaveBeenCalledWith(pug.event_id);
+      expect(mockPugInviteService.generateServerInvite).toHaveBeenCalledWith(
+        pug.event_id,
+      );
       expect(mockClientService.sendEmbedDM).toHaveBeenCalled();
     });
 
@@ -271,7 +299,9 @@ describe('PostEventReminderService', () => {
       const pug = makePugRow();
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
-      mockSettingsService.getBranding.mockResolvedValue({ communityName: 'My Awesome Guild' });
+      mockSettingsService.getBranding.mockResolvedValue({
+        communityName: 'My Awesome Guild',
+      });
 
       await service.handlePostEventReminders();
 
@@ -315,7 +345,9 @@ describe('PostEventReminderService', () => {
       const pug = makePugRow();
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
-      mockClientService.sendEmbedDM.mockRejectedValue(new Error('Cannot send DM'));
+      mockClientService.sendEmbedDM.mockRejectedValue(
+        new Error('Cannot send DM'),
+      );
 
       // Should not throw — errors are caught and logged
       await expect(service.handlePostEventReminders()).resolves.not.toThrow();
@@ -325,7 +357,9 @@ describe('PostEventReminderService', () => {
       const pug = makePugRow();
       mockDb.execute.mockResolvedValue([pug]);
       setupTrackingInsert(false);
-      mockSettingsService.getClientUrl.mockResolvedValue('https://raidledger.example.com');
+      mockSettingsService.getClientUrl.mockResolvedValue(
+        'https://raidledger.example.com',
+      );
 
       await service.handlePostEventReminders();
 
@@ -352,9 +386,10 @@ describe('PostEventReminderService', () => {
       const insertChain = {
         values: jest.fn().mockReturnValue({
           onConflictDoNothing: jest.fn().mockReturnValue({
-            returning: jest.fn()
+            returning: jest
+              .fn()
               .mockResolvedValueOnce([{ id: 1 }]) // first call: new row
-              .mockResolvedValueOnce([]),          // second call: duplicate, no row
+              .mockResolvedValueOnce([]), // second call: duplicate, no row
           }),
         }),
       };
