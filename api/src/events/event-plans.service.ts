@@ -481,13 +481,22 @@ export class EventPlansService {
         ? `Not everyone was available — here are new time options! (Round ${round})`
         : undefined;
 
-    // Build event details embed
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setColor(0x7c3aed); // violet
+    // Build event details embed and send BEFORE the poll so it appears above
+    const embed = new EmbedBuilder().setTitle(title).setColor(0x7c3aed); // violet
 
+    const descParts: string[] = [];
     if (details?.description) {
-      embed.setDescription(details.description);
+      descParts.push(details.description);
+    }
+
+    // Add link to plan on web UI
+    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
+    if (clientUrl) {
+      descParts.push(`\n📎 [View on Raid Ledger](${clientUrl}/events?tab=plans)`);
+    }
+
+    if (descParts.length > 0) {
+      embed.setDescription(descParts.join('\n'));
     }
 
     const fields: Array<{ name: string; value: string; inline: boolean }> = [];
@@ -499,11 +508,12 @@ export class EventPlansService {
     if (details?.durationMinutes) {
       const hours = Math.floor(details.durationMinutes / 60);
       const mins = details.durationMinutes % 60;
-      const duration = hours > 0 && mins > 0
-        ? `${hours}h ${mins}m`
-        : hours > 0
-          ? `${hours}h`
-          : `${mins}m`;
+      const duration =
+        hours > 0 && mins > 0
+          ? `${hours}h ${mins}m`
+          : hours > 0
+            ? `${hours}h`
+            : `${mins}m`;
       fields.push({ name: 'Duration', value: duration, inline: true });
     }
 
@@ -527,7 +537,7 @@ export class EventPlansService {
     if (details?.pollMode === 'all_or_nothing') {
       fields.push({
         name: 'Mode',
-        value: 'All or Nothing — re-polls if anyone can\'t make it',
+        value: "All or Nothing — re-polls if anyone can't make it",
         inline: false,
       });
     }
@@ -536,9 +546,11 @@ export class EventPlansService {
       embed.addFields(fields);
     }
 
+    // Send embed as a separate message first so it appears ABOVE the poll
+    await textChannel.send({ content, embeds: [embed] });
+
+    // Then send the poll as its own message
     const message = await textChannel.send({
-      content,
-      embeds: [embed],
       poll: {
         question: { text: `When should we play "${title}"?` },
         answers: pollAnswers,
