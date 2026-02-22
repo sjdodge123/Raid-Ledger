@@ -24,3 +24,4 @@ export * from './schema/cron-job-executions';
 export * from './schema/discord-event-messages';
 export * from './schema/channel-bindings';
 export * from './schema/post-event-reminders-sent';
+export * from './schema/event-plans';

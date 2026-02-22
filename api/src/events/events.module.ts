@@ -7,7 +7,10 @@ import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { ShareService } from './share.service';
 import { TemplatesService } from './templates.service';
+import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
+import { EventPlansProcessor } from './event-plans.processor';
 import { EventsController } from './events.controller';
+import { EventPlansController } from './event-plans.controller';
 import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
 import { AvailabilityModule } from '../availability/availability.module';
@@ -27,8 +30,14 @@ import {
     SettingsModule,
     forwardRef(() => DiscordBotModule),
     BullModule.registerQueue({ name: BENCH_PROMOTION_QUEUE }),
+    BullModule.registerQueue({ name: EVENT_PLANS_QUEUE }),
   ],
-  controllers: [EventsController, InviteController, TemplatesController],
+  controllers: [
+    EventsController,
+    EventPlansController,
+    InviteController,
+    TemplatesController,
+  ],
   providers: [
     EventsService,
     SignupsService,
@@ -39,6 +48,8 @@ import {
     TemplatesService,
     BenchPromotionService,
     BenchPromotionProcessor,
+    EventPlansService,
+    EventPlansProcessor,
   ],
   exports: [EventsService, SignupsService, PugsService, InviteService],
 })

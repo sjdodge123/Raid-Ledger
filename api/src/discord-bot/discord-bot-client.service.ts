@@ -44,6 +44,7 @@ const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
     label: 'Read Message History',
     flag: PermissionsBitField.Flags.ReadMessageHistory,
   },
+  { label: 'Send Polls', flag: PermissionsBitField.Flags.SendPolls },
 ];
 
 @Injectable()

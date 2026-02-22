@@ -112,6 +112,13 @@ export class EventCreateCommand
               .setMaxValue(50),
           ),
       )
+      .addSubcommand((sub) =>
+        sub
+          .setName('plan')
+          .setDescription(
+            'Plan an event with a community poll to find the best time',
+          ),
+      )
       .toJSON();
   }
 
@@ -121,6 +128,8 @@ export class EventCreateCommand
     const subcommand = interaction.options.getSubcommand();
     if (subcommand === 'create') {
       await this.handleCreate(interaction);
+    } else if (subcommand === 'plan') {
+      await this.handlePlan(interaction);
     }
   }
 
@@ -286,6 +295,67 @@ export class EventCreateCommand
         'Failed to create event. Please try again or use the web app.',
       );
     }
+  }
+
+  /**
+   * Handle the /event plan subcommand.
+   * Generates a magic link to the web plan form.
+   */
+  private async handlePlan(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    await interaction.deferReply({ ephemeral: true });
+
+    const discordId = interaction.user.id;
+    const user = await this.usersService.findByDiscordId(discordId);
+    if (!user) {
+      await interaction.editReply(
+        'You need a Raid Ledger account linked to Discord to plan events. ' +
+          'Log in to Raid Ledger via Discord OAuth first.',
+      );
+      return;
+    }
+
+    const clientUrl = process.env.CLIENT_URL ?? null;
+    if (!clientUrl) {
+      await interaction.editReply(
+        'The web app URL is not configured. Contact an admin.',
+      );
+      return;
+    }
+
+    const magicLinkUrl = await this.magicLinkService.generateLink(
+      user.id,
+      '/events/plan',
+      clientUrl,
+    );
+
+    if (!magicLinkUrl) {
+      await interaction.editReply(
+        'Failed to generate a link. Please try again.',
+      );
+      return;
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor(0x8b5cf6) // Violet
+      .setTitle('Plan an Event')
+      .setDescription(
+        'Use the web form to pick candidate time slots and start a community poll.',
+      );
+
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setLabel('Open Planning Form')
+        .setStyle(ButtonStyle.Link)
+        .setURL(magicLinkUrl)
+        .setEmoji({ name: '\uD83D\uDCCA' }),
+    );
+
+    await interaction.editReply({
+      embeds: [embed],
+      components: [row],
+    });
   }
 
   /**
