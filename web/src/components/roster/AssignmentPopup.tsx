@@ -45,6 +45,12 @@ interface AssignmentPopupProps {
     onGenerateInviteLink?: () => void;
     /** ROK-402: Called when admin removes a signup from the event entirely */
     onRemoveFromEvent?: (signupId: number, username: string) => void;
+    /** ROK-390: Called when admin reassigns occupant to another slot (move or swap) */
+    onReassignToSlot?: (
+        fromSignupId: number,
+        toRole: RosterRole,
+        toPosition: number,
+    ) => void;
 }
 
 
@@ -68,10 +74,13 @@ export function AssignmentPopup({
     onAssignToSlot,
     onGenerateInviteLink,
     onRemoveFromEvent,
+    onReassignToSlot,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
     const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
+    // ROK-390: Reassign mode — shows slot picker for moving current occupant
+    const [reassignMode, setReassignMode] = useState(false);
 
     const isBrowseAll = slotRole === null;
     const selectedPlayer = selectedPlayerId != null
@@ -113,11 +122,13 @@ export function AssignmentPopup({
         }));
     }, [availableSlots]);
 
-    const title = selectedPlayer
-        ? `Pick a slot for ${selectedPlayer.username}`
-        : slotRole && slotPosition > 0
-            ? `Assign to ${formatRole(slotRole)} ${slotPosition}`
-            : 'Unassigned Players';
+    const title = reassignMode && currentOccupant
+        ? `Reassign ${currentOccupant.username}`
+        : selectedPlayer
+            ? `Pick a slot for ${selectedPlayer.username}`
+            : slotRole && slotPosition > 0
+                ? `Assign to ${formatRole(slotRole)} ${slotPosition}`
+                : 'Unassigned Players';
 
     const handleAssign = (signupId: number) => {
         if (isBrowseAll && onAssignToSlot && availableSlots) {
@@ -139,17 +150,114 @@ export function AssignmentPopup({
     };
 
     const handleBack = () => {
-        setSelectedPlayerId(null);
+        if (reassignMode) {
+            setReassignMode(false);
+        } else {
+            setSelectedPlayerId(null);
+        }
     };
 
     const handleClose = () => {
         setSelectedPlayerId(null);
+        setReassignMode(false);
         setSearch('');
         onClose();
     };
 
+    // ROK-390: Handle slot pick during reassign mode
+    const handleReassignSlotPick = (role: RosterRole, position: number) => {
+        if (currentOccupant && onReassignToSlot) {
+            onReassignToSlot(currentOccupant.signupId, role, position);
+            setReassignMode(false);
+        }
+    };
+
     // Whether the invite section should be shown (targeted mode + MMO combat role)
     const canInvitePug = !isBrowseAll && slotRole !== null && PUG_ELIGIBLE_ROLES.has(slotRole) && !!onGenerateInviteLink;
+
+    // ROK-390: Reassign slot picker view — shown when admin clicks "Reassign" on an occupied slot
+    if (reassignMode && currentOccupant && availableSlots) {
+        return (
+            <Modal isOpen={isOpen} onClose={handleClose} title={title}>
+                <div className="assignment-popup">
+                    <button
+                        onClick={handleBack}
+                        className="assignment-popup__back-btn"
+                    >
+                        &larr; Back
+                    </button>
+
+                    <PlayerCard
+                        player={currentOccupant}
+                        size="default"
+                        showRole
+                    />
+
+                    {slotsByRole.map(({ role, label, slots }) => (
+                        <div key={role} className="assignment-popup__section">
+                            <h4 className="assignment-popup__section-title">
+                                {ROLE_EMOJI[role] ?? '🎯'} {label}
+                            </h4>
+                            <div className="assignment-popup__slot-grid">
+                                {slots.map(slot => {
+                                    const colors = ROLE_SLOT_COLORS[slot.role] ?? ROLE_SLOT_COLORS.player;
+                                    const isCurrent = slot.role === slotRole && slot.position === slotPosition;
+                                    const isOccupied = !!slot.occupantName && !isCurrent;
+                                    const isEmpty = !slot.occupantName;
+                                    const isMatch = isEmpty && currentOccupant.character?.role === slot.role;
+
+                                    return (
+                                        <button
+                                            key={`${slot.role}-${slot.position}`}
+                                            onClick={() => !isCurrent && handleReassignSlotPick(slot.role, slot.position)}
+                                            disabled={isCurrent}
+                                            className={`assignment-popup__slot-btn ${
+                                                isCurrent ? 'assignment-popup__slot-btn--locked'
+                                                    : isOccupied ? 'assignment-popup__slot-btn--swap'
+                                                        : isMatch ? 'assignment-popup__slot-btn--match'
+                                                            : ''
+                                            }`}
+                                            style={{
+                                                '--slot-bg': isCurrent ? 'rgba(30, 41, 59, 0.6)'
+                                                    : isOccupied ? 'rgba(245, 158, 11, 0.08)'
+                                                        : colors.bg,
+                                                '--slot-border': isCurrent ? 'rgba(51, 65, 85, 0.4)'
+                                                    : isOccupied ? 'rgba(245, 158, 11, 0.4)'
+                                                        : colors.border,
+                                                '--slot-text': isCurrent ? '#475569'
+                                                    : isOccupied ? '#fbbf24'
+                                                        : colors.text,
+                                            } as React.CSSProperties}
+                                        >
+                                            <span className="assignment-popup__slot-label">
+                                                {formatRole(slot.role)} {slot.position}
+                                            </span>
+                                            {isCurrent && (
+                                                <span className="assignment-popup__slot-occupant">
+                                                    (current)
+                                                </span>
+                                            )}
+                                            {isOccupied && (
+                                                <span className="assignment-popup__slot-occupant">
+                                                    &harr; {slot.occupantName}
+                                                </span>
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    ))}
+
+                    {slotsByRole.length === 0 && (
+                        <div className="assignment-popup__empty">
+                            No slots available.
+                        </div>
+                    )}
+                </div>
+            </Modal>
+        );
+    }
 
     // Slot picker view: shown when a player is selected in browse-all mode
     if (selectedPlayer && availableSlots) {
@@ -264,6 +372,14 @@ export function AssignmentPopup({
                                 />
                             </div>
                             <div className="flex flex-col gap-1 shrink-0">
+                                {onReassignToSlot && (
+                                    <button
+                                        onClick={() => setReassignMode(true)}
+                                        className="assignment-popup__reassign-btn"
+                                    >
+                                        Reassign
+                                    </button>
+                                )}
                                 <button
                                     onClick={() => onRemove(currentOccupant.signupId)}
                                     className="assignment-popup__remove-btn"

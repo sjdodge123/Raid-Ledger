@@ -219,6 +219,7 @@ export class DiscordNotificationEmbedService {
         return EMBED_COLORS.ANNOUNCEMENT;
       case 'slot_vacated':
       case 'bench_promoted':
+      case 'roster_reassigned':
         return EMBED_COLORS.ROSTER_UPDATE;
       case 'event_rescheduled':
         return EMBED_COLORS.REMINDER;
@@ -244,6 +245,8 @@ export class DiscordNotificationEmbedService {
         return '🚪';
       case 'bench_promoted':
         return '🎉';
+      case 'roster_reassigned':
+        return '🔄';
       case 'event_rescheduled':
         return '📆';
       case 'achievement_unlocked':
@@ -269,6 +272,8 @@ export class DiscordNotificationEmbedService {
         return 'Slot Vacated';
       case 'bench_promoted':
         return 'Bench Promoted';
+      case 'roster_reassigned':
+        return 'Roster Reassigned';
       case 'event_rescheduled':
         return 'Event Rescheduled';
       case 'achievement_unlocked':
@@ -313,6 +318,22 @@ export class DiscordNotificationEmbedService {
           embed.addFields({
             name: 'Slot',
             value: toStr(payload.slotName),
+            inline: true,
+          });
+        }
+        break;
+      case 'roster_reassigned':
+        if (payload.oldRole) {
+          embed.addFields({
+            name: 'Previous Role',
+            value: toStr(payload.oldRole),
+            inline: true,
+          });
+        }
+        if (payload.newRole) {
+          embed.addFields({
+            name: 'New Role',
+            value: toStr(payload.newRole),
             inline: true,
           });
         }
@@ -374,6 +395,7 @@ export class DiscordNotificationEmbedService {
         break;
       case 'slot_vacated':
       case 'bench_promoted':
+      case 'roster_reassigned':
         if (eventId) {
           return new ButtonBuilder()
             .setLabel('View Roster')
