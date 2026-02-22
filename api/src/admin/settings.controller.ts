@@ -539,11 +539,18 @@ export class AdminSettingsController {
   @Put('timezone')
   @HttpCode(HttpStatus.OK)
   async updateTimezone(
-    @Body() body: { timezone: string },
+    @Body() body: { timezone?: string | null },
   ): Promise<{ success: boolean; message: string }> {
     const { timezone } = body;
-    if (!timezone || typeof timezone !== 'string') {
-      throw new BadRequestException('Timezone is required');
+
+    // Empty/null/undefined clears the setting (falls back to UTC)
+    if (!timezone) {
+      await this.settingsService.delete(SETTING_KEYS.DEFAULT_TIMEZONE);
+      this.logger.log('Default timezone cleared (UTC fallback) via admin UI');
+      return {
+        success: true,
+        message: 'Default timezone cleared (UTC fallback).',
+      };
     }
 
     // Validate the timezone is a valid IANA timezone

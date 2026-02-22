@@ -87,7 +87,7 @@ describe('SignupInteractionListener', () => {
   };
   let mockIntentTokenService: { generate: jest.Mock };
   let mockEmbedFactory: { buildEventEmbed: jest.Mock };
-  let mockSettingsService: { getBranding: jest.Mock };
+  let mockSettingsService: { getBranding: jest.Mock; getDefaultTimezone: jest.Mock };
   let mockDb: Record<string, jest.Mock>;
 
   const mockEmbed = new EmbedBuilder().setTitle('Test');
