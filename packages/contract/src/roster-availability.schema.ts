@@ -8,7 +8,7 @@ export const UserAvailabilitySlotSchema = z.object({
     start: z.string().datetime(),
     end: z.string().datetime(),
     status: AvailabilityStatusEnum,
-    gameId: z.string().uuid().nullable(),
+    gameId: z.number().nullable(),
     sourceEventId: z.number().nullable(),
 });
 export type UserAvailabilitySlot = z.infer<typeof UserAvailabilitySlotSchema>;

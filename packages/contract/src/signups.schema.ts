@@ -21,7 +21,7 @@ export const SignupUserSchema = z.object({
     customAvatarUrl: z.string().nullable().optional(),
     /** Optional characters array for avatar resolution (ROK-194) */
     characters: z.array(z.object({
-        gameId: z.string().uuid(),
+        gameId: z.number(),
         avatarUrl: z.string().nullable(),
     })).optional(),
 });

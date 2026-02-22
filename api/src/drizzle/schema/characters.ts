@@ -13,11 +13,12 @@ import {
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { users } from './users';
-import { gameRegistry } from './game-registry';
+import { games } from './games';
 
 /**
  * Characters - Player characters across different games.
  * Supports Main/Alt designation with enforced single main per game.
+ * ROK-400: gameId now references games.id (integer) instead of game_registry.id (uuid).
  */
 export const characters = pgTable(
   'characters',
@@ -27,9 +28,9 @@ export const characters = pgTable(
     userId: integer('user_id')
       .references(() => users.id, { onDelete: 'cascade' })
       .notNull(),
-    /** FK to game_registry.id (uuid) */
-    gameId: uuid('game_id')
-      .references(() => gameRegistry.id, { onDelete: 'cascade' })
+    /** FK to games.id (integer) — ROK-400: was UUID referencing game_registry */
+    gameId: integer('game_id')
+      .references(() => games.id, { onDelete: 'cascade' })
       .notNull(),
     /** Character name */
     name: varchar('name', { length: 100 }).notNull(),

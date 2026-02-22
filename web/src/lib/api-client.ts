@@ -289,17 +289,19 @@ export async function searchGames(query: string): Promise<GameSearchResponseDto>
 }
 
 /**
- * Fetch all registered games from the game registry
+ * Fetch all configured games (enabled, with config columns).
+ * ROK-400: Now uses /games/configured instead of removed /game-registry.
  */
 export async function fetchGameRegistry(): Promise<GameRegistryListResponseDto> {
-    return fetchApi('/game-registry');
+    return fetchApi('/games/configured');
 }
 
 /**
- * Fetch event types for a specific registry game
+ * Fetch event types for a specific game.
+ * ROK-400: Now uses /games/:id/event-types instead of removed /game-registry/:id/event-types.
  */
-export async function getGameEventTypes(registryGameId: string): Promise<EventTypesResponseDto> {
-    return fetchApi(`/game-registry/${registryGameId}/event-types`);
+export async function getGameEventTypes(gameId: number): Promise<EventTypesResponseDto> {
+    return fetchApi(`/games/${gameId}/event-types`);
 }
 
 // ============================================================
@@ -382,7 +384,7 @@ export async function redeemIntent(
 /**
  * Fetch current user's characters, optionally filtered by game
  */
-export async function getMyCharacters(gameId?: string): Promise<CharacterListResponseDto> {
+export async function getMyCharacters(gameId?: number): Promise<CharacterListResponseDto> {
     const params = gameId ? `?gameId=${gameId}` : '';
     return fetchApi(`/users/me/characters${params}`, {}, CharacterListResponseSchema);
 }

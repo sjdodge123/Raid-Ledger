@@ -33,29 +33,29 @@ const mockUseDeleteCharacter = useDeleteCharacter as unknown as ReturnType<typeo
 const mockUseMyCharacters = useMyCharacters as unknown as ReturnType<typeof vi.fn>;
 
 const baseGame: GameRegistryDto = {
-    id: 'wow',
+    id: 1,
     name: 'World of Warcraft',
     shortName: 'WoW',
-    slug: 'wow',
+    slug: 'world-of-warcraft',
     hasRoles: true,
     hasSpecs: true,
-    iconUrl: null,
+    coverUrl: null,
     colorHex: '#F58518',
     maxCharactersPerUser: 10,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    enabled: true,
 };
 
 const nonMmoGame: GameRegistryDto = {
-    id: 'factorio',
+    id: 2,
     name: 'Factorio',
     shortName: null,
     slug: 'factorio',
     hasRoles: false,
     hasSpecs: false,
-    iconUrl: null,
+    coverUrl: null,
     colorHex: '#6B7280',
     maxCharactersPerUser: 5,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    enabled: true,
 };
 
 function createQueryClient() {
@@ -214,7 +214,7 @@ describe('CharacterStep', () => {
             fireEvent.click(submitButton);
 
             expect(mockMutate).toHaveBeenCalledWith(
-                expect.objectContaining({ name: 'Arthas', gameId: 'wow' }),
+                expect.objectContaining({ name: 'Arthas', gameId: 1 }),
                 expect.any(Object),
             );
         });
@@ -254,7 +254,7 @@ describe('CharacterStep', () => {
                             level: 80,
                             race: 'Orc',
                             realm: 'Draenor',
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -282,7 +282,7 @@ describe('CharacterStep', () => {
                             level: 80,
                             race: 'Orc',
                             realm: 'Draenor',
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -313,7 +313,7 @@ describe('CharacterStep', () => {
                             level: null,
                             race: null,
                             realm: null,
-                            gameId: 'wow',
+                            gameId: 1,
                         },
                     ],
                 },
@@ -340,8 +340,8 @@ describe('CharacterStep', () => {
             mockUseMyCharacters.mockReturnValue({
                 data: {
                     data: [
-                        { id: 'char-0', name: 'Char0', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 'wow' },
-                        { id: 'char-1', name: 'Char1', class: null, spec: null, effectiveRole: null, isMain: false, avatarUrl: null, level: null, race: null, realm: null, gameId: 'wow' },
+                        { id: 'char-0', name: 'Char0', class: null, spec: null, effectiveRole: null, isMain: true, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
+                        { id: 'char-1', name: 'Char1', class: null, spec: null, effectiveRole: null, isMain: false, avatarUrl: null, level: null, race: null, realm: null, gameId: 1 },
                     ],
                 },
             });

@@ -10,12 +10,7 @@ import type { WowGameVariant } from '@raid-ledger/contract';
 
 @Injectable()
 export class BlizzardContentProvider implements ContentProvider {
-  readonly gameSlugs = [
-    'wow',
-    'world-of-warcraft',
-    'wow-classic',
-    'wow-classic-era',
-  ];
+  readonly gameSlugs = ['world-of-warcraft', 'world-of-warcraft-classic'];
 
   constructor(private readonly blizzardService: BlizzardService) {}
 

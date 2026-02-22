@@ -14,7 +14,7 @@ const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventRespon
     startTime: '2026-02-10T20:00:00Z',
     endTime: '2026-02-10T23:00:00Z',
     creator: { id: 1, username: 'TestUser', avatar: null },
-    game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: 'https://example.com/cover.jpg' },
+    game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: 'https://example.com/cover.jpg' },
     signupCount: 3,
     createdAt: '2026-02-01T00:00:00Z',
     updatedAt: '2026-02-01T00:00:00Z',

@@ -58,8 +58,8 @@ describe('CharactersService', () => {
   };
 
   const mockGame = {
-    id: 'game-uuid-1',
-    slug: 'wow',
+    id: 1,
+    slug: 'world-of-warcraft',
     name: 'World of Warcraft',
     hasRoles: true,
     hasSpecs: true,
@@ -68,7 +68,7 @@ describe('CharactersService', () => {
   const mockCharacter = {
     id: 'char-uuid-1',
     userId: 1,
-    gameId: 'game-uuid-1',
+    gameId: 1,
     name: 'Thrall',
     realm: 'Area 52',
     class: 'Shaman',
@@ -253,7 +253,7 @@ describe('CharactersService', () => {
       });
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'NewChar',
         realm: 'Stormrage',
         class: 'Paladin',
@@ -277,7 +277,7 @@ describe('CharactersService', () => {
       });
 
       const dto = {
-        gameId: 'nonexistent-game',
+        gameId: 99999,
         name: 'NewChar',
         isMain: false,
       };
@@ -311,7 +311,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'Thrall',
         realm: 'Area 52',
         isMain: false,
@@ -349,7 +349,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'FirstChar',
         realm: 'Stormrage',
         isMain: false,
@@ -393,7 +393,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'AltChar',
         realm: 'Stormrage',
         isMain: false,
@@ -441,7 +441,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'NewMain',
         realm: 'Stormrage',
         isMain: true,
@@ -492,7 +492,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'NewMain',
         realm: 'Stormrage',
         isMain: true,
@@ -538,7 +538,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'Thrall',
         realm: 'Area 52',
         isMain: false,
@@ -584,7 +584,7 @@ describe('CharactersService', () => {
       );
 
       const dto = {
-        gameId: 'game-uuid-1',
+        gameId: 1,
         name: 'Shadow',
         // No realm — should skip duplicate claim check
         isMain: false,

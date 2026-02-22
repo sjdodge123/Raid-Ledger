@@ -244,9 +244,10 @@ export class DiscordBotSettingsController {
       return [];
     }
 
+    const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
     const result = await this.charactersService.findAllForUser(
       linkedUser.id,
-      gameId,
+      parsedGameId || undefined,
     );
     return result.data;
   }

@@ -36,9 +36,9 @@ export interface AvatarUser {
     avatar: string | null;
     /** Custom uploaded avatar (relative path like /avatars/...) */
     customAvatarUrl?: string | null;
-    /** User's characters (optional) */
+    /** User's characters (optional). gameId is number (games.id) or '__resolved__' sentinel. */
     characters?: Array<{
-        gameId: string;
+        gameId: number | string;
         name?: string;
         avatarUrl: string | null;
     }>;
@@ -122,7 +122,7 @@ export function toAvatarUser(user: {
     avatar: string | null;
     discordId?: string | null;
     customAvatarUrl?: string | null;
-    characters?: Array<{ gameId: string; name?: string; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: number | string; name?: string; avatarUrl: string | null }>;
     avatarPreference?: AvatarPreference | null;
 }): AvatarUser {
     // ROK-352: Overlay current user's preference data when IDs match
@@ -175,7 +175,7 @@ export function toAvatarUser(user: {
  */
 export function resolveAvatar(
     user: AvatarUser | null | undefined,
-    gameId?: string
+    gameId?: number | string
 ): ResolvedAvatar {
     // Handle null/undefined user
     if (!user) {

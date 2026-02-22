@@ -205,7 +205,7 @@ describe('EventReminderService', () => {
               title: 'Far Future Event',
               duration: [futureStart, futureEnd] as [Date, Date],
               gameId: null,
-              registryGameId: null,
+
               reminder15min: true,
               reminder1hour: false,
               reminder24hour: false,
@@ -237,7 +237,7 @@ describe('EventReminderService', () => {
               title: 'Raid Night',
               duration: [soonStart, soonEnd] as [Date, Date],
               gameId: null,
-              registryGameId: null,
+
               reminder15min: true,
               reminder1hour: false,
               reminder24hour: false,
@@ -335,7 +335,7 @@ describe('EventReminderService', () => {
               title: 'Raid Night',
               duration: [soonStart, soonEnd] as [Date, Date],
               gameId: null,
-              registryGameId: null,
+
               // 15min reminder is disabled
               reminder15min: false,
               reminder1hour: false,

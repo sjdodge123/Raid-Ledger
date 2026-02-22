@@ -85,7 +85,7 @@ export function WeekEventCard({ event, eventOverlapsGameTime }: WeekEventCardPro
                             size={avatarConfig.size}
                             maxVisible={avatarConfig.max}
                             accentColor={colors.border}
-                            gameId={event.resource?.game?.registryId ?? undefined}
+                            gameId={event.resource?.game?.id ?? undefined}
                         />
                     </div>
                 ) : signupCount > 0 ? (

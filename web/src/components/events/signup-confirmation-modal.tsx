@@ -13,7 +13,7 @@ interface SignupConfirmationModalProps {
     onClose: () => void;
     eventId: number;
     signupId: number;
-    gameId?: string;
+    gameId?: number;
     /** Game name for display */
     gameName?: string;
     /** Whether the game has roles (MMO fields) */

@@ -80,7 +80,6 @@ export class EventReminderService {
             title: schema.events.title,
             duration: schema.events.duration,
             gameId: schema.events.gameId,
-            registryGameId: schema.events.registryGameId,
             reminder15min: schema.events.reminder15min,
             reminder1hour: schema.events.reminder1hour,
             reminder24hour: schema.events.reminder24hour,
@@ -127,8 +126,7 @@ export class EventReminderService {
       id: number;
       title: string;
       duration: [Date, Date];
-      gameId: string | null;
-      registryGameId: string | null;
+      gameId: number | null;
     }[],
     windowType: ReminderWindowType,
     windowLabel: string,
@@ -210,8 +208,7 @@ export class EventReminderService {
         // Find user's character for this event's game
         const userChars = charsByUser.get(userId) ?? [];
         const matchingChar = event.gameId
-          ? (userChars.find((c) => c.gameId === event.registryGameId) ??
-            userChars[0])
+          ? (userChars.find((c) => c.gameId === event.gameId) ?? userChars[0])
           : userChars[0];
 
         const charDisplay = matchingChar

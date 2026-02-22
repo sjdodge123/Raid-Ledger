@@ -11,7 +11,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
-import { gameRegistry } from './game-registry';
+import { games } from './games';
 
 // Define custom tsrange type
 export const tsrange = customType<{
@@ -48,9 +48,8 @@ export const events = pgTable(
     id: serial('id').primaryKey(),
     title: text('title').notNull(),
     description: text('description'),
-    gameId: text('game_id'), // Reference to IGDB (legacy)
-    /** Reference to game registry for game-specific configuration (nullable for backward compatibility) */
-    registryGameId: uuid('registry_game_id').references(() => gameRegistry.id),
+    /** ROK-400: Single FK to games.id (integer). Replaces legacy gameId (text) + registryGameId (uuid). */
+    gameId: integer('game_id').references(() => games.id),
     creatorId: integer('creator_id')
       .references(() => users.id)
       .notNull(),
@@ -84,6 +83,6 @@ export const events = pgTable(
   (table) => [
     // Performance indexes for common query patterns
     index('idx_events_creator_id').on(table.creatorId),
-    index('idx_events_registry_game_id').on(table.registryGameId),
+    index('idx_events_game_id').on(table.gameId),
   ],
 );

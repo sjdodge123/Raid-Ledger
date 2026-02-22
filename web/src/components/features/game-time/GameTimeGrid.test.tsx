@@ -149,7 +149,7 @@ describe('GameTimeGrid', () => {
             {
                 eventId: 1,
                 title: 'Raid Night',
-                gameSlug: 'wow',
+                gameSlug: 'world-of-warcraft',
                 gameName: 'World of Warcraft',
                 coverUrl: null,
                 signupId: 10,
@@ -212,7 +212,7 @@ describe('GameTimeGrid', () => {
                     endHour: 22,
                     title: 'Raid Night',
                     gameName: 'WoW',
-                    gameSlug: 'wow',
+                    gameSlug: 'world-of-warcraft',
                 },
             ];
             render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);

@@ -21,7 +21,7 @@ export interface EventBlockDescriptor {
   title: string;
   gameSlug: string | null;
   gameName: string | null;
-  gameRegistryId: string | null;
+  gameId: number | null;
   coverUrl: string | null;
   signupId: number;
   confirmationStatus: 'pending' | 'confirmed' | 'changed';
@@ -34,7 +34,7 @@ export interface EventBlockDescriptor {
     id: number;
     username: string;
     avatar: string | null;
-    characters?: Array<{ gameId: string; avatarUrl: string | null }>;
+    characters?: Array<{ gameId: number; avatarUrl: string | null }>;
   }>;
   signupCount: number;
 }
@@ -342,10 +342,7 @@ export class GameTimeService {
         duration: schema.events.duration,
         signupId: schema.eventSignups.id,
         confirmationStatus: schema.eventSignups.confirmationStatus,
-        registryId: schema.gameRegistry.id,
-        registrySlug: schema.gameRegistry.slug,
-        registryName: schema.gameRegistry.name,
-        registryIconUrl: schema.gameRegistry.iconUrl,
+        gameId: schema.games.id,
         gameSlug: schema.games.slug,
         gameName: schema.games.name,
         gameCoverUrl: schema.games.coverUrl,
@@ -358,14 +355,7 @@ export class GameTimeService {
         eq(schema.eventSignups.eventId, schema.events.id),
       )
       .leftJoin(schema.users, eq(schema.events.creatorId, schema.users.id))
-      .leftJoin(
-        schema.games,
-        eq(schema.events.gameId, sql`${schema.games.igdbId}::text`),
-      )
-      .leftJoin(
-        schema.gameRegistry,
-        eq(schema.events.registryGameId, schema.gameRegistry.id),
-      )
+      .leftJoin(schema.games, eq(schema.events.gameId, schema.games.id))
       .where(
         and(
           eq(schema.eventSignups.userId, userId),
@@ -382,7 +372,7 @@ export class GameTimeService {
           id: number;
           username: string;
           avatar: string | null;
-          characters?: Array<{ gameId: string; avatarUrl: string | null }>;
+          characters?: Array<{ gameId: number; avatarUrl: string | null }>;
         }>;
         count: number;
       }
@@ -455,7 +445,7 @@ export class GameTimeService {
 
         const charactersByUser = new Map<
           number,
-          Array<{ gameId: string; avatarUrl: string | null }>
+          Array<{ gameId: number; avatarUrl: string | null }>
         >();
         for (const char of charactersData) {
           if (!charactersByUser.has(char.userId)) {
@@ -653,9 +643,9 @@ export class GameTimeService {
       const clampedStart = eventStart < weekStart ? weekStart : eventStart;
       const clampedEnd = eventEnd > weekEnd ? weekEnd : eventEnd;
 
-      const gameSlug = event.registrySlug ?? event.gameSlug ?? null;
-      const gameName = event.registryName ?? event.gameName ?? null;
-      const coverUrl = event.gameCoverUrl ?? event.registryIconUrl ?? null;
+      const gameSlug = event.gameSlug ?? null;
+      const gameName = event.gameName ?? null;
+      const coverUrl = event.gameCoverUrl ?? null;
 
       const dayHours = new Map<number, number[]>();
 
@@ -690,7 +680,7 @@ export class GameTimeService {
           title: event.title,
           gameSlug,
           gameName,
-          gameRegistryId: event.registryId ?? null,
+          gameId: event.gameId ?? null,
           coverUrl,
           signupId: event.signupId,
           confirmationStatus: event.confirmationStatus as

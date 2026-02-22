@@ -98,7 +98,7 @@ function makeResolveData(overrides: Record<string, unknown> = {}) {
                 id: 1,
                 name: 'World of Warcraft',
                 coverUrl: null,
-                registryId: 'wow-retail',
+                gameId: 1,
                 isBlizzardGame: false,
                 hasRoles: false,
                 gameVariant: null,

@@ -15,10 +15,11 @@ dotenv.config();
  */
 const GAMES_SEED = [
     {
-        slug: 'wow',
+        igdbId: 123,
+        slug: 'world-of-warcraft',
         name: 'World of Warcraft',
         shortName: 'WoW',
-        iconUrl: 'https://assets.blizzard.com/wow/icon.png',
+        iconUrl: null,
         colorHex: '#F58518',
         hasRoles: true,
         hasSpecs: true,
@@ -62,10 +63,11 @@ const GAMES_SEED = [
         ],
     },
     {
-        slug: 'wow-classic',
+        igdbId: 136210,
+        slug: 'world-of-warcraft-classic',
         name: 'World of Warcraft Classic',
         shortName: 'WoW Classic',
-        iconUrl: 'https://assets.blizzard.com/wow/icon.png',
+        iconUrl: null,
         colorHex: '#C79C6E',
         hasRoles: true,
         hasSpecs: true,
@@ -102,6 +104,7 @@ const GAMES_SEED = [
         ],
     },
     {
+        igdbId: 104967,
         slug: 'valheim',
         name: 'Valheim',
         shortName: null,
@@ -135,7 +138,8 @@ const GAMES_SEED = [
         ],
     },
     {
-        slug: 'ffxiv',
+        igdbId: 14729,
+        slug: 'final-fantasy-xiv-online',
         name: 'Final Fantasy XIV Online',
         shortName: 'FFXIV',
         iconUrl: null,
@@ -204,37 +208,39 @@ async function bootstrap() {
 
     try {
         for (const gameData of GAMES_SEED) {
-            const { eventTypes, ...game } = gameData;
+            const { eventTypes, iconUrl: _iconUrl, ...game } = gameData;
 
-            // Insert game (or get existing)
+            // ROK-400: Upsert into unified games table (slug is unique)
             const [insertedGame] = await db
-                .insert(schema.gameRegistry)
+                .insert(schema.games)
                 .values(game)
-                .onConflictDoNothing({ target: schema.gameRegistry.slug })
+                .onConflictDoNothing({ target: schema.games.slug })
                 .returning();
 
-            // If game already existed, fetch it and update shortName
-            let gameId: string;
+            let gameId: number;
             if (insertedGame) {
                 gameId = insertedGame.id;
                 console.log(`  ✅ Created game: ${game.name} (${game.slug})`);
             } else {
                 const [existing] = await db
                     .select()
-                    .from(schema.gameRegistry)
-                    .where(eq(schema.gameRegistry.slug, game.slug))
+                    .from(schema.games)
+                    .where(eq(schema.games.slug, game.slug))
                     .limit(1);
                 gameId = existing.id;
-                // Update shortName if it changed
-                if (existing.shortName !== game.shortName) {
-                    await db
-                        .update(schema.gameRegistry)
-                        .set({ shortName: game.shortName })
-                        .where(eq(schema.gameRegistry.id, gameId));
-                    console.log(`  🔄 Updated game: ${game.name} (shortName → ${game.shortName ?? 'null'})`);
-                } else {
-                    console.log(`  ⏭️  Skipped game: ${game.name} (already exists)`);
-                }
+                // Update config columns + igdbId if they changed
+                await db
+                    .update(schema.games)
+                    .set({
+                        ...(game.igdbId ? { igdbId: game.igdbId } : {}),
+                        shortName: game.shortName,
+                        colorHex: game.colorHex,
+                        hasRoles: game.hasRoles,
+                        hasSpecs: game.hasSpecs,
+                        maxCharactersPerUser: game.maxCharactersPerUser,
+                    })
+                    .where(eq(schema.games.id, gameId));
+                console.log(`  🔄 Updated game: ${game.name}`);
             }
 
             // Insert event types
@@ -257,7 +263,7 @@ async function bootstrap() {
             console.log('');
         }
 
-        console.log('🎉 Game registry seeding complete!');
+        console.log('🎉 Game seeding complete!');
     } catch (err) {
         console.error('❌ Seeding failed:', err);
         await app.close();

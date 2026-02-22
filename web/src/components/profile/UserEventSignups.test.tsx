@@ -22,9 +22,9 @@ const createMockEvent = (overrides: Partial<EventResponseDto> = {}): EventRespon
     },
     game: {
         id: 1,
-        registryId: 'uuid',
+
         name: 'World of Warcraft',
-        slug: 'wow',
+        slug: 'world-of-warcraft',
         coverUrl: 'https://example.com/cover.jpg',
     },
     signupCount: 3,

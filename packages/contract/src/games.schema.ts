@@ -10,7 +10,8 @@ export type GameSearchQueryDto = z.infer<typeof GameSearchQuerySchema>;
 // Individual game from IGDB (cached locally) — basic fields
 export const IgdbGameSchema = z.object({
     id: z.number(),
-    igdbId: z.number(),
+    /** ROK-400: nullable for non-IGDB games (e.g., manually created "Generic" game) */
+    igdbId: z.number().nullable(),
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),
@@ -25,7 +26,7 @@ export type IgdbGameDto = z.infer<typeof IgdbGameSchema>;
 /** Full game detail with all IGDB metadata */
 export const GameDetailSchema = z.object({
     id: z.number(),
-    igdbId: z.number(),
+    igdbId: z.number().nullable(),
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),
@@ -144,7 +145,7 @@ export type AdminGameListQueryDto = z.infer<typeof AdminGameListQuerySchema>;
 export const AdminGameListResponseSchema = z.object({
     data: z.array(z.object({
         id: z.number(),
-        igdbId: z.number(),
+        igdbId: z.number().nullable(),
         name: z.string(),
         slug: z.string(),
         coverUrl: z.string().nullable(),
@@ -197,7 +198,7 @@ export type BatchInterestResponseDto = z.infer<typeof BatchInterestResponseSchem
 /** A game the user has hearted, with basic info for display (ROK-282) */
 export const UserHeartedGameSchema = z.object({
     id: z.number(),
-    igdbId: z.number(),
+    igdbId: z.number().nullable(),
     name: z.string(),
     slug: z.string(),
     coverUrl: z.string().nullable(),

@@ -55,7 +55,7 @@ function getLevelWarning(
     if (characterLevel < lowestMinLevel) {
         return { type: 'under', label: `Below min level (${lowestMinLevel})` };
     }
-    if (gameSlug === 'wow-classic' && characterLevel > lowestMinLevel + 20) {
+    if (gameSlug === 'world-of-warcraft-classic' && characterLevel > lowestMinLevel + 20) {
         return { type: 'over', label: 'Over-leveled for this content' };
     }
     return null;

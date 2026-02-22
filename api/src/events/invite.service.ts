@@ -79,52 +79,32 @@ export class InviteService {
       return { valid: false, error: 'This event has already ended' };
     }
 
-    // Resolve game info — prefer IGDB coverUrl, fallback to registry iconUrl
-    const BLIZZARD_SLUGS = [
-      'wow',
-      'world-of-warcraft',
-      'wow-classic',
-      'wow-classic-era',
-    ];
+    // ROK-400: Resolve game info directly from unified games table
+    const BLIZZARD_SLUGS = ['world-of-warcraft', 'world-of-warcraft-classic'];
     let game: {
       name: string;
       coverUrl?: string | null;
       hasRoles?: boolean;
-      registryId?: string;
+      gameId?: number;
       isBlizzardGame?: boolean;
       inviterRealm?: string | null;
       gameVariant?: string | null;
     } | null = null;
-    if (event.registryGameId) {
-      const [registryRow] = await this.db
+    if (event.gameId) {
+      const [gameRow] = await this.db
         .select({
-          name: schema.gameRegistry.name,
-          iconUrl: schema.gameRegistry.iconUrl,
-          hasRoles: schema.gameRegistry.hasRoles,
-          slug: schema.gameRegistry.slug,
+          id: schema.games.id,
+          name: schema.games.name,
+          coverUrl: schema.games.coverUrl,
+          hasRoles: schema.games.hasRoles,
+          slug: schema.games.slug,
         })
-        .from(schema.gameRegistry)
-        .where(eq(schema.gameRegistry.id, event.registryGameId))
+        .from(schema.games)
+        .where(eq(schema.games.id, event.gameId))
         .limit(1);
 
-      // Also check IGDB games table for higher-quality cover art
-      let igdbCoverUrl: string | null = null;
-      if (event.gameId) {
-        const gameId = parseInt(String(event.gameId), 10);
-        if (!isNaN(gameId)) {
-          const [igdbGame] = await this.db
-            .select({ coverUrl: schema.games.coverUrl })
-            .from(schema.games)
-            .where(eq(schema.games.igdbId, gameId))
-            .limit(1);
-          igdbCoverUrl = igdbGame?.coverUrl ?? null;
-        }
-      }
-
-      if (registryRow) {
-        const isBlizzardGame = BLIZZARD_SLUGS.some(
-          (s) => registryRow.slug === s || registryRow.slug.startsWith('wow'),
-        );
+      if (gameRow) {
+        const isBlizzardGame = BLIZZARD_SLUGS.some((s) => gameRow.slug === s);
 
         // Look up inviter's character for realm/gameVariant hints
         let inviterRealm: string | null = null;
@@ -139,7 +119,7 @@ export class InviteService {
             .where(
               and(
                 eq(schema.characters.userId, slot.createdBy),
-                eq(schema.characters.gameId, event.registryGameId),
+                eq(schema.characters.gameId, event.gameId),
               ),
             )
             .limit(1);
@@ -148,34 +128,14 @@ export class InviteService {
         }
 
         game = {
-          name: registryRow.name,
-          coverUrl: igdbCoverUrl || registryRow.iconUrl,
-          hasRoles: registryRow.hasRoles,
-          registryId: event.registryGameId,
+          name: gameRow.name,
+          coverUrl: gameRow.coverUrl,
+          hasRoles: gameRow.hasRoles,
+          gameId: gameRow.id,
           isBlizzardGame,
           inviterRealm,
           gameVariant,
         };
-      }
-    } else if (event.gameId) {
-      // IGDB-only event (no registry entry) — resolve name + cover from IGDB
-      const gameId = parseInt(String(event.gameId), 10);
-      if (!isNaN(gameId)) {
-        const [igdbGame] = await this.db
-          .select({
-            name: schema.games.name,
-            coverUrl: schema.games.coverUrl,
-          })
-          .from(schema.games)
-          .where(eq(schema.games.igdbId, gameId))
-          .limit(1);
-        if (igdbGame) {
-          game = {
-            name: igdbGame.name,
-            coverUrl: igdbGame.coverUrl,
-            hasRoles: false,
-          };
-        }
       }
     }
 

@@ -518,34 +518,54 @@ describe('PluginRegistryService', () => {
   describe('registerAdapter()', () => {
     it('should store and retrieve an adapter by extension point and game slug', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
 
-      const result = service.getAdapter('character-sync', 'wow');
+      const result = service.getAdapter('character-sync', 'world-of-warcraft');
       expect(result).toBe(adapter);
     });
 
     it('should return undefined for unregistered adapter', () => {
-      expect(service.getAdapter('character-sync', 'wow')).toBeUndefined();
+      expect(
+        service.getAdapter('character-sync', 'world-of-warcraft'),
+      ).toBeUndefined();
     });
 
     it('should allow multiple game slugs for same extension point', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
-      service.registerAdapter('character-sync', 'wow-classic', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
+      service.registerAdapter(
+        'character-sync',
+        'world-of-warcraft-classic',
+        adapter,
+      );
 
-      expect(service.getAdapter('character-sync', 'wow')).toBe(adapter);
-      expect(service.getAdapter('character-sync', 'wow-classic')).toBe(adapter);
+      expect(service.getAdapter('character-sync', 'world-of-warcraft')).toBe(
+        adapter,
+      );
+      expect(
+        service.getAdapter('character-sync', 'world-of-warcraft-classic'),
+      ).toBe(adapter);
     });
 
     it('should allow different adapters for different extension points', () => {
       const syncAdapter = { fetchProfile: jest.fn() };
       const contentAdapter = { fetchRealms: jest.fn() };
 
-      service.registerAdapter('character-sync', 'wow', syncAdapter);
-      service.registerAdapter('content-provider', 'wow', contentAdapter);
+      service.registerAdapter(
+        'character-sync',
+        'world-of-warcraft',
+        syncAdapter,
+      );
+      service.registerAdapter(
+        'content-provider',
+        'world-of-warcraft',
+        contentAdapter,
+      );
 
-      expect(service.getAdapter('character-sync', 'wow')).toBe(syncAdapter);
-      expect(service.getAdapter('content-provider', 'wow')).toBe(
+      expect(service.getAdapter('character-sync', 'world-of-warcraft')).toBe(
+        syncAdapter,
+      );
+      expect(service.getAdapter('content-provider', 'world-of-warcraft')).toBe(
         contentAdapter,
       );
     });
@@ -554,10 +574,12 @@ describe('PluginRegistryService', () => {
       const adapter1 = { fetchProfile: jest.fn() };
       const adapter2 = { fetchProfile: jest.fn() };
 
-      service.registerAdapter('character-sync', 'wow', adapter1);
-      service.registerAdapter('character-sync', 'wow', adapter2);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter1);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter2);
 
-      expect(service.getAdapter('character-sync', 'wow')).toBe(adapter2);
+      expect(service.getAdapter('character-sync', 'world-of-warcraft')).toBe(
+        adapter2,
+      );
     });
   });
 
@@ -569,50 +591,75 @@ describe('PluginRegistryService', () => {
 
     it('should return all adapters for an extension point', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
-      service.registerAdapter('character-sync', 'wow-classic', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
+      service.registerAdapter(
+        'character-sync',
+        'world-of-warcraft-classic',
+        adapter,
+      );
 
       const result = service.getAdaptersForExtensionPoint('character-sync');
       expect(result.size).toBe(2);
-      expect(result.get('wow')).toBe(adapter);
-      expect(result.get('wow-classic')).toBe(adapter);
+      expect(result.get('world-of-warcraft')).toBe(adapter);
+      expect(result.get('world-of-warcraft-classic')).toBe(adapter);
     });
   });
 
   describe('removeAdaptersForPlugin()', () => {
     it('should remove adapters for specified game slugs', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
-      service.registerAdapter('character-sync', 'wow-classic', adapter);
-      service.registerAdapter('content-provider', 'wow', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
+      service.registerAdapter(
+        'character-sync',
+        'world-of-warcraft-classic',
+        adapter,
+      );
+      service.registerAdapter('content-provider', 'world-of-warcraft', adapter);
 
-      service.removeAdaptersForPlugin(['wow', 'wow-classic']);
+      service.removeAdaptersForPlugin([
+        'world-of-warcraft',
+        'world-of-warcraft-classic',
+      ]);
 
-      expect(service.getAdapter('character-sync', 'wow')).toBeUndefined();
       expect(
-        service.getAdapter('character-sync', 'wow-classic'),
+        service.getAdapter('character-sync', 'world-of-warcraft'),
       ).toBeUndefined();
-      expect(service.getAdapter('content-provider', 'wow')).toBeUndefined();
+      expect(
+        service.getAdapter('character-sync', 'world-of-warcraft-classic'),
+      ).toBeUndefined();
+      expect(
+        service.getAdapter('content-provider', 'world-of-warcraft'),
+      ).toBeUndefined();
     });
 
     it('should not affect adapters for other game slugs', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
-      service.registerAdapter('character-sync', 'ffxiv', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
+      service.registerAdapter(
+        'character-sync',
+        'final-fantasy-xiv-online',
+        adapter,
+      );
 
-      service.removeAdaptersForPlugin(['wow']);
+      service.removeAdaptersForPlugin(['world-of-warcraft']);
 
-      expect(service.getAdapter('character-sync', 'wow')).toBeUndefined();
-      expect(service.getAdapter('character-sync', 'ffxiv')).toBe(adapter);
+      expect(
+        service.getAdapter('character-sync', 'world-of-warcraft'),
+      ).toBeUndefined();
+      expect(
+        service.getAdapter('character-sync', 'final-fantasy-xiv-online'),
+      ).toBe(adapter);
     });
 
     it('should handle undefined gameSlugs gracefully', () => {
       const adapter = { fetchProfile: jest.fn() };
-      service.registerAdapter('character-sync', 'wow', adapter);
+      service.registerAdapter('character-sync', 'world-of-warcraft', adapter);
 
       service.removeAdaptersForPlugin();
 
-      expect(service.getAdapter('character-sync', 'wow')).toBe(adapter);
+      expect(service.getAdapter('character-sync', 'world-of-warcraft')).toBe(
+        adapter,
+      );
     });
   });
 

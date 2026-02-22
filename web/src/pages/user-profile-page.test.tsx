@@ -15,7 +15,7 @@ vi.mock('../hooks/use-game-registry');
 const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-1',
     userId: 1,
-    gameId: 'game-uuid-wow',
+    gameId: 1,
     name: 'TestCharacter',
     realm: 'TestRealm',
     class: 'Warrior',
@@ -80,9 +80,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         // Default mock for game registry
         vi.spyOn(useGameRegistryHook, 'useGameRegistry').mockReturnValue({
             games: [
-                { id: 'game-uuid-wow', name: 'World of Warcraft', slug: 'wow', registryId: 'reg-1', coverUrl: null },
-                { id: 'game-uuid-ff14', name: 'Final Fantasy XIV', slug: 'ff14', registryId: 'reg-2', coverUrl: null },
-                { id: 'game-uuid-eso', name: 'Elder Scrolls Online', slug: 'eso', registryId: 'reg-3', coverUrl: null },
+                { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
+                { id: 2, name: 'Final Fantasy XIV', slug: 'ff14', coverUrl: null },
+                { id: 3, name: 'Elder Scrolls Online', slug: 'eso', coverUrl: null },
             ],
             isLoading: false,
             error: null,
@@ -107,9 +107,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('groups characters by game with correct headers', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'WowChar1' }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-wow', name: 'WowChar2' }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-ff14', name: 'FF14Char' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'WowChar1' }),
+                    createMockCharacter({ id: 'char-2', gameId: 1, name: 'WowChar2' }),
+                    createMockCharacter({ id: 'char-3', gameId: 2, name: 'FF14Char' }),
                 ],
             });
 
@@ -138,7 +138,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('shows singular "character" when count is 1', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'OnlyChar' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'OnlyChar' }),
                 ],
             });
 
@@ -157,9 +157,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('shows main section header with total character count', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow' }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-ff14' }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-eso' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1 }),
+                    createMockCharacter({ id: 'char-2', gameId: 2 }),
+                    createMockCharacter({ id: 'char-3', gameId: 3 }),
                 ],
             });
 
@@ -180,7 +180,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('renders game section with divider line', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1 }),
                 ],
             });
 
@@ -200,7 +200,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('uses correct CSS classes for section structure', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1 }),
                 ],
             });
 
@@ -226,9 +226,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('sorts main character first within game group', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'Alt1', isMain: false, displayOrder: 1 }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-wow', name: 'MainChar', isMain: true, displayOrder: 2 }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-wow', name: 'Alt2', isMain: false, displayOrder: 3 }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'Alt1', isMain: false, displayOrder: 1 }),
+                    createMockCharacter({ id: 'char-2', gameId: 1, name: 'MainChar', isMain: true, displayOrder: 2 }),
+                    createMockCharacter({ id: 'char-3', gameId: 1, name: 'Alt2', isMain: false, displayOrder: 3 }),
                 ],
             });
 
@@ -252,9 +252,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('sorts by displayOrder when no main character', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'Char3', isMain: false, displayOrder: 3 }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-wow', name: 'Char1', isMain: false, displayOrder: 1 }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-wow', name: 'Char2', isMain: false, displayOrder: 2 }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'Char3', isMain: false, displayOrder: 3 }),
+                    createMockCharacter({ id: 'char-2', gameId: 1, name: 'Char1', isMain: false, displayOrder: 1 }),
+                    createMockCharacter({ id: 'char-3', gameId: 1, name: 'Char2', isMain: false, displayOrder: 2 }),
                 ],
             });
 
@@ -279,9 +279,9 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('sorts main first, then remaining by displayOrder', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'Alt2', isMain: false, displayOrder: 3 }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-wow', name: 'MainChar', isMain: true, displayOrder: 2 }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-wow', name: 'Alt1', isMain: false, displayOrder: 1 }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'Alt2', isMain: false, displayOrder: 3 }),
+                    createMockCharacter({ id: 'char-2', gameId: 1, name: 'MainChar', isMain: true, displayOrder: 2 }),
+                    createMockCharacter({ id: 'char-3', gameId: 1, name: 'Alt1', isMain: false, displayOrder: 1 }),
                 ],
             });
 
@@ -309,7 +309,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('renders sections in correct order: Events, Characters, Hearted Games', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'TestChar' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'TestChar' }),
                 ],
             });
 
@@ -372,8 +372,8 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('renders single game section for single-game user', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'Char1' }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-wow', name: 'Char2' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'Char1' }),
+                    createMockCharacter({ id: 'char-2', gameId: 1, name: 'Char2' }),
                 ],
             });
 
@@ -394,10 +394,10 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('renders multiple game sections for multi-game user', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'WowChar' }),
-                    createMockCharacter({ id: 'char-2', gameId: 'game-uuid-ff14', name: 'FF14Char1' }),
-                    createMockCharacter({ id: 'char-3', gameId: 'game-uuid-ff14', name: 'FF14Char2' }),
-                    createMockCharacter({ id: 'char-4', gameId: 'game-uuid-eso', name: 'ESOChar' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'WowChar' }),
+                    createMockCharacter({ id: 'char-2', gameId: 2, name: 'FF14Char1' }),
+                    createMockCharacter({ id: 'char-3', gameId: 2, name: 'FF14Char2' }),
+                    createMockCharacter({ id: 'char-4', gameId: 3, name: 'ESOChar' }),
                 ],
             });
 
@@ -423,7 +423,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('falls back to "Unknown Game" when game data is missing', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-unknown', name: 'OrphanChar' }),
+                    createMockCharacter({ id: 'char-1', gameId: 999, name: 'OrphanChar' }),
                 ],
             });
 
@@ -443,7 +443,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('handles empty game registry gracefully', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-1', gameId: 'game-uuid-wow', name: 'TestChar' }),
+                    createMockCharacter({ id: 'char-1', gameId: 1, name: 'TestChar' }),
                 ],
             });
 
@@ -474,7 +474,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 characters: [
                     createMockCharacter({
                         id: 'char-1',
-                        gameId: 'game-uuid-wow',
+                        gameId: 1,
                         name: 'DetailedChar',
                         level: 60,
                         race: 'Human',
@@ -509,7 +509,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         it('links to character detail page', () => {
             const profile = createMockProfile({
                 characters: [
-                    createMockCharacter({ id: 'char-uuid-123', gameId: 'game-uuid-wow', name: 'LinkChar' }),
+                    createMockCharacter({ id: 'char-uuid-123', gameId: 1, name: 'LinkChar' }),
                 ],
             });
 

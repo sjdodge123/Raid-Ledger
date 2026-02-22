@@ -12,7 +12,7 @@ export function CharactersPanel() {
 
     const [showAddModal, setShowAddModal] = useState(false);
     const [editingCharacter, setEditingCharacter] = useState<CharacterDto | null>(null);
-    const [selectedGameId, setSelectedGameId] = useState<string>('');
+    const [selectedGameId, setSelectedGameId] = useState<number | null>(null);
 
     const characters = charactersData?.data ?? [];
     const activeGameId = editingCharacter?.gameId ?? (selectedGameId || undefined);
@@ -33,7 +33,7 @@ export function CharactersPanel() {
     function handleCloseCharacterModal() {
         setShowAddModal(false);
         setEditingCharacter(null);
-        setSelectedGameId('');
+        setSelectedGameId(null);
     }
 
     return (

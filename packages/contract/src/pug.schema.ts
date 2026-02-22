@@ -87,7 +87,8 @@ export const InviteCodeResolveResponseSchema = z.object({
             name: z.string(),
             coverUrl: z.string().nullable().optional(),
             hasRoles: z.boolean().optional(),
-            registryId: z.string().optional(),
+            /** ROK-400: games.id for character matching */
+            gameId: z.number().optional(),
             isBlizzardGame: z.boolean().optional(),
             inviterRealm: z.string().nullable().optional(),
             gameVariant: z.string().nullable().optional(),

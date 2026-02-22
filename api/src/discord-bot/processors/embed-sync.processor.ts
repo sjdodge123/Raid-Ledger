@@ -225,7 +225,7 @@ export class EmbedSyncProcessor extends WorkerHost {
       const [game] = await this.db
         .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
         .from(schema.games)
-        .where(eq(schema.games.igdbId, parseInt(event.gameId, 10)))
+        .where(eq(schema.games.id, event.gameId))
         .limit(1);
       if (game) {
         eventData.game = { name: game.name, coverUrl: game.coverUrl };

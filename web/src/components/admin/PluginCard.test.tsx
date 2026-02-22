@@ -9,7 +9,7 @@ const basePlugin: PluginInfoDto = {
     version: '1.2.0',
     description: 'Adds WoW character import and realm data',
     author: { name: 'Raid Ledger Team' },
-    gameSlugs: ['wow', 'wow-classic'],
+    gameSlugs: ['world-of-warcraft', 'world-of-warcraft-classic'],
     capabilities: ['character-sync', 'content-provider'],
     integrations: [
         {
@@ -78,8 +78,8 @@ describe('PluginCard', () => {
     it('renders game slug and capability tags', () => {
         render(<PluginCard plugin={basePlugin} {...handlers} isPending={false} />);
 
-        expect(screen.getByText('wow')).toBeInTheDocument();
-        expect(screen.getByText('wow-classic')).toBeInTheDocument();
+        expect(screen.getByText('world-of-warcraft')).toBeInTheDocument();
+        expect(screen.getByText('world-of-warcraft-classic')).toBeInTheDocument();
         expect(screen.getByText('character-sync')).toBeInTheDocument();
         expect(screen.getByText('content-provider')).toBeInTheDocument();
     });

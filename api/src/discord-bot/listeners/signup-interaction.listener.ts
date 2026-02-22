@@ -216,18 +216,18 @@ export class SignupInteractionListener {
         return;
       }
 
-      // ROK-138: Check if event has a registry game with character support
-      if (event.registryGameId) {
+      // ROK-400: Check if event has a game with character support
+      if (event.gameId) {
         const [game] = await this.db
           .select()
-          .from(schema.gameRegistry)
-          .where(eq(schema.gameRegistry.id, event.registryGameId))
+          .from(schema.games)
+          .where(eq(schema.games.id, event.gameId))
           .limit(1);
 
         if (game) {
           const characterList = await this.charactersService.findAllForUser(
             linkedUser.id,
-            event.registryGameId,
+            event.gameId,
           );
           const characters = characterList.data;
 
@@ -295,7 +295,7 @@ export class SignupInteractionListener {
         }
       }
 
-      // No registry game or game not found — plain signup
+      // No game or game not found — plain signup
       await this.signupsService.signup(eventId, linkedUser.id);
 
       await interaction.editReply({

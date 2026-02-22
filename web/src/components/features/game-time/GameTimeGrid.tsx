@@ -143,8 +143,8 @@ function RichEventBlock({
         endHour: number;
         description?: string | null;
         creatorUsername?: string | null;
-        gameRegistryId?: string | null;
-        signupsPreview?: Array<{ id: number; username: string; avatar: string | null; characters?: Array<{ gameId: string; avatarUrl: string | null }> }>;
+        gameId?: number | null;
+        signupsPreview?: Array<{ id: number; username: string; avatar: string | null; characters?: Array<{ gameId: number; avatarUrl: string | null }> }>;
         signupCount?: number;
     };
     spanHours: number;
@@ -184,7 +184,7 @@ function RichEventBlock({
                             maxVisible={3}
                             size="xs"
                             accentColor={colors.border}
-                            gameId={event.gameRegistryId ?? undefined}
+                            gameId={event.gameId ?? undefined}
                         />
                     </div>
                 )}
@@ -918,7 +918,7 @@ export function GameTimeGrid({
                                     title: ev.title,
                                     gameName: ev.gameName,
                                     gameSlug: ev.gameSlug,
-                                    gameRegistryId: ev.gameRegistryId,
+                                    gameId: ev.gameId,
                                     coverUrl: ev.coverUrl,
                                     startHour: ev.startHour,
                                     endHour: ev.endHour,

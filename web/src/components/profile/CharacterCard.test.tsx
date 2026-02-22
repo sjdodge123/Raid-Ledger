@@ -14,7 +14,7 @@ vi.mock('../../plugins', () => ({
 const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-1',
     userId: 1,
-    gameId: 'game-uuid-wow',
+    gameId: 1,
     name: 'Arthas',
     realm: 'Frostmourne',
     class: 'Death Knight',

@@ -114,7 +114,7 @@ function ScheduleEventCard({
                         size="sm"
                         maxVisible={3}
                         accentColor={colors.border}
-                        gameId={event.resource.game?.id?.toString()}
+                        gameId={event.resource.game?.id}
                     />
                 </div>
             )}

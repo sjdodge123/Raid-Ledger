@@ -30,10 +30,8 @@ describe('BlizzardContentProvider', () => {
   describe('gameSlugs', () => {
     it('should include all WoW game slugs', () => {
       expect(provider.gameSlugs).toEqual([
-        'wow',
         'world-of-warcraft',
-        'wow-classic',
-        'wow-classic-era',
+        'world-of-warcraft-classic',
       ]);
     });
   });

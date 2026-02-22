@@ -10,12 +10,7 @@ import type { WowGameVariant } from '@raid-ledger/contract';
 
 @Injectable()
 export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
-  readonly gameSlugs = [
-    'wow',
-    'world-of-warcraft',
-    'wow-classic',
-    'wow-classic-era',
-  ];
+  readonly gameSlugs = ['world-of-warcraft', 'world-of-warcraft-classic'];
 
   constructor(private readonly blizzardService: BlizzardService) {}
 
@@ -25,10 +20,10 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
       gameVariant === 'classic' ||
       gameVariant === 'classic_anniversary'
     ) {
-      return ['wow-classic', 'wow-classic-era'];
+      return ['world-of-warcraft-classic'];
     }
     if (!gameVariant || gameVariant === 'retail') {
-      return ['wow', 'world-of-warcraft'];
+      return ['world-of-warcraft'];
     }
     return [];
   }

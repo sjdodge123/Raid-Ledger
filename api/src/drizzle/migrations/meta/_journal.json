@@ -379,6 +379,20 @@
       "when": 1771653281428,
       "tag": "0053_powerful_iron_monger",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1771700000000,
+      "tag": "0054_remove_game_registry",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1771700100000,
+      "tag": "0055_fix_game_slug_mapping",
+      "breakpoints": true
     }
   ]
 }

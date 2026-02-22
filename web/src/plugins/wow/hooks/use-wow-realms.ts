@@ -7,7 +7,7 @@ import { fetchWowRealms, previewWowCharacter } from '../api-client';
  */
 export function useWowRealms(region: string, gameVariant?: string) {
     return useQuery({
-        queryKey: ['wow', 'realms', region, gameVariant ?? 'retail'],
+        queryKey: ['blizzard', 'realms', region, gameVariant ?? 'retail'],
         queryFn: () => fetchWowRealms(region, gameVariant),
         staleTime: 1000 * 60 * 60, // 1 hour
         gcTime: 1000 * 60 * 120, // 2 hours
@@ -26,7 +26,7 @@ export function useCharacterPreview(
     gameVariant?: string,
 ) {
     return useQuery({
-        queryKey: ['wow', 'character-preview', region, realm, name, gameVariant ?? 'retail'],
+        queryKey: ['blizzard', 'character-preview', region, realm, name, gameVariant ?? 'retail'],
         queryFn: () => previewWowCharacter(name, realm, region, gameVariant),
         enabled: enabled && !!name.trim() && !!realm.trim() && !!region,
         staleTime: 1000 * 60 * 5, // 5 minutes

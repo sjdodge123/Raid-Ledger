@@ -4,7 +4,7 @@ import { useCreateCharacter } from '../../hooks/use-character-mutations';
 import { PluginSlot } from '../../plugins';
 
 interface InlineCharacterFormProps {
-    gameId: string;
+    gameId: number;
     hasRoles?: boolean;
     hasSpecs?: boolean;
     /** Game slug for plugin slot context (enables WoW import when plugin active) */

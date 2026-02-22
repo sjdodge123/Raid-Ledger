@@ -140,7 +140,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     discordBotClientService = module.get<DiscordBotClientService>(
       DiscordBotClientService,
     );
-    channelResolver = module.get<ChannelResolverService>(ChannelResolverService);
+    channelResolver = module.get<ChannelResolverService>(
+      ChannelResolverService,
+    );
   });
 
   const mockRequest = { user: { id: 1, role: 'member' } };
@@ -149,7 +151,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     it('returns botConnected: false when isConnected() is false', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({ botConnected: false });
     });
@@ -158,7 +162,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(true);
       (discordBotClientService.getGuildInfo as jest.Mock).mockReturnValue(null);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({ botConnected: false });
     });
@@ -171,7 +177,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       (usersService.findById as jest.Mock).mockResolvedValue(mockUser);
       (discordBotClientService.getClient as jest.Mock).mockReturnValue(null);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({ botConnected: false });
     });
@@ -186,7 +194,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         guilds: { cache: { first: jest.fn().mockReturnValue(null) } },
       });
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({ botConnected: false });
     });
@@ -202,9 +212,13 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
 
     it('returns isMember: false for user without discordId', async () => {
       const userWithoutDiscord = { ...mockUser, discordId: null };
-      (usersService.findById as jest.Mock).mockResolvedValue(userWithoutDiscord);
+      (usersService.findById as jest.Mock).mockResolvedValue(
+        userWithoutDiscord,
+      );
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({
         botConnected: true,
@@ -217,7 +231,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       const localUser = { ...mockUser, discordId: 'local:testuser' };
       (usersService.findById as jest.Mock).mockResolvedValue(localUser);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({
         botConnected: true,
@@ -230,7 +246,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       const unlinkedUser = { ...mockUser, discordId: 'unlinked:12345' };
       (usersService.findById as jest.Mock).mockResolvedValue(unlinkedUser);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({
         botConnected: true,
@@ -262,7 +280,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         guilds: { cache: { first: jest.fn().mockReturnValue(guild) } },
       });
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result).toEqual({
         botConnected: true,
@@ -283,7 +303,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         guilds: { cache: { first: jest.fn().mockReturnValue(guild) } },
       });
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBeUndefined();
     });
@@ -312,7 +334,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       guild.systemChannelId = null as unknown as string;
       guild.channels.cache.find = jest.fn().mockReturnValue(undefined);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.isMember).toBe(false);
       expect(result.botConnected).toBe(true);
@@ -335,7 +359,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       );
       guild.channels.fetch = jest.fn().mockResolvedValue(mockChannel);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBe('https://discord.gg/invite123');
     });
@@ -348,7 +374,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       guild.systemChannelId = null as unknown as string;
       guild.channels.cache.find = jest.fn().mockReturnValue(undefined);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBeUndefined();
     });
@@ -370,7 +398,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       guild.systemChannelId = 'sys-channel-id';
       guild.channels.fetch = jest.fn().mockResolvedValue(mockChannel);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBe('https://discord.gg/sys-invite');
     });
@@ -395,7 +425,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         .mockReturnValue({ id: 'first-text-id' });
       guild.channels.fetch = jest.fn().mockResolvedValue(mockChannel);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBe('https://discord.gg/first-text');
     });
@@ -409,11 +441,11 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       (channelResolver.resolveChannelForEvent as jest.Mock).mockResolvedValue(
         'channel-id',
       );
-      guild.channels.fetch = jest
-        .fn()
-        .mockResolvedValue(mockChannelNoInvite);
+      guild.channels.fetch = jest.fn().mockResolvedValue(mockChannelNoInvite);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBeUndefined();
     });
@@ -424,7 +456,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         isTextBased: () => true,
         isThread: () => false,
         isDMBased: () => false,
-        createInvite: jest.fn().mockRejectedValue(new Error('Missing Permissions')),
+        createInvite: jest
+          .fn()
+          .mockRejectedValue(new Error('Missing Permissions')),
       };
 
       (channelResolver.resolveChannelForEvent as jest.Mock).mockResolvedValue(
@@ -432,7 +466,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       );
       guild.channels.fetch = jest.fn().mockResolvedValue(mockChannel);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       expect(result.inviteUrl).toBeUndefined();
     });
@@ -442,7 +478,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
     it('validates botConnected: false response against schema', async () => {
       (discordBotClientService.isConnected as jest.Mock).mockReturnValue(false);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       const parseResult = DiscordMembershipResponseSchema.safeParse(result);
       expect(parseResult.success).toBe(true);
@@ -459,7 +497,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
         guilds: { cache: { first: jest.fn().mockReturnValue(guild) } },
       });
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       const parseResult = DiscordMembershipResponseSchema.safeParse(result);
       expect(parseResult.success).toBe(true);
@@ -490,7 +530,9 @@ describe('UsersController — getDiscordMembership (ROK-425)', () => {
       );
       guild.channels.fetch = jest.fn().mockResolvedValue(mockChannel);
 
-      const result = await controller.getDiscordMembership(mockRequest as never);
+      const result = await controller.getDiscordMembership(
+        mockRequest as never,
+      );
 
       const parseResult = DiscordMembershipResponseSchema.safeParse(result);
       expect(parseResult.success).toBe(true);

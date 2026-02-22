@@ -28,7 +28,7 @@ describe('resolveAvatar', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: '/avatars/custom.png',
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
                 ],
                 avatarPreference: { type: 'character', characterName: 'Thrall' },
             };
@@ -77,7 +77,7 @@ describe('resolveAvatar', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
+                    { gameId: 'world-of-warcraft', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
                 ],
                 avatarPreference: { type: 'character', characterName: 'Thrall' },
             };
@@ -146,12 +146,12 @@ describe('resolveAvatar', () => {
             const user: AvatarUser = {
                 avatar: 'https://discord.com/avatar.png',
                 characters: [
-                    { gameId: 'wow', avatarUrl: 'https://example.com/wow-char.png' },
-                    { gameId: 'ffxiv', avatarUrl: 'https://example.com/ffxiv-char.png' },
+                    { gameId: 'world-of-warcraft', avatarUrl: 'https://example.com/wow-char.png' },
+                    { gameId: 'final-fantasy-xiv-online', avatarUrl: 'https://example.com/ffxiv-char.png' },
                 ],
             };
 
-            const result = resolveAvatar(user, 'ffxiv');
+            const result = resolveAvatar(user, 'final-fantasy-xiv-online');
 
             expect(result).toEqual({
                 url: 'https://example.com/ffxiv-char.png',
@@ -364,7 +364,7 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
                 ],
                 // characterName is omitted — the `find` will never match
                 avatarPreference: { type: 'character' },
@@ -384,7 +384,7 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: null },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: null },
                 ],
                 avatarPreference: { type: 'character', characterName: 'Thrall' },
             };
@@ -469,7 +469,7 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
+                    { gameId: 'world-of-warcraft', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
                 ],
                 avatarPreference: { type: 'character', characterName: 'Thrall' },
             };
@@ -517,8 +517,8 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
                 avatar: null,
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
-                    { gameId: 'ffxiv', name: 'Y\'shtola', avatarUrl: 'https://example.com/yshtola.png' },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                    { gameId: 'final-fantasy-xiv-online', name: 'Y\'shtola', avatarUrl: 'https://example.com/yshtola.png' },
                 ],
                 avatarPreference: { type: 'character', characterName: "Y'shtola" },
             };
@@ -536,7 +536,7 @@ describe('resolveAvatar — adversarial edge cases (ROK-352)', () => {
                 avatar: 'https://discord.com/avatar.png',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
                 ],
                 // Wrong case
                 avatarPreference: { type: 'character', characterName: 'thrall' },
@@ -656,7 +656,7 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
 
         it('passes through characters array unchanged when no overlay', () => {
             const chars = [
-                { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
             ];
             const result = toAvatarUser({
                 avatar: null,
@@ -676,7 +676,7 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
                 discordId: '111222333',
                 customAvatarUrl: '/avatars/custom.png',
                 characters: [
-                    { gameId: 'wow', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
+                    { gameId: 'world-of-warcraft', name: 'Thrall', avatarUrl: 'https://example.com/thrall.png' },
                 ],
                 avatarPreference: { type: 'character' as const, characterName: 'Thrall' },
             };
@@ -696,7 +696,7 @@ describe('toAvatarUser — adversarial edge cases (ROK-352)', () => {
                 discordId: '111222333',
                 customAvatarUrl: null,
                 characters: [
-                    { gameId: 'wow', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
+                    { gameId: 'world-of-warcraft', name: 'Jaina', avatarUrl: 'https://example.com/jaina.png' },
                 ],
                 avatarPreference: { type: 'character' as const, characterName: 'Thrall' },
             };
@@ -924,7 +924,7 @@ describe('toAvatarUser — current user overlay (ROK-352)', () => {
             discordId: '111222333',
             customAvatarUrl: null,
             characters: [
-                { gameId: 'wow', avatarUrl: 'https://example.com/thrall.png' },
+                { gameId: 'world-of-warcraft', avatarUrl: 'https://example.com/thrall.png' },
             ],
         });
         const result = resolveAvatar(avatarUser);

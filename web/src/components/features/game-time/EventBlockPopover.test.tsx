@@ -24,7 +24,7 @@ vi.mock('../../events/signup-confirmation-modal', () => ({
 const mockEvent = {
     eventId: 5,
     title: 'Mythic Raid',
-    gameSlug: 'wow',
+    gameSlug: 'world-of-warcraft',
     gameName: 'World of Warcraft',
     coverUrl: null,
     signupId: 10,

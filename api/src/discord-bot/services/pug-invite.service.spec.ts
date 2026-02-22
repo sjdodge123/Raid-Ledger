@@ -74,7 +74,7 @@ describe('PugInviteService', () => {
       new Date('2026-02-20T20:00:00Z'),
       new Date('2026-02-20T23:00:00Z'),
     ],
-    registryGameId: 'uuid-game-1',
+    gameId: 1,
   };
 
   /** Mock PUG slot row */

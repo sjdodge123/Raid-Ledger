@@ -14,7 +14,7 @@ function createMockEvent(overrides: Partial<EventResponseDto> = {}): CalendarEve
         startTime: '2026-02-10T20:00:00Z',
         endTime: '2026-02-10T23:00:00Z',
         creator: { id: 10, username: 'RaidLeader', avatar: null },
-        game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+        game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
         signupCount: 3,
         createdAt: '2026-02-01T00:00:00Z',
         updatedAt: '2026-02-01T00:00:00Z',
@@ -190,7 +190,7 @@ describe('WeekEventCard', () => {
     describe('cover art background', () => {
         it('uses cover art in background when game has coverUrl', () => {
             const { container } = renderCard(createMockEvent({
-                game: { id: 1, name: 'WoW', slug: 'wow', coverUrl: 'https://example.com/cover.jpg' },
+                game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: 'https://example.com/cover.jpg' },
             }));
             const block = container.querySelector('.week-event-block') as HTMLElement;
             expect(block.style.backgroundImage).toContain('example.com/cover.jpg');
@@ -198,7 +198,7 @@ describe('WeekEventCard', () => {
 
         it('uses gradient only when no coverUrl', () => {
             const { container } = renderCard(createMockEvent({
-                game: { id: 1, name: 'WoW', slug: 'wow', coverUrl: null },
+                game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: null },
             }));
             const block = container.querySelector('.week-event-block') as HTMLElement;
             expect(block.style.backgroundImage).not.toContain('url(');

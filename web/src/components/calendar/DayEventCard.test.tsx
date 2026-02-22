@@ -66,7 +66,7 @@ function createMockEvent(overrides: Partial<EventResponseDto> = {}): CalendarEve
         startTime: '2099-02-20T20:00:00Z',
         endTime: '2099-02-20T23:00:00Z',
         creator: { id: 10, username: 'RaidLeader', avatar: null },
-        game: { id: 1, name: 'World of Warcraft', slug: 'wow', coverUrl: null },
+        game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
         signupCount: 3,
         createdAt: '2099-02-01T00:00:00Z',
         updatedAt: '2099-02-01T00:00:00Z',
@@ -311,7 +311,7 @@ describe('DayEventCard', () => {
         mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
 
         const event = createMockEvent({
-            game: { id: 1, name: 'WoW', slug: 'wow', coverUrl: null, registryId: 'wow-registry' },
+            game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: null },
         });
 
         renderCard(event);

@@ -353,10 +353,10 @@ export class PugInviteListener {
     const isMMO = slotConfig?.type === 'mmo';
 
     // Check for characters if user has a linked account and event has a game
-    if (linkedUser && event.registryGameId) {
+    if (linkedUser && event.gameId) {
       const characterList = await this.charactersService.findAllForUser(
         linkedUser.id,
-        event.registryGameId,
+        event.gameId,
       );
       const characters = characterList.data;
 
@@ -674,10 +674,10 @@ export class PugInviteListener {
             .where(eq(schema.events.id, slot.eventId))
             .limit(1);
 
-          if (event?.registryGameId) {
+          if (event?.gameId) {
             const charList = await this.charactersService.findAllForUser(
               linkedUser.id,
-              event.registryGameId,
+              event.gameId,
             );
             const char = charList.data.find((c) => c.name === characterName);
             if (char) {
@@ -1176,10 +1176,10 @@ export class PugInviteListener {
     const isMMO = slotConfig?.type === 'mmo';
 
     // Check for characters if event has a game
-    if (event.registryGameId) {
+    if (event.gameId) {
       const characterList = await this.charactersService.findAllForUser(
         linkedUser.id,
-        event.registryGameId,
+        event.gameId,
       );
       const characters = characterList.data;
 

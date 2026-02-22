@@ -42,9 +42,10 @@ export function EventInviteActions({
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [signupId, setSignupId] = useState<number | null>(null);
 
-    // Resolve game registry data for character confirmation modal
+    // Resolve game config data for character confirmation modal
+    // ROK-400: event.game.id is now the games table integer ID directly
     const gameRegistryEntry = games.find(
-        (g) => g.id === event?.game?.registryId || g.slug === event?.game?.slug,
+        (g) => g.id === event?.game?.id || g.slug === event?.game?.slug,
     );
 
     const handleAccept = async () => {
@@ -109,7 +110,7 @@ export function EventInviteActions({
                         onClose={handleConfirmationClose}
                         eventId={eventId}
                         signupId={signupId}
-                        gameId={gameRegistryEntry?.id ?? event?.game?.registryId ?? undefined}
+                        gameId={gameRegistryEntry?.id ?? event?.game?.id ?? undefined}
                         gameName={event?.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event?.game?.slug ?? undefined}

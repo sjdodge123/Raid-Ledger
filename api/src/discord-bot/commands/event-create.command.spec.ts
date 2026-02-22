@@ -25,7 +25,7 @@ describe('EventCreateCommand', () => {
   const originalClientUrl = process.env.CLIENT_URL;
 
   const mockUser = { id: 1, username: 'testuser', role: 'member' as const };
-  const mockGame = { id: 'game-uuid', name: 'WoW', coverUrl: null };
+  const mockGame = { id: 1, name: 'WoW', coverUrl: null };
   const mockCreatedEvent = {
     id: 42,
     title: 'Test Raid',
@@ -320,7 +320,7 @@ describe('EventCreateCommand', () => {
 
       expect(eventsService.create).toHaveBeenCalledWith(
         mockUser.id,
-        expect.objectContaining({ registryGameId: 'game-uuid' }),
+        expect.objectContaining({ gameId: 1 }),
       );
     });
 
@@ -336,7 +336,7 @@ describe('EventCreateCommand', () => {
 
       expect(eventsService.create).toHaveBeenCalledWith(
         mockUser.id,
-        expect.objectContaining({ registryGameId: undefined }),
+        expect.objectContaining({ gameId: undefined }),
       );
     });
 
@@ -509,7 +509,9 @@ describe('EventCreateCommand', () => {
       const mockRespond = jest.fn().mockResolvedValue(undefined);
       const mockAutocompleteInteraction = {
         options: {
-          getFocused: jest.fn().mockReturnValue({ name: 'game', value: 'wow' }),
+          getFocused: jest
+            .fn()
+            .mockReturnValue({ name: 'game', value: 'world-of-warcraft' }),
         },
         respond: mockRespond,
       };
