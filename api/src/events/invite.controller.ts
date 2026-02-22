@@ -6,9 +6,11 @@ import {
   Body,
   UseGuards,
   Request,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { InviteService } from './invite.service';
+import { OgMetaService } from './og-meta.service';
 import { InviteCodeClaimSchema } from '@raid-ledger/contract';
 import type { InviteCodeResolveResponseDto } from '@raid-ledger/contract';
 
@@ -21,7 +23,22 @@ interface AuthenticatedRequest {
  */
 @Controller('invite')
 export class InviteController {
-  constructor(private readonly inviteService: InviteService) {}
+  constructor(
+    private readonly inviteService: InviteService,
+    private readonly ogMetaService: OgMetaService,
+  ) {}
+
+  /**
+   * Render OG meta tags for social media crawlers (ROK-393).
+   * Nginx proxies crawler requests from /i/:code to this endpoint.
+   * Must be registered before :code to avoid route shadowing.
+   */
+  @Get(':code/og')
+  @Header('Content-Type', 'text/html; charset=utf-8')
+  @Header('Cache-Control', 'public, max-age=300')
+  async renderOgMeta(@Param('code') code: string): Promise<string> {
+    return this.ogMetaService.renderInviteOgHtml(code);
+  }
 
   /**
    * Resolve an invite code — public, no auth required.
