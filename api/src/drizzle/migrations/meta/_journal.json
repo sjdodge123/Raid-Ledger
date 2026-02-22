@@ -414,6 +414,13 @@
       "when": 1771787655657,
       "tag": "0058_dungeon_quests",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1771790794245,
+      "tag": "0059_pale_echo",
+      "breakpoints": true
     }
   ]
 }

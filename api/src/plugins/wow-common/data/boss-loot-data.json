@@ -1,0 +1,720 @@
+[
+    {
+        "bossName": "Ragnaros",
+        "expansion": "classic",
+        "itemId": 17182,
+        "itemName": "Sulfuras, Hand of Ragnaros",
+        "slot": "Main Hand",
+        "quality": "Legendary",
+        "itemLevel": 80,
+        "dropRate": 0.0400,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Ragnaros",
+        "expansion": "classic",
+        "itemId": 17063,
+        "itemName": "Band of Accuria",
+        "slot": "Finger",
+        "quality": "Epic",
+        "itemLevel": 75,
+        "dropRate": 0.1200,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Ragnaros",
+        "expansion": "classic",
+        "itemId": 17076,
+        "itemName": "Bonereaver's Edge",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 77,
+        "dropRate": 0.0700,
+        "classRestrictions": [
+            "Warrior",
+            "Paladin"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Ragnaros",
+        "expansion": "classic",
+        "itemId": 17082,
+        "itemName": "Shard of the Flame",
+        "slot": "Trinket",
+        "quality": "Epic",
+        "itemLevel": 75,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Lucifron",
+        "expansion": "classic",
+        "itemId": 16805,
+        "itemName": "Felheart Belt",
+        "slot": "Waist",
+        "quality": "Epic",
+        "itemLevel": 66,
+        "dropRate": 0.1500,
+        "classRestrictions": [
+            "Warlock"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Garr",
+        "expansion": "classic",
+        "itemId": 18564,
+        "itemName": "Bindings of the Windseeker",
+        "slot": "Bindings",
+        "quality": "Legendary",
+        "itemLevel": 75,
+        "dropRate": 0.0300,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Baron Geddon",
+        "expansion": "classic",
+        "itemId": 18563,
+        "itemName": "Bindings of the Windseeker",
+        "slot": "Bindings",
+        "quality": "Legendary",
+        "itemLevel": 75,
+        "dropRate": 0.0300,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Golemagg the Incinerator",
+        "expansion": "classic",
+        "itemId": 17103,
+        "itemName": "Azuresong Mageblade",
+        "slot": "Main Hand",
+        "quality": "Epic",
+        "itemLevel": 71,
+        "dropRate": 0.1000,
+        "classRestrictions": [
+            "Mage",
+            "Warlock",
+            "Priest"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Nefarian",
+        "expansion": "classic",
+        "itemId": 19375,
+        "itemName": "Mish'undare, Circlet of the Mind Flayer",
+        "slot": "Head",
+        "quality": "Epic",
+        "itemLevel": 83,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Nefarian",
+        "expansion": "classic",
+        "itemId": 19377,
+        "itemName": "Prestor's Talisman of Connivery",
+        "slot": "Neck",
+        "quality": "Epic",
+        "itemLevel": 83,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Chromaggus",
+        "expansion": "classic",
+        "itemId": 19389,
+        "itemName": "Taut Dragonhide Gloves",
+        "slot": "Hands",
+        "quality": "Epic",
+        "itemLevel": 81,
+        "dropRate": 0.0700,
+        "classRestrictions": [
+            "Druid",
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Onyxia",
+        "expansion": "classic",
+        "itemId": 18422,
+        "itemName": "Head of Onyxia",
+        "slot": "Quest",
+        "quality": "Epic",
+        "itemLevel": 62,
+        "dropRate": 1.0000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Onyxia",
+        "expansion": "classic",
+        "itemId": 17078,
+        "itemName": "Deathbringer",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 70,
+        "dropRate": 0.0800,
+        "classRestrictions": [
+            "Warrior",
+            "Paladin"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "C'Thun",
+        "expansion": "classic",
+        "itemId": 21221,
+        "itemName": "Eye of C'Thun",
+        "slot": "Quest",
+        "quality": "Epic",
+        "itemLevel": 81,
+        "dropRate": 1.0000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "C'Thun",
+        "expansion": "classic",
+        "itemId": 21126,
+        "itemName": "Death's Sting",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 81,
+        "dropRate": 0.0700,
+        "classRestrictions": [
+            "Rogue",
+            "Warrior"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Kel'Thuzad",
+        "expansion": "classic",
+        "itemId": 23057,
+        "itemName": "Gressil, Dawn of Ruin",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 90,
+        "dropRate": 0.0500,
+        "classRestrictions": [
+            "Warrior",
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Kel'Thuzad",
+        "expansion": "classic",
+        "itemId": 23054,
+        "itemName": "The Hungering Cold",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 90,
+        "dropRate": 0.0500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Sapphiron",
+        "expansion": "classic",
+        "itemId": 23050,
+        "itemName": "Cloak of the Necropolis",
+        "slot": "Back",
+        "quality": "Epic",
+        "itemLevel": 88,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Edwin VanCleef",
+        "expansion": "classic",
+        "itemId": 5191,
+        "itemName": "Cruel Barb",
+        "slot": "One-Hand",
+        "quality": "Rare",
+        "itemLevel": 25,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Prince Malchezaar",
+        "expansion": "tbc",
+        "itemId": 28633,
+        "itemName": "Staff of Infinite Mysteries",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 125,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Prince Malchezaar",
+        "expansion": "tbc",
+        "itemId": 28611,
+        "itemName": "Drape of the Dark Reavers",
+        "slot": "Back",
+        "quality": "Epic",
+        "itemLevel": 125,
+        "dropRate": 0.1200,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Attumen the Huntsman",
+        "expansion": "tbc",
+        "itemId": 28477,
+        "itemName": "Harbinger Bands",
+        "slot": "Wrist",
+        "quality": "Epic",
+        "itemLevel": 115,
+        "dropRate": 0.1500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Attumen the Huntsman",
+        "expansion": "tbc",
+        "itemId": 30480,
+        "itemName": "Fiery Warhorse's Reins",
+        "slot": "Mount",
+        "quality": "Epic",
+        "itemLevel": 70,
+        "dropRate": 0.0100,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "The Curator",
+        "expansion": "tbc",
+        "itemId": 28649,
+        "itemName": "Garona's Signet Ring",
+        "slot": "Finger",
+        "quality": "Epic",
+        "itemLevel": 120,
+        "dropRate": 0.1000,
+        "classRestrictions": [
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Lady Vashj",
+        "expansion": "tbc",
+        "itemId": 30021,
+        "itemName": "Serpent-Coil Braid",
+        "slot": "Head",
+        "quality": "Epic",
+        "itemLevel": 141,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Kael'thas Sunstrider",
+        "expansion": "tbc",
+        "itemId": 30311,
+        "itemName": "Warp Slicer",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 141,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Kael'thas Sunstrider",
+        "expansion": "tbc",
+        "itemId": 30048,
+        "itemName": "Netherblade Faceguard",
+        "slot": "Head",
+        "quality": "Epic",
+        "itemLevel": 141,
+        "dropRate": 0.1200,
+        "classRestrictions": [
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Illidan Stormrage",
+        "expansion": "tbc",
+        "itemId": 32837,
+        "itemName": "Warglaive of Azzinoth",
+        "slot": "Main Hand",
+        "quality": "Legendary",
+        "itemLevel": 156,
+        "dropRate": 0.0500,
+        "classRestrictions": [
+            "Warrior",
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Illidan Stormrage",
+        "expansion": "tbc",
+        "itemId": 32838,
+        "itemName": "Warglaive of Azzinoth",
+        "slot": "Off Hand",
+        "quality": "Legendary",
+        "itemLevel": 156,
+        "dropRate": 0.0500,
+        "classRestrictions": [
+            "Warrior",
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Kil'jaeden",
+        "expansion": "tbc",
+        "itemId": 34334,
+        "itemName": "Thori'dal, the Stars' Fury",
+        "slot": "Ranged",
+        "quality": "Legendary",
+        "itemLevel": 164,
+        "dropRate": 0.0300,
+        "classRestrictions": [
+            "Hunter",
+            "Rogue",
+            "Warrior"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Yogg-Saron",
+        "expansion": "wotlk",
+        "itemId": 46017,
+        "itemName": "Val'anyr, Hammer of Ancient Kings",
+        "slot": "Main Hand",
+        "quality": "Legendary",
+        "itemLevel": 245,
+        "dropRate": 0.0100,
+        "classRestrictions": [
+            "Paladin",
+            "Priest",
+            "Druid",
+            "Shaman"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Yogg-Saron",
+        "expansion": "wotlk",
+        "itemId": 45529,
+        "itemName": "Ironmender",
+        "slot": "Wrist",
+        "quality": "Epic",
+        "itemLevel": 232,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Algalon the Observer",
+        "expansion": "wotlk",
+        "itemId": 45609,
+        "itemName": "Comet's Trail",
+        "slot": "Trinket",
+        "quality": "Epic",
+        "itemLevel": 239,
+        "dropRate": 0.1500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Mimiron",
+        "expansion": "wotlk",
+        "itemId": 45489,
+        "itemName": "Pandora's Plea",
+        "slot": "Trinket",
+        "quality": "Epic",
+        "itemLevel": 232,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Hodir",
+        "expansion": "wotlk",
+        "itemId": 45461,
+        "itemName": "Drape of Icy Intent",
+        "slot": "Back",
+        "quality": "Epic",
+        "itemLevel": 232,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "The Lich King",
+        "expansion": "wotlk",
+        "itemId": 50818,
+        "itemName": "Invincible's Reins",
+        "slot": "Mount",
+        "quality": "Legendary",
+        "itemLevel": 80,
+        "dropRate": 0.0100,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "The Lich King",
+        "expansion": "wotlk",
+        "itemId": 50070,
+        "itemName": "Glorenzelg, High-Blade of the Silver Hand",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 277,
+        "dropRate": 0.0800,
+        "classRestrictions": [
+            "Warrior",
+            "Paladin",
+            "Death Knight"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "The Lich King",
+        "expansion": "wotlk",
+        "itemId": 50012,
+        "itemName": "Havoc's Call, Blade of Lordaeron Kings",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 277,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Professor Putricide",
+        "expansion": "wotlk",
+        "itemId": 50231,
+        "itemName": "Astrylian's Sutured Cinch",
+        "slot": "Waist",
+        "quality": "Epic",
+        "itemLevel": 264,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Sindragosa",
+        "expansion": "wotlk",
+        "itemId": 50424,
+        "itemName": "Memory of Malygos",
+        "slot": "Trinket",
+        "quality": "Epic",
+        "itemLevel": 264,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Ragnaros",
+        "expansion": "cata",
+        "itemId": 69897,
+        "itemName": "Sulfuras, the Extinguished Hand",
+        "slot": "Two-Hand",
+        "quality": "Legendary",
+        "itemLevel": 391,
+        "dropRate": 0.0100,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Ragnaros",
+        "expansion": "cata",
+        "itemId": 71355,
+        "itemName": "Majordomo's Chain of Office",
+        "slot": "Neck",
+        "quality": "Epic",
+        "itemLevel": 384,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Majordomo Staghelm",
+        "expansion": "cata",
+        "itemId": 71343,
+        "itemName": "Fandral's Flamescythe",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 378,
+        "dropRate": 0.0800,
+        "classRestrictions": [
+            "Druid"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Beth'tilac",
+        "expansion": "cata",
+        "itemId": 71039,
+        "itemName": "Funeral Pyre",
+        "slot": "Main Hand",
+        "quality": "Epic",
+        "itemLevel": 378,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Alysrazor",
+        "expansion": "cata",
+        "itemId": 71079,
+        "itemName": "Alysrazor's Band",
+        "slot": "Finger",
+        "quality": "Epic",
+        "itemLevel": 378,
+        "dropRate": 0.1200,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Madness of Deathwing",
+        "expansion": "cata",
+        "itemId": 77949,
+        "itemName": "Gurthalak, Voice of the Deeps",
+        "slot": "Two-Hand",
+        "quality": "Epic",
+        "itemLevel": 397,
+        "dropRate": 0.0800,
+        "classRestrictions": [
+            "Warrior",
+            "Paladin",
+            "Death Knight"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Madness of Deathwing",
+        "expansion": "cata",
+        "itemId": 77947,
+        "itemName": "No'Kaled, the Elements of Death",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 397,
+        "dropRate": 0.0800,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Spine of Deathwing",
+        "expansion": "cata",
+        "itemId": 78357,
+        "itemName": "Backbreaker Spaulders",
+        "slot": "Shoulder",
+        "quality": "Epic",
+        "itemLevel": 397,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Nefarian",
+        "expansion": "cata",
+        "itemId": 65003,
+        "itemName": "Prestor's Talisman of Machination",
+        "slot": "Neck",
+        "quality": "Epic",
+        "itemLevel": 359,
+        "dropRate": 0.1000,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Magmaw",
+        "expansion": "cata",
+        "itemId": 65022,
+        "itemName": "Incineratus",
+        "slot": "Main Hand",
+        "quality": "Epic",
+        "itemLevel": 359,
+        "dropRate": 0.1200,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Aku'mai (SoD)",
+        "expansion": "sod",
+        "itemId": 211505,
+        "itemName": "Blackfathom Ritual Dagger",
+        "slot": "Main Hand",
+        "quality": "Rare",
+        "itemLevel": 26,
+        "dropRate": 0.1500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Aku'mai (SoD)",
+        "expansion": "sod",
+        "itemId": 211507,
+        "itemName": "Twilight Sage's Walking Stick",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 26,
+        "dropRate": 0.1500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Twilight Lord Kelris (SoD)",
+        "expansion": "sod",
+        "itemId": 211508,
+        "itemName": "Kelris's Scepter",
+        "slot": "Main Hand",
+        "quality": "Rare",
+        "itemLevel": 25,
+        "dropRate": 0.1500,
+        "classRestrictions": null,
+        "iconUrl": null
+    },
+    {
+        "bossName": "Mekgineer Thermaplugg (SoD)",
+        "expansion": "sod",
+        "itemId": 213320,
+        "itemName": "Thermaplugg's Rocket Launcher",
+        "slot": "Ranged",
+        "quality": "Rare",
+        "itemLevel": 40,
+        "dropRate": 0.1200,
+        "classRestrictions": [
+            "Warrior",
+            "Hunter",
+            "Rogue"
+        ],
+        "iconUrl": null
+    },
+    {
+        "bossName": "Shade of Eranikus (SoD)",
+        "expansion": "sod",
+        "itemId": 220608,
+        "itemName": "Eranikus's Scale",
+        "slot": "Shield",
+        "quality": "Epic",
+        "itemLevel": 50,
+        "dropRate": 0.1000,
+        "classRestrictions": [
+            "Warrior",
+            "Paladin",
+            "Shaman"
+        ],
+        "iconUrl": null
+    }
+]

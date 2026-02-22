@@ -8,6 +8,9 @@ import { WowCronRegistrar } from './wow-cron-registrar';
 import { DungeonQuestsController } from './dungeon-quests.controller';
 import { DungeonQuestsService } from './dungeon-quests.service';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
+import { BossEncountersController } from './boss-encounters.controller';
+import { BossEncountersService } from './boss-encounters.service';
+import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -17,7 +20,11 @@ import { WOW_COMMON_MANIFEST } from './manifest';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
-  controllers: [BlizzardController, DungeonQuestsController],
+  controllers: [
+    BlizzardController,
+    DungeonQuestsController,
+    BossEncountersController,
+  ],
   providers: [
     BlizzardService,
     BlizzardCharacterSyncAdapter,
@@ -25,12 +32,15 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     WowCronRegistrar,
     DungeonQuestsService,
     DungeonQuestSeeder,
+    BossEncountersService,
+    BossEncounterSeeder,
   ],
   exports: [
     BlizzardService,
     BlizzardCharacterSyncAdapter,
     BlizzardContentProvider,
     DungeonQuestsService,
+    BossEncountersService,
   ],
 })
 export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
@@ -46,6 +56,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly contentProvider: BlizzardContentProvider,
     private readonly cronRegistrar: WowCronRegistrar,
     private readonly dungeonQuestsService: DungeonQuestsService,
+    private readonly bossEncountersService: BossEncountersService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -59,6 +70,15 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.warn(
         `Dungeon quest seed skipped (may already exist): ${err}`,
+      );
+    }
+
+    // Seed boss encounters on first boot
+    try {
+      await this.bossEncountersService.seedBosses();
+    } catch (err) {
+      this.logger.warn(
+        `Boss encounter seed skipped (may already exist): ${err}`,
       );
     }
 
@@ -78,6 +98,13 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
               `Failed to seed dungeon quests on install: ${err}`,
             ),
           );
+        this.bossEncountersService
+          .seedBosses()
+          .catch((err) =>
+            this.logger.error(
+              `Failed to seed boss encounters on install: ${err}`,
+            ),
+          );
       }
     };
 
@@ -88,6 +115,13 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
           .catch((err) =>
             this.logger.error(
               `Failed to drop dungeon quests on uninstall: ${err}`,
+            ),
+          );
+        this.bossEncountersService
+          .dropBosses()
+          .catch((err) =>
+            this.logger.error(
+              `Failed to drop boss encounters on uninstall: ${err}`,
             ),
           );
       }
