@@ -67,12 +67,14 @@ describe('DiscordEmbedFactory', () => {
       expect(json.description).toContain('World of Warcraft');
     });
 
-    it('should include date and time in the description', () => {
+    it('should include Discord native timestamp in the description', () => {
       const { embed } = factory.buildEventEmbed(baseEvent, baseContext);
       const json = embed.toJSON();
 
+      // 2026-02-20T20:00:00.000Z = Unix 1771617600
       expect(json.description).toContain('📆');
-      expect(json.description).toContain('⏰');
+      expect(json.description).toContain('<t:1771617600:f>');
+      expect(json.description).toContain('<t:1771617600:R>');
     });
 
     it('should include duration in the description', () => {
@@ -444,7 +446,7 @@ describe('DiscordEmbedFactory', () => {
       expect(embed.toJSON().description).toContain('World of Warcraft');
     });
 
-    it('should include date and time', () => {
+    it('should include Discord native timestamp', () => {
       const { embed } = factory.buildEventInvite(
         baseEvent,
         baseContext,
@@ -452,7 +454,8 @@ describe('DiscordEmbedFactory', () => {
       );
       const desc = embed.toJSON().description;
       expect(desc).toContain('📆');
-      expect(desc).toContain('⏰');
+      expect(desc).toContain('<t:1771617600:f>');
+      expect(desc).toContain('<t:1771617600:R>');
     });
 
     it('should include description excerpt', () => {
@@ -524,10 +527,9 @@ describe('DiscordEmbedFactory', () => {
     });
   });
 
-  describe('timezone support (ROK-431)', () => {
-    it('should format event time in the configured timezone', () => {
-      // Event starts at 2026-02-20T20:00:00.000Z
-      // In America/New_York (EST, UTC-5), that is 3:00 PM
+  describe('Discord native timestamps (ROK-431)', () => {
+    it('should use Discord timestamp syntax regardless of timezone setting', () => {
+      // Discord native timestamps are timezone-agnostic: each viewer sees their own tz
       const estContext: EmbedContext = {
         ...baseContext,
         timezone: 'America/New_York',
@@ -536,52 +538,42 @@ describe('DiscordEmbedFactory', () => {
       const { embed } = factory.buildEventEmbed(baseEvent, estContext);
       const desc = embed.toJSON().description!;
 
-      expect(desc).toContain('3:00 PM');
-      expect(desc).toContain('EST');
+      // Should use <t:UNIX:f> format, not locale-formatted time
+      expect(desc).toContain('<t:1771617600:f>');
+      expect(desc).toContain('<t:1771617600:R>');
+      expect(desc).not.toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/);
     });
 
-    it('should format event time in Pacific timezone', () => {
-      // In America/Los_Angeles (PST, UTC-8), 20:00 UTC is 12:00 PM
-      const pstContext: EmbedContext = {
+    it('should produce the same output with or without timezone', () => {
+      const withTz: EmbedContext = {
         ...baseContext,
         timezone: 'America/Los_Angeles',
       };
-
-      const { embed } = factory.buildEventEmbed(baseEvent, pstContext);
-      const desc = embed.toJSON().description!;
-
-      expect(desc).toContain('12:00 PM');
-      expect(desc).toContain('PST');
-    });
-
-    it('should fall back to system default when no timezone is set', () => {
-      const noTzContext: EmbedContext = {
+      const withoutTz: EmbedContext = {
         ...baseContext,
         timezone: null,
       };
 
-      const { embed } = factory.buildEventEmbed(baseEvent, noTzContext);
-      const desc = embed.toJSON().description!;
+      const descWithTz = factory
+        .buildEventEmbed(baseEvent, withTz)
+        .embed.toJSON().description!;
+      const descWithoutTz = factory
+        .buildEventEmbed(baseEvent, withoutTz)
+        .embed.toJSON().description!;
 
-      // When no timezone is configured, falls back to system default (not a crash)
-      expect(desc).toMatch(/\d{1,2}:\d{2}\s*(AM|PM)/);
+      expect(descWithTz).toBe(descWithoutTz);
     });
 
-    it('should apply timezone to invite embeds', () => {
-      const estContext: EmbedContext = {
-        ...baseContext,
-        timezone: 'America/New_York',
-      };
-
+    it('should use Discord timestamps in invite embeds', () => {
       const { embed } = factory.buildEventInvite(
         baseEvent,
-        estContext,
+        baseContext,
         'inviter',
       );
       const desc = embed.toJSON().description!;
 
-      expect(desc).toContain('3:00 PM');
-      expect(desc).toContain('EST');
+      expect(desc).toContain('<t:1771617600:f>');
+      expect(desc).toContain('<t:1771617600:R>');
     });
   });
 });
