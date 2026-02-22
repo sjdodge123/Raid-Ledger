@@ -207,7 +207,7 @@ describe('EventPlansController', () => {
       const result = await controller.myPlans(mockReq as AuthenticatedRequest);
 
       expect(result).toEqual([mockPlan]);
-      expect(service.findByCreator).toHaveBeenCalledWith(CREATOR_ID);
+      expect(service.findByCreator).toHaveBeenCalledWith(CREATOR_ID, 'member');
     });
 
     it('should return empty array when user has no plans', async () => {
@@ -250,7 +250,7 @@ describe('EventPlansController', () => {
       );
 
       expect(result.status).toBe('cancelled');
-      expect(service.cancel).toHaveBeenCalledWith(PLAN_ID, CREATOR_ID);
+      expect(service.cancel).toHaveBeenCalledWith(PLAN_ID, CREATOR_ID, 'member');
     });
 
     it('should propagate NotFoundException when plan does not exist', async () => {

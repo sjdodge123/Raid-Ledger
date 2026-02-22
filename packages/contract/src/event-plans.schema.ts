@@ -154,3 +154,14 @@ export const PollResultsResponseSchema = z.object({
   pollEndsAt: z.string().datetime().nullable(),
 });
 export type PollResultsResponse = z.infer<typeof PollResultsResponseSchema>;
+
+// ============================================================
+// Convert Event to Plan DTO
+// ============================================================
+
+/** Options for converting an event to a plan. */
+export const ConvertEventToPlanSchema = z.object({
+  cancelOriginal: z.boolean().optional().default(true),
+  pollDurationHours: z.number().int().min(1).max(72).optional().default(24),
+});
+export type ConvertEventToPlanDto = z.infer<typeof ConvertEventToPlanSchema>;

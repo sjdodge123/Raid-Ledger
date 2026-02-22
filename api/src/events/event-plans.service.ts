@@ -20,6 +20,7 @@ import {
   TimeSuggestion,
   PollResultsResponse,
   PollOptionResult,
+  ConvertEventToPlanDto,
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
@@ -162,6 +163,177 @@ export class EventPlansService {
 
     this.logger.log(
       `Event plan ${plan.id} created, poll posted to channel ${channelId}`,
+    );
+
+    return this.toResponseDto(plan);
+  }
+
+  /**
+   * Convert an existing event to an event plan (poll-based scheduling).
+   * Copies event data into a new plan, posts a Discord poll, and optionally
+   * soft-cancels the original event.
+   */
+  async convertFromEvent(
+    eventId: number,
+    userId: number,
+    userRole?: string,
+    options?: ConvertEventToPlanDto,
+  ): Promise<EventPlanResponseDto> {
+    // Fetch the event via the events service (gives us the response DTO with times)
+    const event = await this.eventsService.findOne(eventId);
+
+    // Permission check: creator, admin, or operator
+    const isPrivileged = userRole === 'admin' || userRole === 'operator';
+    if (event.creator.id !== userId && !isPrivileged) {
+      throw new ForbiddenException(
+        'Only the event creator or an admin/operator can convert this event to a plan',
+      );
+    }
+
+    // Compute duration from event times
+    const durationMinutes = Math.max(
+      1,
+      Math.round(
+        (Date.parse(event.endTime) - Date.parse(event.startTime)) / 60000,
+      ),
+    );
+
+    // Resolve channel for the poll
+    const channelId = await this.channelResolver.resolveChannelForEvent(
+      event.game?.id ?? null,
+    );
+
+    if (!channelId) {
+      throw new BadRequestException(
+        'No Discord channel configured for this game. Set a default channel or bind a channel first.',
+      );
+    }
+
+    // Get time suggestions for the game
+    const suggestions = await this.getTimeSuggestions(
+      event.game?.id ?? undefined,
+      0,
+    );
+
+    const pollOptions = suggestions.suggestions.slice(0, 9).map((s) => ({
+      date: s.date,
+      label: s.label,
+    }));
+
+    if (pollOptions.length < 2) {
+      throw new BadRequestException(
+        'Could not generate enough time suggestions. At least 2 options are required.',
+      );
+    }
+
+    const pollDurationHours = options?.pollDurationHours ?? 24;
+
+    // Create the plan record from event data
+    const [plan] = await this.db
+      .insert(schema.eventPlans)
+      .values({
+        creatorId: userId,
+        title: event.title,
+        description: event.description ?? null,
+        gameId: event.game?.id ?? null,
+        slotConfig: event.slotConfig ?? null,
+        maxAttendees: event.maxAttendees ?? null,
+        autoUnbench: event.autoUnbench ?? true,
+        durationMinutes,
+        pollOptions,
+        pollDurationHours,
+        pollMode: 'standard',
+        pollChannelId: channelId,
+        status: 'polling',
+        contentInstances: event.contentInstances ?? null,
+        reminder15min: event.reminder15min,
+        reminder1hour: event.reminder1hour,
+        reminder24hour: event.reminder24hour,
+        pollStartedAt: new Date(),
+        pollEndsAt: new Date(Date.now() + pollDurationHours * 3600 * 1000),
+      })
+      .returning();
+
+    // Look up game name for the embed
+    let gameName: string | null = null;
+    if (event.game?.id) {
+      const [game] = await this.db
+        .select({ name: schema.games.name })
+        .from(schema.games)
+        .where(eq(schema.games.id, event.game.id))
+        .limit(1);
+      gameName = game?.name ?? null;
+    }
+
+    // Post Discord poll
+    try {
+      const messageId = await this.postDiscordPoll(
+        channelId,
+        plan.id,
+        event.title,
+        pollOptions,
+        pollDurationHours,
+        1,
+        {
+          description: event.description,
+          gameName,
+          durationMinutes,
+          slotConfig: event.slotConfig as Record<string, unknown> | null,
+          pollMode: 'standard',
+        },
+      );
+
+      await this.db
+        .update(schema.eventPlans)
+        .set({ pollMessageId: messageId })
+        .where(eq(schema.eventPlans.id, plan.id));
+
+      plan.pollMessageId = messageId;
+    } catch (error) {
+      await this.db
+        .update(schema.eventPlans)
+        .set({ status: 'draft' })
+        .where(eq(schema.eventPlans.id, plan.id));
+      this.logger.error(
+        'Failed to post Discord poll for event conversion:',
+        error,
+      );
+      throw new BadRequestException(
+        'Failed to post Discord poll. The bot may not have Send Polls permission.',
+      );
+    }
+
+    // Schedule the poll-close job
+    const delayMs = pollDurationHours * 3600 * 1000;
+    await this.queue.add(
+      'poll-closed',
+      { planId: plan.id } satisfies PollClosedJobData,
+      {
+        jobId: `plan-poll-close-${plan.id}`,
+        delay: delayMs,
+        removeOnComplete: true,
+        removeOnFail: 50,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 5000 },
+      },
+    );
+
+    // If cancelOriginal, soft-cancel the event
+    if (options?.cancelOriginal !== false) {
+      try {
+        await this.eventsService.cancel(eventId, userId, isPrivileged, {
+          reason: 'Converted to community poll',
+        });
+      } catch (error) {
+        this.logger.warn(
+          `Failed to cancel original event ${eventId} during conversion:`,
+          error,
+        );
+      }
+    }
+
+    this.logger.log(
+      `Event ${eventId} converted to plan ${plan.id} by user ${userId}`,
     );
 
     return this.toResponseDto(plan);

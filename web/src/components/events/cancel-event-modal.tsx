@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { toast } from '../../lib/toast';
 import { Modal } from '../ui/modal';
 import { useCancelEvent } from '../../hooks/use-events';
+import { useConvertEventToPlan } from '../../hooks/use-event-plans';
 
 interface CancelEventModalProps {
     isOpen: boolean;
@@ -13,7 +15,7 @@ interface CancelEventModalProps {
 
 /**
  * Confirmation modal for cancelling an event (ROK-374).
- * Shows signup count warning and optional reason input.
+ * Shows signup count warning, optional reason input, and a "Convert to Plan" option.
  */
 export function CancelEventModal({
     isOpen,
@@ -24,6 +26,8 @@ export function CancelEventModal({
 }: CancelEventModalProps) {
     const [reason, setReason] = useState('');
     const cancelEvent = useCancelEvent(eventId);
+    const convertToPlan = useConvertEventToPlan();
+    const navigate = useNavigate();
 
     const handleConfirm = async () => {
         try {
@@ -37,6 +41,20 @@ export function CancelEventModal({
             toast.error('Failed to cancel event', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
+        }
+    };
+
+    const handleConvertToPlan = async () => {
+        try {
+            await convertToPlan.mutateAsync({
+                eventId,
+                options: { cancelOriginal: true },
+            });
+            setReason('');
+            onClose();
+            navigate('/events?tab=plans');
+        } catch {
+            // Error toast handled by the mutation's onError
         }
     };
 
@@ -83,12 +101,31 @@ export function CancelEventModal({
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={cancelEvent.isPending}
+                        disabled={cancelEvent.isPending || convertToPlan.isPending}
                         className="btn btn-danger btn-sm"
                     >
                         {cancelEvent.isPending ? 'Cancelling...' : 'Cancel Event'}
                     </button>
                 </div>
+
+                {/* Convert to Plan option */}
+                <div className="relative pt-2">
+                    <div className="absolute inset-x-0 top-0 flex items-center justify-center">
+                        <span className="bg-panel px-3 text-xs text-muted">or</span>
+                    </div>
+                    <div className="border-t border-border" />
+                </div>
+
+                <button
+                    onClick={handleConvertToPlan}
+                    disabled={convertToPlan.isPending || cancelEvent.isPending}
+                    className="w-full rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2.5 text-sm font-medium text-white transition-colors"
+                >
+                    {convertToPlan.isPending ? 'Converting...' : 'Convert to Plan'}
+                </button>
+                <p className="text-xs text-muted text-center -mt-2">
+                    Post a Discord poll so your community can vote on a new time
+                </p>
             </div>
         </Modal>
     );

@@ -9,6 +9,7 @@ import {
     cancelEventPlan,
     getEventPlanPollResults,
     restartEventPlan,
+    convertEventToPlan,
 } from '../lib/api-client';
 
 /**
@@ -108,6 +109,27 @@ export function useRestartEventPlan() {
         },
         onError: (error: Error) => {
             toast.error(error.message || 'Failed to restart poll');
+        },
+    });
+}
+
+/**
+ * Convert an existing event to a plan (poll-based scheduling).
+ */
+export function useConvertEventToPlan() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ eventId, options }: {
+            eventId: number;
+            options?: { cancelOriginal?: boolean; pollDurationHours?: number };
+        }) => convertEventToPlan(eventId, options),
+        onSuccess: () => {
+            toast.success('Event converted to plan! Poll posted to Discord.');
+            queryClient.invalidateQueries({ queryKey: ['event-plans'] });
+            queryClient.invalidateQueries({ queryKey: ['events'] });
+        },
+        onError: (error: Error) => {
+            toast.error(error.message || 'Failed to convert event to plan');
         },
     });
 }

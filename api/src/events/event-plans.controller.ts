@@ -9,11 +9,13 @@ import {
   UseGuards,
   Request,
   ParseUUIDPipe,
+  ParseIntPipe,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
   CreateEventPlanSchema,
+  ConvertEventToPlanSchema,
   EventPlanResponseDto,
   TimeSuggestionsResponse,
   PollResultsResponse,
@@ -99,6 +101,31 @@ export class EventPlansController {
   }
 
   /**
+   * Convert an existing event into an event plan (poll-based scheduling).
+   * Copies event data, posts a Discord poll, and optionally soft-cancels the original.
+   * Requires authentication.
+   */
+  @Post('from-event/:eventId')
+  @UseGuards(AuthGuard('jwt'))
+  async convertFromEvent(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<EventPlanResponseDto> {
+    try {
+      const dto = ConvertEventToPlanSchema.parse(body);
+      return this.eventPlansService.convertFromEvent(
+        eventId,
+        req.user.id,
+        req.user.role,
+        dto,
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
    * Get a single event plan by ID.
    * Requires authentication.
    */
@@ -120,7 +147,11 @@ export class EventPlansController {
     @Param('id', ParseUUIDPipe) id: string,
     @Request() req: AuthenticatedRequest,
   ): Promise<PollResultsResponse> {
-    return this.eventPlansService.getPollResults(id, req.user.id, req.user.role);
+    return this.eventPlansService.getPollResults(
+      id,
+      req.user.id,
+      req.user.role,
+    );
   }
 
   /**

@@ -1088,3 +1088,17 @@ export async function restartEventPlan(
         method: 'PATCH',
     });
 }
+
+/**
+ * Convert an existing event to an event plan (poll-based scheduling).
+ * Posts a Discord poll and optionally soft-cancels the original event.
+ */
+export async function convertEventToPlan(
+    eventId: number,
+    options?: { cancelOriginal?: boolean; pollDurationHours?: number },
+): Promise<EventPlanResponseDto> {
+    return fetchApi(`/event-plans/from-event/${eventId}`, {
+        method: 'POST',
+        body: JSON.stringify(options ?? {}),
+    });
+}
