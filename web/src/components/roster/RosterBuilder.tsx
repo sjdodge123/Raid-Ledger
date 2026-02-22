@@ -311,6 +311,63 @@ export const RosterBuilder = memo(function RosterBuilder({
         }
     };
 
+    // ROK-390: Reassign player from one slot to another (move or swap)
+    const handleReassignToSlot = (fromSignupId: number, toRole: RosterRole, toPosition: number) => {
+        const sourcePlayer = assignments.find(a => a.signupId === fromSignupId);
+        if (!sourcePlayer) return;
+
+        // Check if target slot is occupied
+        const targetPlayer = assignments.find(a => a.slot === toRole && a.position === toPosition);
+
+        let newAssignments = [...assignments];
+
+        if (targetPlayer) {
+            // Swap: target player goes to source slot, source goes to target
+            newAssignments = newAssignments.map(a => {
+                if (a.signupId === fromSignupId) {
+                    return {
+                        ...a,
+                        slot: toRole,
+                        position: toPosition,
+                        isOverride: a.character?.role !== toRole,
+                    };
+                }
+                if (a.signupId === targetPlayer.signupId) {
+                    return {
+                        ...a,
+                        slot: sourcePlayer.slot,
+                        position: sourcePlayer.position,
+                        isOverride: a.character?.role !== sourcePlayer.slot,
+                    };
+                }
+                return a;
+            });
+            const msg = `Swapped ${sourcePlayer.username} and ${targetPlayer.username}`;
+            toast.success(msg);
+            announce(msg);
+        } else {
+            // Move: source to empty target
+            newAssignments = newAssignments.map(a => {
+                if (a.signupId === fromSignupId) {
+                    return {
+                        ...a,
+                        slot: toRole,
+                        position: toPosition,
+                        isOverride: a.character?.role !== toRole,
+                    };
+                }
+                return a;
+            });
+            const roleLabel = toRole.charAt(0).toUpperCase() + toRole.slice(1);
+            const msg = `${sourcePlayer.username} moved to ${roleLabel} ${toPosition}`;
+            toast.success(msg);
+            announce(msg);
+        }
+
+        onRosterChange(pool, newAssignments);
+        setAssignmentTarget(null);
+    };
+
     // ROK-208: Assign player to a specific slot (from browse-all slot picker)
     const handleAssignToSlot = (signupId: number, role: RosterRole, position: number) => {
         const sourceItem = pool.find(p => p.signupId === signupId);
@@ -516,6 +573,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                     onGenerateInviteLink(assignmentTarget.role);
                 } : undefined}
                 onRemoveFromEvent={onRemoveFromEvent}
+                onReassignToSlot={assignmentTarget?.occupant ? handleReassignToSlot : undefined}
             />
         </div>
     );

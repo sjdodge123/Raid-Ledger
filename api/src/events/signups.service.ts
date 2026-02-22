@@ -1206,7 +1206,7 @@ export class SignupsService {
     // Only event creator or admin can update roster
     if (event.creatorId !== userId && !isAdmin) {
       throw new ForbiddenException(
-        'Only event creator or admin can update roster',
+        'Only event creator, admin, or operator can update roster',
       );
     }
 
@@ -1226,6 +1226,17 @@ export class SignupsService {
         );
       }
     }
+
+    // ROK-390: Capture old assignments before deleting (for role-change diff)
+    const oldAssignments = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, eventId));
+
+    // Build lookup: signupId → old role
+    const oldRoleBySignupId = new Map(
+      oldAssignments.map((a) => [a.signupId, a.role]),
+    );
 
     // Delete existing assignments
     await this.db
@@ -1266,6 +1277,20 @@ export class SignupsService {
     this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
       eventId,
       action: 'roster_updated',
+    });
+
+    // ROK-390: Notify players whose role changed (async, non-blocking)
+    this.notifyRoleChanges(
+      eventId,
+      event.title,
+      dto.assignments,
+      signupByUserId,
+      oldRoleBySignupId,
+    ).catch((err) => {
+      this.logger.warn(
+        'Failed to send roster reassign notifications: %s',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
     });
 
     return this.getRosterWithAssignments(eventId);
@@ -1461,6 +1486,72 @@ export class SignupsService {
         user.discordId,
         eventId,
       );
+    }
+  }
+
+  /**
+   * ROK-390: Detect role changes between old and new roster assignments,
+   * and send notifications to affected players.
+   * - Role changes (e.g., healer → DPS): roster_reassigned notification
+   * - Bench → non-bench: bench_promoted notification
+   * - Non-bench → bench: roster_reassigned notification
+   * - Same-role position changes (DPS 1 → DPS 5): silent (no notification)
+   * - Anonymous Discord participants: skipped (no userId)
+   */
+  private async notifyRoleChanges(
+    eventId: number,
+    eventTitle: string,
+    newAssignments: UpdateRosterDto['assignments'],
+    signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
+    oldRoleBySignupId: Map<number, string | null>,
+  ): Promise<void> {
+    for (const assignment of newAssignments) {
+      // Skip anonymous participants (no RL user to notify)
+      if (!assignment.userId) continue;
+
+      const signup = signupByUserId.get(assignment.userId);
+      if (!signup) continue;
+
+      const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
+      const newRole = assignment.slot;
+
+      // No change in role → silent (same-role position changes)
+      if (oldRole === newRole) continue;
+
+      // No previous assignment (newly assigned) → not a reassign notification
+      if (oldRole === null) continue;
+
+      // No new role (moved to unassigned pool) → not a reassign notification
+      if (newRole === null) continue;
+
+      const formatLabel = (r: string) =>
+        r.charAt(0).toUpperCase() + r.slice(1);
+
+      if (oldRole === 'bench' && newRole !== 'bench') {
+        // Promoted from bench → use existing bench_promoted type
+        await this.notificationService.create({
+          userId: assignment.userId,
+          type: 'bench_promoted',
+          title: 'Promoted from Bench',
+          message: `You've been moved from bench to ${formatLabel(newRole)} for ${eventTitle}`,
+          payload: { eventId },
+        });
+      } else {
+        // Role change or moved to bench → roster_reassigned
+        const oldLabel = formatLabel(oldRole);
+        const newLabel = formatLabel(newRole);
+        const isBenched = newRole === 'bench';
+
+        await this.notificationService.create({
+          userId: assignment.userId,
+          type: 'roster_reassigned',
+          title: isBenched ? 'Moved to Bench' : 'Role Changed',
+          message: isBenched
+            ? `You've been moved from ${oldLabel} to bench for ${eventTitle}`
+            : `Your role changed from ${oldLabel} to ${newLabel} for ${eventTitle}`,
+          payload: { eventId, oldRole, newRole },
+        });
+      }
     }
   }
 
