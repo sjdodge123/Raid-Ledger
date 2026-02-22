@@ -187,6 +187,24 @@ describe('OnboardingWizardPage', () => {
         expect(screen.getByText('Calendar Page')).toBeInTheDocument();
     });
 
+    it('allows admin to access wizard with ?rerun=1', () => {
+        mockUseAuth.mockReturnValue({
+            user: {
+                id: 1,
+                username: 'admin',
+                role: 'admin',
+                discordId: '123',
+                onboardingCompletedAt: '2026-02-01T00:00:00Z',
+            },
+        });
+        mockIsAdmin.mockReturnValue(true);
+
+        renderWithRouter(<OnboardingWizardPage />, ['/onboarding?rerun=1']);
+
+        expect(screen.queryByText('Calendar Page')).not.toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+    });
+
     it('redirects users who already completed onboarding', () => {
         mockUseAuth.mockReturnValue({
             user: {

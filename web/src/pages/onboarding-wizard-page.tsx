@@ -174,14 +174,13 @@ export function OnboardingWizardPage() {
         );
         return hearted
             .map((h) => registryByName.get(h.name.toLowerCase()))
-            .filter((g): g is GameRegistryDto => !!g);
+            .filter((g): g is GameRegistryDto => !!g && g.hasRoles);
     }, [heartedGamesData, registryGames]);
 
     // Build active steps list dynamically
     const steps: StepDef[] = useMemo(() => {
         const s: StepDef[] = [];
         if (needsConnect) s.push({ key: 'connect', label: 'Connect' });
-        if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
         s.push({ key: 'games', label: 'Games' });
         // Character steps: 1 initial + extras per qualifying hearted game
         qualifyingGames.forEach((game) => {
@@ -198,6 +197,8 @@ export function OnboardingWizardPage() {
         });
         s.push({ key: 'gametime', label: 'Game Time' });
         s.push({ key: 'avatar', label: 'Personalize' });
+        // Discord Join is last — the invite link navigates away from the browser
+        if (needsDiscordJoin) s.push({ key: 'discord-join', label: 'Discord' });
         return s;
     }, [needsConnect, needsDiscordJoin, qualifyingGames, extraCharCounts]);
 
@@ -277,7 +278,7 @@ export function OnboardingWizardPage() {
     }, [handleSkipAll]);
 
     // Redirect guards — placed after all hooks
-    if (user && isAdmin(user)) {
+    if (user && isAdmin(user) && !isRerun) {
         return <Navigate to="/calendar" replace />;
     }
     // Allow re-run from settings (skip the onboardingCompletedAt guard)
@@ -286,7 +287,7 @@ export function OnboardingWizardPage() {
     }
 
     const isFirstStep = currentStep === 0;
-    const isFinalStep = currentStepDef?.key === 'avatar';
+    const isFinalStep = currentStep === maxStep;
     const isCharacterStep = currentStepDef?.key.startsWith('character-');
 
     return (
