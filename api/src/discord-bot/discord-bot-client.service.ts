@@ -99,17 +99,25 @@ export class DiscordBotClientService {
         // Use emitAsync so async @OnEvent(CONNECTED) handlers (setup wizard,
         // command registration, etc.) are properly awaited before connect()
         // resolves.  Errors in handlers are logged but do not reject connect().
-        this.eventEmitter
-          .emitAsync(DISCORD_BOT_EVENTS.CONNECTED)
-          .catch((err: unknown) => {
-            this.logger.error(
-              'Error in CONNECTED event handlers:',
-              err instanceof Error ? err.message : err,
-            );
-          })
-          .finally(() => {
-            resolve();
-          });
+        if (typeof this.eventEmitter.emitAsync === 'function') {
+          this.eventEmitter
+            .emitAsync(DISCORD_BOT_EVENTS.CONNECTED)
+            .catch((err: unknown) => {
+              this.logger.error(
+                'Error in CONNECTED event handlers:',
+                err instanceof Error ? err.message : err,
+              );
+            })
+            .finally(() => {
+              resolve();
+            });
+        } else {
+          this.logger.warn(
+            'EventEmitter2.emitAsync unavailable — falling back to synchronous emit',
+          );
+          this.eventEmitter.emit(DISCORD_BOT_EVENTS.CONNECTED);
+          resolve();
+        }
       });
 
       client.once(Events.Error, (error: Error) => {

@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { SettingsModule } from '../settings/settings.module';
 import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
@@ -38,6 +39,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
 
 @Module({
   imports: [
+    EventEmitterModule,
     SettingsModule,
     forwardRef(() => UsersModule),
     forwardRef(() => EventsModule),
