@@ -26,3 +26,4 @@ export * from './schema/channel-bindings';
 export * from './schema/post-event-reminders-sent';
 export * from './schema/event-plans';
 export * from './schema/dungeon-quests';
+export * from './schema/boss-encounters';
