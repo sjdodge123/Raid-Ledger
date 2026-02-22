@@ -109,11 +109,10 @@ export function CancelEventModal({
                 </div>
 
                 {/* Convert to Plan option */}
-                <div className="relative pt-2">
-                    <div className="absolute inset-x-0 top-0 flex items-center justify-center">
-                        <span className="bg-panel px-3 text-xs text-muted">or</span>
-                    </div>
-                    <div className="border-t border-border" />
+                <div className="flex items-center gap-3 pt-1">
+                    <div className="flex-1 border-t border-edge" />
+                    <span className="text-xs text-muted">or</span>
+                    <div className="flex-1 border-t border-edge" />
                 </div>
 
                 <button
@@ -123,7 +122,7 @@ export function CancelEventModal({
                 >
                     {convertToPlan.isPending ? 'Converting...' : 'Convert to Plan'}
                 </button>
-                <p className="text-xs text-muted text-center -mt-2">
+                <p className="text-xs text-muted text-center -mt-1">
                     Post a Discord poll so your community can vote on a new time
                 </p>
             </div>

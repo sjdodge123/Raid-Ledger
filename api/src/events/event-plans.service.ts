@@ -602,10 +602,21 @@ export class EventPlansService {
       gameCoverUrl = game?.coverUrl ?? null;
     }
 
-    const pollOptions = plan.pollOptions as Array<{
-      date: string;
-      label: string;
-    }>;
+    // Regenerate labels with timezone abbreviation from stored dates
+    const pollOptions = (
+      plan.pollOptions as Array<{ date: string; label: string }>
+    ).map((opt) => ({
+      date: opt.date,
+      label: new Date(opt.date).toLocaleDateString('en-US', {
+        weekday: 'long',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        timeZoneName: 'short',
+      }),
+    }));
     const newRound = (plan.pollRound ?? 1) + 1;
 
     // Resolve channel (may have changed since original creation)
@@ -944,6 +955,16 @@ export class EventPlansService {
       bodyLines.push(`⏱️ **Duration:** ${durationStr}`);
     }
 
+    // Poll time options using Discord's localized timestamp format
+    if (options.length > 0) {
+      bodyLines.push('');
+      bodyLines.push('📆 **Time Options:**');
+      for (const opt of options) {
+        const unix = Math.floor(new Date(opt.date).getTime() / 1000);
+        bodyLines.push(`> <t:${unix}:f> (<t:${unix}:R>)`);
+      }
+    }
+
     // Roster breakdown matching event embed format
     if (details?.slotConfig) {
       const sc = details.slotConfig as Record<string, number | string>;
@@ -976,6 +997,13 @@ export class EventPlansService {
       bodyLines.push('');
       bodyLines.push("🔄 **All or Nothing** — re-polls if anyone can't make it");
     }
+
+    // Poll deadline using Discord's localized timestamp
+    const pollEndsUnix = Math.floor(
+      (Date.now() + durationHours * 3600 * 1000) / 1000,
+    );
+    bodyLines.push('');
+    bodyLines.push(`⏳ **Poll closes:** <t:${pollEndsUnix}:f> (<t:${pollEndsUnix}:R>)`);
 
     embed.setDescription(bodyLines.join('\n'));
 
@@ -1372,6 +1400,7 @@ export class EventPlansService {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
+          timeZoneName: 'short',
         });
 
         suggestions.push({
@@ -1420,6 +1449,7 @@ export class EventPlansService {
           hour: 'numeric',
           minute: '2-digit',
           hour12: true,
+          timeZoneName: 'short',
         });
 
         suggestions.push({
