@@ -1,0 +1,21 @@
+CREATE TABLE "wow_classic_dungeon_quests" (
+	"id" serial PRIMARY KEY NOT NULL,
+	"quest_id" integer NOT NULL,
+	"dungeon_instance_id" integer,
+	"name" varchar(255) NOT NULL,
+	"quest_level" integer,
+	"required_level" integer,
+	"expansion" varchar(20) NOT NULL,
+	"quest_giver_npc" varchar(255),
+	"quest_giver_zone" varchar(255),
+	"prev_quest_id" integer,
+	"next_quest_id" integer,
+	"rewards_json" jsonb,
+	"objectives" text,
+	"class_restriction" jsonb,
+	"race_restriction" jsonb,
+	"starts_inside_dungeon" boolean DEFAULT false NOT NULL,
+	"sharable" boolean DEFAULT true NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "wow_classic_dungeon_quests_quest_id_unique" UNIQUE("quest_id")
+);

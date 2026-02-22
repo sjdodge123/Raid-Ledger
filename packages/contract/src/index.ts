@@ -81,3 +81,6 @@ export * from './backup.schema.js';
 
 // Event Plans (ROK-392)
 export * from './event-plans.schema.js';
+
+// Dungeon Quests (ROK-245)
+export * from './dungeon-quests.schema.js';
