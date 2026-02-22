@@ -169,6 +169,7 @@ describe('SignupInteractionListener', () => {
         communityName: 'Test Guild',
         communityLogoPath: null,
       }),
+      getDefaultTimezone: jest.fn().mockResolvedValue(null),
     };
 
     mockDb = {
