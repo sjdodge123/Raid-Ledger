@@ -10,6 +10,9 @@ const SENTRY_DSN =
 
 const isProduction = import.meta.env.PROD;
 const telemetryDisabled = import.meta.env.VITE_DISABLE_TELEMETRY === 'true';
+const isLocalhost = ['localhost', '127.0.0.1'].includes(
+    window.location.hostname,
+);
 
 // Track transport-level send failures (e.g. 403 from invalid DSN)
 let _lastTransportFailed = false;
@@ -17,6 +20,7 @@ let _lastTransportFailed = false;
 if (!telemetryDisabled) {
     Sentry.init({
         dsn: SENTRY_DSN,
+        enabled: !isLocalhost,
         environment: isProduction ? 'production' : 'development',
         tracesSampleRate: isProduction ? 0.1 : 1.0,
         replaysSessionSampleRate: 0,
