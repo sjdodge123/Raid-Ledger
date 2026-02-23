@@ -1,0 +1,2312 @@
+{
+  "15452": {
+    "name": "Featherbead Bracers",
+    "quality": "Uncommon",
+    "slot": "WRIST",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_08.jpg"
+  },
+  "15453": {
+    "name": "Savannah Bracers",
+    "quality": "Uncommon",
+    "slot": "WRIST",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_07.jpg"
+  },
+  "15449": {
+    "name": "Ghastly Trousers",
+    "quality": "Uncommon",
+    "slot": "LEGS",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_14.jpg"
+  },
+  "15450": {
+    "name": "Dredgemire Leggings",
+    "quality": "Uncommon",
+    "slot": "LEGS",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_07.jpg"
+  },
+  "15451": {
+    "name": "Gargoyle Leggings",
+    "quality": "Uncommon",
+    "slot": "LEGS",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "2074": {
+    "name": "Solid Shortblade",
+    "quality": "Uncommon",
+    "slot": "ONE_HAND",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_23.jpg"
+  },
+  "2089": {
+    "name": "Scrimshaw Dagger",
+    "quality": "Uncommon",
+    "slot": "ONE_HAND",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_shortblade_01.jpg"
+  },
+  "6094": {
+    "name": "Piercing Axe",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_throwingaxe_01.jpg"
+  },
+  "6480": {
+    "name": "Slick Deviate Leggings",
+    "quality": "Uncommon",
+    "slot": "LEGS",
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_02.jpg"
+  },
+  "918": {
+    "name": "Deviate Hide Pack",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bag_07_black.jpg"
+  },
+  "7606": {
+    "name": "Polar Gauntlets",
+    "quality": "Uncommon",
+    "slot": "HANDS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_04.jpg"
+  },
+  "7607": {
+    "name": "Sable Wand",
+    "quality": "Uncommon",
+    "slot": "RANGED",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_02.jpg"
+  },
+  "6476": {
+    "name": "Pattern: Deviate Scale Belt",
+    "quality": "Uncommon",
+    "slot": "WAIST",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_06.jpg"
+  },
+  "8071": {
+    "name": "Sizzle Stick",
+    "quality": "Uncommon",
+    "slot": "RANGED",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_02.jpg"
+  },
+  "6481": {
+    "name": "Dagmire Gauntlets",
+    "quality": "Uncommon",
+    "slot": "HANDS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_05.jpg"
+  },
+  "6087": {
+    "name": "Chausses of Westfall",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "2041": {
+    "name": "Tunic of Westfall",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_leather_07.jpg"
+  },
+  "2042": {
+    "name": "Staff of Westfall",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_10.jpg"
+  },
+  "6505": {
+    "name": "Crescent Staff",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_04.jpg"
+  },
+  "6504": {
+    "name": "Wingblade",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_16.jpg"
+  },
+  "7083": {
+    "name": "Purified Kor Gem",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_sapphire_02.jpg"
+  },
+  "6743": {
+    "name": "Sustaining Ring",
+    "quality": "Uncommon",
+    "slot": "FINGER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_08.jpg"
+  },
+  "7003": {
+    "name": "Beetle Clasps",
+    "quality": "Uncommon",
+    "slot": "WRIST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_06.jpg"
+  },
+  "7004": {
+    "name": "Prelacy Cape",
+    "quality": "Uncommon",
+    "slot": "BACK",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_18.jpg"
+  },
+  "3400": {
+    "name": "Lucine Longsword",
+    "quality": "Uncommon",
+    "slot": "ONE_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_20.jpg"
+  },
+  "1317": {
+    "name": "Hardened Root Staff",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_16.jpg"
+  },
+  "3324": {
+    "name": "Ghostly Mantle",
+    "quality": "Uncommon",
+    "slot": "SHOULDER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_09.jpg"
+  },
+  "6998": {
+    "name": "Nimbus Boots",
+    "quality": "Uncommon",
+    "slot": "FEET",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_05.jpg"
+  },
+  "7000": {
+    "name": "Heartwood Girdle",
+    "quality": "Uncommon",
+    "slot": "WAIST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_04.jpg"
+  },
+  "6898": {
+    "name": "Orb of Soran'ruk",
+    "quality": "Uncommon",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_orb_03.jpg"
+  },
+  "15109": {
+    "name": "Staff of Soran'ruk",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_09.jpg"
+  },
+  "2033": {
+    "name": "Ambassador's Boots",
+    "quality": "Uncommon",
+    "slot": "FEET",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_08.jpg"
+  },
+  "2906": {
+    "name": "Darkshire Mail Leggings",
+    "quality": "Uncommon",
+    "slot": "LEGS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "6335": {
+    "name": "Grizzled Boots",
+    "quality": "Uncommon",
+    "slot": "FEET",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_03.jpg"
+  },
+  "4534": {
+    "name": "Steel-Clasped Bracers",
+    "quality": "Uncommon",
+    "slot": "WRIST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_06.jpg"
+  },
+  "6755": {
+    "name": "A Small Container of Gems",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 10,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_ornatebox.jpg"
+  },
+  "17694": {
+    "name": "Band of the Fist",
+    "quality": "Uncommon",
+    "slot": "FINGER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_02.jpg"
+  },
+  "17695": {
+    "name": "Chestnut Mantle",
+    "quality": "Uncommon",
+    "slot": "SHOULDER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_09.jpg"
+  },
+  "3562": {
+    "name": "Belt of Vindication",
+    "quality": "Uncommon",
+    "slot": "WAIST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_05.jpg"
+  },
+  "1264": {
+    "name": "Headbasher",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_mace_07.jpg"
+  },
+  "6414": {
+    "name": "Seal of Sylvanas",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_15.jpg"
+  },
+  "7001": {
+    "name": "Gravestone Scepter",
+    "quality": "Rare",
+    "slot": "RANGED",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_04.jpg"
+  },
+  "7002": {
+    "name": "Arctic Buckler",
+    "quality": "Rare",
+    "slot": "OFF_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_02.jpg"
+  },
+  "6751": {
+    "name": "Mourning Shawl",
+    "quality": "Rare",
+    "slot": "BACK",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_11.jpg"
+  },
+  "6752": {
+    "name": "Lancer Boots",
+    "quality": "Rare",
+    "slot": "FEET",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_03.jpg"
+  },
+  "6748": {
+    "name": "Monkey Ring",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_14.jpg"
+  },
+  "6750": {
+    "name": "Snake Hoop",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_06.jpg"
+  },
+  "6749": {
+    "name": "Tiger Band",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_13.jpg"
+  },
+  "9535": {
+    "name": "Fire-Welded Bracers",
+    "quality": "Uncommon",
+    "slot": "WRIST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_02.jpg"
+  },
+  "9536": {
+    "name": "Fairywing Mantle",
+    "quality": "Uncommon",
+    "slot": "SHOULDER",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_02.jpg"
+  },
+  "9608": {
+    "name": "Shoni's Disarming Tool",
+    "quality": "Uncommon",
+    "slot": "ONE_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_wrench_01.jpg"
+  },
+  "9609": {
+    "name": "Shilly Mitts",
+    "quality": "Uncommon",
+    "slot": "HANDS",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_27.jpg"
+  },
+  "9605": {
+    "name": "Repairman's Cape",
+    "quality": "Uncommon",
+    "slot": "BACK",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_06.jpg"
+  },
+  "9604": {
+    "name": "Mechanic's Pipehammer",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_mace_04.jpg"
+  },
+  "9363": {
+    "name": "Sparklematic-Wrapped Box",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gift_01.jpg"
+  },
+  "16886": {
+    "name": "Outlaw Sabre",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_33.jpg"
+  },
+  "16887": {
+    "name": "Witch's Finger",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_12.jpg"
+  },
+  "4197": {
+    "name": "Berylline Pads",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_05.jpg"
+  },
+  "6742": {
+    "name": "Stonefist Girdle",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_35.jpg"
+  },
+  "6725": {
+    "name": "Marbled Buckler",
+    "quality": "Rare",
+    "slot": "OFF_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_10.jpg"
+  },
+  "9623": {
+    "name": "Civinad Robes",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_18.jpg"
+  },
+  "9624": {
+    "name": "Triprunner Dungarees",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_08.jpg"
+  },
+  "9625": {
+    "name": "Dual Reinforced Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "9173": {
+    "name": "Goblin Transponder",
+    "quality": "Poor",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_battery_01.jpg"
+  },
+  "17039": {
+    "name": "Skullbreaker",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bone_dwarfskull_01.jpg"
+  },
+  "17042": {
+    "name": "Nail Spitter",
+    "quality": "Rare",
+    "slot": "RANGED",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_rifle_01.jpg"
+  },
+  "17043": {
+    "name": "Zealot's Robe",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_06.jpg"
+  },
+  "10710": {
+    "name": "Dragonclaw Ring",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_04.jpg"
+  },
+  "9626": {
+    "name": "Dwarven Charge",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_09.jpg"
+  },
+  "9627": {
+    "name": "Explorers' League Lodestar",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_lantern_01.jpg"
+  },
+  "10823": {
+    "name": "Vanquisher's Sword",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_35.jpg"
+  },
+  "10824": {
+    "name": "Amberglow Talisman",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_07.jpg"
+  },
+  "7888": {
+    "name": "Jarkal's Enhancing Necklace",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_02.jpg"
+  },
+  "7673": {
+    "name": "Talvash's Enhancing Necklace",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_02.jpg"
+  },
+  "6723": {
+    "name": "Medal of Courage",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_amulet_03.jpg"
+  },
+  "9527": {
+    "name": "Spellshifter Rod",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_11.jpg"
+  },
+  "9531": {
+    "name": "Gemshale Pauldrons",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_23.jpg"
+  },
+  "9533": {
+    "name": "Masons Fraternity Ring",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_03.jpg"
+  },
+  "9534": {
+    "name": "Engineer's Guild Headpiece",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_33.jpg"
+  },
+  "1490": {
+    "name": "Guardian Talisman",
+    "quality": "Uncommon",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_05.jpg"
+  },
+  "11122": {
+    "name": "Carrot on a Stick",
+    "quality": "Uncommon",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_food_54.jpg"
+  },
+  "10773": {
+    "name": "Hakkari Urn",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_box_01.jpg"
+  },
+  "11000": {
+    "name": "Shadowforge Key",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": null
+  },
+  "20083": {
+    "name": "Hunting Spear",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_spear_02.jpg"
+  },
+  "19991": {
+    "name": "Devilsaur Eye",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_eye_01.jpg"
+  },
+  "19992": {
+    "name": "Devilsaur Tooth",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bone_07.jpg"
+  },
+  "19984": {
+    "name": "Ebon Mask",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_30.jpg"
+  },
+  "20255": {
+    "name": "Whisperwalk Boots",
+    "quality": "Rare",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_cloth_05.jpg"
+  },
+  "19982": {
+    "name": "Duskbat Drape",
+    "quality": "Rare",
+    "slot": "BACK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_20.jpg"
+  },
+  "20035": {
+    "name": "Glacial Spike",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_shortblade_06.jpg"
+  },
+  "20037": {
+    "name": "Arcane Crystal Pendant",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_topaz_01.jpg"
+  },
+  "20036": {
+    "name": "Fire Ruby",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_bloodstone_02.jpg"
+  },
+  "19990": {
+    "name": "Blessed Prayer Beads",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_11.jpg"
+  },
+  "20082": {
+    "name": "Woestave",
+    "quality": "Rare",
+    "slot": "RANGED",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_09.jpg"
+  },
+  "20006": {
+    "name": "Circle of Hope",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_32.jpg"
+  },
+  "20369": {
+    "name": "Azurite Fists",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_30.jpg"
+  },
+  "20503": {
+    "name": "Enamored Water Spirit",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_wand_01.jpg"
+  },
+  "20556": {
+    "name": "Wildstaff",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_goldfeathered_01.jpg"
+  },
+  "20504": {
+    "name": "Lightforged Blade",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_39.jpg"
+  },
+  "20620": {
+    "name": "Holy Mightstone",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_stone_15.jpg"
+  },
+  "20512": {
+    "name": "Sanctified Orb",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_pearl_04.jpg"
+  },
+  "20505": {
+    "name": "Chivalrous Signet",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_43.jpg"
+  },
+  "20536": {
+    "name": "Soul Harvester",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_48.jpg"
+  },
+  "20534": {
+    "name": "Abyss Shard",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_02.jpg"
+  },
+  "20530": {
+    "name": "Robes of Servitude",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_10.jpg"
+  },
+  "20521": {
+    "name": "Fury Visor",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_01.jpg"
+  },
+  "20130": {
+    "name": "Diamond Flask",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_drink_01.jpg"
+  },
+  "20517": {
+    "name": "Razorsteel Shoulders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_16.jpg"
+  },
+  "22274": {
+    "name": "Grizzled Pelt",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_leather_08.jpg"
+  },
+  "22272": {
+    "name": "Forest's Embrace",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_leather_08.jpg"
+  },
+  "22458": {
+    "name": "Moonshadow Stave",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_28.jpg"
+  },
+  "11123": {
+    "name": "Rainstrider Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_08.jpg"
+  },
+  "11124": {
+    "name": "Helm of Exile",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_21.jpg"
+  },
+  "10749": {
+    "name": "Avenguard Helm",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_22.jpg"
+  },
+  "10750": {
+    "name": "Lifeforce Dirk",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_21.jpg"
+  },
+  "10751": {
+    "name": "Gemburst Circlet",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_crown_01.jpg"
+  },
+  "11865": {
+    "name": "Rancor Boots",
+    "quality": "Rare",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_02.jpg"
+  },
+  "11963": {
+    "name": "Penance Spaulders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_25.jpg"
+  },
+  "12049": {
+    "name": "Splintsteel Armor",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_16.jpg"
+  },
+  "11320": {
+    "name": "Bloodpetal Zapper",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gizmo_07.jpg"
+  },
+  "11962": {
+    "name": "Manacle Cuffs",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_13.jpg"
+  },
+  "11866": {
+    "name": "Nagmara's Whipping Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_11.jpg"
+  },
+  "12018": {
+    "name": "Conservator Helm",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_01.jpg"
+  },
+  "12021": {
+    "name": "Shieldplate Sabatons",
+    "quality": "Rare",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_plate_01.jpg"
+  },
+  "12041": {
+    "name": "Windshear Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_13.jpg"
+  },
+  "12038": {
+    "name": "Lagrave's Seal",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_03.jpg"
+  },
+  "10455": {
+    "name": "Chained Essence of Eranikus",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_stone_03.jpg"
+  },
+  "11964": {
+    "name": "Swiftstrike Cudgel",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_mace_08.jpg"
+  },
+  "12003": {
+    "name": "Dark Dwarven Lager",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_drink_05.jpg"
+  },
+  "12000": {
+    "name": "Limb Cleaver",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_02.jpg"
+  },
+  "3928": {
+    "name": "Superior Healing Potion",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_potion_53.jpg"
+  },
+  "6149": {
+    "name": "Greater Mana Potion",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 11,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_potion_73.jpg"
+  },
+  "12113": {
+    "name": "Sunborne Cape",
+    "quality": "Rare",
+    "slot": "BACK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_08.jpg"
+  },
+  "12114": {
+    "name": "Nightfall Gloves",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_17.jpg"
+  },
+  "12112": {
+    "name": "Crypt Demon Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_17.jpg"
+  },
+  "12115": {
+    "name": "Stalwart Clutch",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_34.jpg"
+  },
+  "11883": {
+    "name": "A Dingy Fanny Pack",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bag_09_black.jpg"
+  },
+  "18491": {
+    "name": "Lorespinner",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_shortblade_21.jpg"
+  },
+  "12066": {
+    "name": "Shaleskin Cape",
+    "quality": "Rare",
+    "slot": "BACK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_02.jpg"
+  },
+  "12082": {
+    "name": "Wyrmhide Spaulders",
+    "quality": "Uncommon",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_16.jpg"
+  },
+  "12083": {
+    "name": "Valconian Sash",
+    "quality": "Uncommon",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_11.jpg"
+  },
+  "12109": {
+    "name": "Azure Moon Amice",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_02.jpg"
+  },
+  "12110": {
+    "name": "Raincaster Drape",
+    "quality": "Rare",
+    "slot": "BACK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_cape_16.jpg"
+  },
+  "12108": {
+    "name": "Basaltscale Armor",
+    "quality": "Uncommon",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_16.jpg"
+  },
+  "12111": {
+    "name": "Lavaplate Gauntlets",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_26.jpg"
+  },
+  "12059": {
+    "name": "Conqueror's Medallion",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_amulet_03.jpg"
+  },
+  "12061": {
+    "name": "Blade of Reckoning",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_26.jpg"
+  },
+  "12065": {
+    "name": "Ward of the Elements",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_02.jpg"
+  },
+  "12062": {
+    "name": "Skilled Fighting Blade",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_21.jpg"
+  },
+  "18411": {
+    "name": "Spry Boots",
+    "quality": "Uncommon",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_06.jpg"
+  },
+  "18410": {
+    "name": "Sprinter's Sword",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_28.jpg"
+  },
+  "12548": {
+    "name": "Magni's Will",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_05.jpg"
+  },
+  "12543": {
+    "name": "Songstone of Ironforge",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_05.jpg"
+  },
+  "15824": {
+    "name": "Astoria Robes",
+    "quality": "Uncommon",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_07.jpg"
+  },
+  "15825": {
+    "name": "Traphook Jerkin",
+    "quality": "Uncommon",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_plate06.jpg"
+  },
+  "15827": {
+    "name": "Jadescale Breastplate",
+    "quality": "Uncommon",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_04.jpg"
+  },
+  "12264": {
+    "name": "Worg Carrier",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_box_petcarrier_01.jpg"
+  },
+  "12529": {
+    "name": "Smolderweb Carrier",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_box_birdcage_01.jpg"
+  },
+  "15858": {
+    "name": "Freewind Gloves",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_16.jpg"
+  },
+  "15859": {
+    "name": "Seapost Girdle",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_23.jpg"
+  },
+  "18366": {
+    "name": "Gordok's Handguards",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_09.jpg"
+  },
+  "18367": {
+    "name": "Gordok's Gauntlets",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_09.jpg"
+  },
+  "18368": {
+    "name": "Gordok's Gloves",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_01.jpg"
+  },
+  "18369": {
+    "name": "Gordok's Handwraps",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_06.jpg"
+  },
+  "12544": {
+    "name": "Thrall's Resolve",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_05.jpg"
+  },
+  "12545": {
+    "name": "Eye of Orgrimmar",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_05.jpg"
+  },
+  "12344": {
+    "name": "Seal of Ascension",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_01.jpg"
+  },
+  "15853": {
+    "name": "Windreaper",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_08.jpg"
+  },
+  "15854": {
+    "name": "Dancing Sliver",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_07.jpg"
+  },
+  "15873": {
+    "name": "Ragged John's Neverending Cup",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_drink_03.jpg"
+  },
+  "15867": {
+    "name": "Prismcharm",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_variety_02.jpg"
+  },
+  "13958": {
+    "name": "Wyrmthalak's Shackles",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_04.jpg"
+  },
+  "13959": {
+    "name": "Omokk's Girth Restrainer",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_13.jpg"
+  },
+  "13961": {
+    "name": "Halycon's Muzzle",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_24.jpg"
+  },
+  "13962": {
+    "name": "Vosh'gajin's Strand",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_15.jpg"
+  },
+  "13963": {
+    "name": "Voone's Vice Grips",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_15.jpg"
+  },
+  "17044": {
+    "name": "Will of the Martyr",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_07.jpg"
+  },
+  "17045": {
+    "name": "Blood of the Martyr",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_25.jpg"
+  },
+  "12696": {
+    "name": "Plans: Demon Forged Breastplate",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_03.jpg"
+  },
+  "9224": {
+    "name": "Elixir of Demonslaying",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_potion_27.jpg"
+  },
+  "12849": {
+    "name": "Demon Kissed Sack",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bag_13.jpg"
+  },
+  "13209": {
+    "name": "Seal of the Dawn",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_armorkit_18.jpg"
+  },
+  "19812": {
+    "name": "Rune of the Dawn",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_rune_06.jpg"
+  },
+  "13171": {
+    "name": "Smokey's Lighter",
+    "quality": "Uncommon",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/spell_fire_searingtotem.jpg"
+  },
+  "13216": {
+    "name": "Crown of the Penitent",
+    "quality": "Uncommon",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_06.jpg"
+  },
+  "13217": {
+    "name": "Band of the Penitent",
+    "quality": "Uncommon",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_30.jpg"
+  },
+  "13315": {
+    "name": "Testament of Hope",
+    "quality": "Uncommon",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_book_06.jpg"
+  },
+  "12824": {
+    "name": "Plans: Enchanted Battlehammer",
+    "quality": "Uncommon",
+    "slot": "TWO_HAND",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_06.jpg"
+  },
+  "12821": {
+    "name": "Plans: Dawn's Edge",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_03.jpg"
+  },
+  "12825": {
+    "name": "Plans: Blazing Rapier",
+    "quality": "Uncommon",
+    "slot": "ONE_HAND",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_06.jpg"
+  },
+  "15805": {
+    "name": "Penelope's Rose",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_flower_04.jpg"
+  },
+  "13544": {
+    "name": "Spectral Essence",
+    "quality": "Uncommon",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_orb_05.jpg"
+  },
+  "15806": {
+    "name": "Mirah's Song",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_34.jpg"
+  },
+  "13982": {
+    "name": "Warblade of Caer Darrow",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_39.jpg"
+  },
+  "14002": {
+    "name": "Darrowshire Strongguard",
+    "quality": "Rare",
+    "slot": "OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_05.jpg"
+  },
+  "13986": {
+    "name": "Crown of Caer Darrow",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_crown_01.jpg"
+  },
+  "13984": {
+    "name": "Darrowspike",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_shortblade_21.jpg"
+  },
+  "18258": {
+    "name": "Gordok Ogre Suit",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_14.jpg"
+  },
+  "18535": {
+    "name": "Milli's Shield",
+    "quality": "Rare",
+    "slot": "OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_12.jpg"
+  },
+  "18536": {
+    "name": "Milli's Lexicon",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_book_06.jpg"
+  },
+  "18269": {
+    "name": "Gordok Green Grog",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_drink_03.jpg"
+  },
+  "18284": {
+    "name": "Kreeg's Stout Beatdown",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_drink_05.jpg"
+  },
+  "18022": {
+    "name": "Royal Seal of Alexis",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_30.jpg"
+  },
+  "17001": {
+    "name": "Elemental Circle",
+    "quality": "Uncommon",
+    "slot": "FINGER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_29.jpg"
+  },
+  "18420": {
+    "name": "Bonecrusher",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_mace_02.jpg"
+  },
+  "18421": {
+    "name": "Backwood Helm",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_19.jpg"
+  },
+  "18424": {
+    "name": "Sedge Boots",
+    "quality": "Rare",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_05.jpg"
+  },
+  "18329": {
+    "name": "Arcanum of Rapidity",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_02.jpg"
+  },
+  "18330": {
+    "name": "Arcanum of Focus",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_02.jpg"
+  },
+  "18331": {
+    "name": "Arcanum of Protection",
+    "quality": "Uncommon",
+    "slot": null,
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_gem_02.jpg"
+  },
+  "18465": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18466": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18468": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18472": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18467": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18473": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18469": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18471": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18470": {
+    "name": "Royal Seal of Eldre'Thalas",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_10.jpg"
+  },
+  "18592": {
+    "name": "Plans: Sulfuron Hammer",
+    "quality": "Epic",
+    "slot": "TWO_HAND",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_03.jpg"
+  },
+  "12727": {
+    "name": "Plans: Enchanted Thorium Breastplate",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_05.jpg"
+  },
+  "12726": {
+    "name": "Plans: Enchanted Thorium Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_05.jpg"
+  },
+  "12725": {
+    "name": "Plans: Enchanted Thorium Helm",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_scroll_05.jpg"
+  },
+  "18746": {
+    "name": "Divination Scryer",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_enggizmos_08.jpg"
+  },
+  "18807": {
+    "name": "Helm of Latent Power",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_24.jpg"
+  },
+  "20134": {
+    "name": "Skyfury Helm",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_57.jpg"
+  },
+  "22108": {
+    "name": "Feralheart Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_09.jpg"
+  },
+  "22011": {
+    "name": "Beastmaster's Bindings",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_17.jpg"
+  },
+  "22063": {
+    "name": "Sorcerer's Bindings",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_23.jpg"
+  },
+  "22088": {
+    "name": "Soulforge Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_14.jpg"
+  },
+  "22079": {
+    "name": "Virtuous Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_31.jpg"
+  },
+  "22004": {
+    "name": "Darkmantle Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_07.jpg"
+  },
+  "22071": {
+    "name": "Deathmist Bracers",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_13.jpg"
+  },
+  "21996": {
+    "name": "Bracers of Heroism",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_18.jpg"
+  },
+  "22095": {
+    "name": "Bindings of The Five Thunders",
+    "quality": "Rare",
+    "slot": "WRIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_bracer_02.jpg"
+  },
+  "22106": {
+    "name": "Feralheart Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_15.jpg"
+  },
+  "22110": {
+    "name": "Feralheart Gloves",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_17.jpg"
+  },
+  "22010": {
+    "name": "Beastmaster's Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_28.jpg"
+  },
+  "22015": {
+    "name": "Beastmaster's Gloves",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_10.jpg"
+  },
+  "22062": {
+    "name": "Sorcerer's Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_08.jpg"
+  },
+  "22066": {
+    "name": "Sorcerer's Gloves",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_17.jpg"
+  },
+  "22086": {
+    "name": "Soulforge Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_11.jpg"
+  },
+  "22090": {
+    "name": "Soulforge Gauntlets",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_19.jpg"
+  },
+  "22078": {
+    "name": "Virtuous Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_10.jpg"
+  },
+  "22081": {
+    "name": "Virtuous Gloves",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_14.jpg"
+  },
+  "22002": {
+    "name": "Darkmantle Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_03.jpg"
+  },
+  "22006": {
+    "name": "Darkmantle Gloves",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_24.jpg"
+  },
+  "22070": {
+    "name": "Deathmist Belt",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_12.jpg"
+  },
+  "22077": {
+    "name": "Deathmist Wraps",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_32.jpg"
+  },
+  "21994": {
+    "name": "Belt of Heroism",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_34.jpg"
+  },
+  "21998": {
+    "name": "Gauntlets of Heroism",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_26.jpg"
+  },
+  "22098": {
+    "name": "Cord of The Five Thunders",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_16.jpg"
+  },
+  "22099": {
+    "name": "Gauntlets of The Five Thunders",
+    "quality": "Epic",
+    "slot": "HANDS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_11.jpg"
+  },
+  "22137": {
+    "name": "Ysida's Satchel",
+    "quality": "Common",
+    "slot": null,
+    "itemLevel": 1,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bag_20.jpg"
+  },
+  "22150": {
+    "name": "Beads of Ogre Might",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_amulet_05.jpg"
+  },
+  "22149": {
+    "name": "Beads of Ogre Mojo",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_amulet_05.jpg"
+  },
+  "22107": {
+    "name": "Feralheart Boots",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_08.jpg"
+  },
+  "22111": {
+    "name": "Feralheart Kilt",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_08.jpg"
+  },
+  "22112": {
+    "name": "Feralheart Spaulders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_01.jpg"
+  },
+  "22061": {
+    "name": "Beastmaster's Boots",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_plate_07.jpg"
+  },
+  "22017": {
+    "name": "Beastmaster's Pants",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "22016": {
+    "name": "Beastmaster's Mantle",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_10.jpg"
+  },
+  "22064": {
+    "name": "Sorcerer's Boots",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_02.jpg"
+  },
+  "22067": {
+    "name": "Sorcerer's Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_06.jpg"
+  },
+  "22068": {
+    "name": "Sorcerer's Mantle",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_23.jpg"
+  },
+  "22087": {
+    "name": "Soulforge Boots",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_plate_03.jpg"
+  },
+  "22092": {
+    "name": "Soulforge Legplates",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_04.jpg"
+  },
+  "22093": {
+    "name": "Soulforge Spaulders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_10.jpg"
+  },
+  "22084": {
+    "name": "Virtuous Sandals",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_05.jpg"
+  },
+  "22085": {
+    "name": "Virtuous Skirt",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_08.jpg"
+  },
+  "22082": {
+    "name": "Virtuous Mantle",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_02.jpg"
+  },
+  "22003": {
+    "name": "Darkmantle Boots",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_08.jpg"
+  },
+  "22007": {
+    "name": "Darkmantle Pants",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_02.jpg"
+  },
+  "22008": {
+    "name": "Darkmantle Spaulders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_07.jpg"
+  },
+  "22096": {
+    "name": "Boots of The Five Thunders",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_wolf.jpg"
+  },
+  "22100": {
+    "name": "Kilt of The Five Thunders",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_03.jpg"
+  },
+  "22101": {
+    "name": "Pauldrons of The Five Thunders",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_29.jpg"
+  },
+  "22076": {
+    "name": "Deathmist Sandals",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_05.jpg"
+  },
+  "22072": {
+    "name": "Deathmist Leggings",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_08.jpg"
+  },
+  "22073": {
+    "name": "Deathmist Mantle",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_bone_taurenskull_01.jpg"
+  },
+  "21995": {
+    "name": "Boots of Heroism",
+    "quality": "Epic",
+    "slot": "FEET",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_boots_plate_03.jpg"
+  },
+  "22000": {
+    "name": "Legplates of Heroism",
+    "quality": "Rare",
+    "slot": "LEGS",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_pants_04.jpg"
+  },
+  "22001": {
+    "name": "Spaulders of Heroism",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_30.jpg"
+  },
+  "22109": {
+    "name": "Feralheart Cowl",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_27.jpg"
+  },
+  "22113": {
+    "name": "Feralheart Vest",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_plate06.jpg"
+  },
+  "22013": {
+    "name": "Beastmaster's Cap",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_24.jpg"
+  },
+  "22060": {
+    "name": "Beastmaster's Tunic",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_03.jpg"
+  },
+  "22065": {
+    "name": "Sorcerer's Crown",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_crown_02.jpg"
+  },
+  "22069": {
+    "name": "Sorcerer's Robes",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_25.jpg"
+  },
+  "22091": {
+    "name": "Soulforge Helm",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_08.jpg"
+  },
+  "22089": {
+    "name": "Soulforge Breastplate",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_plate03.jpg"
+  },
+  "22080": {
+    "name": "Virtuous Crown",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_crown_01.jpg"
+  },
+  "22083": {
+    "name": "Virtuous Robe",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_11.jpg"
+  },
+  "22005": {
+    "name": "Darkmantle Cap",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_41.jpg"
+  },
+  "22009": {
+    "name": "Darkmantle Tunic",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_leather_07.jpg"
+  },
+  "22074": {
+    "name": "Deathmist Mask",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_29.jpg"
+  },
+  "22075": {
+    "name": "Deathmist Robe",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_49.jpg"
+  },
+  "21999": {
+    "name": "Helm of Heroism",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_02.jpg"
+  },
+  "21997": {
+    "name": "Breastplate of Heroism",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_plate03.jpg"
+  },
+  "22097": {
+    "name": "Coif of The Five Thunders",
+    "quality": "Epic",
+    "slot": "HEAD",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_04.jpg"
+  },
+  "22102": {
+    "name": "Vest of The Five Thunders",
+    "quality": "Epic",
+    "slot": "CHEST",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_11.jpg"
+  },
+  "22631": {
+    "name": "Atiesh, Greatstaff of the Guardian",
+    "quality": "Legendary",
+    "slot": "TWO_HAND",
+    "itemLevel": 44,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_medivh.jpg"
+  },
+  "22632": {
+    "name": "Atiesh, Greatstaff of the Guardian",
+    "quality": "Legendary",
+    "slot": "TWO_HAND",
+    "itemLevel": 44,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_medivh.jpg"
+  },
+  "22589": {
+    "name": "Atiesh, Greatstaff of the Guardian",
+    "quality": "Legendary",
+    "slot": "TWO_HAND",
+    "itemLevel": 44,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_medivh.jpg"
+  },
+  "22630": {
+    "name": "Atiesh, Greatstaff of the Guardian",
+    "quality": "Legendary",
+    "slot": "TWO_HAND",
+    "itemLevel": 44,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_medivh.jpg"
+  },
+  "7747": {
+    "name": "Vile Protector",
+    "quality": "Uncommon",
+    "slot": "OFF_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_02.jpg"
+  },
+  "17508": {
+    "name": "Forcestone Buckler",
+    "quality": "Uncommon",
+    "slot": "OFF_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shield_02.jpg"
+  },
+  "7749": {
+    "name": "Omega Orb",
+    "quality": "Uncommon",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_orb_03.jpg"
+  },
+  "7746": {
+    "name": "Explorers' League Commendation",
+    "quality": "Uncommon",
+    "slot": "NECK",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_01.jpg"
+  },
+  "6829": {
+    "name": "Sword of Serenity",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_27.jpg"
+  },
+  "6830": {
+    "name": "Bonebiter",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_axe_04.jpg"
+  },
+  "6831": {
+    "name": "Black Menace",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_13.jpg"
+  },
+  "11262": {
+    "name": "Orb of Lorica",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_misc_orb_01.jpg"
+  },
+  "6802": {
+    "name": "Sword of Omen",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_19.jpg"
+  },
+  "6803": {
+    "name": "Prophetic Cane",
+    "quality": "Rare",
+    "slot": "HELD_IN_OFF_HAND",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_01.jpg"
+  },
+  "10711": {
+    "name": "Dragon's Blood Necklace",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 13,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_02.jpg"
+  },
+  "17772": {
+    "name": "Zealous Shadowshard Pendant",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_06.jpg"
+  },
+  "17773": {
+    "name": "Prodigious Shadowshard Pendant",
+    "quality": "Rare",
+    "slot": "NECK",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_necklace_06.jpg"
+  },
+  "17775": {
+    "name": "Acumen Robes",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_cloth_49.jpg"
+  },
+  "17776": {
+    "name": "Sprightring Helm",
+    "quality": "Rare",
+    "slot": "HEAD",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_35.jpg"
+  },
+  "17777": {
+    "name": "Relentless Chain",
+    "quality": "Rare",
+    "slot": "CHEST",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_chest_chain_07.jpg"
+  },
+  "17779": {
+    "name": "Hulkstone Pauldrons",
+    "quality": "Rare",
+    "slot": "SHOULDER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_23.jpg"
+  },
+  "17768": {
+    "name": "Woodseed Hoop",
+    "quality": "Rare",
+    "slot": "FINGER",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_ring_18.jpg"
+  },
+  "17778": {
+    "name": "Sagebrush Girdle",
+    "quality": "Rare",
+    "slot": "WAIST",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_belt_25.jpg"
+  },
+  "17770": {
+    "name": "Branchclaw Gauntlets",
+    "quality": "Rare",
+    "slot": "HANDS",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_30.jpg"
+  },
+  "17774": {
+    "name": "Mark of the Chosen",
+    "quality": "Rare",
+    "slot": "TRINKET",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_jewelry_talisman_08.jpg"
+  },
+  "17191": {
+    "name": "Scepter of Celebras",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_16.jpg"
+  },
+  "17705": {
+    "name": "Thrash Blade",
+    "quality": "Rare",
+    "slot": "ONE_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_sword_36.jpg"
+  },
+  "17743": {
+    "name": "Resurgence Rod",
+    "quality": "Rare",
+    "slot": "TWO_HAND",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_goldfeathered_01.jpg"
+  },
+  "17753": {
+    "name": "Verdant Keeper's Aim",
+    "quality": "Rare",
+    "slot": "RANGED",
+    "itemLevel": 12,
+    "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_weapon_bow_03.jpg"
+  }
+}

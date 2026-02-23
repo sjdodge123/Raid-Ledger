@@ -451,11 +451,6 @@ export function EventDetailPage() {
                 </div>
             </div>
 
-            {/* Plugin: content instance details (e.g. WoW dungeon/raid chips) */}
-            <PluginSlot
-                name="event-detail:content-sections"
-                context={{ contentInstances: event.contentInstances ?? [] }}
-            />
 
             {/* ROK-192: Collapsed banner (fixed, only visible when scrolled past full banner) */}
             {isBannerCollapsed && (
@@ -726,6 +721,17 @@ export function EventDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* Plugin: content instance details (e.g. WoW dungeon quest prep) */}
+            <PluginSlot
+                name="event-detail:content-sections"
+                context={{
+                    contentInstances: event.contentInstances ?? [],
+                    eventId,
+                    gameSlug: event.game?.slug,
+                    characterId: userSignup?.character?.id,
+                }}
+            />
 
             {/* Character Confirmation Modal */}
             {pendingSignupId && (

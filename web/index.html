@@ -1,59 +1,62 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Raid Ledger</title>
-    <meta name="description" content="Gaming community management — plan raids, track schedules, manage rosters." />
-    <meta name="theme-color" content="#4338ca" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
-    <script>var whTooltips = {colorLinks: false, iconizeLinks: false, renameLinks: false};</script>
-    <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
-    <script>
-      // No-flash theme script — sets data-scheme (+ data-variant) before first paint
-      // (ROK-280, ROK-228, ROK-291)
-      // Space: mode='dark' + darkTheme='space' -> data-scheme='space'.
-      // Quest Log: mode='light' + lightTheme='quest-log' -> data-scheme='light' + data-variant='quest-log'.
-      (function() {
-        var mode = localStorage.getItem('raid_ledger_theme_mode');
-        var darkTheme = localStorage.getItem('raid_ledger_dark_theme') || 'default-dark';
-        var lightTheme = localStorage.getItem('raid_ledger_light_theme') || 'default-light';
-        var scheme;
-        var variant = null;
-        if (mode === 'light') {
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Raid Ledger</title>
+  <meta name="description" content="Gaming community management — plan raids, track schedules, manage rosters." />
+  <meta name="theme-color" content="#4338ca" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+  <script>var whTooltips = { colorLinks: true, iconizeLinks: true, renameLinks: true };</script>
+  <script src="https://wow.zamimg.com/js/tooltips.js" async></script>
+  <script>
+    // No-flash theme script — sets data-scheme (+ data-variant) before first paint
+    // (ROK-280, ROK-228, ROK-291)
+    // Space: mode='dark' + darkTheme='space' -> data-scheme='space'.
+    // Quest Log: mode='light' + lightTheme='quest-log' -> data-scheme='light' + data-variant='quest-log'.
+    (function () {
+      var mode = localStorage.getItem('raid_ledger_theme_mode');
+      var darkTheme = localStorage.getItem('raid_ledger_dark_theme') || 'default-dark';
+      var lightTheme = localStorage.getItem('raid_ledger_light_theme') || 'default-light';
+      var scheme;
+      var variant = null;
+      if (mode === 'light') {
+        scheme = 'light';
+        if (lightTheme === 'quest-log') variant = 'quest-log';
+      } else if (mode === 'dark') {
+        scheme = darkTheme === 'space' ? 'space' : 'dark';
+      } else if (mode === 'auto') {
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (prefersDark) {
+          scheme = darkTheme === 'space' ? 'space' : 'dark';
+        } else {
           scheme = 'light';
           if (lightTheme === 'quest-log') variant = 'quest-log';
-        } else if (mode === 'dark') {
-          scheme = darkTheme === 'space' ? 'space' : 'dark';
-        } else if (mode === 'auto') {
-          var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-          if (prefersDark) {
-            scheme = darkTheme === 'space' ? 'space' : 'dark';
-          } else {
-            scheme = 'light';
-            if (lightTheme === 'quest-log') variant = 'quest-log';
-          }
-        } else if (mode === 'space') {
-          scheme = 'space';
-        } else {
-          scheme = localStorage.getItem('raid_ledger_scheme');
-          if (!scheme) {
-            scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-          }
         }
-        document.documentElement.setAttribute('data-scheme', scheme);
-        document.documentElement.style.colorScheme = scheme === 'space' ? 'dark' : scheme;
-        if (variant) {
-          document.documentElement.setAttribute('data-variant', variant);
+      } else if (mode === 'space') {
+        scheme = 'space';
+      } else {
+        scheme = localStorage.getItem('raid_ledger_scheme');
+        if (!scheme) {
+          scheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         }
-      })();
-    </script>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+      }
+      document.documentElement.setAttribute('data-scheme', scheme);
+      document.documentElement.style.colorScheme = scheme === 'space' ? 'dark' : scheme;
+      if (variant) {
+        document.documentElement.setAttribute('data-variant', variant);
+      }
+    })();
+  </script>
+</head>
+
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

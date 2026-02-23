@@ -8,6 +8,7 @@ import { EventDetailContentSections } from './slots/event-detail-content-section
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
 import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-cards';
 import { ProfileCharacterActions } from './slots/profile-character-actions';
+import { QuestPrepPanel } from './slots/quest-prep-panel';
 
 // Guard against HMR re-execution pushing duplicate registrations
 let registered = false;
@@ -27,6 +28,7 @@ if (!registered) {
     blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
     blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
     blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
+    blizzard.registerSlot('event-detail:content-sections', QuestPrepPanel, 10);
     blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings);
     blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
     blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);

@@ -3,6 +3,7 @@ import { useWowheadTooltips, isWowheadLoaded } from '../hooks/use-wowhead-toolti
 import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
 import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
+import { getWowheadItemUrl, getWowheadItemData } from '../lib/wowhead-urls';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 
 /** Quality color mapping for WoW item quality */
@@ -27,27 +28,6 @@ const SLOT_LABELS: Record<string, string> = {
     MAIN_HAND: 'Main Hand', OFF_HAND: 'Off Hand', RANGED: 'Ranged',
 };
 
-function getWowheadDomain(gameVariant: string | null): { urlBase: string; tooltipDomain: string } {
-    switch (gameVariant) {
-        case 'classic_anniversary':
-            return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
-        case 'classic':
-        case 'classic_era':
-            return { urlBase: 'classic.wowhead.com', tooltipDomain: 'classic' };
-        default:
-            return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
-    }
-}
-
-function getWowheadUrl(itemId: number, gameVariant: string | null): string {
-    const { urlBase } = getWowheadDomain(gameVariant);
-    return `https://${urlBase}/item=${itemId}`;
-}
-
-function getWowheadDataAttr(itemId: number, gameVariant: string | null): string {
-    const { tooltipDomain } = getWowheadDomain(gameVariant);
-    return `item=${itemId}&domain=${tooltipDomain}`;
-}
 
 function buildOrderedItems(equipment: CharacterEquipmentDto): EquipmentItemDto[] {
     const itemsBySlot = new Map(equipment.items.map((i) => [i.slot, i]));
@@ -113,8 +93,8 @@ function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: EquipmentSl
             </div>
             <div className="min-w-0 flex-1">
                 <a
-                    href={getWowheadUrl(item.itemId, gameVariant)}
-                    data-wowhead={getWowheadDataAttr(item.itemId, gameVariant)}
+                    href={getWowheadItemUrl(item.itemId, gameVariant)}
+                    data-wowhead={getWowheadItemData(item.itemId, gameVariant)}
                     target="_blank"
                     rel="noopener noreferrer"
                     className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}

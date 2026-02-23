@@ -59,7 +59,6 @@ describe('BossEncountersService', () => {
       ]);
     });
 
-
     it('should default to classic_era for unknown variant', () => {
       expect(service.getExpansionsForVariant('unknown')).toEqual(['classic']);
     });

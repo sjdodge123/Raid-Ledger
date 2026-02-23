@@ -52,5 +52,11 @@ export const wowClassicDungeonQuests = pgTable('wow_classic_dungeon_quests', {
     .notNull(),
   /** Whether the quest can be shared with party members */
   sharable: boolean('sharable').default(true).notNull(),
+  /** XP reward for completing the quest */
+  rewardXp: integer('reward_xp'),
+  /** Gold reward in copper (100 copper = 1 silver, 10000 copper = 1 gold) */
+  rewardGold: integer('reward_gold'),
+  /** Reward type: 'choice' (pick one), 'guaranteed', or 'none' */
+  rewardType: varchar('reward_type', { length: 20 }).default('none'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

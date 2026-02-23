@@ -20,7 +20,7 @@ export class DungeonQuestSeeder {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
-  ) { }
+  ) {}
 
   /**
    * Seed all dungeon quests from the bundled data file.
@@ -46,6 +46,9 @@ export class DungeonQuestSeeder {
       raceRestriction: string[] | null;
       startsInsideDungeon: boolean;
       sharable: boolean;
+      rewardXp: number | null;
+      rewardGold: number | null;
+      rewardType: string | null;
     }>;
 
     this.logger.log(`Seeding ${quests.length} dungeon quests...`);
@@ -76,6 +79,9 @@ export class DungeonQuestSeeder {
             raceRestriction: q.raceRestriction,
             startsInsideDungeon: q.startsInsideDungeon,
             sharable: q.sharable,
+            rewardXp: q.rewardXp,
+            rewardGold: q.rewardGold,
+            rewardType: q.rewardType,
           })),
         )
         .onConflictDoNothing({ target: wowClassicDungeonQuests.questId })

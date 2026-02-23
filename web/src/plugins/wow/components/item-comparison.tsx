@@ -1,20 +1,8 @@
 import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { WowItemCard } from './wow-item-card';
+import { getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import './item-comparison.css';
 
-/** Build the Wowhead URL for an item */
-function getWowheadItemUrl(itemId: number, gameVariant: string | null): string {
-    if (gameVariant === 'classic_anniversary') return `https://www.wowhead.com/tbc/item=${itemId}`;
-    if (gameVariant === 'classic' || gameVariant === 'classic_era') return `https://www.wowhead.com/classic/item=${itemId}`;
-    return `https://www.wowhead.com/item=${itemId}`;
-}
-
-/** Build the data-wowhead attribute suffix. dataEnv=1 = Classic Era (not SoD) */
-function getWowheadDataSuffix(gameVariant: string | null): string {
-    if (gameVariant === 'classic_anniversary') return 'domain=tbc';
-    if (gameVariant === 'classic' || gameVariant === 'classic_era') return 'domain=classic&dataEnv=1';
-    return 'domain=www';
-}
 
 interface ItemComparisonProps {
     /** The reward item's level (may be null if unknown) */
@@ -23,8 +11,6 @@ interface ItemComparisonProps {
     equippedItem: EquipmentItemDto | undefined;
     /** WoW game variant for Wowhead URLs */
     gameVariant: string | null;
-    /** Character ID for linking to the character sheet */
-    characterId?: string;
 }
 
 /**

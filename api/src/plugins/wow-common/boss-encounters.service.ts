@@ -54,7 +54,7 @@ export class BossEncountersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: BossEncounterSeeder,
-  ) { }
+  ) {}
 
   /**
    * Get the expansion set for a given WoW game variant.

@@ -58,26 +58,8 @@ function slugToVariant(gameSlug?: string): string {
     }
 }
 
-function getWowheadQuestUrl(questId: number, variant?: string): string {
-    const domain = variant === 'classic_anniversary' ? 'www.wowhead.com/tbc' :
-        variant === 'classic' || variant === 'classic_era' ? 'classic.wowhead.com' :
-            'www.wowhead.com';
-    return `https://${domain}/quest=${questId}`;
-}
+import { getWowheadQuestUrl, getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 
-function getWowheadItemUrl(itemId: number, variant?: string): string {
-    const domain = variant === 'classic_anniversary' ? 'www.wowhead.com/tbc' :
-        variant === 'classic' || variant === 'classic_era' ? 'classic.wowhead.com' :
-            'www.wowhead.com';
-    return `https://${domain}/item=${itemId}`;
-}
-
-/** Build the data-wowhead attribute suffix for a given variant. dataEnv=1 = Classic Era (not SoD) */
-function getWowheadDataSuffix(variant?: string): string {
-    if (variant === 'classic_anniversary') return 'domain=tbc';
-    if (variant === 'classic' || variant === 'classic_era') return 'domain=classic&dataEnv=1';
-    return 'domain=www';
-}
 
 /** Format copper amount into WoW gold/silver/copper display */
 function formatGold(copper: number): string {
@@ -138,6 +120,7 @@ export function QuestPrepPanel({
 
 
     const [expandedQuests, setExpandedQuests] = useState<Set<number>>(new Set());
+    const [pendingQuestId, setPendingQuestId] = useState<number | null>(null);
 
     // Build slot-to-equipped-item map from character equipment
     const equippedBySlot = useMemo(() => {
@@ -216,9 +199,14 @@ export function QuestPrepPanel({
 
     const handleTogglePickedUp = (questId: number, currentlyPickedUp: boolean) => {
         if (eventId) {
-            updateProgress.mutate({ questId, pickedUp: !currentlyPickedUp });
+            setPendingQuestId(questId);
+            updateProgress.mutate(
+                { questId, pickedUp: !currentlyPickedUp },
+                { onSettled: () => setPendingQuestId(null) },
+            );
         }
     };
+
 
     const toggleExpanded = (questId: number) => {
         setExpandedQuests((prev) => {
@@ -311,10 +299,10 @@ export function QuestPrepPanel({
                                             <button
                                                 className="quest-coverage__btn quest-coverage__btn--checked"
                                                 onClick={() => handleTogglePickedUp(quest.questId, true)}
-                                                disabled={updateProgress.isPending}
+                                                disabled={pendingQuestId === quest.questId}
                                                 title="Remove — I don't have this quest"
                                             >
-                                                {updateProgress.isPending ? '…' : '✓'}
+                                                {pendingQuestId === quest.questId ? '…' : '✓'}
                                             </button>
                                         )}
                                     </>
@@ -331,10 +319,10 @@ export function QuestPrepPanel({
                                             <button
                                                 className="quest-coverage__btn quest-coverage__btn--add"
                                                 onClick={() => handleTogglePickedUp(quest.questId, false)}
-                                                disabled={updateProgress.isPending}
+                                                disabled={pendingQuestId === quest.questId}
                                                 title="I have this quest"
                                             >
-                                                {updateProgress.isPending ? '…' : '⚠'}
+                                                {pendingQuestId === quest.questId ? '…' : '⚠'}
                                             </button>
                                         )}
                                     </>
@@ -417,7 +405,6 @@ export function QuestPrepPanel({
                                                         rewardItemLevel={reward.itemLevel}
                                                         equippedItem={equippedItem}
                                                         gameVariant={wowheadVariant}
-                                                        characterId={characterId}
                                                     />
                                                 )}
                                             </div>
@@ -437,15 +424,15 @@ export function QuestPrepPanel({
         quests: EnrichedDungeonQuestDto[],
         icon: string,
     ) => {
-        const usable = quests.filter(isQuestUsable);
-        if (usable.length === 0) return null;
+        if (quests.length === 0) return null;
+        const usableCount = quests.filter(isQuestUsable).length;
         return (
             <div className="quest-subgroup">
                 <div className="quest-subgroup__label">
                     <span>{icon}</span>
-                    <span>{label} ({usable.length})</span>
+                    <span>{label} ({usableCount})</span>
                 </div>
-                {usable.map(renderQuestCard)}
+                {quests.map(renderQuestCard)}
             </div>
         );
     };
@@ -455,15 +442,15 @@ export function QuestPrepPanel({
         icon: string,
         quests: EnrichedDungeonQuestDto[],
     ) => {
-        const usable = quests.filter(isQuestUsable);
-        if (usable.length === 0) return null;
-        const { sharable, mustPickUp } = groupBySharable(usable);
+        if (quests.length === 0) return null;
+        const usableCount = quests.filter(isQuestUsable).length;
+        const { sharable, mustPickUp } = groupBySharable(quests);
 
         return (
             <div className="quest-group">
                 <div className="quest-group__title">
                     <span className="quest-group__icon">{icon}</span>
-                    <span>{title} ({usable.length})</span>
+                    <span>{title} ({usableCount})</span>
                 </div>
                 {renderSubGroup('Sharable', sharable, '🔗')}
                 {renderSubGroup('Must pick up yourself', mustPickUp, '👤')}
