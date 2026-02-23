@@ -20,13 +20,17 @@ export function PluginBadge({ icon, iconSmall, label, size = 'sm' }: PluginBadge
     const displayIsImage = isImageIcon(displayIcon);
 
     return displayIsImage ? (
-        <img
-            src={displayIcon}
-            alt=""
-            className={`${dimension} rounded-full object-cover`}
+        <span
+            className={`${dimension} rounded-full overflow-hidden inline-flex items-center justify-center shrink-0`}
             aria-hidden="true"
             title={label}
-        />
+        >
+            <img
+                src={displayIcon}
+                alt=""
+                className="w-full h-full object-cover scale-[1.45]"
+            />
+        </span>
     ) : (
         <span className={size === 'md' ? 'text-xl' : 'text-base'} aria-hidden="true" title={label}>
             {displayIcon}
