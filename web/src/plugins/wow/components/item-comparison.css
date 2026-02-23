@@ -96,6 +96,17 @@
     font-style: italic;
 }
 
+.item-comparison--not-equippable {
+    opacity: 0.6;
+}
+
+.item-comparison__not-equippable {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #f87171;
+    font-style: italic;
+}
+
 /* Quality border colors for equipped item icon */
 .item-comparison__icon.quality-border-poor {
     border-color: #9d9d9d;

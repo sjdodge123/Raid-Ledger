@@ -4,12 +4,13 @@
         "expansion": "classic",
         "itemId": 17182,
         "itemName": "Sulfuras, Hand of Ragnaros",
-        "slot": "Main Hand",
+        "slot": "Two-Hand",
         "quality": "Legendary",
         "itemLevel": 80,
         "dropRate": 0.0400,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_hammer_unique_sulfuras.jpg",
+        "itemSubclass": "Mace"
     },
     {
         "bossName": "Ragnaros",
@@ -18,10 +19,11 @@
         "itemName": "Band of Accuria",
         "slot": "Finger",
         "quality": "Epic",
-        "itemLevel": 75,
+        "itemLevel": 78,
         "dropRate": 0.1200,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_ring_23.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Ragnaros",
@@ -36,7 +38,8 @@
             "Warrior",
             "Paladin"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_31.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Ragnaros",
@@ -45,15 +48,16 @@
         "itemName": "Shard of the Flame",
         "slot": "Trinket",
         "quality": "Epic",
-        "itemLevel": 75,
+        "itemLevel": 74,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_trinket_naxxramas06.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Lucifron",
         "expansion": "classic",
-        "itemId": 16805,
+        "itemId": 16806,
         "itemName": "Felheart Belt",
         "slot": "Waist",
         "quality": "Epic",
@@ -62,47 +66,51 @@
         "classRestrictions": [
             "Warlock"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_belt_13.jpg",
+        "itemSubclass": "Cloth"
     },
     {
         "bossName": "Garr",
         "expansion": "classic",
         "itemId": 18564,
         "itemName": "Bindings of the Windseeker",
-        "slot": "Bindings",
+        "slot": "Quest",
         "quality": "Legendary",
         "itemLevel": 75,
         "dropRate": 0.0300,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_stonetablet_11.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "Baron Geddon",
         "expansion": "classic",
         "itemId": 18563,
         "itemName": "Bindings of the Windseeker",
-        "slot": "Bindings",
+        "slot": "Quest",
         "quality": "Legendary",
         "itemLevel": 75,
         "dropRate": 0.0300,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_stonetablet_11.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "Golemagg the Incinerator",
         "expansion": "classic",
         "itemId": 17103,
         "itemName": "Azuresong Mageblade",
-        "slot": "Main Hand",
+        "slot": "One-Hand",
         "quality": "Epic",
         "itemLevel": 71,
         "dropRate": 0.1000,
         "classRestrictions": [
             "Mage",
             "Warlock",
-            "Priest"
+            "Paladin"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_26.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Nefarian",
@@ -114,7 +122,8 @@
         "itemLevel": 83,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_helmet_19.jpg",
+        "itemSubclass": "Cloth"
     },
     {
         "bossName": "Nefarian",
@@ -126,22 +135,24 @@
         "itemLevel": 83,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_necklace_15.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Chromaggus",
         "expansion": "classic",
         "itemId": 19389,
-        "itemName": "Taut Dragonhide Gloves",
-        "slot": "Hands",
+        "itemName": "Taut Dragonhide Shoulderpads",
+        "slot": "Shoulder",
         "quality": "Epic",
-        "itemLevel": 81,
+        "itemLevel": 77,
         "dropRate": 0.0700,
         "classRestrictions": [
             "Druid",
             "Rogue"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shoulder_08.jpg",
+        "itemSubclass": "Leather"
     },
     {
         "bossName": "Onyxia",
@@ -150,25 +161,24 @@
         "itemName": "Head of Onyxia",
         "slot": "Quest",
         "quality": "Epic",
-        "itemLevel": 62,
+        "itemLevel": 60,
         "dropRate": 1.0000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_head_dragon_01.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "Onyxia",
         "expansion": "classic",
-        "itemId": 17078,
+        "itemId": 17068,
         "itemName": "Deathbringer",
-        "slot": "Two-Hand",
+        "slot": "One-Hand",
         "quality": "Epic",
-        "itemLevel": 70,
+        "itemLevel": 75,
         "dropRate": 0.0800,
-        "classRestrictions": [
-            "Warrior",
-            "Paladin"
-        ],
-        "iconUrl": null
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_axe_06.jpg",
+        "itemSubclass": "Axe"
     },
     {
         "bossName": "C'Thun",
@@ -177,10 +187,11 @@
         "itemName": "Eye of C'Thun",
         "slot": "Quest",
         "quality": "Epic",
-        "itemLevel": 81,
+        "itemLevel": 60,
         "dropRate": 1.0000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_eye_01.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "C'Thun",
@@ -189,40 +200,43 @@
         "itemName": "Death's Sting",
         "slot": "One-Hand",
         "quality": "Epic",
-        "itemLevel": 81,
+        "itemLevel": 84,
         "dropRate": 0.0700,
         "classRestrictions": [
             "Rogue",
             "Warrior"
         ],
-        "iconUrl": null
-    },
-    {
-        "bossName": "Kel'Thuzad",
-        "expansion": "classic",
-        "itemId": 23057,
-        "itemName": "Gressil, Dawn of Ruin",
-        "slot": "One-Hand",
-        "quality": "Epic",
-        "itemLevel": 90,
-        "dropRate": 0.0500,
-        "classRestrictions": [
-            "Warrior",
-            "Rogue"
-        ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_07.jpg",
+        "itemSubclass": "Dagger"
     },
     {
         "bossName": "Kel'Thuzad",
         "expansion": "classic",
         "itemId": 23054,
+        "itemName": "Gressil, Dawn of Ruin",
+        "slot": "One-Hand",
+        "quality": "Epic",
+        "itemLevel": 89,
+        "dropRate": 0.0500,
+        "classRestrictions": [
+            "Warrior",
+            "Rogue"
+        ],
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_40.jpg",
+        "itemSubclass": "Sword"
+    },
+    {
+        "bossName": "Kel'Thuzad",
+        "expansion": "classic",
+        "itemId": 23577,
         "itemName": "The Hungering Cold",
         "slot": "One-Hand",
         "quality": "Epic",
-        "itemLevel": 90,
+        "itemLevel": 89,
         "dropRate": 0.0500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_56.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Sapphiron",
@@ -231,10 +245,11 @@
         "itemName": "Cloak of the Necropolis",
         "slot": "Back",
         "quality": "Epic",
-        "itemLevel": 88,
+        "itemLevel": 90,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_cape_18.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Edwin VanCleef",
@@ -243,34 +258,297 @@
         "itemName": "Cruel Barb",
         "slot": "One-Hand",
         "quality": "Rare",
-        "itemLevel": 25,
+        "itemLevel": 24,
         "dropRate": 0.2000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_27.jpg",
+        "itemSubclass": "Sword"
     },
     {
-        "bossName": "Prince Malchezaar",
+        "bossName": "Interrogator Vishas",
+        "expansion": "classic",
+        "itemId": 7682,
+        "itemName": "Torturing Poker",
+        "slot": "One-Hand",
+        "quality": "Rare",
+        "itemLevel": 34,
+        "dropRate": 0.3000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_03.jpg",
+        "itemSubclass": "Dagger"
+    },
+    {
+        "bossName": "Interrogator Vishas",
+        "expansion": "classic",
+        "itemId": 7683,
+        "itemName": "Bloody Brass Knuckles",
+        "slot": "Hands",
+        "quality": "Uncommon",
+        "itemLevel": 34,
+        "dropRate": 0.3500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_04.jpg",
+        "itemSubclass": "Leather"
+    },
+    {
+        "bossName": "Bloodmage Thalnos",
+        "expansion": "classic",
+        "itemId": 7685,
+        "itemName": "Orb of the Forgotten Seer",
+        "slot": "Off Hand",
+        "quality": "Rare",
+        "itemLevel": 38,
+        "dropRate": 0.3000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_orb_03.jpg",
+        "itemSubclass": null
+    },
+    {
+        "bossName": "Bloodmage Thalnos",
+        "expansion": "classic",
+        "itemId": 7684,
+        "itemName": "Bloodmage Mantle",
+        "slot": "Shoulder",
+        "quality": "Uncommon",
+        "itemLevel": 35,
+        "dropRate": 0.3500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shoulder_02.jpg",
+        "itemSubclass": "Cloth"
+    },
+    {
+        "bossName": "Houndmaster Loksey",
+        "expansion": "classic",
+        "itemId": 7710,
+        "itemName": "Loksey's Training Stick",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 36,
+        "dropRate": 0.3000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_08.jpg",
+        "itemSubclass": "Staff"
+    },
+    {
+        "bossName": "Houndmaster Loksey",
+        "expansion": "classic",
+        "itemId": 7756,
+        "itemName": "Dog Training Gloves",
+        "slot": "Hands",
+        "quality": "Rare",
+        "itemLevel": 34,
+        "dropRate": 0.3500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_11.jpg",
+        "itemSubclass": "Mail"
+    },
+    {
+        "bossName": "Arcanist Doan",
+        "expansion": "classic",
+        "itemId": 7714,
+        "itemName": "Hypnotic Blade",
+        "slot": "Main Hand",
+        "quality": "Rare",
+        "itemLevel": 39,
+        "dropRate": 0.2500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_05.jpg",
+        "itemSubclass": "Dagger"
+    },
+    {
+        "bossName": "Arcanist Doan",
+        "expansion": "classic",
+        "itemId": 7713,
+        "itemName": "Illusionary Rod",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 39,
+        "dropRate": 0.2500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_01.jpg",
+        "itemSubclass": "Staff"
+    },
+    {
+        "bossName": "Arcanist Doan",
+        "expansion": "classic",
+        "itemId": 7712,
+        "itemName": "Mantle of Doan",
+        "slot": "Shoulder",
+        "quality": "Uncommon",
+        "itemLevel": 38,
+        "dropRate": 0.3000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shoulder_02.jpg",
+        "itemSubclass": "Cloth"
+    },
+    {
+        "bossName": "Arcanist Doan",
+        "expansion": "classic",
+        "itemId": 7711,
+        "itemName": "Robe of Doan",
+        "slot": "Chest",
+        "quality": "Uncommon",
+        "itemLevel": 38,
+        "dropRate": 0.3000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_chest_cloth_04.jpg",
+        "itemSubclass": "Cloth"
+    },
+    {
+        "bossName": "Herod",
+        "expansion": "classic",
+        "itemId": 7717,
+        "itemName": "Ravager",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 42,
+        "dropRate": 0.1200,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_halberd_05.jpg",
+        "itemSubclass": "Polearm"
+    },
+    {
+        "bossName": "Herod",
+        "expansion": "classic",
+        "itemId": 7718,
+        "itemName": "Herod's Shoulder",
+        "slot": "Shoulder",
+        "quality": "Rare",
+        "itemLevel": 42,
+        "dropRate": 0.2500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shoulder_01.jpg",
+        "itemSubclass": "Mail"
+    },
+    {
+        "bossName": "Herod",
+        "expansion": "classic",
+        "itemId": 7719,
+        "itemName": "Raging Berserker's Helm",
+        "slot": "Head",
+        "quality": "Rare",
+        "itemLevel": 42,
+        "dropRate": 0.2500,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_helmet_09.jpg",
+        "itemSubclass": "Mail"
+    },
+    {
+        "bossName": "Herod",
+        "expansion": "classic",
+        "itemId": 10330,
+        "itemName": "Scarlet Leggings",
+        "slot": "Legs",
+        "quality": "Rare",
+        "itemLevel": 43,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_pants_04.jpg",
+        "itemSubclass": "Mail"
+    },
+    {
+        "bossName": "Scarlet Commander Mograine",
+        "expansion": "classic",
+        "itemId": 7726,
+        "itemName": "Aegis of the Scarlet Commander",
+        "slot": "Off Hand",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shield_04.jpg",
+        "itemSubclass": "Shield"
+    },
+    {
+        "bossName": "Scarlet Commander Mograine",
+        "expansion": "classic",
+        "itemId": 7723,
+        "itemName": "Mograine's Might",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_mace_10.jpg",
+        "itemSubclass": "Mace"
+    },
+    {
+        "bossName": "Scarlet Commander Mograine",
+        "expansion": "classic",
+        "itemId": 7724,
+        "itemName": "Gauntlets of Divinity",
+        "slot": "Hands",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_gauntlets_29.jpg",
+        "itemSubclass": "Plate"
+    },
+    {
+        "bossName": "High Inquisitor Whitemane",
+        "expansion": "classic",
+        "itemId": 7720,
+        "itemName": "Whitemane's Chapeau",
+        "slot": "Head",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_helmet_38.jpg",
+        "itemSubclass": "Cloth"
+    },
+    {
+        "bossName": "High Inquisitor Whitemane",
+        "expansion": "classic",
+        "itemId": 7721,
+        "itemName": "Hand of Righteousness",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_mace_02.jpg",
+        "itemSubclass": "Mace"
+    },
+    {
+        "bossName": "High Inquisitor Whitemane",
+        "expansion": "classic",
+        "itemId": 7722,
+        "itemName": "Triune Amulet",
+        "slot": "Neck",
+        "quality": "Rare",
+        "itemLevel": 44,
+        "dropRate": 0.2000,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_amulet_01.jpg",
+        "itemSubclass": null
+    },
+    {
+        "bossName": "The Curator",
         "expansion": "tbc",
         "itemId": 28633,
         "itemName": "Staff of Infinite Mysteries",
         "slot": "Two-Hand",
         "quality": "Epic",
-        "itemLevel": 125,
+        "itemLevel": 115,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_29.jpg",
+        "itemSubclass": "Staff"
     },
     {
         "bossName": "Prince Malchezaar",
         "expansion": "tbc",
         "itemId": 28611,
-        "itemName": "Drape of the Dark Reavers",
-        "slot": "Back",
+        "itemName": "Dragonheart Flameshield",
+        "slot": "Off Hand",
         "quality": "Epic",
-        "itemLevel": 125,
+        "itemLevel": 115,
         "dropRate": 0.1200,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shield_30.jpg",
+        "itemSubclass": "Shield"
     },
     {
         "bossName": "Attumen the Huntsman",
@@ -282,7 +560,8 @@
         "itemLevel": 115,
         "dropRate": 0.1500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_bracer_02.jpg",
+        "itemSubclass": "Mail"
     },
     {
         "bossName": "Attumen the Huntsman",
@@ -291,10 +570,11 @@
         "itemName": "Fiery Warhorse's Reins",
         "slot": "Mount",
         "quality": "Epic",
-        "itemLevel": 70,
+        "itemLevel": 1,
         "dropRate": 0.0100,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/ability_mount_dreadsteed.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "The Curator",
@@ -303,24 +583,24 @@
         "itemName": "Garona's Signet Ring",
         "slot": "Finger",
         "quality": "Epic",
-        "itemLevel": 120,
+        "itemLevel": 115,
         "dropRate": 0.1000,
-        "classRestrictions": [
-            "Rogue"
-        ],
-        "iconUrl": null
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_ring_57.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Lady Vashj",
         "expansion": "tbc",
         "itemId": 30021,
-        "itemName": "Serpent-Coil Braid",
-        "slot": "Head",
+        "itemName": "Fang of Vashj",
+        "slot": "One-Hand",
         "quality": "Epic",
         "itemLevel": 141,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_shortblade_47.jpg",
+        "itemSubclass": "Dagger"
     },
     {
         "bossName": "Kael'thas Sunstrider",
@@ -328,25 +608,25 @@
         "itemId": 30311,
         "itemName": "Warp Slicer",
         "slot": "One-Hand",
-        "quality": "Epic",
-        "itemLevel": 141,
+        "quality": "Legendary",
+        "itemLevel": 175,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_75.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Kael'thas Sunstrider",
         "expansion": "tbc",
-        "itemId": 30048,
-        "itemName": "Netherblade Faceguard",
-        "slot": "Head",
-        "quality": "Epic",
-        "itemLevel": 141,
-        "dropRate": 0.1200,
-        "classRestrictions": [
-            "Rogue"
-        ],
-        "iconUrl": null
+        "itemId": 32458,
+        "itemName": "Ashes of Al'ar",
+        "slot": "Mount",
+        "quality": "Legendary",
+        "itemLevel": 70,
+        "dropRate": 0.0200,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_summerfest_brazierorange.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "Illidan Stormrage",
@@ -361,7 +641,8 @@
             "Warrior",
             "Rogue"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_glave_01.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Illidan Stormrage",
@@ -376,7 +657,8 @@
             "Warrior",
             "Rogue"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_glave_01.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Kil'jaeden",
@@ -392,7 +674,8 @@
             "Rogue",
             "Warrior"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_weapon_bow_39.jpg",
+        "itemSubclass": "Bow"
     },
     {
         "bossName": "Yogg-Saron",
@@ -409,7 +692,8 @@
             "Druid",
             "Shaman"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_mace_99.jpg",
+        "itemSubclass": "Mace"
     },
     {
         "bossName": "Yogg-Saron",
@@ -421,7 +705,8 @@
         "itemLevel": 232,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_bracer_28.jpg",
+        "itemSubclass": "Plate"
     },
     {
         "bossName": "Algalon the Observer",
@@ -433,7 +718,8 @@
         "itemLevel": 239,
         "dropRate": 0.1500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/spell_arcane_starfire.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Mimiron",
@@ -445,7 +731,8 @@
         "itemLevel": 232,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_enggizmos_16.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Hodir",
@@ -457,7 +744,8 @@
         "itemLevel": 232,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_cape_19.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "The Lich King",
@@ -465,11 +753,12 @@
         "itemId": 50818,
         "itemName": "Invincible's Reins",
         "slot": "Mount",
-        "quality": "Legendary",
+        "quality": "Epic",
         "itemLevel": 80,
         "dropRate": 0.0100,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/ability_mount_yourockziliak.jpg",
+        "itemSubclass": "Miscellaneous"
     },
     {
         "bossName": "The Lich King",
@@ -485,7 +774,8 @@
             "Paladin",
             "Death Knight"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_141.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "The Lich King",
@@ -497,7 +787,8 @@
         "itemLevel": 277,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_132.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Professor Putricide",
@@ -509,7 +800,8 @@
         "itemLevel": 264,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_belt_49c.jpg",
+        "itemSubclass": "Leather"
     },
     {
         "bossName": "Sindragosa",
@@ -521,7 +813,8 @@
         "itemLevel": 264,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_misc_gem_pearl_12.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Ragnaros",
@@ -533,7 +826,8 @@
         "itemLevel": 391,
         "dropRate": 0.0100,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_hammer_unique_sulfuras.jpg",
+        "itemSubclass": "Mace"
     },
     {
         "bossName": "Ragnaros",
@@ -545,7 +839,8 @@
         "itemLevel": 384,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_necklace_43.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Majordomo Staghelm",
@@ -559,7 +854,8 @@
         "classRestrictions": [
             "Druid"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_staff_99.jpg",
+        "itemSubclass": "Staff"
     },
     {
         "bossName": "Beth'tilac",
@@ -571,7 +867,8 @@
         "itemLevel": 378,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_135.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Alysrazor",
@@ -583,7 +880,8 @@
         "itemLevel": 378,
         "dropRate": 0.1200,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_ring_67.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Madness of Deathwing",
@@ -599,7 +897,8 @@
             "Paladin",
             "Death Knight"
         ],
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_2h_deathwingraid_d_01.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Madness of Deathwing",
@@ -611,7 +910,8 @@
         "itemLevel": 397,
         "dropRate": 0.0800,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_1h_deathwingraid_d_01.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Spine of Deathwing",
@@ -623,7 +923,8 @@
         "itemLevel": 397,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_shoulder_plate_deathwingraid_d_01.jpg",
+        "itemSubclass": "Plate"
     },
     {
         "bossName": "Nefarian",
@@ -635,7 +936,8 @@
         "itemLevel": 359,
         "dropRate": 0.1000,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_jewelry_necklace_30.jpg",
+        "itemSubclass": null
     },
     {
         "bossName": "Magmaw",
@@ -647,7 +949,8 @@
         "itemLevel": 359,
         "dropRate": 0.1200,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/large/inv_sword_110.jpg",
+        "itemSubclass": "Sword"
     },
     {
         "bossName": "Aku'mai (SoD)",
@@ -659,7 +962,8 @@
         "itemLevel": 26,
         "dropRate": 0.1500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": null,
+        "itemSubclass": "Dagger"
     },
     {
         "bossName": "Aku'mai (SoD)",
@@ -671,7 +975,8 @@
         "itemLevel": 26,
         "dropRate": 0.1500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": null,
+        "itemSubclass": "Staff"
     },
     {
         "bossName": "Twilight Lord Kelris (SoD)",
@@ -683,7 +988,8 @@
         "itemLevel": 25,
         "dropRate": 0.1500,
         "classRestrictions": null,
-        "iconUrl": null
+        "iconUrl": null,
+        "itemSubclass": "Mace"
     },
     {
         "bossName": "Mekgineer Thermaplugg (SoD)",
@@ -699,7 +1005,8 @@
             "Hunter",
             "Rogue"
         ],
-        "iconUrl": null
+        "iconUrl": null,
+        "itemSubclass": "Gun"
     },
     {
         "bossName": "Shade of Eranikus (SoD)",
@@ -715,6 +1022,7 @@
             "Paladin",
             "Shaman"
         ],
-        "iconUrl": null
+        "iconUrl": null,
+        "itemSubclass": "Shield"
     }
 ]

@@ -14,7 +14,7 @@ function getWowheadDomain(variant: string | null | undefined): { urlBase: string
             return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
         case 'classic':
         case 'classic_era':
-            return { urlBase: 'classic.wowhead.com', tooltipDomain: 'classic&dataEnv=1' };
+            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
     }
@@ -46,4 +46,10 @@ export function getWowheadItemData(itemId: number, variant?: string | null): str
 /** Build a complete data-wowhead attribute for a quest. */
 export function getWowheadQuestData(questId: number, variant?: string | null): string {
     return `quest=${questId}&${getWowheadDataSuffix(variant)}`;
+}
+
+/** Build a Wowhead NPC search URL for a boss name. */
+export function getWowheadNpcSearchUrl(bossName: string, variant?: string | null): string {
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/search?q=${encodeURIComponent(bossName)}`;
 }

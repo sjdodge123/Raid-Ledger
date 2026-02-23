@@ -1,0 +1,1 @@
+ALTER TABLE "wow_classic_boss_loot" ADD COLUMN "item_subclass" varchar(50);

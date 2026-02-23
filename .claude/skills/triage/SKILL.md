@@ -70,7 +70,12 @@ Parse each issue body to extract:
 
 For each non-noise group, fetch rich context from the Sentry API to include in the Linear story.
 
-**If `SENTRY_AUTH_TOKEN` is not set**, skip this step entirely and note in the triage summary that Sentry details were unavailable.
+**Load `SENTRY_AUTH_TOKEN` from `.env`** — the token lives in the project `.env` file, not the shell environment. At the start of this step, source it:
+```bash
+export $(grep '^SENTRY_AUTH_TOKEN=' .env | xargs)
+```
+
+**If `SENTRY_AUTH_TOKEN` is still not set after loading `.env`**, skip this step entirely and note in the triage summary that Sentry details were unavailable.
 
 For each group:
 

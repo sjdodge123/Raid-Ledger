@@ -11,6 +11,8 @@ import type {
     QuestProgressDto,
     QuestCoverageResponse,
     UpdateQuestProgressBody,
+    BossEncounterDto,
+    BossLootDto,
 } from '@raid-ledger/contract';
 import { CharacterSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
@@ -134,4 +136,26 @@ export async function updateQuestProgress(
         method: 'PUT',
         body: JSON.stringify(body),
     });
+}
+
+/**
+ * Fetch boss encounters for an instance (ROK-247)
+ */
+export async function fetchBossesForInstance(
+    instanceId: number,
+    variant: string,
+): Promise<BossEncounterDto[]> {
+    const params = new URLSearchParams({ variant });
+    return fetchApi(`/plugins/wow-classic/instances/${instanceId}/bosses?${params}`);
+}
+
+/**
+ * Fetch loot table for a boss (ROK-247)
+ */
+export async function fetchLootForBoss(
+    bossId: number,
+    variant: string,
+): Promise<BossLootDto[]> {
+    const params = new URLSearchParams({ variant });
+    return fetchApi(`/plugins/wow-classic/bosses/${bossId}/loot?${params}`);
 }

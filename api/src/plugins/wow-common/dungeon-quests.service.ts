@@ -52,6 +52,7 @@ export interface EnrichedQuestReward {
   slot: string | null;
   itemLevel: number | null;
   iconUrl: string | null;
+  itemSubclass: string | null;
 }
 
 export interface EnrichedDungeonQuestDto extends DungeonQuestDto {
@@ -356,6 +357,7 @@ export class DungeonQuestsService {
           slot: string | null;
           itemLevel: number | null;
           iconUrl: string | null;
+          itemSubclass: string | null;
         }
       >;
       for (const [idStr, item] of Object.entries(parsed)) {
@@ -367,6 +369,7 @@ export class DungeonQuestsService {
           slot: item.slot,
           itemLevel: item.itemLevel,
           iconUrl: item.iconUrl,
+          itemSubclass: item.itemSubclass ?? null,
         };
       }
     } catch {
@@ -386,11 +389,9 @@ export class DungeonQuestsService {
       }
     }
 
-    // Second: fill gaps from boss loot table (items that are also boss drops)
-    const missingItemIds = [...allItemIds].filter(
-      (id) => !itemDetailsMap.has(id),
-    );
-    if (missingItemIds.length > 0) {
+    // Second: fill gaps from boss loot table AND backfill itemSubclass for Wowhead items
+    const lootLookupIds = [...allItemIds];
+    if (lootLookupIds.length > 0) {
       const lootRows = await this.db
         .select({
           itemId: wowClassicBossLoot.itemId,
@@ -399,12 +400,19 @@ export class DungeonQuestsService {
           slot: wowClassicBossLoot.slot,
           itemLevel: wowClassicBossLoot.itemLevel,
           iconUrl: wowClassicBossLoot.iconUrl,
+          itemSubclass: wowClassicBossLoot.itemSubclass,
         })
         .from(wowClassicBossLoot)
-        .where(inArray(wowClassicBossLoot.itemId, missingItemIds));
+        .where(inArray(wowClassicBossLoot.itemId, lootLookupIds));
 
       for (const row of lootRows) {
-        if (!itemDetailsMap.has(row.itemId)) {
+        const existing = itemDetailsMap.get(row.itemId);
+        if (existing) {
+          // Backfill itemSubclass from boss loot for Wowhead-sourced items
+          if (!existing.itemSubclass && row.itemSubclass) {
+            existing.itemSubclass = row.itemSubclass;
+          }
+        } else {
           itemDetailsMap.set(row.itemId, {
             itemId: row.itemId,
             itemName: row.itemName,
@@ -412,6 +420,7 @@ export class DungeonQuestsService {
             slot: row.slot,
             itemLevel: row.itemLevel,
             iconUrl: row.iconUrl,
+            itemSubclass: row.itemSubclass,
           });
         }
       }
@@ -433,6 +442,7 @@ export class DungeonQuestsService {
                 slot: null,
                 itemLevel: null,
                 iconUrl: null,
+                itemSubclass: null,
               }
             );
           })

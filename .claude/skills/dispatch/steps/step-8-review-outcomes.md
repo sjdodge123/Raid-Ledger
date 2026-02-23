@@ -57,6 +57,66 @@
 
 ---
 
+## 8a-td. Persist Tech Debt to Linear (after each review)
+
+When a reviewer's report includes **Tech Debt Identified** items, create Linear backlog stories so they aren't lost after `/clear`. Do this immediately after processing each reviewer message (whether approved or blocked).
+
+**For each tech debt item (TD-1, TD-2, etc.) in the reviewer's report:**
+
+1. **Create a Linear issue in Backlog:**
+   ```
+   mcp__linear__create_issue(
+     title: "tech-debt: <concise description from TD item>",
+     description: <see template below>,
+     teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
+     projectId: "1bc39f98-abaa-4d85-912f-ba62c8da1532",
+     priority: <severity mapping: high=2, medium=3, low=4>,
+     state: "Backlog"
+   )
+   ```
+
+2. **Severity → Priority mapping:**
+   | Reviewer Severity | Linear Priority | Rationale |
+   |---|---|---|
+   | high | 2 (High) | Could cause issues if left unaddressed |
+   | medium | 3 (Normal) | Should be addressed in a future sprint |
+   | low | 4 (Low) | Nice-to-have improvement |
+
+3. **Tech debt story description template:**
+   ```markdown
+   ## Tech Debt — <description>
+
+   **Source:** Code review of ROK-<parent story number>
+   **Identified by:** Review agent during dispatch batch <N>
+   **Severity:** <low/medium/high>
+
+   ### Details
+
+   **File(s):** `<file:line>`
+   **Issue:** <description of the tech debt>
+
+   ### Suggested Fix
+
+   <suggested approach from the reviewer>
+
+   ### Context
+
+   - Found during review of ROK-<num> (<parent story title>)
+   - Not a regression — pre-existing or non-blocking for the parent story
+   - No immediate user impact
+   ```
+
+4. **After creating all tech debt stories, report them in the story's review summary:**
+   ```
+   Tech debt stories created: <count>
+   - ROK-AAA: tech-debt: <title> (P<N>)
+   - ROK-BBB: tech-debt: <title> (P<N>)
+   ```
+
+**Skip this step** if the reviewer reported 0 tech debt items.
+
+---
+
 ## 8b. Batch PR Creation (after all stories reviewed)
 
 Once all stories in the batch have passed code review (or been deferred), create PRs.

@@ -49,6 +49,7 @@ export const EnrichedQuestRewardSchema = z.object({
     slot: z.string().nullable(),
     itemLevel: z.number().nullable(),
     iconUrl: z.string().nullable(),
+    itemSubclass: z.string().nullable(),
 });
 
 export type EnrichedQuestReward = z.infer<typeof EnrichedQuestRewardSchema>;

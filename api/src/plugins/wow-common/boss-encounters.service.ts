@@ -18,6 +18,32 @@ const VARIANT_EXPANSIONS: Record<string, string[]> = {
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
 };
 
+/**
+ * Sub-instance wing-to-boss mapping for multi-wing dungeons.
+ *
+ * Synthetic sub-instance IDs are generated as `parentId * 100 + suffix`
+ * (e.g., SM parent = 316, SM:Armory = 31603). Boss data is seeded under
+ * the parent instance ID, so when a sub-instance is queried we need to
+ * filter the parent's boss list to only the bosses belonging to that wing.
+ *
+ * Key format: `${parentId}:${suffix}` — value is the set of boss names.
+ */
+const SUB_INSTANCE_BOSSES: Record<string, Set<string>> = {
+  // Scarlet Monastery (parent 316)
+  '316:1': new Set(['Interrogator Vishas', 'Bloodmage Thalnos']), // SM: Graveyard
+  '316:2': new Set(['Houndmaster Loksey', 'Arcanist Doan']), // SM: Library
+  '316:3': new Set(['Herod']), // SM: Armory
+  '316:4': new Set([
+    'High Inquisitor Fairbanks',
+    'Scarlet Commander Mograine',
+    'High Inquisitor Whitemane',
+  ]), // SM: Cathedral
+  // Maraudon (parent 239)
+  '239:1': new Set(['Noxxion', 'Razorlash', 'Lord Vyletongue']), // Purple
+  '239:2': new Set(['Celebras the Cursed', 'Landslide']), // Orange
+  '239:3': new Set(['Tinkerer Gizlock', 'Rotgrip', 'Princess Theradras']), // Inner
+};
+
 export interface BossEncounterDto {
   id: number;
   instanceId: number;
@@ -39,6 +65,7 @@ export interface BossLootDto {
   expansion: string;
   classRestrictions: string[] | null;
   iconUrl: string | null;
+  itemSubclass: string | null;
 }
 
 /**
@@ -66,6 +93,9 @@ export class BossEncountersService {
   /**
    * Get all boss encounters for an instance, filtered by variant.
    * SoD-modified bosses are only included for SoD-enabled variants.
+   *
+   * For sub-instances (synthetic IDs > 10000, e.g. 31603 = SM:Armory),
+   * resolves to the parent instance and filters to only the wing's bosses.
    */
   async getBossesForInstance(
     instanceId: number,
@@ -73,18 +103,39 @@ export class BossEncountersService {
   ): Promise<BossEncounterDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
 
+    // Resolve sub-instance to parent and determine wing boss filter
+    let queryInstanceId = instanceId;
+    let wingBossNames: Set<string> | undefined;
+
+    if (instanceId > 10000) {
+      const parentId = Math.floor(instanceId / 100);
+      const suffix = instanceId % 100;
+      queryInstanceId = parentId;
+      wingBossNames = SUB_INSTANCE_BOSSES[`${parentId}:${suffix}`];
+    }
+
     const rows = await this.db
       .select()
       .from(wowClassicBosses)
       .where(
         and(
-          eq(wowClassicBosses.instanceId, instanceId),
+          eq(wowClassicBosses.instanceId, queryInstanceId),
           inArray(wowClassicBosses.expansion, expansions),
         ),
       )
       .orderBy(wowClassicBosses.order);
 
-    return rows.map((row) => this.toBossDto(row));
+    // Filter to wing-specific bosses when querying a sub-instance
+    const filtered = wingBossNames
+      ? rows.filter((row) => wingBossNames.has(row.name))
+      : rows;
+
+    // Reassign sequential order numbers for sub-instance filtered results
+    if (wingBossNames) {
+      return filtered.map((row, i) => ({ ...this.toBossDto(row), order: i + 1 }));
+    }
+
+    return filtered.map((row) => this.toBossDto(row));
   }
 
   /**
@@ -153,6 +204,7 @@ export class BossEncountersService {
       expansion: row.expansion,
       classRestrictions: row.classRestrictions,
       iconUrl: row.iconUrl,
+      itemSubclass: row.itemSubclass,
     };
   }
 }
