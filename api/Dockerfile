@@ -85,7 +85,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Set environment
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=1024"
 ENV PORT=3000
 
 # Start application - NestJS outputs main.js to dist/src/

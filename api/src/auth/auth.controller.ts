@@ -461,18 +461,17 @@ export class AuthController {
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
   async getProfile(@Req() req: RequestWithUser) {
-    // Fetch fresh user data from database instead of returning cached JWT payload
-    // This ensures the UI reflects updated info (e.g., after Discord linking)
-    const user = await this.usersService.findById(req.user.id);
+    // Fetch user data and avatar preference in parallel (ROK-448: was sequential)
+    const [user, avatarPref] = await Promise.all([
+      this.usersService.findById(req.user.id),
+      this.preferencesService.getUserPreference(
+        req.user.id,
+        'avatarPreference',
+      ),
+    ]);
     if (!user) {
       throw new UnauthorizedException('User no longer exists');
     }
-
-    // Fetch avatar preference for avatar resolution (ROK-352, ROK-414)
-    const avatarPref = await this.preferencesService.getUserPreference(
-      req.user.id,
-      'avatarPreference',
-    );
 
     // ROK-414: Resolve avatar URL server-side instead of sending all characters
     let resolvedAvatarUrl: string | null = null;

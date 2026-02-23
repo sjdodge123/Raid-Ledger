@@ -91,6 +91,11 @@ export const characters = pgTable(
       .where(sql`${table.isMain} = true`),
     /** Index for efficient user character lookups */
     userIdIndex: index('idx_characters_user_id').on(table.userId),
+    /** ROK-448: Composite index for avatar-by-name lookups in /auth/me */
+    userIdNameIndex: index('idx_characters_user_id_name').on(
+      table.userId,
+      table.name,
+    ),
   }),
 );
 
