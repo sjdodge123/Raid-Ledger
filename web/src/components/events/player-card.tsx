@@ -110,7 +110,7 @@ export function PlayerCard({
 
             {/* Info - AC-6: truncation with title tooltip */}
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <Link
                         to={`/users/${player.userId}`}
                         state={player.userId === 0 ? {
@@ -129,10 +129,10 @@ export function PlayerCard({
                     {/* ROK-459: Tentative indicator */}
                     {isTentative && (
                         <span
-                            className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400"
+                            className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400"
                             title="Tentative — may not attend"
                         >
-                            ⏳ Tentative
+                            ⏳
                         </span>
                     )}
                     {/* ROK-452: Flexibility indicator for multi-role players */}

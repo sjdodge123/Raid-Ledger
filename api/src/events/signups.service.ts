@@ -920,6 +920,18 @@ export class SignupsService {
           assignment.position,
         );
       }
+
+      // ROK-459: When a slot vacates, check for tentative unassigned players
+      // who want that role and re-slot them immediately.
+      if (assignment && assignment.role && assignment.role !== 'bench') {
+        this.reslotTentativePlayer(eventId, assignment.role, assignment.position).catch(
+          (err: unknown) => {
+            this.logger.warn(
+              `ROK-459: Failed tentative reslot check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            );
+          },
+        );
+      }
     }
   }
 
@@ -1300,6 +1312,17 @@ export class SignupsService {
         eventId,
         assignment.role,
         assignment.position,
+      );
+    }
+
+    // ROK-459: When a slot vacates, check for tentative unassigned players
+    if (assignment && assignment.role && assignment.role !== 'bench') {
+      this.reslotTentativePlayer(eventId, assignment.role, assignment.position).catch(
+        (err: unknown) => {
+          this.logger.warn(
+            `ROK-459: Failed tentative reslot check (admin remove): ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        },
       );
     }
   }
@@ -1873,6 +1896,80 @@ export class SignupsService {
     this.logger.log(
       `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
     );
+  }
+
+  /**
+   * ROK-459: When a slot vacates, check for tentative unassigned players
+   * who prefer that role and assign them to the open slot.
+   */
+  private async reslotTentativePlayer(
+    eventId: number,
+    vacatedRole: string,
+    vacatedPosition: number,
+  ): Promise<void> {
+    // Find tentative unassigned players who prefer this role
+    const candidates = await this.db
+      .select({
+        id: schema.eventSignups.id,
+        preferredRoles: schema.eventSignups.preferredRoles,
+        signedUpAt: schema.eventSignups.signedUpAt,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.status, 'tentative'),
+          isNull(schema.rosterAssignments.id),
+        ),
+      )
+      .orderBy(schema.eventSignups.signedUpAt);
+
+    // Find first candidate who prefers the vacated role
+    const candidate = candidates.find((c) => {
+      const prefs = (c.preferredRoles as string[] | null) ?? [];
+      return prefs.includes(vacatedRole);
+    });
+
+    if (!candidate) return;
+
+    // Verify the slot is still empty (might have been filled by bench promotion)
+    const [existing] = await this.db
+      .select({ id: schema.rosterAssignments.id })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.role, vacatedRole),
+          eq(schema.rosterAssignments.position, vacatedPosition),
+        ),
+      )
+      .limit(1);
+
+    if (existing) return; // Slot already filled
+
+    // Assign the tentative player to the vacated slot
+    await this.db.insert(schema.rosterAssignments).values({
+      eventId,
+      signupId: candidate.id,
+      role: vacatedRole,
+      position: vacatedPosition,
+      isOverride: 0,
+    });
+
+    this.logger.log(
+      `ROK-459: Reslotted tentative signup ${candidate.id} to ${vacatedRole} slot ${vacatedPosition}`,
+    );
+
+    // Resync embed
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      signupId: candidate.id,
+      action: 'tentative_reslotted',
+    });
   }
 
   /**
