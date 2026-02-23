@@ -178,22 +178,18 @@ export function QuestPrepPanel({
         return classMatch && raceMatch;
     };
 
-    // Sort: usable quests first, then unusable
-    const sortByUsability = (list: EnrichedDungeonQuestDto[]) =>
-        [...list].sort((a, b) => {
-            const aUsable = isQuestUsable(a) ? 0 : 1;
-            const bUsable = isQuestUsable(b) ? 0 : 1;
-            return aUsable - bUsable;
-        });
+    // Filter to only quests usable by the character's race/class
+    const usableQuests = quests.filter(isQuestUsable);
 
     // Group quests: outside vs inside dungeon
-    const outsideQuests = sortByUsability(quests.filter((q) => !q.startsInsideDungeon));
-    const insideQuests = sortByUsability(quests.filter((q) => q.startsInsideDungeon));
+    const outsideQuests = usableQuests.filter((q) => !q.startsInsideDungeon);
+    const insideQuests = usableQuests.filter((q) => q.startsInsideDungeon);
 
-    // Sub-group by sharability
-    const groupBySharable = (list: EnrichedDungeonQuestDto[]) => ({
-        sharable: list.filter((q) => q.sharable),
-        mustPickUp: list.filter((q) => !q.sharable),
+    // Sub-group by practical pickup type
+    const groupByType = (list: EnrichedDungeonQuestDto[]) => ({
+        sharable: list.filter((q) => q.sharable && !q.prevQuestId),
+        chain: list.filter((q) => !!q.prevQuestId),
+        solo: list.filter((q) => !q.sharable && !q.prevQuestId),
     });
 
 
@@ -224,145 +220,159 @@ export function QuestPrepPanel({
         const questCoverage = coverageMap.get(quest.questId);
         const isCovered = questCoverage && questCoverage.coveredBy.length > 0;
         const wowheadSuffix = getWowheadDataSuffix(wowheadVariant);
-        const isUsable = isQuestUsable(quest);
         const isExpanded = expandedQuests.has(quest.questId);
+        const hasPrereqs = !!quest.prevQuestId;
 
-        const cardClasses = [
-            'quest-card',
-            !isUsable ? 'quest-card--dimmed' : '',
-        ].filter(Boolean).join(' ');
+        // Pre-compute coverage for inline indicator + expanded details
+        const coveredByMe = questCoverage?.coveredBy.some(
+            (c: { userId: number }) => c.userId === currentUserId
+        ) ?? false;
+        const coveredByOthers = questCoverage?.coveredBy.filter(
+            (c: { userId: number }) => c.userId !== currentUserId
+        ) ?? [];
 
         return (
-            <div key={quest.questId} className={cardClasses}>
-                <div className="quest-card__header-wrapper">
-                    <div className="quest-card__header" onClick={() => toggleExpanded(quest.questId)} role="button" tabIndex={0}>
-                        <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>▸</span>
-                        <div className="quest-card__info">
-                            <div className="quest-card__name">
-                                {quest.name}
-                                {quest.questLevel && (
-                                    <span className="quest-card__level"> (Lv{quest.questLevel})</span>
+            <div key={quest.questId} className="quest-card-row">
+                {/* Coverage indicator — outside card, to the left (not for chain quests) */}
+                {quest.sharable && !hasPrereqs && (
+                    coveredByMe ? (
+                        <button
+                            className="quest-coverage__btn quest-coverage__btn--checked"
+                            onClick={() => handleTogglePickedUp(quest.questId, true)}
+                            disabled={pendingQuestId === quest.questId}
+                            title="Remove — I don't have this quest"
+                        >
+                            {pendingQuestId === quest.questId ? '…' : '✓'}
+                        </button>
+                    ) : isCovered ? (
+                        <span className="quest-card__inline-status quest-card__inline-status--covered">✓</span>
+                    ) : eventId ? (
+                        <button
+                            className="quest-coverage__btn quest-coverage__btn--add"
+                            onClick={() => handleTogglePickedUp(quest.questId, false)}
+                            disabled={pendingQuestId === quest.questId}
+                            title="I have this quest"
+                        >
+                            {pendingQuestId === quest.questId ? '…' : '⚠'}
+                        </button>
+                    ) : (
+                        <span className="quest-card__inline-status quest-card__inline-status--needed">&#x26A0;</span>
+                    )
+                )}
+
+                <div className="quest-card">
+                    {/* Single-line header — matches boss-row compactness */}
+                    <div className="quest-card__header-wrapper">
+                        <div className="quest-card__header" onClick={() => toggleExpanded(quest.questId)} role="button" tabIndex={0}>
+                            <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>&#x25B8;</span>
+                            <div className="quest-card__info">
+                                <span className="quest-card__name">
+                                    {quest.name}
+                                    {quest.questLevel && (
+                                        <span className="quest-card__level"> (Lv{quest.questLevel})</span>
+                                    )}
+                                </span>
+                                {hasPrereqs && (
+                                    <span className="quest-card__prereq-badge" title={`Requires ${quest.prerequisiteChain!.length - 1} prerequisite quest(s)`}>
+                                        Chain
+                                    </span>
                                 )}
                             </div>
                         </div>
+                        <a
+                            className="quest-card__wowhead-icon"
+                            href={getWowheadQuestUrl(quest.questId, wowheadVariant)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="View on Wowhead"
+                        >
+                            &#x2197;
+                        </a>
                     </div>
-                    <a
-                        className="quest-card__wowhead-icon"
-                        href={getWowheadQuestUrl(quest.questId, wowheadVariant)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="View on Wowhead"
-                    >
-                        &#x2197;
-                    </a>
-                </div>
 
-                {/* Compact details — always visible */}
-                <div className="quest-card__details">
-                    <div className="quest-card__details-left">
-                        {quest.questGiverNpc && (
-                            <span className="quest-card__npc-inline">
-                                {quest.questGiverNpc}
-                                {quest.questGiverZone && (
-                                    <span className="quest-card__npc-zone"> — {quest.questGiverZone}</span>
+                    {/* Collapsible body — all details + rewards */}
+                    {isExpanded && (
+                        <div className="quest-card__body">
+                            {/* Quest giver — prominent */}
+                            {quest.questGiverNpc && (
+                                <div className="quest-card__quest-giver">
+                                    Start: {quest.questGiverNpc}
+                                    {quest.questGiverZone && (
+                                        <span className="quest-card__quest-giver-zone"> &mdash; {quest.questGiverZone}</span>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Quest metadata: required level, sharable */}
+                            <div className="quest-card__meta">
+                                {quest.requiredLevel && (
+                                    <span className="quest-card__meta-item">Requires Lv{quest.requiredLevel}</span>
                                 )}
-                            </span>
-                        )}
-                        {quest.raceRestriction && quest.raceRestriction.length > 0 && (
-                            <span className="quest-badge-restriction quest-badge-race">
-                                🏷️ {(quest.raceRestriction as string[]).join(', ')}
-                            </span>
-                        )}
-                        {quest.classRestriction && quest.classRestriction.length > 0 && (
-                            <span className="quest-badge-restriction quest-badge-class">
-                                ⚔️ {(quest.classRestriction as string[]).join(', ')}
-                            </span>
-                        )}
-                    </div>
-                    {quest.sharable && (() => {
-                        const coveredByMe = questCoverage?.coveredBy.some(
-                            (c: { userId: number }) => c.userId === currentUserId
-                        ) ?? false;
-                        const coveredByOthers = questCoverage?.coveredBy.filter(
-                            (c: { userId: number }) => c.userId !== currentUserId
-                        ) ?? [];
-
-                        return (
-                            <div className={`quest-card__details-right ${isCovered ? 'quest-coverage--covered' : 'quest-coverage--uncovered'}`}>
-                                {coveredByMe ? (
-                                    <>
-                                        <span className="quest-coverage__status">✓ You have this quest</span>
-                                        {coveredByOthers.length > 0 && (
-                                            <span className="quest-coverage__also">
-                                                also: {coveredByOthers.map((c: { username: string }) => c.username).join(', ')}
-                                            </span>
-                                        )}
-                                        {eventId && (
-                                            <button
-                                                className="quest-coverage__btn quest-coverage__btn--checked"
-                                                onClick={() => handleTogglePickedUp(quest.questId, true)}
-                                                disabled={pendingQuestId === quest.questId}
-                                                title="Remove — I don't have this quest"
-                                            >
-                                                {pendingQuestId === quest.questId ? '…' : '✓'}
-                                            </button>
-                                        )}
-                                    </>
-                                ) : isCovered ? (
-                                    <span className="quest-coverage__status">
-                                        ✓ Covered by {questCoverage!.coveredBy.map((c: { username: string }) => c.username).join(', ')}
-                                    </span>
-                                ) : (
-                                    <>
-                                        <span className="quest-coverage__status quest-coverage__status--needed">
-                                            No one has this yet
-                                        </span>
-                                        {eventId && (
-                                            <button
-                                                className="quest-coverage__btn quest-coverage__btn--add"
-                                                onClick={() => handleTogglePickedUp(quest.questId, false)}
-                                                disabled={pendingQuestId === quest.questId}
-                                                title="I have this quest"
-                                            >
-                                                {pendingQuestId === quest.questId ? '…' : '⚠'}
-                                            </button>
-                                        )}
-                                    </>
+                                {quest.sharable && (
+                                    <span className="quest-card__meta-item quest-card__meta-item--sharable">Sharable</span>
                                 )}
                             </div>
-                        );
-                    })()}
-                </div>
 
-                {/* Collapsible body */}
-                {isExpanded && (
-                    <div className="quest-card__body">
+                            {/* Restrictions + coverage */}
+                            <div className="quest-card__details">
+                                <div className="quest-card__details-left">
+                                    {quest.raceRestriction && quest.raceRestriction.length > 0 && (
+                                        <span className="quest-badge-restriction quest-badge-race">
+                                            {(quest.raceRestriction as string[]).join(', ')}
+                                        </span>
+                                    )}
+                                    {quest.classRestriction && quest.classRestriction.length > 0 && (
+                                        <span className="quest-badge-restriction quest-badge-class">
+                                            {(quest.classRestriction as string[]).join(', ')}
+                                        </span>
+                                    )}
+                                </div>
+                                {quest.sharable && !hasPrereqs && (
+                                    <div className={`quest-card__details-right ${isCovered ? 'quest-coverage--covered' : 'quest-coverage--uncovered'}`}>
+                                        {coveredByMe ? (
+                                            <>
+                                                <span className="quest-coverage__status">&#x2713; You have this quest</span>
+                                                {coveredByOthers.length > 0 && (
+                                                    <span className="quest-coverage__also">
+                                                        also: {coveredByOthers.map((c: { username: string }) => c.username).join(', ')}
+                                                    </span>
+                                                )}
+                                            </>
+                                        ) : isCovered ? (
+                                            <span className="quest-coverage__status">
+                                                &#x2713; Covered by {questCoverage!.coveredBy.map((c: { username: string }) => c.username).join(', ')}
+                                            </span>
+                                        ) : (
+                                            <span className="quest-coverage__status quest-coverage__status--needed">
+                                                No one has this yet
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
 
-                        {/* Gold/XP rewards */}
-                        {
-                            (quest.rewardGold || quest.rewardXp || (quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) && (
+                            {/* Gold/XP rewards */}
+                            {(quest.rewardGold || quest.rewardXp || (quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1)) && (
                                 <div className="quest-reward-meta">
                                     {quest.rewardGold && quest.rewardGold > 0 && (
-                                        <span className="quest-reward-gold">🪙 {formatGold(quest.rewardGold)}</span>
+                                        <span className="quest-reward-gold">&#x1FA99; {formatGold(quest.rewardGold)}</span>
                                     )}
                                     {quest.rewardXp && quest.rewardXp > 0 && (
-                                        <span className="quest-reward-xp">⭐ {quest.rewardXp.toLocaleString()} XP</span>
+                                        <span className="quest-reward-xp">&#x2B50; {quest.rewardXp.toLocaleString()} XP</span>
                                     )}
                                     {quest.rewardType === 'choice' && quest.rewards && quest.rewards.length > 1 && (
                                         <span className="quest-reward-choice">Choose one reward</span>
                                     )}
                                 </div>
-                            )
-                        }
+                            )}
 
-                        {/* Prerequisite chain */}
-                        {
-                            quest.prerequisiteChain && quest.prerequisiteChain.length > 1 && (
+                            {/* Prerequisite chain */}
+                            {hasPrereqs && (
                                 <div className="quest-prereq">
                                     <span className="text-xs">Requires:</span>
-                                    {quest.prerequisiteChain.map((step: { questId: number; name: string }, idx: number) => (
+                                    {quest.prerequisiteChain!.map((step: { questId: number; name: string }, idx: number) => (
                                         <span key={step.questId}>
-                                            {idx > 0 && <span className="quest-prereq__arrow"> → </span>}
+                                            {idx > 0 && <span className="quest-prereq__arrow"> &rarr; </span>}
                                             <span
                                                 className={
                                                     step.questId === quest.questId
@@ -375,15 +385,12 @@ export function QuestPrepPanel({
                                         </span>
                                     ))}
                                 </div>
-                            )
-                        }
+                            )}
 
-                        {/* Rewards */}
-                        {
-                            quest.rewards && quest.rewards.length > 0 && (
+                            {/* Rewards */}
+                            {quest.rewards && quest.rewards.length > 0 && (
                                 <div className="quest-rewards">
                                     {quest.rewards.map((reward: { itemId: number; itemName: string; quality: string; slot: string | null; itemLevel: number | null; iconUrl: string | null }) => {
-                                        // Map reward slot to character equipment slot
                                         const equipSlot = reward.slot ? REWARD_TO_EQUIP_SLOT[reward.slot] ?? reward.slot : null;
                                         const equippedItem = equipSlot
                                             ? equippedBySlot.get(equipSlot)
@@ -401,7 +408,6 @@ export function QuestPrepPanel({
                                                     wowheadUrl={getWowheadItemUrl(reward.itemId, wowheadVariant)}
                                                     wowheadData={`item=${reward.itemId}&${wowheadSuffix}`}
                                                 />
-                                                {/* Item comparison with equipped item */}
                                                 {equipSlot && characterId && (
                                                     <ItemComparison
                                                         rewardItemLevel={reward.itemLevel}
@@ -413,10 +419,10 @@ export function QuestPrepPanel({
                                         );
                                     })}
                                 </div>
-                            )
-                        }
-                    </div>
-                )}
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         );
     };
@@ -427,12 +433,11 @@ export function QuestPrepPanel({
         icon: string,
     ) => {
         if (quests.length === 0) return null;
-        const usableCount = quests.filter(isQuestUsable).length;
         return (
             <div className="quest-subgroup">
                 <div className="quest-subgroup__label">
                     <span>{icon}</span>
-                    <span>{label} ({usableCount})</span>
+                    <span>{label} ({quests.length})</span>
                 </div>
                 {quests.map(renderQuestCard)}
             </div>
@@ -445,17 +450,17 @@ export function QuestPrepPanel({
         quests: EnrichedDungeonQuestDto[],
     ) => {
         if (quests.length === 0) return null;
-        const usableCount = quests.filter(isQuestUsable).length;
-        const { sharable, mustPickUp } = groupBySharable(quests);
+        const { sharable, chain, solo } = groupByType(quests);
 
         return (
             <div className="quest-group">
                 <div className="quest-group__title">
                     <span className="quest-group__icon">{icon}</span>
-                    <span>{title} ({usableCount})</span>
+                    <span>{title} ({quests.length})</span>
                 </div>
                 {renderSubGroup('Sharable', sharable, '🔗')}
-                {renderSubGroup('Must pick up yourself', mustPickUp, '👤')}
+                {renderSubGroup('Requires quest chain', chain, '⛓')}
+                {renderSubGroup('Must pick up yourself', solo, '👤')}
             </div>
         );
     };
@@ -468,7 +473,7 @@ export function QuestPrepPanel({
                     Quest Prep
                 </h2>
                 <span className="text-xs text-muted">
-                    {quests.filter(isQuestUsable).length} quests
+                    {usableQuests.length} quests
                 </span>
             </div>
 

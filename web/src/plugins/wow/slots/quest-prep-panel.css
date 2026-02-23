@@ -80,17 +80,38 @@
     gap: 0.375rem;
 }
 
+/* Quest card row — wraps inline status indicator + card */
+.quest-card-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    margin-bottom: 0.5rem;
+}
+
+.quest-card-row > .quest-coverage__btn,
+.quest-card-row > .quest-card__inline-status {
+    margin-top: 0.5rem;
+}
+
+@media (min-width: 640px) {
+    .quest-card-row > .quest-coverage__btn,
+    .quest-card-row > .quest-card__inline-status {
+        margin-top: 0.625rem;
+    }
+}
+
 /* Individual quest card */
 .quest-card {
     background: var(--color-overlay);
     border: 1px solid var(--color-edge);
     border-radius: var(--radius);
     padding: 0.625rem;
-    margin-bottom: 0.5rem;
     transition: background 0.15s ease;
     overflow: hidden;
     max-width: 100%;
     box-sizing: border-box;
+    flex: 1;
+    min-width: 0;
 }
 
 @media (min-width: 640px) {
@@ -111,7 +132,7 @@
 
 .quest-card__header {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.5rem;
     flex: 1;
     min-width: 0;
@@ -154,7 +175,27 @@
     gap: 0.375rem;
 }
 
+/* Prereq chain badge — visible on collapsed header */
+.quest-card__prereq-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 600;
+    background: rgba(251, 191, 36, 0.12);
+    color: rgb(251, 191, 36);
+    border: 1px solid rgba(251, 191, 36, 0.25);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
 .quest-card__inline-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
     font-size: 0.875rem;
 }
@@ -171,6 +212,33 @@
     margin-top: 0.5rem;
     padding-top: 0.5rem;
     border-top: 1px solid var(--color-edge);
+}
+
+/* Quest giver — prominent display in expanded body */
+.quest-card__quest-giver {
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--color-foreground);
+    margin-bottom: 0.375rem;
+}
+
+.quest-card__quest-giver-zone {
+    font-weight: 400;
+    color: var(--color-muted);
+}
+
+/* Quest metadata row (required level, sharable) */
+.quest-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+}
+
+.quest-card__meta-item--sharable {
+    color: rgb(96, 165, 250);
 }
 
 .quest-card__details {

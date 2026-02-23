@@ -1100,9 +1100,7 @@
         "quality": "Rare",
         "itemLevel": 37,
         "dropRate": 0.25,
-        "classRestrictions": [
-            "Warrior"
-        ],
+        "classRestrictions": null,
         "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_helmet_12.jpg"
     },
     {
