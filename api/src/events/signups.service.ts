@@ -1063,6 +1063,14 @@ export class SignupsService {
       `User ${userId} self-unassigned from ${assignment.role} slot for event ${eventId}`,
     );
 
+    // Emit signup event so Discord embed is re-synced (ROK-458)
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId,
+      signupId: signup.id,
+      action: 'self_unassigned',
+    });
+
     // Notify organizer about the vacated slot
     const slotLabel = assignment.role ?? 'assigned';
     await this.notificationService.create({

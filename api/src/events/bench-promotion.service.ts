@@ -1,11 +1,14 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Queue, Job } from 'bullmq';
 import { eq, and, asc } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
+import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
+import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
 
 export const BENCH_PROMOTION_QUEUE = 'bench-promotion';
 export const PROMOTION_DELAY_MS = 5 * 60 * 1000; // 5 minutes
@@ -117,6 +120,7 @@ export class BenchPromotionProcessor extends WorkerHost {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private notificationService: NotificationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {
     super();
   }
@@ -193,5 +197,13 @@ export class BenchPromotionProcessor extends WorkerHost {
         payload: { eventId, role: vacatedRole, position: vacatedPosition },
       });
     }
+
+    // 6. Emit signup event so Discord embed is re-synced (ROK-458)
+    this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      userId: benchPlayer.userId,
+      signupId: benchPlayer.signupId,
+      action: 'bench_promoted',
+    } satisfies SignupEventPayload);
   }
 }
