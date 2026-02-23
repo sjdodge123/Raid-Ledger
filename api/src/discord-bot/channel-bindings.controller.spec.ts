@@ -14,6 +14,7 @@ const makeBinding = (overrides: Partial<BindingRecord> = {}): BindingRecord =>
     channelType: 'text',
     bindingPurpose: 'game-announcements',
     gameId: null,
+    recurrenceGroupId: null,
     config: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-01-01T00:00:00Z'),

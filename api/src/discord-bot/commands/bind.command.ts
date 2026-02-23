@@ -10,7 +10,7 @@ import {
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { and, ilike } from 'drizzle-orm';
+import { and, ilike, isNotNull, gte, sql, eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -36,7 +36,7 @@ export class BindCommand
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
     return new SlashCommandBuilder()
       .setName('bind')
-      .setDescription('Bind a Discord channel to a game/behavior')
+      .setDescription('Bind a Discord channel to a game or event series')
       .setDMPermission(false)
       .addChannelOption((opt) =>
         opt
@@ -46,6 +46,12 @@ export class BindCommand
       )
       .addStringOption((opt) =>
         opt.setName('game').setDescription('Game name').setAutocomplete(true),
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName('series')
+          .setDescription('Event series (recurrence group)')
+          .setAutocomplete(true),
       )
       .toJSON();
   }
@@ -106,6 +112,33 @@ export class BindCommand
       }
     }
 
+    // ROK-435: Resolve series (recurrence group) from autocomplete
+    const seriesValue = interaction.options.getString('series');
+    let recurrenceGroupId: string | null = null;
+    let resolvedSeriesTitle: string | null = null;
+
+    if (seriesValue) {
+      // The autocomplete value is the recurrence group UUID
+      const [seriesMatch] = await this.db
+        .select({
+          recurrenceGroupId: schema.events.recurrenceGroupId,
+          title: schema.events.title,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.recurrenceGroupId, seriesValue))
+        .limit(1);
+
+      if (seriesMatch?.recurrenceGroupId) {
+        recurrenceGroupId = seriesMatch.recurrenceGroupId;
+        resolvedSeriesTitle = seriesMatch.title;
+      } else {
+        await interaction.editReply(
+          'Event series not found. Use autocomplete to find available series.',
+        );
+        return;
+      }
+    }
+
     // Detect behavior based on channel type
     const behavior =
       this.channelBindingsService.detectBehavior(bindingChannelType);
@@ -118,6 +151,8 @@ export class BindCommand
         bindingChannelType,
         behavior,
         gameId,
+        undefined,
+        recurrenceGroupId,
       );
 
       const behaviorLabel =
@@ -127,6 +162,7 @@ export class BindCommand
 
       const description = [
         `**#${channelName}** bound for **${behaviorLabel}**`,
+        resolvedSeriesTitle ? `Series: **${resolvedSeriesTitle}**` : null,
         resolvedGameName ? `Game: **${resolvedGameName}**` : null,
         '',
         'Use the web admin panel for fine-tuning settings.',
@@ -181,6 +217,48 @@ export class BindCommand
 
       await interaction.respond(
         results.map((g) => ({ name: g.name, value: g.name })),
+      );
+    } else if (focused.name === 'series') {
+      // ROK-435: Autocomplete for event series — show active recurrence groups with future instances
+      const now = new Date().toISOString();
+      const searchValue = focused.value.toLowerCase();
+
+      const results = await this.db
+        .selectDistinctOn([schema.events.recurrenceGroupId], {
+          recurrenceGroupId: schema.events.recurrenceGroupId,
+          title: schema.events.title,
+          recurrenceRule: schema.events.recurrenceRule,
+        })
+        .from(schema.events)
+        .where(
+          and(
+            isNotNull(schema.events.recurrenceGroupId),
+            gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
+            sql`${schema.events.cancelledAt} IS NULL`,
+            searchValue
+              ? ilike(schema.events.title, `%${searchValue}%`)
+              : undefined,
+          ),
+        )
+        .limit(25);
+
+      await interaction.respond(
+        results
+          .filter(
+            (r): r is typeof r & { recurrenceGroupId: string } =>
+              r.recurrenceGroupId !== null,
+          )
+          .map((r) => {
+            const rule = r.recurrenceRule as {
+              frequency?: string;
+            } | null;
+            const freq = rule?.frequency ? ` (${rule.frequency})` : '';
+            const label = `${r.title}${freq}`.slice(0, 100);
+            return {
+              name: label,
+              value: r.recurrenceGroupId,
+            };
+          }),
       );
     }
   }

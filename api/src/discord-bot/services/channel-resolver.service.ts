@@ -6,10 +6,11 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 /**
  * Resolves which Discord channel to post event embeds to.
  *
- * Channel resolution priority (design spec section 4.3):
- * 1. Game-specific channel binding (ROK-348)
- * 2. Default text channel from bot settings (ROK-349)
- * 3. null — skip posting with logged warning
+ * Channel resolution priority (ROK-435 update):
+ * 1. Series-specific channel binding (recurrence group)
+ * 2. Game-specific channel binding (ROK-348)
+ * 3. Default text channel from bot settings (ROK-349)
+ * 4. null — skip posting with logged warning
  */
 @Injectable()
 export class ChannelResolverService {
@@ -24,29 +25,46 @@ export class ChannelResolverService {
   /**
    * Resolve the target Discord channel for an event.
    * @param gameId - Games table PK (integer) for game-specific binding lookup
+   * @param recurrenceGroupId - Optional recurrence group ID for series-specific binding (ROK-435)
    * @returns Channel ID string or null if no channel configured
    */
-  async resolveChannelForEvent(gameId?: number | null): Promise<string | null> {
-    // Priority 1: Game-specific binding
-    if (gameId) {
-      const guildId = this.clientService.getGuildId();
-      if (guildId) {
-        const boundChannel =
-          await this.channelBindingsService.getChannelForGame(guildId, gameId);
-        if (boundChannel) {
-          return boundChannel;
-        }
+  async resolveChannelForEvent(
+    gameId?: number | null,
+    recurrenceGroupId?: string | null,
+  ): Promise<string | null> {
+    const guildId = this.clientService.getGuildId();
+
+    // Priority 1: Series-specific binding (ROK-435)
+    if (recurrenceGroupId && guildId) {
+      const seriesChannel =
+        await this.channelBindingsService.getChannelForSeries(
+          guildId,
+          recurrenceGroupId,
+        );
+      if (seriesChannel) {
+        return seriesChannel;
       }
     }
 
-    // Priority 2: Default channel from bot settings
+    // Priority 2: Game-specific binding
+    if (gameId && guildId) {
+      const boundChannel = await this.channelBindingsService.getChannelForGame(
+        guildId,
+        gameId,
+      );
+      if (boundChannel) {
+        return boundChannel;
+      }
+    }
+
+    // Priority 3: Default channel from bot settings
     const defaultChannel =
       await this.settingsService.getDiscordBotDefaultChannel();
     if (defaultChannel) {
       return defaultChannel;
     }
 
-    // Priority 3: No channel configured
+    // Priority 4: No channel configured
     this.logger.warn(
       'No Discord channel configured for event posting. ' +
         'Set a default channel in the Discord bot settings or bind a channel with /bind.',
