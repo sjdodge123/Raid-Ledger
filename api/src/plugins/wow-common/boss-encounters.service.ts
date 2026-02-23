@@ -132,7 +132,10 @@ export class BossEncountersService {
 
     // Reassign sequential order numbers for sub-instance filtered results
     if (wingBossNames) {
-      return filtered.map((row, i) => ({ ...this.toBossDto(row), order: i + 1 }));
+      return filtered.map((row, i) => ({
+        ...this.toBossDto(row),
+        order: i + 1,
+      }));
     }
 
     return filtered.map((row) => this.toBossDto(row));
