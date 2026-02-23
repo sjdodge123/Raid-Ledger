@@ -238,9 +238,10 @@ export class EventCreateCommand
       });
 
       // Build ephemeral confirmation for creator
-      const clientUrl = process.env.CLIENT_URL ?? null;
+      const clientUrl =
+        process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
       let magicLinkUrl: string | null = null;
-      if (clientUrl) {
+      if (clientUrl && clientUrl !== 'auto') {
         magicLinkUrl = await this.magicLinkService.generateLink(
           user.id,
           `/events/${event.id}/edit`,
@@ -316,8 +317,8 @@ export class EventCreateCommand
       return;
     }
 
-    const clientUrl = process.env.CLIENT_URL ?? null;
-    if (!clientUrl) {
+    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
+    if (!clientUrl || clientUrl === 'auto') {
       await interaction.editReply(
         'The web app URL is not configured. Contact an admin.',
       );
