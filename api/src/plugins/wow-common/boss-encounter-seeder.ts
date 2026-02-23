@@ -1,5 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { sql } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -33,6 +34,7 @@ interface LootEntry {
  * Called on plugin install; data dropped on plugin uninstall.
  *
  * ROK-244: Variant-Aware Boss & Loot Table Seed Data
+ * ROK-247: Added Houndmaster Loksey loot
  */
 @Injectable()
 export class BossEncounterSeeder {
@@ -125,7 +127,18 @@ export class BossEncounterSeeder {
       const result = await this.db
         .insert(wowClassicBossLoot)
         .values(batch)
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [wowClassicBossLoot.bossId, wowClassicBossLoot.itemId, wowClassicBossLoot.expansion],
+          set: {
+            itemName: sql`excluded.item_name`,
+            slot: sql`excluded.slot`,
+            quality: sql`excluded.quality`,
+            itemLevel: sql`excluded.item_level`,
+            dropRate: sql`excluded.drop_rate`,
+            classRestrictions: sql`excluded.class_restrictions`,
+            iconUrl: sql`excluded.icon_url`,
+          },
+        })
         .returning({ id: wowClassicBossLoot.id });
 
       lootInserted += result.length;

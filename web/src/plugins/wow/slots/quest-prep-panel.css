@@ -103,13 +103,35 @@
     background: var(--color-faint);
 }
 
+.quest-card__header-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
 .quest-card__header {
     display: flex;
     align-items: flex-start;
     gap: 0.5rem;
+    flex: 1;
+    min-width: 0;
     cursor: pointer;
     user-select: none;
     -webkit-tap-highlight-color: transparent;
+}
+
+.quest-card__wowhead-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--color-muted);
+    text-decoration: none;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.quest-card__wowhead-icon:hover {
+    color: var(--color-indigo-400);
 }
 
 .quest-card__chevron {

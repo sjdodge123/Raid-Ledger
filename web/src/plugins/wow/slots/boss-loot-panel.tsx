@@ -241,32 +241,33 @@ function BossRow({
 
     return (
         <div className="boss-row">
-            <div
-                className="boss-row__header"
-                onClick={onToggle}
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        onToggle();
-                    }
-                }}
-            >
-                <span className={`boss-row__chevron ${isExpanded ? 'boss-row__chevron--open' : ''}`}>
-                    &#x25B8;
-                </span>
-                <span className="boss-row__order">{boss.order}</span>
-                <span className="boss-row__name">
-                    {boss.name}
-                </span>
-                {boss.sodModified && <span className="boss-row__sod-badge">SoD</span>}
+            <div className="boss-row__header-wrapper">
+                <div
+                    className="boss-row__header"
+                    onClick={onToggle}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            onToggle();
+                        }
+                    }}
+                >
+                    <span className={`boss-row__chevron ${isExpanded ? 'boss-row__chevron--open' : ''}`}>
+                        &#x25B8;
+                    </span>
+                    <span className="boss-row__order">{boss.order}</span>
+                    <span className="boss-row__name">
+                        {boss.name}
+                    </span>
+                    {boss.sodModified && <span className="boss-row__sod-badge">SoD</span>}
+                </div>
                 <a
                     className="boss-row__wowhead-link"
                     href={getWowheadNpcSearchUrl(boss.name, wowheadVariant)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    onClick={(e) => e.stopPropagation()}
                     title="View on Wowhead"
                 >
                     &#x2197;

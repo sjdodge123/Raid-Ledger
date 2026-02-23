@@ -234,30 +234,32 @@ export function QuestPrepPanel({
 
         return (
             <div key={quest.questId} className={cardClasses}>
-                <div className="quest-card__header" onClick={() => toggleExpanded(quest.questId)} role="button" tabIndex={0}>
-                    <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>▸</span>
-                    <div className="quest-card__info">
-                        <div className="quest-card__name">
-                            {quest.name}
-                            {quest.questLevel && (
-                                <span className="quest-card__level"> (Lv{quest.questLevel})</span>
-                            )}
+                <div className="quest-card__header-wrapper">
+                    <div className="quest-card__header" onClick={() => toggleExpanded(quest.questId)} role="button" tabIndex={0}>
+                        <span className={`quest-card__chevron ${isExpanded ? 'quest-card__chevron--open' : ''}`}>▸</span>
+                        <div className="quest-card__info">
+                            <div className="quest-card__name">
+                                {quest.name}
+                                {quest.questLevel && (
+                                    <span className="quest-card__level"> (Lv{quest.questLevel})</span>
+                                )}
+                            </div>
                         </div>
                     </div>
+                    <a
+                        className="quest-card__wowhead-icon"
+                        href={getWowheadQuestUrl(quest.questId, wowheadVariant)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="View on Wowhead"
+                    >
+                        &#x2197;
+                    </a>
                 </div>
 
                 {/* Compact details — always visible */}
                 <div className="quest-card__details">
                     <div className="quest-card__details-left">
-                        <a
-                            className="quest-card__wowhead-link"
-                            href={getWowheadQuestUrl(quest.questId, wowheadVariant)}
-                            data-wowhead={`quest=${quest.questId}&${wowheadSuffix}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            🔗 View on Wowhead
-                        </a>
                         {quest.questGiverNpc && (
                             <span className="quest-card__npc-inline">
                                 {quest.questGiverNpc}

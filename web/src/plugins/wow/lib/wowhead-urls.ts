@@ -14,7 +14,7 @@ function getWowheadDomain(variant: string | null | undefined): { urlBase: string
             return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
         case 'classic':
         case 'classic_era':
-            return { urlBase: 'classic.wowhead.com', tooltipDomain: 'classic&dataEnv=1' };
+            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
     }

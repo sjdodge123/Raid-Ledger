@@ -103,13 +103,13 @@ export class BossEncountersService {
     const expansions = this.getExpansionsForVariant(variant);
 
     // Resolve sub-instance to parent and determine wing boss filter
-    const instanceIds = [instanceId];
+    let queryInstanceId = instanceId;
     let wingBossNames: Set<string> | undefined;
 
     if (instanceId > 10000) {
       const parentId = Math.floor(instanceId / 100);
       const suffix = instanceId % 100;
-      instanceIds.push(parentId);
+      queryInstanceId = parentId;
       wingBossNames = SUB_INSTANCE_BOSSES[`${parentId}:${suffix}`];
     }
 
@@ -118,7 +118,7 @@ export class BossEncountersService {
       .from(wowClassicBosses)
       .where(
         and(
-          inArray(wowClassicBosses.instanceId, instanceIds),
+          eq(wowClassicBosses.instanceId, queryInstanceId),
           inArray(wowClassicBosses.expansion, expansions),
         ),
       )
@@ -128,6 +128,11 @@ export class BossEncountersService {
     const filtered = wingBossNames
       ? rows.filter((row) => wingBossNames.has(row.name))
       : rows;
+
+    // Reassign sequential order numbers for sub-instance filtered results
+    if (wingBossNames) {
+      return filtered.map((row, i) => ({ ...this.toBossDto(row), order: i + 1 }));
+    }
 
     return filtered.map((row) => this.toBossDto(row));
   }

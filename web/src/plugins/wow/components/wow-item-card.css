@@ -141,14 +141,7 @@
     white-space: nowrap;
 }
 
-/* Constrain Wowhead-injected icons */
-.wow-item-card .iconsmall,
-.wow-item-card .iconsmall img,
-.wow-item-card .iconsmall ins {
-    width: 18px !important;
-    height: 18px !important;
-    margin: 0 !important;
-    padding: 0 !important;
-    display: inline-block;
-    vertical-align: middle;
+/* Hide Wowhead-injected icons — we render our own via __icon */
+.wow-item-card .iconsmall {
+    display: none !important;
 }

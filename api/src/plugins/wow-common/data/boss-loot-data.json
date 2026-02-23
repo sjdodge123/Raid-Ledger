@@ -1118,6 +1118,30 @@
         "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_shoulder_10.jpg"
     },
     {
+        "bossName": "Houndmaster Loksey",
+        "expansion": "classic",
+        "itemId": 7756,
+        "itemName": "Dog Training Gloves",
+        "slot": "Hands",
+        "quality": "Rare",
+        "itemLevel": 34,
+        "dropRate": 0.30,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_gauntlets_07.jpg"
+    },
+    {
+        "bossName": "Houndmaster Loksey",
+        "expansion": "classic",
+        "itemId": 7710,
+        "itemName": "Loksey's Training Stick",
+        "slot": "Two-Hand",
+        "quality": "Rare",
+        "itemLevel": 36,
+        "dropRate": 0.25,
+        "classRestrictions": null,
+        "iconUrl": "https://wow.zamimg.com/images/wow/icons/medium/inv_staff_18.jpg"
+    },
+    {
         "bossName": "Arcanist Doan",
         "expansion": "classic",
         "itemId": 7714,
