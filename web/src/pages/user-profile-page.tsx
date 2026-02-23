@@ -6,74 +6,8 @@ import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
+import { CharacterCardCompact } from '../components/characters/character-card-compact';
 import './user-profile-page.css';
-
-const FACTION_STYLES: Record<string, string> = {
-    alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    horde: 'bg-red-500/20 text-red-400 border-red-500/30',
-};
-
-const ROLE_COLORS: Record<string, string> = {
-    tank: 'bg-blue-600',
-    healer: 'bg-emerald-600',
-    dps: 'bg-red-600',
-};
-
-/** Read-only character card matching the profile page style, clickable to detail page */
-function PublicCharacterCard({ character }: { character: CharacterDto }) {
-    return (
-        <Link
-            to={`/characters/${character.id}`}
-            className="bg-panel border border-edge rounded-lg p-4 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
-        >
-            {character.avatarUrl ? (
-                <img
-                    src={character.avatarUrl}
-                    alt={character.name}
-                    className="w-10 h-10 rounded-full bg-overlay flex-shrink-0"
-                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                />
-            ) : (
-                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-muted flex-shrink-0">
-                    👤
-                </div>
-            )}
-            <div className="min-w-0 overflow-hidden">
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-medium text-foreground truncate max-w-[180px] sm:max-w-none">{character.name}</span>
-                    {character.faction && (
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${FACTION_STYLES[character.faction] ?? 'bg-faint text-muted'}`}>
-                            {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
-                        </span>
-                    )}
-                </div>
-                <div className="flex items-center gap-1.5 text-sm text-muted flex-wrap">
-                    {character.level && (
-                        <>
-                            <span className="text-amber-400">Lv.{character.level}</span>
-                            <span>•</span>
-                        </>
-                    )}
-                    {character.race && <span className="truncate max-w-[100px] sm:max-w-none">{character.race}</span>}
-                    {character.race && character.class && <span>•</span>}
-                    {character.class && <span className="truncate max-w-[100px] sm:max-w-none">{character.class}</span>}
-                    {character.spec && <span className="truncate max-w-[80px] sm:max-w-none">• {character.spec}</span>}
-                    {character.effectiveRole && (
-                        <span className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${ROLE_COLORS[character.effectiveRole] ?? 'bg-faint'}`}>
-                            {character.effectiveRole.toUpperCase()}
-                        </span>
-                    )}
-                    {character.itemLevel && (
-                        <>
-                            <span>•</span>
-                            <span className="text-purple-400 whitespace-nowrap">{character.itemLevel} iLvl</span>
-                        </>
-                    )}
-                </div>
-            </div>
-        </Link>
-    );
-}
 
 /** Clickable game card for the hearted games section (ROK-282) */
 function HeartedGameCard({ game }: { game: UserHeartedGameDto }) {
@@ -149,7 +83,7 @@ function GroupedCharacters({
                             </div>
                             <div className="space-y-2">
                                 {chars.map((character) => (
-                                    <PublicCharacterCard
+                                    <CharacterCardCompact
                                         key={character.id}
                                         character={character}
                                     />

@@ -663,7 +663,7 @@ export function EventDetailPage() {
                                             race={signup.character.race}
                                             className={signup.character.class}
                                             spec={signup.character.spec}
-                                            role={signup.character.role}
+                                            role={signup.character.effectiveRole ?? signup.character.role}
                                             itemLevel={signup.character.itemLevel}
                                         />
                                     )}

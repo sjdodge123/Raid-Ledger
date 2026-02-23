@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import type { CharacterRole, GameRegistryDto, CharacterDto } from '@raid-ledger/contract';
+import type { CharacterRole, GameRegistryDto } from '@raid-ledger/contract';
 import { useCreateCharacter, useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { PluginSlot } from '../../plugins';
+import { CharacterCardCompact } from '../characters/character-card-compact';
 
 interface CharacterStepProps {
     /** The registry game to create a character for (pre-filled from hearted games) */
@@ -23,63 +24,6 @@ interface FormState {
     spec: string;
     role: CharacterRole | '';
     realm: string;
-}
-
-const ROLE_COLORS: Record<string, string> = {
-    tank: 'bg-blue-600',
-    healer: 'bg-emerald-600',
-    dps: 'bg-red-600',
-};
-
-/**
- * Mini read-only character card for display in the wizard.
- * Mirrors the profile page CharacterCard style but without edit/delete actions.
- */
-function MiniCharacterCard({ character }: { character: CharacterDto }) {
-    return (
-        <div className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3">
-            {character.avatarUrl ? (
-                <img
-                    src={character.avatarUrl}
-                    alt={character.name}
-                    className="w-8 h-8 rounded-full bg-overlay"
-                />
-            ) : (
-                <div className="w-8 h-8 rounded-full bg-overlay flex items-center justify-center text-muted text-xs">
-                    👤
-                </div>
-            )}
-            <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                    <span className="font-medium text-foreground text-sm truncate">
-                        {character.name}
-                    </span>
-                    {character.isMain && (
-                        <span className="text-yellow-400 text-xs font-semibold">⭐ Main</span>
-                    )}
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-muted">
-                    {character.level && (
-                        <>
-                            <span className="text-amber-400">Lv.{character.level}</span>
-                            <span>•</span>
-                        </>
-                    )}
-                    {character.race && <span>{character.race}</span>}
-                    {character.race && character.class && <span>•</span>}
-                    {character.class && <span>{character.class}</span>}
-                    {character.spec && <span>• {character.spec}</span>}
-                    {character.effectiveRole && (
-                        <span
-                            className={`px-1.5 py-0.5 rounded text-xs text-foreground ${ROLE_COLORS[character.effectiveRole] || 'bg-faint'}`}
-                        >
-                            {character.effectiveRole.toUpperCase()}
-                        </span>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
 }
 
 /**
@@ -176,7 +120,7 @@ export function CharacterStep({ preselectedGame, charIndex, onRegisterValidator,
             {hasCharacter && (
                 <div className="max-w-md mx-auto space-y-3">
                     <div className="relative">
-                        <MiniCharacterCard character={savedCharacter} />
+                        <CharacterCardCompact character={savedCharacter} size="sm" />
                         <button
                             type="button"
                             onClick={() => handleDeleteCharacter(savedCharacter.id)}
