@@ -127,6 +127,11 @@ export const EventResponseSchema = z.object({
     autoUnbench: z.boolean().optional(),
     contentInstances: z.array(z.record(z.string(), z.unknown())).nullable().optional(),
     recurrenceGroupId: z.string().uuid().nullable().optional(),
+    /** Stored recurrence rule for recurring events (ROK-434). */
+    recurrenceRule: z.object({
+        frequency: z.enum(['weekly', 'biweekly', 'monthly']),
+        until: z.string().datetime({ offset: true }),
+    }).nullable().optional(),
     /** DM reminder 15 min before event (ROK-126). */
     reminder15min: z.boolean().optional(),
     /** DM reminder 1 hour before event (ROK-126). */
