@@ -97,13 +97,39 @@ export class EventLinkListener {
       return;
     }
 
-    const clientUrl = process.env.CLIENT_URL;
-    if (!clientUrl) return;
+    const clientUrl = (
+      process.env.CLIENT_URL || process.env.CORS_ORIGIN
+    )?.replace(/\/+$/, ''); // strip trailing slash(es)
+    if (!clientUrl) {
+      this.logger.warn(
+        'Neither CLIENT_URL nor CORS_ORIGIN is set — link unfurl disabled',
+      );
+      return;
+    }
 
-    // Escape special regex chars in the URL, then match /events/:id and /i/:code
-    const escapedUrl = clientUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const eventPattern = new RegExp(`${escapedUrl}/events/(\\d+)`, 'g');
-    const invitePattern = new RegExp(`${escapedUrl}/i/([a-z2-9]{8})`, 'g');
+    // Build a protocol-flexible pattern from the hostname so http vs https doesn't matter
+    let hostPattern: string;
+    try {
+      const parsed = new URL(clientUrl);
+      const escapedHost = parsed.hostname.replace(
+        /[.*+?^${}()|[\]\\]/g,
+        '\\$&',
+      );
+      const port = parsed.port ? `:${parsed.port}` : '';
+      hostPattern = `${escapedHost}${port}`;
+    } catch {
+      this.logger.warn(`CLIENT_URL is not a valid URL: ${clientUrl}`);
+      return;
+    }
+
+    const eventPattern = new RegExp(
+      `https?://${hostPattern}/events/(\\d+)`,
+      'g',
+    );
+    const invitePattern = new RegExp(
+      `https?://${hostPattern}/i/([a-z2-9]{8})`,
+      'g',
+    );
 
     const eventMatches: number[] = [];
     const inviteCodes: string[] = [];
@@ -125,7 +151,17 @@ export class EventLinkListener {
       if (inviteCodes.length >= MAX_UNFURLS_PER_MESSAGE) break;
     }
 
-    if (eventMatches.length === 0 && inviteCodes.length === 0) return;
+    if (eventMatches.length === 0 && inviteCodes.length === 0) {
+      // Debug: warn if message contains something that looks like an event link
+      // but didn't match our pattern (helps diagnose CLIENT_URL mismatches)
+      const genericEventLink = /https?:\/\/[^\s/]+\/events\/\d+/i;
+      if (genericEventLink.test(message.content)) {
+        this.logger.warn(
+          `Message contains event-like URL but no match for host "${hostPattern}": ${message.content.substring(0, 200)}`,
+        );
+      }
+      return;
+    }
 
     const context = await this.buildContext();
     const embeds: EmbedBuilder[] = [];
@@ -200,6 +236,16 @@ export class EventLinkListener {
       ...(rows.length > 0 ? { components: rows } : {}),
     });
 
+    // Suppress Discord's default OG meta preview on the original message
+    // so only the bot's rich embed is shown
+    try {
+      await message.suppressEmbeds(true);
+    } catch (err) {
+      this.logger.warn(
+        `Failed to suppress embeds on message ${message.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
+      );
+    }
+
     // Track unfurl reply in discord_event_messages so embed sync updates it
     const guildId = message.guild?.id;
     if (guildId && reply.id) {
@@ -231,7 +277,7 @@ export class EventLinkListener {
     ]);
     return {
       communityName: branding.communityName,
-      clientUrl: process.env.CLIENT_URL ?? null,
+      clientUrl: process.env.CLIENT_URL || process.env.CORS_ORIGIN || null,
       timezone,
     };
   }
