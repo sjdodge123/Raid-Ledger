@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { CharacterStep } from './character-step';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 
@@ -64,9 +65,11 @@ function createQueryClient() {
 
 function renderWithProviders(ui: React.ReactElement) {
     return render(
-        <QueryClientProvider client={createQueryClient()}>
-            {ui}
-        </QueryClientProvider>
+        <MemoryRouter>
+            <QueryClientProvider client={createQueryClient()}>
+                {ui}
+            </QueryClientProvider>
+        </MemoryRouter>
     );
 }
 
