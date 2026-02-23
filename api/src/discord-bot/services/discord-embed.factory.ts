@@ -390,8 +390,13 @@ export class DiscordEmbedFactory {
     return filtered
       .map((m) => {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
-        const prefs = m.preferredRoles ?? [];
-        if (prefs.length <= 1) return label;
+        // Fall back to assigned role if no explicit preferences stored
+        const prefs =
+          m.preferredRoles && m.preferredRoles.length > 0
+            ? m.preferredRoles
+            : m.role
+              ? [m.role]
+              : [];
         // Show emojis for ALL preferred roles so flexibility is fully visible
         const allEmojis = prefs
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
