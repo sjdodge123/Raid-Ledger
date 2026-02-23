@@ -4,7 +4,7 @@ import { BindingConfigForm } from './BindingConfigForm';
 
 const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
-  'game-voice-monitor': 'Event Announcements',
+  'game-voice-monitor': 'Ad-hoc Events (Activity Monitoring) & Game Event Announcements',
   'general-lobby': 'General Lobby',
 };
 
@@ -14,7 +14,7 @@ const BEHAVIOR_BADGES: Record<string, { label: string; className: string }> = {
     className: 'bg-cyan-500/15 text-cyan-400',
   },
   'game-voice-monitor': {
-    label: 'Event Announcements',
+    label: 'Activity Monitor',
     className: 'bg-purple-500/15 text-purple-400',
   },
   'general-lobby': {

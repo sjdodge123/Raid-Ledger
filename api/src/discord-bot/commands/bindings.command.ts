@@ -87,7 +87,7 @@ export class BindingsCommand
           binding.bindingPurpose === 'game-announcements'
             ? 'Announcements'
             : binding.bindingPurpose === 'game-voice-monitor'
-              ? 'Event Announcements'
+              ? 'Activity Monitor'
               : binding.bindingPurpose;
 
         return `<#${binding.channelId}> → ${gameName} (${behaviorLabel})`;
