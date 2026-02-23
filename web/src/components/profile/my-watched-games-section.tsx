@@ -2,10 +2,9 @@ import { useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import type { UserHeartedGameDto } from '@raid-ledger/contract';
-import { useAuth } from '../../hooks/use-auth';
+import { useAuth, getAuthToken } from '../../hooks/use-auth';
 import { useUserHeartedGames } from '../../hooks/use-user-profile';
 import { API_BASE_URL } from '../../lib/config';
-import { getAuthToken } from '../../hooks/use-auth';
 
 /**
  * Card displaying a hearted game with toggle capability.
@@ -144,12 +143,13 @@ export function MyWatchedGamesSection() {
 
             // Fire DELETE for each unselected game
             await Promise.all(
-                removedIds.map((gameId) =>
-                    fetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, {
+                removedIds.map(async (gameId) => {
+                    const res = await fetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, {
                         method: 'DELETE',
                         headers,
-                    }),
-                ),
+                    });
+                    if (!res.ok) throw new Error(`Failed to remove game ${gameId} (${res.status})`);
+                }),
             );
 
             // Invalidate relevant queries
