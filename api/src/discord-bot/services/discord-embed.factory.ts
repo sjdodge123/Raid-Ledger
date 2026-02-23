@@ -41,6 +41,8 @@ export interface EmbedEventData {
     username?: string | null;
     role: string | null;
     preferredRoles: string[] | null;
+    /** ROK-459: Signup attendance status */
+    status?: string | null;
   }> | null;
   game?: {
     name: string;
@@ -382,6 +384,7 @@ export class DiscordEmbedFactory {
       username?: string | null;
       role: string | null;
       preferredRoles: string[] | null;
+      status?: string | null;
     }>,
     role: string | null,
   ): string {
@@ -390,6 +393,8 @@ export class DiscordEmbedFactory {
     return filtered
       .map((m) => {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
+        // ROK-459: ⏳ prefix for tentative players
+        const tentativePrefix = m.status === 'tentative' ? '⏳' : '';
         // Fall back to assigned role if no explicit preferences stored
         const prefs =
           m.preferredRoles && m.preferredRoles.length > 0
@@ -402,7 +407,9 @@ export class DiscordEmbedFactory {
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
           .filter(Boolean)
           .join('');
-        return allEmojis ? `${label}${allEmojis}` : label;
+        return allEmojis
+          ? `${tentativePrefix}${label}${allEmojis}`
+          : `${tentativePrefix}${label}`;
       })
       .join(', ');
   }

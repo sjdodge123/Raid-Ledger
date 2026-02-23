@@ -75,6 +75,9 @@ export function PlayerCard({
         </span>
     ) : null;
 
+    // ROK-459: Tentative badge
+    const isTentative = player.signupStatus === 'tentative';
+
     // ROK-452: Flexibility indicator — show all preferred roles as small colored badges
     const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 1
         ? player.preferredRoles
@@ -123,6 +126,15 @@ export function PlayerCard({
                         {player.username}
                     </Link>
                     {roleBadge}
+                    {/* ROK-459: Tentative indicator */}
+                    {isTentative && (
+                        <span
+                            className="shrink-0 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400"
+                            title="Tentative — may not attend"
+                        >
+                            ⏳ Tentative
+                        </span>
+                    )}
                     {/* ROK-452: Flexibility indicator for multi-role players */}
                     {preferredRoleBadges && (
                         <span

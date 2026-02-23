@@ -550,6 +550,16 @@ export class SignupsService {
       action: `status_changed_to_${dto.status}`,
     });
 
+    // ROK-459: When a slotted player goes tentative, check if any confirmed
+    // unassigned player wants the same role — if so, displace the tentative player.
+    if (dto.status === 'tentative') {
+      this.checkTentativeDisplacement(eventId, signup.id).catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-459: Failed tentative displacement check: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+    }
+
     if (updated.userId) {
       const [user] = await this.db
         .select()
@@ -1708,11 +1718,13 @@ export class SignupsService {
       dps: dpsSlots,
     };
 
-    // Get all signups with preferred roles for this event
+    // Get all signups with preferred roles and status for this event
     const allSignups = await tx
       .select({
         id: schema.eventSignups.id,
         preferredRoles: schema.eventSignups.preferredRoles,
+        status: schema.eventSignups.status,
+        signedUpAt: schema.eventSignups.signedUpAt,
       })
       .from(schema.eventSignups)
       .where(eq(schema.eventSignups.eventId, eventId));
@@ -1838,10 +1850,246 @@ export class SignupsService {
       return;
     }
 
-    // No rearrangement possible — leave in unassigned pool
+    // ROK-459: No rearrangement possible among confirmed players — try tentative displacement.
+    // If a tentative player occupies a slot in one of the new player's preferred roles,
+    // displace the longest-tentative to unassigned pool and give their slot to the new player.
+    const newSignupStatus = allSignups.find((s) => s.id === newSignupId)?.status;
+    if (newSignupStatus !== 'tentative') {
+      const displaced = await this.displaceTentativeForSlot(
+        tx,
+        eventId,
+        newSignupId,
+        newPrefs,
+        currentAssignments,
+        allSignups,
+        roleCapacity,
+        occupiedPositions,
+        findFirstAvailablePosition,
+      );
+      if (displaced) return;
+    }
+
+    // No rearrangement or displacement possible — leave in unassigned pool
     this.logger.log(
-      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement available)`,
+      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement or tentative displacement available)`,
     );
+  }
+
+  /**
+   * ROK-459: Check if a newly-tentative slotted player should be displaced by
+   * a confirmed unassigned player waiting for the same role.
+   * Called as a fire-and-forget side effect from updateStatus().
+   */
+  private async checkTentativeDisplacement(
+    eventId: number,
+    tentativeSignupId: number,
+  ): Promise<void> {
+    // Get the tentative player's current roster assignment
+    const [assignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, tentativeSignupId),
+        ),
+      )
+      .limit(1);
+
+    if (!assignment || !assignment.role) return; // Not slotted, nothing to displace
+
+    const role = assignment.role;
+
+    // Find confirmed unassigned players who want this role
+    const unassignedConfirmed = await this.db
+      .select({
+        id: schema.eventSignups.id,
+        preferredRoles: schema.eventSignups.preferredRoles,
+        signedUpAt: schema.eventSignups.signedUpAt,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.status, 'signed_up'),
+          isNull(schema.rosterAssignments.id),
+        ),
+      );
+
+    // Find one that wants this role
+    const candidate = unassignedConfirmed.find((s) => {
+      const prefs = (s.preferredRoles as string[] | null) ?? [];
+      return prefs.includes(role);
+    });
+
+    if (!candidate) return; // No confirmed player waiting for this role
+
+    // Get event's slot config for the displacement method
+    const [event] = await this.db
+      .select({ slotConfig: schema.events.slotConfig })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    const slotConfig = event?.slotConfig as Record<string, unknown> | null;
+    if (slotConfig?.type !== 'mmo') return; // Only MMO events have role-based displacement
+
+    // Run the auto-allocation for the confirmed unassigned player —
+    // this will trigger the displacement logic since all slots are full
+    await this.db.transaction(async (tx) => {
+      await this.autoAllocateSignup(tx, eventId, candidate.id, slotConfig);
+    });
+
+    this.logger.log(
+      `ROK-459: Triggered displacement check after signup ${tentativeSignupId} went tentative — candidate ${candidate.id}`,
+    );
+
+    // Emit update to resync embed
+    this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      signupId: tentativeSignupId,
+      action: 'tentative_displacement_check',
+    });
+  }
+
+  /**
+   * ROK-459: Displace the longest-tentative player from a preferred role slot.
+   * Before benching, attempts to rearrange the tentative player to another
+   * preferred role (ROK-452 integration). Returns true if displacement succeeded.
+   */
+  private async displaceTentativeForSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    newPrefs: string[],
+    currentAssignments: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    allSignups: Array<{ id: number; preferredRoles: string[] | null; status: string; signedUpAt: Date | null }>,
+    roleCapacity: Record<string, number>,
+    occupiedPositions: Record<string, Set<number>>,
+    findFirstAvailablePosition: (role: string) => number,
+  ): Promise<boolean> {
+    // Build a map of signupId -> signup data for status lookups
+    const signupById = new Map(allSignups.map((s) => [s.id, s]));
+
+    // For each preferred role, find tentative occupants (sorted by signedUpAt ASC = longest tentative first)
+    for (const role of newPrefs) {
+      if (!(role in roleCapacity)) continue;
+
+      const tentativeOccupants = currentAssignments
+        .filter((a) => {
+          if (a.role !== role) return false;
+          const signup = signupById.get(a.signupId);
+          return signup?.status === 'tentative';
+        })
+        .sort((a, b) => {
+          const aTime = signupById.get(a.signupId)?.signedUpAt?.getTime() ?? 0;
+          const bTime = signupById.get(b.signupId)?.signedUpAt?.getTime() ?? 0;
+          return aTime - bTime; // Oldest tentative first (FIFO)
+        });
+
+      if (tentativeOccupants.length === 0) continue;
+
+      const victim = tentativeOccupants[0];
+      const victimSignup = signupById.get(victim.signupId);
+      const victimPrefs = (victimSignup?.preferredRoles as string[] | null) ?? [];
+
+      // Try to rearrange the tentative player to another preferred role (not the displaced role)
+      const alternativeRoles = victimPrefs.filter((r) => r !== role && r in roleCapacity);
+      let rearranged = false;
+
+      for (const altRole of alternativeRoles) {
+        const filledInAlt = currentAssignments.filter((a) => a.role === altRole).length;
+        if (filledInAlt < roleCapacity[altRole]) {
+          // Open slot in alternative role — move tentative player there
+          const newPos = findFirstAvailablePosition(altRole);
+          await tx
+            .update(schema.rosterAssignments)
+            .set({ role: altRole, position: newPos })
+            .where(eq(schema.rosterAssignments.id, victim.id));
+          occupiedPositions[role]?.delete(victim.position);
+          occupiedPositions[altRole]?.add(newPos);
+          this.logger.log(
+            `ROK-459: Rearranged tentative signup ${victim.signupId} from ${role} slot ${victim.position} to ${altRole} slot ${newPos}`,
+          );
+          rearranged = true;
+          break;
+        }
+      }
+
+      if (!rearranged) {
+        // No alternative — remove assignment (move to unassigned pool)
+        await tx
+          .delete(schema.rosterAssignments)
+          .where(eq(schema.rosterAssignments.id, victim.id));
+        occupiedPositions[role]?.delete(victim.position);
+        this.logger.log(
+          `ROK-459: Displaced tentative signup ${victim.signupId} from ${role} slot ${victim.position} to unassigned pool`,
+        );
+      }
+
+      // Assign new confirmed player to the freed slot
+      const freedPosition = rearranged ? findFirstAvailablePosition(role) : victim.position;
+      await tx.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId: newSignupId,
+        role,
+        position: freedPosition,
+        isOverride: 0,
+      });
+      occupiedPositions[role]?.add(freedPosition);
+
+      this.logger.log(
+        `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
+      );
+      await this.benchPromotionService.cancelPromotion(eventId, role, freedPosition);
+
+      // Send notification to displaced player
+      if (victimSignup) {
+        const [event] = await tx
+          .select({ title: schema.events.title })
+          .from(schema.events)
+          .where(eq(schema.events.id, eventId))
+          .limit(1);
+        const eventTitle = event?.title ?? `Event #${eventId}`;
+        const action = rearranged
+          ? `moved to ${alternativeRoles.find((r) => {
+              const filled = currentAssignments.filter((a) => a.role === r).length;
+              return filled < roleCapacity[r];
+            }) ?? 'another role'}`
+          : 'moved to the unassigned pool';
+
+        // Only notify registered users (not anonymous Discord signups)
+        const [signup] = await tx
+          .select({ userId: schema.eventSignups.userId })
+          .from(schema.eventSignups)
+          .where(eq(schema.eventSignups.id, victim.signupId))
+          .limit(1);
+
+        if (signup?.userId) {
+          this.notificationService
+            .create({
+              userId: signup.userId,
+              type: 'tentative_displaced',
+              title: 'Roster update',
+              message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
+              payload: { eventId },
+            })
+            .catch((err: unknown) => {
+              this.logger.warn(
+                `Failed to notify displaced tentative player: ${err instanceof Error ? err.message : 'Unknown error'}`,
+              );
+            });
+        }
+      }
+
+      return true;
+    }
+
+    return false;
   }
 
   /**
@@ -2028,6 +2276,7 @@ export class SignupsService {
           }
         : null,
       preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+      signupStatus: row.event_signups.status as 'signed_up' | 'tentative' | 'declined',
     };
   }
 }
