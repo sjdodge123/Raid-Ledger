@@ -389,7 +389,11 @@ export class SignupsService {
 
     if (linkedUser) {
       // User has an RL account — use the normal signup path
-      return this.signup(eventId, linkedUser.id);
+      // ROK-452: Forward preferred roles so multi-role selection isn't lost
+      return this.signup(eventId, linkedUser.id, {
+        preferredRoles: dto.preferredRoles,
+        slotRole: dto.role,
+      });
     }
 
     // Insert anonymous signup
@@ -1758,10 +1762,7 @@ export class SignupsService {
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId));
 
-    // Build assignment map: signupId -> current assignment
-    const assignedBySignupId = new Map(
-      currentAssignments.map((a) => [a.signupId, a]),
-    );
+
 
     // Count filled slots per role
     const filledPerRole: Record<string, number> = { tank: 0, healer: 0, dps: 0 };
@@ -1907,67 +1908,74 @@ export class SignupsService {
     vacatedRole: string,
     vacatedPosition: number,
   ): Promise<void> {
-    // Find tentative unassigned players who prefer this role
-    const candidates = await this.db
-      .select({
-        id: schema.eventSignups.id,
-        preferredRoles: schema.eventSignups.preferredRoles,
-        signedUpAt: schema.eventSignups.signedUpAt,
-      })
-      .from(schema.eventSignups)
-      .leftJoin(
-        schema.rosterAssignments,
-        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-      )
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.status, 'tentative'),
-          isNull(schema.rosterAssignments.id),
-        ),
-      )
-      .orderBy(schema.eventSignups.signedUpAt);
+    // ROK-459 review fix: wrap in transaction to prevent race between check and insert
+    const reslottedSignupId = await this.db.transaction(async (tx) => {
+      // Find tentative unassigned players who prefer this role
+      const candidates = await tx
+        .select({
+          id: schema.eventSignups.id,
+          preferredRoles: schema.eventSignups.preferredRoles,
+          signedUpAt: schema.eventSignups.signedUpAt,
+        })
+        .from(schema.eventSignups)
+        .leftJoin(
+          schema.rosterAssignments,
+          eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+        )
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            eq(schema.eventSignups.status, 'tentative'),
+            isNull(schema.rosterAssignments.id),
+          ),
+        )
+        .orderBy(schema.eventSignups.signedUpAt);
 
-    // Find first candidate who prefers the vacated role
-    const candidate = candidates.find((c) => {
-      const prefs = (c.preferredRoles as string[] | null) ?? [];
-      return prefs.includes(vacatedRole);
+      // Find first candidate who prefers the vacated role
+      const candidate = candidates.find((c) => {
+        const prefs = (c.preferredRoles as string[] | null) ?? [];
+        return prefs.includes(vacatedRole);
+      });
+
+      if (!candidate) return null;
+
+      // Verify the slot is still empty (might have been filled by bench promotion)
+      const [existing] = await tx
+        .select({ id: schema.rosterAssignments.id })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.role, vacatedRole),
+            eq(schema.rosterAssignments.position, vacatedPosition),
+          ),
+        )
+        .limit(1);
+
+      if (existing) return null; // Slot already filled
+
+      // Assign the tentative player to the vacated slot
+      await tx.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId: candidate.id,
+        role: vacatedRole,
+        position: vacatedPosition,
+        isOverride: 0,
+      });
+
+      return candidate.id;
     });
 
-    if (!candidate) return;
-
-    // Verify the slot is still empty (might have been filled by bench promotion)
-    const [existing] = await this.db
-      .select({ id: schema.rosterAssignments.id })
-      .from(schema.rosterAssignments)
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.rosterAssignments.role, vacatedRole),
-          eq(schema.rosterAssignments.position, vacatedPosition),
-        ),
-      )
-      .limit(1);
-
-    if (existing) return; // Slot already filled
-
-    // Assign the tentative player to the vacated slot
-    await this.db.insert(schema.rosterAssignments).values({
-      eventId,
-      signupId: candidate.id,
-      role: vacatedRole,
-      position: vacatedPosition,
-      isOverride: 0,
-    });
+    if (!reslottedSignupId) return;
 
     this.logger.log(
-      `ROK-459: Reslotted tentative signup ${candidate.id} to ${vacatedRole} slot ${vacatedPosition}`,
+      `ROK-459: Reslotted tentative signup ${reslottedSignupId} to ${vacatedRole} slot ${vacatedPosition}`,
     );
 
     // Resync embed
     this.emitSignupEvent(SIGNUP_EVENTS.UPDATED, {
       eventId,
-      signupId: candidate.id,
+      signupId: reslottedSignupId,
       action: 'tentative_reslotted',
     });
   }

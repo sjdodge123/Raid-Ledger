@@ -165,6 +165,7 @@ export class EmbedPosterService {
         username: r.username,
         role: r.role ?? null,
         preferredRoles: r.preferredRoles,
+        status: r.status ?? null,
       }));
 
     return {

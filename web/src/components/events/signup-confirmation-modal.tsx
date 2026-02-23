@@ -323,7 +323,7 @@ export function SignupConfirmationModal({
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={!selectedCharacterId || isConfirming}
+                        disabled={!selectedCharacterId || isConfirming || (hasRoles && selectedRoles.length === 0)}
                         className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
                     >
                         {isConfirming ? 'Signing up...' : 'Sign Up'}
