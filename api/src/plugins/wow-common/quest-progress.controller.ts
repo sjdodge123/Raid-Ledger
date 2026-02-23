@@ -64,6 +64,9 @@ export class QuestProgressController {
     @Body() body: { questId: number; pickedUp?: boolean; completed?: boolean },
     @Req() req: { user: { id: number } },
   ) {
+    if (!req.user?.id) {
+      throw new BadRequestException('User ID is required');
+    }
     const parsed = UpdateQuestProgressBodySchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
