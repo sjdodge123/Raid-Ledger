@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -62,8 +62,10 @@ export class EmbedPosterService {
     }
 
     try {
+      // Enrich with live roster data so the embed reflects current signups
+      const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
       const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventEmbed(event, context);
+      const { embed, row } = this.embedFactory.buildEventEmbed(enrichedEvent, context);
 
       const message = await this.clientService.sendEmbed(channelId, embed, row);
 
@@ -98,6 +100,71 @@ export class EmbedPosterService {
       .where(eq(schema.discordEventMessages.eventId, eventId))
       .limit(1);
     return rows.length > 0;
+  }
+
+  /**
+   * Enrich event data with live roster/signup information from the DB.
+   * The caller's payload may have stale or empty signup data (e.g. scheduler
+   * hardcodes signupCount: 0). This queries the current state so the embed
+   * is accurate at post time.
+   */
+  private async enrichWithLiveRoster(
+    eventId: number,
+    event: EmbedEventData,
+  ): Promise<EmbedEventData> {
+    const signupRows = await this.db
+      .select({
+        discordId: sql<
+          string | null
+        >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        role: schema.rosterAssignments.role,
+        status: schema.eventSignups.status,
+      })
+      .from(schema.eventSignups)
+      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+      .leftJoin(
+        schema.rosterAssignments,
+        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    const activeSignups = signupRows.filter((r) => r.status !== 'declined');
+
+    const roleRows = await this.db
+      .select({
+        role: schema.rosterAssignments.role,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.rosterAssignments)
+      .innerJoin(
+        schema.eventSignups,
+        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+      )
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          sql`${schema.eventSignups.status} != 'declined'`,
+        ),
+      )
+      .groupBy(schema.rosterAssignments.role);
+
+    const roleCounts: Record<string, number> = {};
+    for (const row of roleRows) {
+      if (row.role) roleCounts[row.role] = row.count;
+    }
+
+    const signupMentions = activeSignups
+      .filter(
+        (r): r is typeof r & { discordId: string } => r.discordId !== null,
+      )
+      .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
+
+    return {
+      ...event,
+      signupCount: activeSignups.length,
+      roleCounts,
+      signupMentions,
+    };
   }
 
   /**
