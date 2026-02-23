@@ -176,13 +176,20 @@ export class SignupsService {
           .limit(1);
 
         if (existingAssignment.length === 0) {
-          // ROK-452: Try auto-allocation for MMO events with preferred roles
+          // ROK-452: For MMO events, always use auto-allocation
           const slotConfigDup = event[0].slotConfig as Record<string, unknown> | null;
           const isMMODup = slotConfigDup?.type === 'mmo';
           const hasPreferredRolesDup =
             existing.preferredRoles && existing.preferredRoles.length > 0;
+          const hasSingleSlotRoleDup = !hasPreferredRolesDup && dto?.slotRole && !autoBench;
 
-          if (isMMODup && hasPreferredRolesDup && !dto?.slotRole && !autoBench) {
+          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench) {
+            if (hasSingleSlotRoleDup && dto?.slotRole) {
+              await tx
+                .update(schema.eventSignups)
+                .set({ preferredRoles: [dto.slotRole] })
+                .where(eq(schema.eventSignups.id, existing.id));
+            }
             await this.autoAllocateSignup(tx, eventId, existing.id, slotConfigDup);
           } else {
             // ROK-353: If caller requested a slot but the signup has no roster
@@ -246,14 +253,23 @@ export class SignupsService {
       const [inserted] = rows;
       this.logger.log(`User ${userId} signed up for event ${eventId}`);
 
-      // ROK-452: Check if this is an MMO event with preferredRoles — run auto-allocation
+      // ROK-452: For MMO events, always use auto-allocation (handles capacity
+      // checks and chain rearrangement). If slotRole is provided, treat it as
+      // the primary preference. This prevents overflow assignments.
       const slotConfig = event[0].slotConfig as Record<string, unknown> | null;
       const isMMO = slotConfig?.type === 'mmo';
       const hasPreferredRoles =
         dto?.preferredRoles && dto.preferredRoles.length > 0;
+      const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
 
-      if (isMMO && hasPreferredRoles && !dto?.slotRole && !autoBench) {
-        // ROK-452: Auto-allocate using preferred roles
+      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench) {
+        // Ensure the signup has preferred roles stored for the algorithm
+        if (hasSingleSlotRole && dto?.slotRole) {
+          await tx
+            .update(schema.eventSignups)
+            .set({ preferredRoles: [dto.slotRole] })
+            .where(eq(schema.eventSignups.id, inserted.id));
+        }
         await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
       } else {
         // ROK-183: Create roster assignment — explicit slot, auto-bench, or
@@ -417,19 +433,26 @@ export class SignupsService {
 
       const [inserted] = rows;
 
-      // ROK-452: Check if this is an MMO event with preferredRoles — run auto-allocation
+      // ROK-452: For MMO events, always use auto-allocation
       const slotConfig = event.slotConfig as Record<string, unknown> | null;
       const isMMO = slotConfig?.type === 'mmo';
       const hasPreferredRoles =
         dto.preferredRoles && dto.preferredRoles.length > 0;
+      const hasSingleRole = !hasPreferredRoles && dto.role;
 
-      if (isMMO && hasPreferredRoles && !dto.role) {
+      if (isMMO && (hasPreferredRoles || hasSingleRole)) {
+        if (hasSingleRole && dto.role) {
+          await tx
+            .update(schema.eventSignups)
+            .set({ preferredRoles: [dto.role] })
+            .where(eq(schema.eventSignups.id, inserted.id));
+        }
         await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
       }
 
-      // Determine role: explicit from dto, or auto-detect for generic events (ROK-451)
+      // Determine role: for non-MMO or non-preferred-role signups only
       const assignRole =
-        (!isMMO || !hasPreferredRoles)
+        (!isMMO || (!hasPreferredRoles && !hasSingleRole))
           ? (dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId)))
           : null;
 
