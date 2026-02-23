@@ -163,8 +163,10 @@ export class EmbedSyncProcessor extends WorkerHost {
         discordId: sql<
           string | null
         >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        username: schema.users.username,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
+        preferredRoles: schema.eventSignups.preferredRoles,
       })
       .from(schema.eventSignups)
       .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
@@ -202,10 +204,14 @@ export class EmbedSyncProcessor extends WorkerHost {
     }
 
     const signupMentions = activeSignups
-      .filter(
-        (r): r is typeof r & { discordId: string } => r.discordId !== null,
-      )
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
+      .filter((r) => r.discordId !== null || r.username !== null)
+      .map((r) => ({
+        discordId: r.discordId,
+        username: r.username,
+        role: r.role ?? null,
+        preferredRoles: r.preferredRoles,
+        status: r.status ?? null,
+      }));
 
     const eventData: EmbedEventData = {
       id: event.id,

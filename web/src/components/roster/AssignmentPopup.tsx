@@ -87,7 +87,7 @@ export function AssignmentPopup({
         ? unassigned.find(u => u.signupId === selectedPlayerId)
         : null;
 
-    // Sort: matching role first, then alphabetical
+    // Sort: matching role first (character role OR preferred roles), then alphabetical
     const { matching, other } = useMemo(() => {
         const lowerSearch = search.toLowerCase();
         const filtered = search
@@ -101,8 +101,13 @@ export function AssignmentPopup({
             return { matching: [], other: filtered };
         }
 
-        const match = filtered.filter(u => u.character?.role === slotRole);
-        const rest = filtered.filter(u => u.character?.role !== slotRole);
+        // ROK-452: Match by character role OR preferred roles
+        const match = filtered.filter(u =>
+            u.character?.role === slotRole ||
+            (u.preferredRoles && u.preferredRoles.includes(slotRole as 'tank' | 'healer' | 'dps'))
+        );
+        const matchIds = new Set(match.map(u => u.signupId));
+        const rest = filtered.filter(u => !matchIds.has(u.signupId));
         return { matching: match, other: rest };
     }, [unassigned, slotRole, search]);
 

@@ -215,7 +215,10 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
         discordUsername: 'linkeduser',
       });
 
-      expect(signupSpy).toHaveBeenCalledWith(1, mockUser.id);
+      expect(signupSpy).toHaveBeenCalledWith(1, mockUser.id, {
+        preferredRoles: undefined,
+        slotRole: undefined,
+      });
     });
 
     it('should throw NotFoundException when event does not exist', async () => {

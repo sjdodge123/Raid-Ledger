@@ -75,6 +75,14 @@ export function PlayerCard({
         </span>
     ) : null;
 
+    // ROK-459: Tentative badge
+    const isTentative = player.signupStatus === 'tentative';
+
+    // ROK-452: Flexibility indicator — show all preferred roles as small colored badges
+    const preferredRoleBadges = player.preferredRoles && player.preferredRoles.length > 1
+        ? player.preferredRoles
+        : null;
+
     const borderStyle = matchAccent
         ? { borderLeft: `3px solid ${matchAccent}` }
         : undefined;
@@ -102,7 +110,7 @@ export function PlayerCard({
 
             {/* Info - AC-6: truncation with title tooltip */}
             <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
                     <Link
                         to={`/users/${player.userId}`}
                         state={player.userId === 0 ? {
@@ -118,6 +126,31 @@ export function PlayerCard({
                         {player.username}
                     </Link>
                     {roleBadge}
+                    {/* ROK-459: Tentative indicator */}
+                    {isTentative && (
+                        <span
+                            className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-400"
+                            title="Tentative — may not attend"
+                        >
+                            ⏳
+                        </span>
+                    )}
+                    {/* ROK-452: Flexibility indicator for multi-role players */}
+                    {preferredRoleBadges && (
+                        <span
+                            className="flex shrink-0 items-center gap-0.5"
+                            title={`Prefers: ${preferredRoleBadges.map(formatRole).join(', ')}`}
+                        >
+                            {preferredRoleBadges.map((r) => (
+                                <span
+                                    key={r}
+                                    className={`inline-flex items-center rounded px-1.5 py-1 text-sm leading-none font-medium ${ROLE_BADGE_CLASSES[r] ?? ROLE_BADGE_CLASSES.player}`}
+                                >
+                                    {ROLE_EMOJI[r] ?? ''}
+                                </span>
+                            ))}
+                        </span>
+                    )}
                 </div>
                 {player.character && (
                     <p

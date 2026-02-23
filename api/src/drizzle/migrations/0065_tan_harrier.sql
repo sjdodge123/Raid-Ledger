@@ -1,0 +1,1 @@
+ALTER TABLE "event_signups" ADD COLUMN "preferred_roles" text[];

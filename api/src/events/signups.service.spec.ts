@@ -215,6 +215,14 @@ describe('SignupsService', () => {
               limit: jest.fn().mockResolvedValue([mockSignup]),
             }),
           }),
+        })
+        // 4. Check existing roster assignment (ROK-452)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+            }),
+          }),
         });
 
       // Insert with onConflictDoNothing returns empty array (duplicate)
@@ -258,6 +266,14 @@ describe('SignupsService', () => {
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
               limit: jest.fn().mockResolvedValue([mockSignup]),
+            }),
+          }),
+        })
+        // 4. Check existing roster assignment (ROK-452)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
             }),
           }),
         });
@@ -310,6 +326,14 @@ describe('SignupsService', () => {
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
               limit: jest.fn().mockResolvedValue([existingSignupWithNote]),
+            }),
+          }),
+        })
+        // 4. Check existing roster assignment (ROK-452)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
             }),
           }),
         });
@@ -367,7 +391,15 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 4. getCharacterById called via private method
+        // 4. Check existing roster assignment (ROK-452)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+            }),
+          }),
+        })
+        // 5. getCharacterById called via private method
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({

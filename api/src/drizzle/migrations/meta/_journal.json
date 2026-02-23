@@ -456,6 +456,13 @@
       "when": 1771900700000,
       "tag": "0064_aberrant_nuke",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1771900800000,
+      "tag": "0065_tan_harrier",
+      "breakpoints": true
     }
   ]
 }

@@ -162,18 +162,25 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-439: Called when user confirms character/role in the pre-signup modal
-    const handleSelectionConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+    // ROK-439/452: Called when user confirms character/role in the pre-signup modal
+    const handleSelectionConfirm = async (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => {
         try {
-            const options: { characterId: string; slotRole?: string; slotPosition?: number } = {
+            const options: { characterId: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] } = {
                 characterId: selection.characterId,
             };
+            // ROK-452: Pass preferred roles for multi-role auto-allocation
+            if (selection.preferredRoles && selection.preferredRoles.length > 0) {
+                options.preferredRoles = selection.preferredRoles;
+            }
             // If a slot was targeted (from handleSlotClick), include slot info
             if (pendingSlot) {
                 options.slotRole = selection.role ?? pendingSlot.role;
                 options.slotPosition = pendingSlot.position;
-            } else if (selection.role) {
-                // Use the selected role as slot preference
+            } else if (selection.preferredRoles && selection.preferredRoles.length === 1) {
+                // Single preferred role acts as direct slot preference
+                options.slotRole = selection.preferredRoles[0];
+            } else if (!selection.preferredRoles && selection.role) {
+                // Fallback: no multi-role, use selected role
                 options.slotRole = selection.role;
             }
             await signup.mutateAsync(options);
@@ -357,11 +364,12 @@ export function EventDetailPage() {
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
     // Filter out declined signups from display
     const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
+    // ROK-459: Separate tentative players from confirmed
+    const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
+    const nonTentative = activeSignups.filter(s => s.status !== 'tentative');
     // ROK-457: Anonymous Discord signups can't confirm characters — treat them as confirmed
-    const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending' && !s.isAnonymous).sort(alphabetical);
-    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus !== 'pending' || s.isAnonymous).sort(alphabetical);
-    // tentativeSignups can be used to show a separate section if needed
-    // const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
+    const pendingSignups = nonTentative.filter(s => s.confirmationStatus === 'pending' && !s.isAnonymous).sort(alphabetical);
+    const confirmedSignups = nonTentative.filter(s => s.confirmationStatus !== 'pending' || s.isAnonymous).sort(alphabetical);
 
     return (
         <div className="event-detail-page pb-20 md:pb-0">
@@ -556,6 +564,16 @@ export function EventDetailPage() {
                                     Login to Join
                                 </Link>
                             )}
+                            {/* ROK-452: General join button for non-admin users */}
+                            {canJoinSlot && (
+                                <button
+                                    onClick={handleSignup}
+                                    disabled={signup.isPending}
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    {signup.isPending ? 'Joining...' : 'Join Event'}
+                                </button>
+                            )}
                             {isSignedUp && (
                                 <div className="flex items-center gap-1.5">
                                     {/* ROK-137: Status toggle buttons */}
@@ -713,6 +731,50 @@ export function EventDetailPage() {
                     </div>
                 )}
 
+                {tentativeSignups.length > 0 && (
+                    <div className="event-detail-roster__group">
+                        <h3><span role="img" aria-hidden="true">⏳</span> Tentative ({tentativeSignups.length})</h3>
+                        <div className="space-y-2">
+                            {tentativeSignups.map(signup => (
+                                <div key={signup.id} className="space-y-1">
+                                    <div className="flex items-center gap-2">
+                                        {signup.isAnonymous ? (
+                                            <span className="flex items-center gap-1.5 text-sm text-muted">
+                                                <span>{signup.discordUsername ?? signup.user.username}</span>
+                                                <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
+                                            </span>
+                                        ) : (
+                                            <UserLink
+                                                userId={signup.user.id}
+                                                username={signup.user.username}
+                                                user={toAvatarUser(signup.user)}
+                                                gameId={event.game?.id ?? undefined}
+                                                showAvatar
+                                                size="md"
+                                            />
+                                        )}
+                                        <span className="text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">tentative</span>
+                                    </div>
+                                    {signup.character && (
+                                        <CharacterCardCompact
+                                            id={signup.character.id}
+                                            name={signup.character.name}
+                                            avatarUrl={signup.character.avatarUrl}
+                                            faction={signup.character.faction}
+                                            level={signup.character.level}
+                                            race={signup.character.race}
+                                            className={signup.character.class}
+                                            spec={signup.character.spec}
+                                            role={signup.character.role}
+                                            itemLevel={signup.character.itemLevel}
+                                        />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {pendingSignups.length > 0 && (
                     <div className="event-detail-roster__group">
                         <h3><span role="img" aria-hidden="true">⏳</span> Pending ({pendingSignups.length})</h3>
@@ -733,9 +795,6 @@ export function EventDetailPage() {
                                             showAvatar
                                             size="md"
                                         />
-                                    )}
-                                    {signup.status === 'tentative' && (
-                                        <span className="text-xs text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">tentative</span>
                                     )}
                                 </div>
                             ))}

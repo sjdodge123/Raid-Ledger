@@ -35,8 +35,15 @@ export interface EmbedEventData {
   } | null;
   /** Actual per-role signup counts from roster_assignments */
   roleCounts?: Record<string, number> | null;
-  /** Discord IDs of signed-up users, grouped by role for mention display */
-  signupMentions?: Array<{ discordId: string; role: string | null }> | null;
+  /** Signed-up users grouped by role for mention/name display */
+  signupMentions?: Array<{
+    discordId?: string | null;
+    username?: string | null;
+    role: string | null;
+    preferredRoles: string[] | null;
+    /** ROK-459: Signup attendance status */
+    status?: string | null;
+  }> | null;
   game?: {
     name: string;
     coverUrl?: string | null;
@@ -360,16 +367,51 @@ export class DiscordEmbedFactory {
     return null;
   }
 
+  private static readonly ROLE_EMOJI: Record<string, string> = {
+    tank: '🛡️',
+    healer: '💚',
+    dps: '⚔️',
+  };
+
   /**
    * Format Discord mentions for a specific role (or all if role is null).
+   * Players with multiple preferred roles get emoji indicators showing
+   * their other available roles (flexibility visible to other signups).
    */
   private getMentionsForRole(
-    mentions: Array<{ discordId: string; role: string | null }>,
+    mentions: Array<{
+      discordId?: string | null;
+      username?: string | null;
+      role: string | null;
+      preferredRoles: string[] | null;
+      status?: string | null;
+    }>,
     role: string | null,
   ): string {
     const filtered =
       role !== null ? mentions.filter((m) => m.role === role) : mentions;
-    return filtered.map((m) => `<@${m.discordId}>`).join(' ');
+    return filtered
+      .map((m) => {
+        const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
+        // ROK-459: ⏳ prefix for tentative players
+        const tentativePrefix = m.status === 'tentative' ? '⏳' : '';
+        // Fall back to assigned role if no explicit preferences stored
+        const prefs =
+          m.preferredRoles && m.preferredRoles.length > 0
+            ? m.preferredRoles
+            : m.role
+              ? [m.role]
+              : [];
+        // Show emojis for ALL preferred roles so flexibility is fully visible
+        const allEmojis = prefs
+          .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
+          .filter(Boolean)
+          .join('');
+        return allEmojis
+          ? `${tentativePrefix}${label}${allEmojis}`
+          : `${tentativePrefix}${label}`;
+      })
+      .join(', ');
   }
 
   /**

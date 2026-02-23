@@ -70,6 +70,7 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
 
     const isOccupied = !!item;
     const isClickable = onAdminClick || (!isOccupied && !!(onJoinClick || isPending));
+    const isTentative = item?.signupStatus === 'tentative';
 
     // ROK-184: Glow effect classes for current user's slot
     const glowClass = isCurrentUser
@@ -86,9 +87,11 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
         ${isPending
                     ? 'border-green-500 bg-green-500/20'
                     : item
-                        ? isCurrentUser
-                            ? 'border-emerald-400/50 bg-emerald-900/20'
-                            : 'border-edge bg-panel/80'
+                        ? isTentative
+                            ? 'border-dashed border-amber-500/60 bg-amber-900/10'
+                            : isCurrentUser
+                                ? 'border-emerald-400/50 bg-emerald-900/20'
+                                : 'border-edge bg-panel/80'
                         : isClickable
                             ? 'border-dashed border-edge-strong bg-panel/20 hover:border-indigo-400 hover:bg-indigo-500/10'
                             : 'border-dashed border-edge bg-panel/20'
@@ -99,10 +102,10 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
             <span
                 className={`
           absolute -top-2 left-2 z-10 rounded px-1.5 text-xs font-semibold
-          ${isPending ? 'bg-green-600' : color} text-foreground
+          ${isPending ? 'bg-green-600' : isTentative ? 'bg-amber-600' : color} text-foreground
         `}
             >
-                {position}
+                {isTentative ? `⏳ ${position}` : position}
             </span>
 
             {/* Slot content */}
