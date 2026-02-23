@@ -357,6 +357,7 @@ export class DungeonQuestsService {
           slot: string | null;
           itemLevel: number | null;
           iconUrl: string | null;
+          itemSubclass: string | null;
         }
       >;
       for (const [idStr, item] of Object.entries(parsed)) {
@@ -368,7 +369,7 @@ export class DungeonQuestsService {
           slot: item.slot,
           itemLevel: item.itemLevel,
           iconUrl: item.iconUrl,
-          itemSubclass: null,
+          itemSubclass: item.itemSubclass ?? null,
         };
       }
     } catch {
