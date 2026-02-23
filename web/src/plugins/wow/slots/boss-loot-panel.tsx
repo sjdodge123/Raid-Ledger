@@ -7,6 +7,7 @@ import { WowItemCard } from '../components/wow-item-card';
 import { ItemComparison } from '../components/item-comparison';
 import { getWowheadItemUrl, getWowheadDataSuffix, getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
 import './boss-loot-panel.css';
+import './quest-prep-panel.css';
 
 /** Map loot slot names to character equipment slot names for upgrade detection */
 const LOOT_TO_EQUIP_SLOT: Record<string, string> = {
@@ -357,7 +358,7 @@ function BossLootBody({
                 </div>
             )}
 
-            <div className="boss-loot-grid">
+            <div className="quest-rewards">
                 {displayLoot.map((item) => {
                     const usable = isUsableByClass(item);
                     const equipSlot = item.slot ? LOOT_TO_EQUIP_SLOT[item.slot] ?? item.slot : null;
@@ -368,7 +369,7 @@ function BossLootBody({
                     return (
                         <div
                             key={item.id}
-                            className={`boss-loot-item ${!usable && !filterUsable ? 'boss-loot-item--dimmed' : ''}`}
+                            className={`quest-reward-item-wrapper ${!usable && !filterUsable ? 'quest-card--dimmed' : ''}`}
                         >
                             <WowItemCard
                                 itemId={item.itemId}
@@ -390,18 +391,20 @@ function BossLootBody({
                                 />
                             )}
 
-                            {/* Class restrictions tag */}
-                            {item.classRestrictions && item.classRestrictions.length > 0 && (
-                                <span className="boss-loot-item__class-tag">
-                                    {item.classRestrictions.join(', ')}
-                                </span>
-                            )}
-
-                            {/* Drop rate */}
-                            {item.dropRate && (
-                                <span className="boss-loot-item__drop-rate">
-                                    {(parseFloat(item.dropRate) * 100).toFixed(0)}%
-                                </span>
+                            {/* Class restrictions + drop rate metadata */}
+                            {(item.classRestrictions?.length || item.dropRate) && (
+                                <div className="boss-loot-item-meta">
+                                    {item.classRestrictions && item.classRestrictions.length > 0 && (
+                                        <span className="quest-badge-restriction quest-badge-class">
+                                            {item.classRestrictions.join(', ')}
+                                        </span>
+                                    )}
+                                    {item.dropRate && (
+                                        <span className="boss-loot-item-meta__drop-rate">
+                                            {(parseFloat(item.dropRate) * 100).toFixed(0)}% drop
+                                        </span>
+                                    )}
+                                </div>
                             )}
                         </div>
                     );
