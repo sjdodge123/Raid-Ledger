@@ -1779,21 +1779,29 @@ export class SignupsService {
     );
 
     if (chain) {
-      // Execute moves in reverse order (innermost move first to free slots outward)
+      // Execute moves in reverse order (innermost move first to free slots outward).
+      // Each player takes the position vacated by the next player in the chain.
+      // The last mover (innermost) gets a fresh position in their target role.
       for (let i = chain.moves.length - 1; i >= 0; i--) {
         const move = chain.moves[i];
-        const newPos = filledPerRole[move.toRole] + 1;
+        // If there's a subsequent move in the chain that freed a position in this role, take it
+        const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
+        const newPos = (nextMove && nextMove.fromRole === move.toRole)
+          ? nextMove.position
+          : filledPerRole[move.toRole] + 1;
         await tx
           .update(schema.rosterAssignments)
           .set({ role: move.toRole, position: newPos })
           .where(eq(schema.rosterAssignments.id, move.assignmentId));
-        filledPerRole[move.toRole]++;
+        if (!nextMove || nextMove.fromRole !== move.toRole) {
+          filledPerRole[move.toRole]++;
+        }
         this.logger.log(
           `Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`,
         );
       }
 
-      // Assign new player to the freed slot
+      // Assign new player to the freed slot (position vacated by the first mover)
       const freedRole = chain.freedRole;
       const freedPosition = chain.moves[0].position;
       await tx.insert(schema.rosterAssignments).values({
