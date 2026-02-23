@@ -15,7 +15,6 @@ describe('DiscordEventListener', () => {
   let clientService: jest.Mocked<DiscordBotClientService>;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
   let embedPoster: jest.Mocked<EmbedPosterService>;
-  let settingsService: jest.Mocked<SettingsService>;
   let mockDb: {
     insert: jest.Mock;
     select: jest.Mock;
@@ -125,7 +124,6 @@ describe('DiscordEventListener', () => {
     clientService = module.get(DiscordBotClientService);
     embedFactory = module.get(DiscordEmbedFactory);
     embedPoster = module.get(EmbedPosterService);
-    settingsService = module.get(SettingsService);
   });
 
   afterEach(async () => {
