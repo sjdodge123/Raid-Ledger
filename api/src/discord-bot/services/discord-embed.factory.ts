@@ -402,7 +402,7 @@ export class DiscordEmbedFactory {
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
           .filter(Boolean)
           .join('');
-        return allEmojis ? `${label} ${allEmojis}` : label;
+        return allEmojis ? `${label}${allEmojis}` : label;
       })
       .join(', ');
   }

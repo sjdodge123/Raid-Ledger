@@ -1743,14 +1743,30 @@ export class SignupsService {
     }
     const newPrefs = newSignup.preferredRoles as string[];
 
+    // Build occupied positions per role for gap-finding
+    const occupiedPositions: Record<string, Set<number>> = { tank: new Set(), healer: new Set(), dps: new Set() };
+    for (const a of currentAssignments) {
+      if (a.role && a.role in occupiedPositions) {
+        occupiedPositions[a.role].add(a.position);
+      }
+    }
+
+    // Find first available position (fills gaps left by leaves/rearranges)
+    const findFirstAvailablePosition = (role: string): number => {
+      const occupied = occupiedPositions[role] ?? new Set();
+      for (let pos = 1; ; pos++) {
+        if (!occupied.has(pos)) return pos;
+      }
+    };
+
     // Try direct assignment: find an open slot matching one of the new player's prefs
     for (const role of newPrefs) {
       if (
         role in roleCapacity &&
         filledPerRole[role] < roleCapacity[role]
       ) {
-        // Open slot found — assign directly
-        const position = filledPerRole[role] + 1;
+        // Open slot found — assign to first available position (fills gaps)
+        const position = findFirstAvailablePosition(role);
         await tx.insert(schema.rosterAssignments).values({
           eventId,
           signupId: newSignupId,
@@ -1788,11 +1804,14 @@ export class SignupsService {
         const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
         const newPos = (nextMove && nextMove.fromRole === move.toRole)
           ? nextMove.position
-          : filledPerRole[move.toRole] + 1;
+          : findFirstAvailablePosition(move.toRole);
         await tx
           .update(schema.rosterAssignments)
           .set({ role: move.toRole, position: newPos })
           .where(eq(schema.rosterAssignments.id, move.assignmentId));
+        // Track position changes for both occupancy and capacity
+        occupiedPositions[move.fromRole]?.delete(move.position);
+        occupiedPositions[move.toRole]?.add(newPos);
         if (!nextMove || nextMove.fromRole !== move.toRole) {
           filledPerRole[move.toRole]++;
         }
