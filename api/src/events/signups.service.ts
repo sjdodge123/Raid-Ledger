@@ -159,57 +159,77 @@ export class SignupsService {
           )
           .limit(1);
 
-        // ROK-353: If caller requested a slot but the signup has no roster
-        // assignment (e.g. after self-unassign), create one now.
-        // ROK-451: Also auto-slot for generic events with open player slots.
-        const slotRole =
-          autoBench
-            ? 'bench'
-            : (dto?.slotRole ??
-              (await this.resolveGenericSlotRole(tx, event[0], eventId)));
-        if (slotRole) {
-          const existingAssignment = await tx
-            .select()
-            .from(schema.rosterAssignments)
-            .where(eq(schema.rosterAssignments.signupId, existing.id))
-            .limit(1);
+        // ROK-452: Update preferred roles on existing signup if provided
+        if (dto?.preferredRoles && dto.preferredRoles.length > 0) {
+          await tx
+            .update(schema.eventSignups)
+            .set({ preferredRoles: dto.preferredRoles })
+            .where(eq(schema.eventSignups.id, existing.id));
+          existing.preferredRoles = dto.preferredRoles;
+        }
 
-          if (existingAssignment.length === 0) {
-            let position = dto?.slotPosition ?? 0;
-            if (autoBench || !position) {
-              const positionsInRole = await tx
-                .select({ position: schema.rosterAssignments.position })
-                .from(schema.rosterAssignments)
-                .where(
-                  and(
-                    eq(schema.rosterAssignments.eventId, eventId),
-                    eq(schema.rosterAssignments.role, slotRole),
-                  ),
-                );
-              position =
-                positionsInRole.reduce(
-                  (max, r) => Math.max(max, r.position),
-                  0,
-                ) + 1;
-            }
+        // Check if this existing signup has a roster assignment
+        const existingAssignment = await tx
+          .select()
+          .from(schema.rosterAssignments)
+          .where(eq(schema.rosterAssignments.signupId, existing.id))
+          .limit(1);
 
-            await tx.insert(schema.rosterAssignments).values({
-              eventId,
-              signupId: existing.id,
-              role: slotRole,
-              position,
-              isOverride: 0,
-            });
-            this.logger.log(
-              `Re-assigned user ${userId} to ${slotRole} slot ${position} (existing signup)`,
-            );
+        if (existingAssignment.length === 0) {
+          // ROK-452: Try auto-allocation for MMO events with preferred roles
+          const slotConfigDup = event[0].slotConfig as Record<string, unknown> | null;
+          const isMMODup = slotConfigDup?.type === 'mmo';
+          const hasPreferredRolesDup =
+            existing.preferredRoles && existing.preferredRoles.length > 0;
 
-            if (slotRole !== 'bench') {
-              await this.benchPromotionService.cancelPromotion(
+          if (isMMODup && hasPreferredRolesDup && !dto?.slotRole && !autoBench) {
+            await this.autoAllocateSignup(tx, eventId, existing.id, slotConfigDup);
+          } else {
+            // ROK-353: If caller requested a slot but the signup has no roster
+            // assignment (e.g. after self-unassign), create one now.
+            // ROK-451: Also auto-slot for generic events with open player slots.
+            const slotRole =
+              autoBench
+                ? 'bench'
+                : (dto?.slotRole ??
+                  (await this.resolveGenericSlotRole(tx, event[0], eventId)));
+            if (slotRole) {
+              let position = dto?.slotPosition ?? 0;
+              if (autoBench || !position) {
+                const positionsInRole = await tx
+                  .select({ position: schema.rosterAssignments.position })
+                  .from(schema.rosterAssignments)
+                  .where(
+                    and(
+                      eq(schema.rosterAssignments.eventId, eventId),
+                      eq(schema.rosterAssignments.role, slotRole),
+                    ),
+                  );
+                position =
+                  positionsInRole.reduce(
+                    (max, r) => Math.max(max, r.position),
+                    0,
+                  ) + 1;
+              }
+
+              await tx.insert(schema.rosterAssignments).values({
                 eventId,
-                slotRole,
+                signupId: existing.id,
+                role: slotRole,
                 position,
+                isOverride: 0,
+              });
+              this.logger.log(
+                `Re-assigned user ${userId} to ${slotRole} slot ${position} (existing signup)`,
               );
+
+              if (slotRole !== 'bench') {
+                await this.benchPromotionService.cancelPromotion(
+                  eventId,
+                  slotRole,
+                  position,
+                );
+              }
             }
           }
         }
