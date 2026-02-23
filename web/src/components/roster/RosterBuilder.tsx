@@ -124,6 +124,14 @@ export const RosterBuilder = memo(function RosterBuilder({
         }
     }, [pendingSlotKey]);
 
+    // ROK-466: Clear pending "Join?" state when user can no longer join
+    // (e.g., they signed up via a different path while pending was showing)
+    React.useEffect(() => {
+        if (!canJoin && pendingSlotKey) {
+            setPendingSlotKey(null);
+        }
+    }, [canJoin, pendingSlotKey]);
+
     // ROK-209: Auto-fill and clear-all state
     const [autoFillPreview, setAutoFillPreview] = React.useState<AutoFillResult | null>(null);
     const [clearPending, setClearPending] = React.useState(false);

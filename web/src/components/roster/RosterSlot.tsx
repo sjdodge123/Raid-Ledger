@@ -40,21 +40,27 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
     // confirmation click from firing.
     const savedJoinClickRef = useRef(onJoinClick);
 
-    // Keep the ref in sync when the prop is defined
+    // Keep the ref in sync when the prop is defined;
+    // clear it when the prop is explicitly removed (not just a brief refetch blip)
     useEffect(() => {
         if (onJoinClick) {
             savedJoinClickRef.current = onJoinClick;
         }
     }, [onJoinClick]);
 
-    const handleClick = () => {
-        // Admin click: open assignment popup
-        if (onAdminClick) {
-            onAdminClick(role, position);
-            return;
+    // ROK-466: Clear stale ref when pending state is externally reset
+    // (e.g., canJoin became false, parent cleared pendingSlotKey)
+    useEffect(() => {
+        if (!isPending && !onJoinClick) {
+            savedJoinClickRef.current = undefined;
         }
+    }, [isPending, onJoinClick]);
+
+    const handleClick = () => {
+        // ROK-466: Join click takes priority over admin click for empty slots.
+        // This prevents a stale onAdminClick from intercepting a legitimate join.
         // Regular user: double-click join on empty slots
-        const joinFn = onJoinClick ?? savedJoinClickRef.current;
+        const joinFn = onJoinClick ?? (isPending ? savedJoinClickRef.current : undefined);
         if (!item && joinFn) {
             if (isPending) {
                 // Second click - confirm the join
@@ -65,6 +71,11 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
                 savedJoinClickRef.current = joinFn;
                 onPendingChange?.(true);
             }
+            return;
+        }
+        // Admin click: open assignment popup (only if no join flow is active)
+        if (onAdminClick) {
+            onAdminClick(role, position);
         }
     };
 
