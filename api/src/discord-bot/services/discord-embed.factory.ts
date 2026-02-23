@@ -389,14 +389,13 @@ export class DiscordEmbedFactory {
       .map((m) => {
         const prefs = m.preferredRoles ?? [];
         if (prefs.length <= 1) return `<@${m.discordId}>`;
-        // Show emojis for OTHER preferred roles (not the assigned one)
-        const otherEmojis = prefs
-          .filter((r) => r !== m.role)
+        // Show emojis for ALL preferred roles so flexibility is fully visible
+        const allEmojis = prefs
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
           .filter(Boolean)
           .join('');
-        return otherEmojis
-          ? `<@${m.discordId}> ${otherEmojis}`
+        return allEmojis
+          ? `<@${m.discordId}> ${allEmojis}`
           : `<@${m.discordId}>`;
       })
       .join(', ');
