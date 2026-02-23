@@ -54,7 +54,7 @@ export class BossEncountersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: BossEncounterSeeder,
-  ) {}
+  ) { }
 
   /**
    * Get the expansion set for a given WoW game variant.
@@ -73,12 +73,19 @@ export class BossEncountersService {
   ): Promise<BossEncounterDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
 
+    // Blizzard uses composite instance IDs for sub-instances (e.g. 31603 = SM:Armory).
+    // Resolve to parent ID (316) so boss data seeded under the parent is found.
+    const instanceIds = [instanceId];
+    if (instanceId > 10000) {
+      instanceIds.push(Math.floor(instanceId / 100));
+    }
+
     const rows = await this.db
       .select()
       .from(wowClassicBosses)
       .where(
         and(
-          eq(wowClassicBosses.instanceId, instanceId),
+          inArray(wowClassicBosses.instanceId, instanceIds),
           inArray(wowClassicBosses.expansion, expansions),
         ),
       )

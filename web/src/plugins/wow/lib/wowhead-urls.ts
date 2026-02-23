@@ -47,3 +47,9 @@ export function getWowheadItemData(itemId: number, variant?: string | null): str
 export function getWowheadQuestData(questId: number, variant?: string | null): string {
     return `quest=${questId}&${getWowheadDataSuffix(variant)}`;
 }
+
+/** Build a Wowhead NPC search URL for a boss name. */
+export function getWowheadNpcSearchUrl(bossName: string, variant?: string | null): string {
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/search?q=${encodeURIComponent(bossName)}`;
+}
