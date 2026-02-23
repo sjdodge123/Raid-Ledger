@@ -790,6 +790,7 @@ describe('SignupInteractionListener', () => {
 
       // Should call signup with slotRole
       expect(mockSignupsService.signup).toHaveBeenCalledWith(700, 42, {
+        preferredRoles: ['tank'],
         slotRole: 'tank',
       });
 
