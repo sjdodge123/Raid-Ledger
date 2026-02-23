@@ -61,6 +61,13 @@ export class EventPlansService {
     creatorId: number,
     dto: CreateEventPlanDto,
   ): Promise<EventPlanResponseDto> {
+    // Early check: Discord bot must be connected to post a poll
+    if (!this.discordClient.isConnected()) {
+      throw new ServiceUnavailableException(
+        'The Discord bot is not connected. Event plans require Discord to post a poll.',
+      );
+    }
+
     // Resolve the channel for the poll
     const channelId = await this.channelResolver.resolveChannelForEvent(
       dto.gameId,
