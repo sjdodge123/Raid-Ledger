@@ -1,18 +1,23 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { useSeenAdminSections } from './use-seen-admin-sections';
 
 /**
- * Track "NEW" badge visibility via localStorage.
- * Absent key = new; markSeen writes a timestamp and hides the badge.
+ * Track "NEW" badge visibility via DB-persisted user preferences (ROK-285).
+ * Replaces the previous localStorage implementation so badge state persists
+ * across browsers and devices.
+ *
+ * Absent key = new; markSeen writes the key to the user's seen set in the DB.
  */
 export function useNewBadge(key: string): { isNew: boolean; markSeen: () => void } {
-    const [isNew, setIsNew] = useState(() => localStorage.getItem(key) === null);
+  const { isNew: checkIsNew, markSeen: markSectionSeen } = useSeenAdminSections();
 
-    const markSeen = useCallback(() => {
-        if (isNew) {
-            localStorage.setItem(key, Date.now().toString());
-            setIsNew(false);
-        }
-    }, [key, isNew]);
+  const isNew = checkIsNew(key);
 
-    return { isNew, markSeen };
+  const markSeen = useCallback(() => {
+    if (key) {
+      markSectionSeen(key);
+    }
+  }, [key, markSectionSeen]);
+
+  return { isNew, markSeen };
 }
