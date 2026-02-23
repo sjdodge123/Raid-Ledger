@@ -39,6 +39,7 @@ export interface BossLootDto {
   expansion: string;
   classRestrictions: string[] | null;
   iconUrl: string | null;
+  itemSubclass: string | null;
 }
 
 /**
@@ -153,6 +154,7 @@ export class BossEncountersService {
       expansion: row.expansion,
       classRestrictions: row.classRestrictions,
       iconUrl: row.iconUrl,
+      itemSubclass: row.itemSubclass,
     };
   }
 }

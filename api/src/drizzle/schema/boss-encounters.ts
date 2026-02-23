@@ -73,6 +73,8 @@ export const wowClassicBossLoot = pgTable(
     classRestrictions: jsonb('class_restrictions').$type<string[]>(),
     /** Icon URL for the item */
     iconUrl: varchar('icon_url', { length: 512 }),
+    /** Item subclass: armor type (Cloth/Leather/Mail/Plate) or weapon type (Sword/Mace/etc.) */
+    itemSubclass: varchar('item_subclass', { length: 50 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => [

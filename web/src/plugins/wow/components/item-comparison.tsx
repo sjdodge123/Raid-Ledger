@@ -3,6 +3,25 @@ import { WowItemCard } from './wow-item-card';
 import { getWowheadItemUrl, getWowheadDataSuffix } from '../lib/wowhead-urls';
 import './item-comparison.css';
 
+/** Armor types that are restricted by class proficiency */
+const ARMOR_TYPES = ['Cloth', 'Leather', 'Mail', 'Plate'] as const;
+
+/** Which armor types each WoW class can equip */
+const CLASS_ARMOR_PROFICIENCY: Record<string, string[]> = {
+    'Warrior': ['Plate', 'Mail', 'Leather', 'Cloth'],
+    'Paladin': ['Plate', 'Mail', 'Leather', 'Cloth'],
+    'Death Knight': ['Plate', 'Mail', 'Leather', 'Cloth'],
+    'Hunter': ['Mail', 'Leather', 'Cloth'],
+    'Shaman': ['Mail', 'Leather', 'Cloth'],
+    'Rogue': ['Leather', 'Cloth'],
+    'Druid': ['Leather', 'Cloth'],
+    'Monk': ['Leather', 'Cloth'],
+    'Demon Hunter': ['Leather', 'Cloth'],
+    'Priest': ['Cloth'],
+    'Mage': ['Cloth'],
+    'Warlock': ['Cloth'],
+    'Evoker': ['Cloth'],
+};
 
 interface ItemComparisonProps {
     /** The reward item's level (may be null if unknown) */
@@ -11,6 +30,26 @@ interface ItemComparisonProps {
     equippedItem: EquipmentItemDto | undefined;
     /** WoW game variant for Wowhead URLs */
     gameVariant: string | null;
+    /** Character class name for armor proficiency check */
+    characterClass?: string | null;
+    /** Loot item's subclass (armor/weapon type) for equipability check */
+    lootItemSubclass?: string | null;
+}
+
+/**
+ * Check if a given armor subclass is equippable by a character class.
+ * Returns true if equippable, unknown class, unknown subclass, or non-armor item.
+ */
+function isArmorEquippable(
+    characterClass: string | null | undefined,
+    itemSubclass: string | null | undefined,
+): boolean {
+    if (!characterClass || !itemSubclass) return true;
+    // Only restrict armor types; weapons/jewelry/etc. pass through
+    if (!ARMOR_TYPES.includes(itemSubclass as typeof ARMOR_TYPES[number])) return true;
+    const proficiencies = CLASS_ARMOR_PROFICIENCY[characterClass];
+    if (!proficiencies) return true; // Unknown class — don't restrict
+    return proficiencies.includes(itemSubclass);
 }
 
 /**
@@ -18,12 +57,26 @@ interface ItemComparisonProps {
  * in the same slot as a quest reward, with an item level delta indicator.
  *
  * ROK-246: Dungeon Companion — Quest Suggestions UI
+ * ROK-454: Armor proficiency equipability check
  */
 export function ItemComparison({
     rewardItemLevel,
     equippedItem,
     gameVariant,
+    characterClass,
+    lootItemSubclass,
 }: ItemComparisonProps) {
+    // Check equipability when both characterClass and lootItemSubclass are provided
+    if (!isArmorEquippable(characterClass, lootItemSubclass)) {
+        return (
+            <div className="item-comparison">
+                <span className="item-comparison__delta item-comparison__delta--downgrade">
+                    Not equippable by {characterClass}
+                </span>
+            </div>
+        );
+    }
+
     if (!equippedItem) {
         return (
             <div className="item-comparison">
@@ -82,4 +135,3 @@ export function ItemComparison({
         </div>
     );
 }
-

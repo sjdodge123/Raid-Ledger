@@ -27,6 +27,7 @@ interface LootEntry {
   dropRate: number | null;
   classRestrictions: string[] | null;
   iconUrl: string | null;
+  itemSubclass: string | null;
 }
 
 /**
@@ -131,6 +132,7 @@ export class BossEncounterSeeder {
           expansion: l.expansion,
           classRestrictions: l.classRestrictions,
           iconUrl: l.iconUrl,
+          itemSubclass: l.itemSubclass,
         };
       })
       .filter((v): v is NonNullable<typeof v> => v !== null);
@@ -154,6 +156,7 @@ export class BossEncounterSeeder {
             dropRate: sql`excluded.drop_rate`,
             classRestrictions: sql`excluded.class_restrictions`,
             iconUrl: sql`excluded.icon_url`,
+            itemSubclass: sql`excluded.item_subclass`,
           },
         })
         .returning({ id: wowClassicBossLoot.id });
