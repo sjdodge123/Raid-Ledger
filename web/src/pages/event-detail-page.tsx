@@ -162,18 +162,25 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-439: Called when user confirms character/role in the pre-signup modal
-    const handleSelectionConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+    // ROK-439/452: Called when user confirms character/role in the pre-signup modal
+    const handleSelectionConfirm = async (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => {
         try {
-            const options: { characterId: string; slotRole?: string; slotPosition?: number } = {
+            const options: { characterId: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] } = {
                 characterId: selection.characterId,
             };
+            // ROK-452: Pass preferred roles for multi-role auto-allocation
+            if (selection.preferredRoles && selection.preferredRoles.length > 0) {
+                options.preferredRoles = selection.preferredRoles;
+            }
             // If a slot was targeted (from handleSlotClick), include slot info
             if (pendingSlot) {
                 options.slotRole = selection.role ?? pendingSlot.role;
                 options.slotPosition = pendingSlot.position;
-            } else if (selection.role) {
-                // Use the selected role as slot preference
+            } else if (selection.preferredRoles && selection.preferredRoles.length === 1) {
+                // Single preferred role acts as direct slot preference
+                options.slotRole = selection.preferredRoles[0];
+            } else if (!selection.preferredRoles && selection.role) {
+                // Fallback: no multi-role, use selected role
                 options.slotRole = selection.role;
             }
             await signup.mutateAsync(options);

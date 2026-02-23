@@ -75,6 +75,11 @@ export function PlayerCard({
         </span>
     ) : null;
 
+    // ROK-452: Flexibility indicator — show other preferred roles as small badges
+    const otherPreferredRoles = player.preferredRoles && player.preferredRoles.length > 1
+        ? player.preferredRoles.filter((r) => r !== player.slot)
+        : null;
+
     const borderStyle = matchAccent
         ? { borderLeft: `3px solid ${matchAccent}` }
         : undefined;
@@ -118,6 +123,15 @@ export function PlayerCard({
                         {player.username}
                     </Link>
                     {roleBadge}
+                    {/* ROK-452: Flexibility indicator for multi-role players */}
+                    {otherPreferredRoles && (
+                        <span
+                            className="shrink-0 text-xs text-muted/70"
+                            title={`Also plays: ${otherPreferredRoles.map(formatRole).join(', ')}`}
+                        >
+                            +{otherPreferredRoles.map((r) => ROLE_EMOJI[r] ?? '').join('')}
+                        </span>
+                    )}
                 </div>
                 {player.character && (
                     <p

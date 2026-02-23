@@ -11,7 +11,7 @@ export function useSignup(eventId: number) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number; characterId?: string }) =>
+        mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number; characterId?: string; preferredRoles?: string[] }) =>
             signupForEvent(eventId, options),
         onSuccess: () => {
             // Invalidate roster query to refetch updated roster

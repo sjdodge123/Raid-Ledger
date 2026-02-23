@@ -139,6 +139,7 @@ export class SignupsService {
           characterId: dto?.characterId ?? null,
           confirmationStatus: hasCharacter ? 'confirmed' : 'pending',
           status: 'signed_up',
+          preferredRoles: dto?.preferredRoles ?? null,
         })
         .onConflictDoNothing({
           target: [schema.eventSignups.eventId, schema.eventSignups.userId],
@@ -225,48 +226,59 @@ export class SignupsService {
       const [inserted] = rows;
       this.logger.log(`User ${userId} signed up for event ${eventId}`);
 
-      // ROK-183: Create roster assignment — explicit slot, auto-bench, or
-      // ROK-451: auto-slot for generic events with open player slots
-      const slotRole =
-        autoBench
-          ? 'bench'
-          : (dto?.slotRole ??
-            (await this.resolveGenericSlotRole(tx, event[0], eventId)));
-      if (slotRole) {
-        // Determine position: use provided or find next available
-        let position = dto?.slotPosition ?? 0;
-        if (autoBench || !position) {
-          const existing = await tx
-            .select({ position: schema.rosterAssignments.position })
-            .from(schema.rosterAssignments)
-            .where(
-              and(
-                eq(schema.rosterAssignments.eventId, eventId),
-                eq(schema.rosterAssignments.role, slotRole),
-              ),
-            );
-          position =
-            existing.reduce((max, r) => Math.max(max, r.position), 0) + 1;
-        }
+      // ROK-452: Check if this is an MMO event with preferredRoles — run auto-allocation
+      const slotConfig = event[0].slotConfig as Record<string, unknown> | null;
+      const isMMO = slotConfig?.type === 'mmo';
+      const hasPreferredRoles =
+        dto?.preferredRoles && dto.preferredRoles.length > 0;
 
-        await tx.insert(schema.rosterAssignments).values({
-          eventId,
-          signupId: inserted.id,
-          role: slotRole,
-          position,
-          isOverride: 0,
-        });
-        this.logger.log(
-          `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
-        );
+      if (isMMO && hasPreferredRoles && !dto?.slotRole && !autoBench) {
+        // ROK-452: Auto-allocate using preferred roles
+        await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
+      } else {
+        // ROK-183: Create roster assignment — explicit slot, auto-bench, or
+        // ROK-451: auto-slot for generic events with open player slots
+        const slotRole =
+          autoBench
+            ? 'bench'
+            : (dto?.slotRole ??
+              (await this.resolveGenericSlotRole(tx, event[0], eventId)));
+        if (slotRole) {
+          // Determine position: use provided or find next available
+          let position = dto?.slotPosition ?? 0;
+          if (autoBench || !position) {
+            const existing = await tx
+              .select({ position: schema.rosterAssignments.position })
+              .from(schema.rosterAssignments)
+              .where(
+                and(
+                  eq(schema.rosterAssignments.eventId, eventId),
+                  eq(schema.rosterAssignments.role, slotRole),
+                ),
+              );
+            position =
+              existing.reduce((max, r) => Math.max(max, r.position), 0) + 1;
+          }
 
-        // ROK-229: Cancel any pending bench promotion for this slot
-        if (slotRole !== 'bench') {
-          await this.benchPromotionService.cancelPromotion(
+          await tx.insert(schema.rosterAssignments).values({
             eventId,
-            slotRole,
+            signupId: inserted.id,
+            role: slotRole,
             position,
+            isOverride: 0,
+          });
+          this.logger.log(
+            `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
           );
+
+          // ROK-229: Cancel any pending bench promotion for this slot
+          if (slotRole !== 'bench') {
+            await this.benchPromotionService.cancelPromotion(
+              eventId,
+              slotRole,
+              position,
+            );
+          }
         }
       }
 
@@ -357,6 +369,7 @@ export class SignupsService {
           discordAvatarHash: dto.discordAvatarHash ?? null,
           confirmationStatus: 'confirmed',
           status: dto.status ?? 'signed_up',
+          preferredRoles: dto.preferredRoles ?? null,
         })
         .onConflictDoNothing({
           target: [
@@ -384,9 +397,21 @@ export class SignupsService {
 
       const [inserted] = rows;
 
+      // ROK-452: Check if this is an MMO event with preferredRoles — run auto-allocation
+      const slotConfig = event.slotConfig as Record<string, unknown> | null;
+      const isMMO = slotConfig?.type === 'mmo';
+      const hasPreferredRoles =
+        dto.preferredRoles && dto.preferredRoles.length > 0;
+
+      if (isMMO && hasPreferredRoles && !dto.role) {
+        await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
+      }
+
       // Determine role: explicit from dto, or auto-detect for generic events (ROK-451)
       const assignRole =
-        dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId));
+        (!isMMO || !hasPreferredRoles)
+          ? (dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId)))
+          : null;
 
       if (assignRole) {
         const existingPositions = await tx
@@ -900,6 +925,7 @@ export class SignupsService {
         confirmationStatus: row.event_signups
           .confirmationStatus as ConfirmationStatus,
         status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
+        preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
       };
     });
 
@@ -976,6 +1002,7 @@ export class SignupsService {
       character: character ? this.buildCharacterDto(character) : null,
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
       status: (signup.status as SignupStatus) ?? 'signed_up',
+      preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     };
   }
 
@@ -1004,6 +1031,7 @@ export class SignupsService {
       discordUserId: signup.discordUserId,
       discordUsername: signup.discordUsername,
       discordAvatarHash: signup.discordAvatarHash,
+      preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     };
   }
 
@@ -1606,6 +1634,162 @@ export class SignupsService {
   }
 
   /**
+   * ROK-452: Auto-allocate a new signup to the best available slot based on
+   * preferred roles. Uses a greedy algorithm that prioritizes rigid players
+   * (fewer preferred roles) and rearranges flexible players to maximize filled slots.
+   *
+   * Algorithm:
+   * 1. Gather all current signups with their preferred roles and existing assignments
+   * 2. Build a bipartite matching: player preferences vs available slots
+   * 3. Assign rigid players first (1 preferred role), then flexible ones
+   * 4. If needed, rearrange existing flexible players to accommodate rigid newcomers
+   *
+   * @param tx - Transaction handle
+   * @param eventId - Event ID
+   * @param newSignupId - The newly created signup ID to allocate
+   * @param slotConfig - Event's slot configuration (MMO type)
+   */
+  private async autoAllocateSignup(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    newSignupId: number,
+    slotConfig: Record<string, unknown> | null,
+  ): Promise<void> {
+    // Get slot capacities from config
+    const tankSlots = (slotConfig?.tank as number) ?? 2;
+    const healerSlots = (slotConfig?.healer as number) ?? 4;
+    const dpsSlots = (slotConfig?.dps as number) ?? 14;
+    const roleCapacity: Record<string, number> = {
+      tank: tankSlots,
+      healer: healerSlots,
+      dps: dpsSlots,
+    };
+
+    // Get all signups with preferred roles for this event
+    const allSignups = await tx
+      .select({
+        id: schema.eventSignups.id,
+        preferredRoles: schema.eventSignups.preferredRoles,
+      })
+      .from(schema.eventSignups)
+      .where(eq(schema.eventSignups.eventId, eventId));
+
+    // Get all current roster assignments
+    const currentAssignments = await tx
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, eventId));
+
+    // Build assignment map: signupId -> current assignment
+    const assignedBySignupId = new Map(
+      currentAssignments.map((a) => [a.signupId, a]),
+    );
+
+    // Count filled slots per role
+    const filledPerRole: Record<string, number> = { tank: 0, healer: 0, dps: 0 };
+    for (const a of currentAssignments) {
+      if (a.role && a.role in filledPerRole) {
+        filledPerRole[a.role]++;
+      }
+    }
+
+    // Get new signup's preferred roles
+    const newSignup = allSignups.find((s) => s.id === newSignupId);
+    if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0) {
+      return;
+    }
+    const newPrefs = newSignup.preferredRoles as string[];
+
+    // Try direct assignment: find an open slot matching one of the new player's prefs
+    for (const role of newPrefs) {
+      if (
+        role in roleCapacity &&
+        filledPerRole[role] < roleCapacity[role]
+      ) {
+        // Open slot found — assign directly
+        const position = filledPerRole[role] + 1;
+        await tx.insert(schema.rosterAssignments).values({
+          eventId,
+          signupId: newSignupId,
+          role,
+          position,
+          isOverride: 0,
+        });
+        this.logger.log(
+          `Auto-allocated signup ${newSignupId} to ${role} slot ${position} (direct match)`,
+        );
+        await this.benchPromotionService.cancelPromotion(eventId, role, position);
+        return;
+      }
+    }
+
+    // No direct slot available — try rearrangement
+    // Find an existing flexible player who can be moved to free up a slot
+    for (const desiredRole of newPrefs) {
+      if (!(desiredRole in roleCapacity)) continue;
+
+      // Look through current assignments in this role for a flexible player
+      const occupants = currentAssignments.filter(
+        (a) => a.role === desiredRole,
+      );
+
+      for (const occupant of occupants) {
+        const occupantSignup = allSignups.find(
+          (s) => s.id === occupant.signupId,
+        );
+        const occupantPrefs =
+          (occupantSignup?.preferredRoles as string[] | null) ?? [];
+
+        // Skip if the occupant is rigid (only has 1 preferred role)
+        if (occupantPrefs.length <= 1) continue;
+
+        // Check if the occupant has an alternative role with open slots
+        for (const altRole of occupantPrefs) {
+          if (
+            altRole !== desiredRole &&
+            altRole in roleCapacity &&
+            filledPerRole[altRole] < roleCapacity[altRole]
+          ) {
+            // Found a valid swap: move occupant to altRole, new player takes desiredRole
+            const altPosition = filledPerRole[altRole] + 1;
+
+            // Move occupant to alternative slot
+            await tx
+              .update(schema.rosterAssignments)
+              .set({ role: altRole, position: altPosition })
+              .where(eq(schema.rosterAssignments.id, occupant.id));
+
+            // Assign new player to the freed slot
+            await tx.insert(schema.rosterAssignments).values({
+              eventId,
+              signupId: newSignupId,
+              role: desiredRole,
+              position: occupant.position,
+              isOverride: 0,
+            });
+
+            this.logger.log(
+              `Auto-allocated signup ${newSignupId} to ${desiredRole} slot ${occupant.position} ` +
+                `(rearranged signup ${occupant.signupId} from ${desiredRole} to ${altRole} slot ${altPosition})`,
+            );
+            await this.benchPromotionService.cancelPromotion(
+              eventId,
+              desiredRole,
+              occupant.position,
+            );
+            return;
+          }
+        }
+      }
+    }
+
+    // No rearrangement possible — leave in unassigned pool
+    this.logger.log(
+      `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement available)`,
+    );
+  }
+
+  /**
    * ROK-451: For generic (non-MMO) events with an explicit slot configuration,
    * resolve the auto-slot role to 'player' if there are open slots.
    * Returns null for MMO events, events without a slot config, or when all slots are full.
@@ -1706,6 +1890,7 @@ export class SignupsService {
             avatarUrl: row.characters.avatarUrl,
           }
         : null,
+      preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
     };
   }
 }

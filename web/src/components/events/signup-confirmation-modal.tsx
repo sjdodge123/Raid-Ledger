@@ -9,8 +9,8 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 interface SignupConfirmationModalProps {
     isOpen: boolean;
     onClose: () => void;
-    /** ROK-439: Called when user confirms character/role selection BEFORE signup */
-    onConfirm: (selection: { characterId: string; role?: CharacterRole }) => void;
+    /** ROK-439/452: Called when user confirms character/role selection BEFORE signup */
+    onConfirm: (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => void;
     /** ROK-439: Called when user has no characters and wants to sign up without one */
     onSkip: () => void;
     /** Whether the confirm action is in progress (signup mutation pending) */
@@ -69,6 +69,8 @@ export function SignupConfirmationModal({
     const [sessionKey, setSessionKey] = useState(0);
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
     const [selectedRole, setSelectedRole] = useState<CharacterRole | null>(null);
+    // ROK-452: Track multiple preferred roles
+    const [selectedRoles, setSelectedRoles] = useState<CharacterRole[]>([]);
     const [showCreateForm, setShowCreateForm] = useState(false);
 
     // Reset selection when modal opens (increment session key)
@@ -87,9 +89,12 @@ export function SignupConfirmationModal({
         // Pre-select role: use prop if provided, else character's effective role, else null
         if (preSelectedRole) {
             setSelectedRole(preSelectedRole);
+            setSelectedRoles([preSelectedRole]);
         } else {
             const defaultChar = characters.find((c) => c.id === defaultCharacterId);
-            setSelectedRole((defaultChar?.effectiveRole as CharacterRole) ?? null);
+            const defaultRole = (defaultChar?.effectiveRole as CharacterRole) ?? null;
+            setSelectedRole(defaultRole);
+            setSelectedRoles(defaultRole ? [defaultRole] : []);
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionKey]);
@@ -102,7 +107,9 @@ export function SignupConfirmationModal({
         if (!preSelectedRole) {
             const char = characters.find((c) => c.id === characterId);
             if (char?.effectiveRole) {
-                setSelectedRole(char.effectiveRole as CharacterRole);
+                const role = char.effectiveRole as CharacterRole;
+                setSelectedRole(role);
+                setSelectedRoles([role]);
             }
         }
     };
@@ -112,6 +119,8 @@ export function SignupConfirmationModal({
         onConfirm({
             characterId: selectedCharacterId,
             role: hasRoles ? (selectedRole ?? undefined) : undefined,
+            // ROK-452: Include all preferred roles for multi-role signup
+            preferredRoles: hasRoles && selectedRoles.length > 0 ? selectedRoles : undefined,
         });
     };
 
@@ -121,7 +130,9 @@ export function SignupConfirmationModal({
         if (character?.id) {
             setSelectedCharacterId(character.id);
             if (character.effectiveRole && !preSelectedRole) {
-                setSelectedRole(character.effectiveRole as CharacterRole);
+                const role = character.effectiveRole as CharacterRole;
+                setSelectedRole(role);
+                setSelectedRoles([role]);
             }
         }
         // Characters list will refresh via query invalidation
@@ -251,30 +262,49 @@ export function SignupConfirmationModal({
                 </div>
             )}
 
-            {/* ROK-439: Role picker for MMO events */}
+            {/* ROK-452: Multi-role picker for MMO events */}
             {hasRoles && characters.length > 0 && !showCreateForm && (
                 <div>
                     <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
-                        Role
+                        Preferred Roles
+                        <span className="ml-1 text-muted font-normal normal-case">(select all you can play)</span>
                     </h3>
                     <div className="flex gap-2">
-                        {ROLES.map((role) => (
-                            <button
-                                key={role}
-                                onClick={() => setSelectedRole(role)}
-                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
-                                    selectedRole === role
-                                        ? `${ROLE_COLORS[role]} border-current`
-                                        : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
-                                }`}
-                            >
-                                <span>{ROLE_ICONS[role]}</span>
-                                <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
-                            </button>
-                        ))}
+                        {ROLES.map((role) => {
+                            const isSelected = selectedRoles.includes(role);
+                            return (
+                                <button
+                                    key={role}
+                                    onClick={() => {
+                                        let next: CharacterRole[];
+                                        if (isSelected) {
+                                            next = selectedRoles.filter((r) => r !== role);
+                                        } else {
+                                            next = [...selectedRoles, role];
+                                        }
+                                        setSelectedRoles(next);
+                                        // Keep selectedRole in sync: primary is first selected, or null
+                                        setSelectedRole(next[0] ?? null);
+                                    }}
+                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                                        isSelected
+                                            ? `${ROLE_COLORS[role]} border-current`
+                                            : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+                                    }`}
+                                >
+                                    <span>{ROLE_ICONS[role]}</span>
+                                    <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                                </button>
+                            );
+                        })}
                     </div>
-                    {/* Show mismatch warning when selected role differs from character's default */}
-                    {selectedCharacter?.effectiveRole && selectedRole && selectedCharacter.effectiveRole !== selectedRole && (
+                    {selectedRoles.length > 1 && (
+                        <p className="text-xs text-emerald-400/80 mt-1.5">
+                            You'll be auto-assigned to the best available slot.
+                        </p>
+                    )}
+                    {/* Show mismatch warning when primary role differs from character's default */}
+                    {selectedCharacter?.effectiveRole && selectedRole && selectedCharacter.effectiveRole !== selectedRole && selectedRoles.length === 1 && (
                         <p className="text-xs text-amber-400/80 mt-1.5">
                             This character's default role is {selectedCharacter.effectiveRole}. Signing up as {selectedRole} instead.
                         </p>

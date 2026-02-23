@@ -57,6 +57,8 @@ export const RosterAssignmentResponseSchema = z.object({
         role: z.string().nullable(),
         avatarUrl: z.string().nullable(),
     }).nullable(),
+    /** ROK-452: Preferred roles the player is willing to play */
+    preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).nullable().optional(),
 });
 export type RosterAssignmentResponse = z.infer<typeof RosterAssignmentResponseSchema>;
 

@@ -56,10 +56,32 @@ export function computeAutoFill(
             }
         }
     } else {
-        // MMO algorithm (4 passes)
+        // MMO algorithm (5 passes) — ROK-452: now uses preferredRoles
         const mmoRoles: RosterRole[] = ['tank', 'healer', 'dps'];
 
-        // Pass 1: Role-match — assign pool players whose character.role matches the slot role
+        // Pass 0 (ROK-452): Preferred-role match — assign rigid players (1 preferred role) first,
+        // then flexible players (2+ preferred roles) to maximize slot coverage
+        const withPrefs = remaining.filter(p => p.preferredRoles && p.preferredRoles.length > 0);
+        // Sort by rigidity: fewer preferred roles first (rigid players get priority)
+        withPrefs.sort((a, b) => (a.preferredRoles?.length ?? 0) - (b.preferredRoles?.length ?? 0));
+
+        for (const player of withPrefs) {
+            if (!remaining.some(r => r.signupId === player.signupId)) continue;
+            for (const prefRole of (player.preferredRoles ?? [])) {
+                const pos = findNextEmptyPosition(prefRole as RosterRole);
+                if (pos !== null) {
+                    assignPlayer(player, prefRole as RosterRole, pos, player.character?.role !== prefRole);
+                    const slotDef = roleSlots.find(s => s.role === prefRole);
+                    const label = slotDef?.label ?? prefRole;
+                    const existing = summary.find(s => s.role === label);
+                    if (existing) existing.count++;
+                    else summary.push({ role: label, count: 1 });
+                    break;
+                }
+            }
+        }
+
+        // Pass 1: Role-match — assign remaining pool players whose character.role matches the slot role
         for (const role of mmoRoles) {
             let filled = 0;
             const matching = remaining.filter(p => p.character?.role === role);
@@ -71,7 +93,10 @@ export function computeAutoFill(
             }
             if (filled > 0) {
                 const slotDef = roleSlots.find(s => s.role === role);
-                summary.push({ role: slotDef?.label ?? role, count: filled });
+                const label = slotDef?.label ?? role;
+                const existing = summary.find(s => s.role === label);
+                if (existing) existing.count += filled;
+                else summary.push({ role: label, count: filled });
             }
         }
 

@@ -58,6 +58,8 @@ export const SignupResponseSchema = z.object({
     confirmationStatus: ConfirmationStatusSchema,
     /** Attendance status (ROK-137) */
     status: SignupStatusSchema,
+    /** ROK-452: Preferred roles the player is willing to play */
+    preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).nullable().optional(),
     /** Whether this is an anonymous Discord participant (ROK-137) */
     isAnonymous: z.boolean().optional(),
     /** Discord info for anonymous participants (ROK-137) */
@@ -85,6 +87,8 @@ export const CreateSignupSchema = z.object({
     slotPosition: z.number().min(1).optional(),
     /** ROK-439: Optional character ID for selection-first signup (skip separate confirm step) */
     characterId: z.string().uuid().optional(),
+    /** ROK-452: Preferred roles the player is willing to play (multi-role signup) */
+    preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).min(1).max(3).optional(),
 });
 
 export type CreateSignupDto = z.infer<typeof CreateSignupSchema>;
@@ -108,6 +112,8 @@ export const CreateDiscordSignupSchema = z.object({
     /** Optional role for games that require roles */
     role: z.enum(['tank', 'healer', 'dps', 'flex', 'player']).optional(),
     status: SignupStatusSchema.optional(),
+    /** ROK-452: Preferred roles the player is willing to play (multi-role signup) */
+    preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).min(1).max(3).optional(),
 });
 
 export type CreateDiscordSignupDto = z.infer<typeof CreateDiscordSignupSchema>;

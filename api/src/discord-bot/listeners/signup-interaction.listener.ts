@@ -666,9 +666,12 @@ export class SignupInteractionListener {
       ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
       : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
 
+    // ROK-452: Allow multi-role selection (1-3 roles)
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(customId)
-      .setPlaceholder('Select your role')
+      .setPlaceholder('Select your preferred role(s)')
+      .setMinValues(1)
+      .setMaxValues(3)
       .addOptions([
         { label: 'Tank', value: 'tank', emoji: '🛡️' },
         { label: 'Healer', value: 'healer', emoji: '💚' },
@@ -683,8 +686,8 @@ export class SignupInteractionListener {
       ? ` (current: ${characterInfo.role})`
       : '';
     const content = characterInfo
-      ? `Signing up as **${characterInfo.name}**${roleHint} — select your role:`
-      : 'Select your role:';
+      ? `Signing up as **${characterInfo.name}**${roleHint} — select your preferred role(s):`
+      : 'Select your preferred role(s):';
 
     await interaction.editReply({
       content,
@@ -778,7 +781,12 @@ export class SignupInteractionListener {
   ): Promise<void> {
     await interaction.deferUpdate();
 
-    const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
+    // ROK-452: Support multiple selected roles
+    const selectedRoles = interaction.values as ('tank' | 'healer' | 'dps')[];
+    const primaryRole = selectedRoles[0];
+    const rolesLabel = selectedRoles
+      .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
+      .join(', ');
 
     try {
       // ROK-138: Linked user with character — signup with role + character
@@ -798,12 +806,14 @@ export class SignupInteractionListener {
           return;
         }
 
-        // slotPosition intentionally omitted — service auto-calculates next
-        // available position when slotPosition is undefined/0.
+        // ROK-452: Pass preferred roles for auto-allocation; use primary role
+        // as slotRole only when a single role is selected (backward compat)
         const signupResult = await this.signupsService.signup(
           eventId,
           linkedUser.id,
-          { slotRole: selectedRole },
+          selectedRoles.length === 1
+            ? { slotRole: primaryRole, preferredRoles: selectedRoles }
+            : { preferredRoles: selectedRoles },
         );
         await this.signupsService.confirmSignup(
           eventId,
@@ -818,7 +828,7 @@ export class SignupInteractionListener {
         );
 
         await interaction.editReply({
-          content: `Signed up as **${character.name}** (${selectedRole})!`,
+          content: `Signed up as **${character.name}** (${rolesLabel})!`,
           components: [],
         });
 
@@ -827,11 +837,13 @@ export class SignupInteractionListener {
       }
 
       // Anonymous (unlinked) user — existing Path B behavior
+      // ROK-452: Pass preferred roles for auto-allocation
       await this.signupsService.signupDiscord(eventId, {
         discordUserId: interaction.user.id,
         discordUsername: interaction.user.username,
         discordAvatarHash: interaction.user.avatar,
-        role: selectedRole,
+        role: selectedRoles.length === 1 ? primaryRole : undefined,
+        preferredRoles: selectedRoles,
       });
 
       const clientUrl = process.env.CLIENT_URL ?? '';
@@ -840,7 +852,7 @@ export class SignupInteractionListener {
         : '';
 
       await interaction.editReply({
-        content: `You're signed up as **${interaction.user.username}** (${selectedRole})!${accountLink}`,
+        content: `You're signed up as **${interaction.user.username}** (${rolesLabel})!${accountLink}`,
         components: [],
       });
 

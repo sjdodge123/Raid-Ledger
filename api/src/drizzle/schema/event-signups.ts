@@ -81,6 +81,13 @@ export const eventSignups = pgTable(
      * - 'declined': won't attend
      */
     status: varchar('status', { length: 20 }).default('signed_up').notNull(),
+    /**
+     * Preferred roles for multi-role signup (ROK-452).
+     * Stores an array of roles the player is willing to play (e.g., ['tank', 'dps']).
+     * Used by auto-allocation to optimally assign players to roster slots.
+     * Null or empty means no role preference expressed.
+     */
+    preferredRoles: text('preferred_roles').array(),
     signedUpAt: timestamp('signed_up_at').defaultNow().notNull(),
   },
   (table) => [
