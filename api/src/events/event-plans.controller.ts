@@ -21,7 +21,7 @@ import {
   PollResultsResponse,
 } from '@raid-ledger/contract';
 import { EventPlansService } from './event-plans.service';
-import { ZodError } from 'zod';
+import { type ZodType, type ZodTypeDef, ZodError } from 'zod';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -33,17 +33,23 @@ interface AuthenticatedRequest {
 }
 
 /**
- * Handle Zod validation errors by converting to BadRequestException.
+ * Parse data with a Zod schema, converting ZodError to BadRequestException.
  */
-function handleValidationError(error: unknown): never {
-  if (error instanceof Error && error.name === 'ZodError') {
-    const zodError = error as ZodError;
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
+function parseOrThrow<TOut, TDef extends ZodTypeDef, TIn>(
+  schema: ZodType<TOut, TDef, TIn>,
+  data: unknown,
+): TOut {
+  try {
+    return schema.parse(data);
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: error.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
+      });
+    }
+    throw error;
   }
-  throw error;
 }
 
 /**
@@ -80,12 +86,8 @@ export class EventPlansController {
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<EventPlanResponseDto> {
-    try {
-      const dto = CreateEventPlanSchema.parse(body);
-      return this.eventPlansService.create(req.user.id, dto);
-    } catch (error) {
-      handleValidationError(error);
-    }
+    const dto = parseOrThrow(CreateEventPlanSchema, body);
+    return this.eventPlansService.create(req.user.id, dto);
   }
 
   /**
@@ -110,17 +112,13 @@ export class EventPlansController {
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ): Promise<EventPlanResponseDto> {
-    try {
-      const dto = ConvertEventToPlanSchema.parse(body);
-      return this.eventPlansService.convertFromEvent(
-        eventId,
-        req.user.id,
-        req.user.role,
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
+    const dto = parseOrThrow(ConvertEventToPlanSchema, body);
+    return this.eventPlansService.convertFromEvent(
+      eventId,
+      req.user.id,
+      req.user.role,
+      dto,
+    );
   }
 
   /**
