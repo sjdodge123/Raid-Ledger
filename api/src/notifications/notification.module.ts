@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
@@ -7,6 +7,7 @@ import { PostEventReminderService } from './post-event-reminder.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
+import { GameAffinityNotificationService } from './game-affinity-notification.service';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
@@ -17,7 +18,7 @@ import { SettingsModule } from '../settings/settings.module';
   imports: [
     DrizzleModule,
     CronJobModule,
-    DiscordBotModule,
+    forwardRef(() => DiscordBotModule),
     SettingsModule,
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
@@ -29,7 +30,12 @@ import { SettingsModule } from '../settings/settings.module';
     DiscordNotificationService,
     DiscordNotificationProcessor,
     DiscordNotificationEmbedService,
+    GameAffinityNotificationService,
   ],
-  exports: [NotificationService, DiscordNotificationService],
+  exports: [
+    NotificationService,
+    DiscordNotificationService,
+    GameAffinityNotificationService,
+  ],
 })
 export class NotificationModule {}

@@ -1357,6 +1357,7 @@ export class EventsService {
       },
       gameId: eventResponse.game?.id ?? null,
       recurrenceRule: eventResponse.recurrenceRule ?? null,
+      creatorId: eventResponse.creator.id,
     });
   }
 

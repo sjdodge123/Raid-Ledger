@@ -7,6 +7,7 @@ import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
 import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
+import { NotificationModule } from '../notifications/notification.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -49,6 +50,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     forwardRef(() => UsersModule),
     forwardRef(() => EventsModule),
     forwardRef(() => AuthModule),
+    forwardRef(() => NotificationModule),
     CharactersModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     CronJobModule,
