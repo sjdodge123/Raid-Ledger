@@ -811,7 +811,7 @@ describe('SignupInteractionListener', () => {
       );
       expect(interaction.editReply).toHaveBeenCalledWith(
         expect.objectContaining({
-          content: expect.stringContaining('tank'),
+          content: expect.stringContaining('Tank'),
         }),
       );
     });
