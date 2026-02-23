@@ -172,7 +172,32 @@ export class SignupInteractionListener {
     );
 
     if (existingSignup) {
-      if (existingSignup.status === 'signed_up') {
+      if (existingSignup.status !== 'signed_up') {
+        // User has a tentative/declined signup — change to signed_up
+        await this.signupsService.updateStatus(
+          eventId,
+          existingSignup.discordUserId
+            ? { discordUserId: existingSignup.discordUserId }
+            : { userId: existingSignup.user.id },
+          { status: 'signed_up' },
+        );
+
+        await interaction.editReply({
+          content: 'Your status has been changed to **signed up**!',
+        });
+        await this.updateEmbedSignupCount(eventId);
+        return;
+      }
+
+      // ROK-438: Already signed up — allow character/role change instead of dead-end
+      // Only linked users can change characters; anonymous users get a simple message
+      const [linkedUser] = await this.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.discordId, discordUserId))
+        .limit(1);
+
+      if (!linkedUser) {
         await interaction.editReply({
           content:
             "You're already signed up! Use the Tentative or Decline buttons to change your status.",
@@ -180,19 +205,87 @@ export class SignupInteractionListener {
         return;
       }
 
-      // User has a tentative/declined signup — change to signed_up
-      await this.signupsService.updateStatus(
-        eventId,
-        existingSignup.discordUserId
-          ? { discordUserId: existingSignup.discordUserId }
-          : { userId: existingSignup.user.id },
-        { status: 'signed_up' },
-      );
+      const [event] = await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
 
+      if (!event) {
+        await interaction.editReply({ content: 'Event not found.' });
+        return;
+      }
+
+      // Check if event has a game with character support
+      if (event.gameId) {
+        const [game] = await this.db
+          .select()
+          .from(schema.games)
+          .where(eq(schema.games.id, event.gameId))
+          .limit(1);
+
+        if (game) {
+          const characterList = await this.charactersService.findAllForUser(
+            linkedUser.id,
+            event.gameId,
+          );
+          const characters = characterList.data;
+
+          if (characters.length >= 1) {
+            const slotConfig = event.slotConfig as Record<
+              string,
+              unknown
+            > | null;
+            const isMMO = slotConfig?.type === 'mmo';
+
+            // No character yet — show character select
+            if (!existingSignup.characterId) {
+              await this.showCharacterSelect(
+                interaction,
+                eventId,
+                event.title,
+                characters,
+              );
+              return;
+            }
+
+            // Has character but no role on MMO event — show role select
+            if (isMMO && !existingSignup.character?.role) {
+              const currentChar = characters.find(
+                (c) => c.id === existingSignup.characterId,
+              );
+              await this.showRoleSelect(
+                interaction,
+                eventId,
+                existingSignup.characterId,
+                currentChar
+                  ? {
+                      name: currentChar.name,
+                      role:
+                        currentChar.roleOverride ?? currentChar.role ?? null,
+                    }
+                  : undefined,
+              );
+              return;
+            }
+
+            // Has character (and role if MMO) — offer to change
+            await this.showCharacterSelect(
+              interaction,
+              eventId,
+              event.title,
+              characters,
+            );
+            return;
+          }
+        }
+      }
+
+      // No game, no characters, or no character support — simple message
       await interaction.editReply({
-        content: 'Your status has been changed to **signed up**!',
+        content:
+          "You're already signed up! Use the Tentative or Decline buttons to change your status.",
       });
-      await this.updateEmbedSignupCount(eventId);
       return;
     }
 
