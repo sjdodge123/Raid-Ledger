@@ -391,6 +391,7 @@ function BossLootBody({
                                     gameVariant={wowheadVariant}
                                     characterClass={characterClass}
                                     lootItemSubclass={item.itemSubclass}
+                                    lootSlot={item.slot}
                                 />
                             )}
 

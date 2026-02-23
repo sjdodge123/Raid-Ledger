@@ -416,6 +416,7 @@ export function QuestPrepPanel({
                                                         gameVariant={wowheadVariant}
                                                         characterClass={charClass}
                                                         lootItemSubclass={reward.itemSubclass}
+                                                        lootSlot={reward.slot}
                                                     />
                                                 )}
                                             </div>
