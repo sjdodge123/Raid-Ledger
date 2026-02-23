@@ -995,7 +995,9 @@ export class EventPlansService {
 
     if (details?.pollMode === 'all_or_nothing') {
       bodyLines.push('');
-      bodyLines.push("🔄 **All or Nothing** — re-polls if anyone can't make it");
+      bodyLines.push(
+        "🔄 **All or Nothing** — re-polls if anyone can't make it",
+      );
     }
 
     // Poll deadline using Discord's localized timestamp
@@ -1003,7 +1005,9 @@ export class EventPlansService {
       (Date.now() + durationHours * 3600 * 1000) / 1000,
     );
     bodyLines.push('');
-    bodyLines.push(`⏳ **Poll closes:** <t:${pollEndsUnix}:f> (<t:${pollEndsUnix}:R>)`);
+    bodyLines.push(
+      `⏳ **Poll closes:** <t:${pollEndsUnix}:f> (<t:${pollEndsUnix}:R>)`,
+    );
 
     embed.setDescription(bodyLines.join('\n'));
 

@@ -24,7 +24,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
 @UseGuards(PluginActiveGuard)
 @RequirePlugin(WOW_COMMON_MANIFEST.id)
 export class BossEncountersController {
-  constructor(private readonly bossEncountersService: BossEncountersService) { }
+  constructor(private readonly bossEncountersService: BossEncountersService) {}
 
   private static readonly VALID_VARIANTS = new Set([
     'classic_era',

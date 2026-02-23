@@ -11,6 +11,8 @@ import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { BossEncountersController } from './boss-encounters.controller';
 import { BossEncountersService } from './boss-encounters.service';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
+import { QuestProgressController } from './quest-progress.controller';
+import { QuestProgressService } from './quest-progress.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -24,6 +26,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     BlizzardController,
     DungeonQuestsController,
     BossEncountersController,
+    QuestProgressController,
   ],
   providers: [
     BlizzardService,
@@ -34,6 +37,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     DungeonQuestSeeder,
     BossEncountersService,
     BossEncounterSeeder,
+    QuestProgressService,
   ],
   exports: [
     BlizzardService,

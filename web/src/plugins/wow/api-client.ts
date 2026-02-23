@@ -6,6 +6,11 @@ import type {
     BlizzardCharacterPreviewDto,
     WowInstanceListResponseDto,
     WowInstanceDetailDto,
+    EnrichedDungeonQuestsResponse,
+    QuestProgressResponse,
+    QuestProgressDto,
+    QuestCoverageResponse,
+    UpdateQuestProgressBody,
 } from '@raid-ledger/contract';
 import { CharacterSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
@@ -87,4 +92,46 @@ export async function fetchWowInstanceDetail(
 ): Promise<WowInstanceDetailDto> {
     const params = new URLSearchParams({ gameVariant });
     return fetchApi(`/blizzard/instance/${instanceId}?${params}`);
+}
+
+/**
+ * Fetch enriched quests for a dungeon instance (ROK-246)
+ */
+export async function fetchEnrichedQuests(
+    instanceId: number,
+    variant: string,
+): Promise<EnrichedDungeonQuestsResponse> {
+    const params = new URLSearchParams({ variant });
+    return fetchApi(`/plugins/wow-classic/instances/${instanceId}/quests/enriched?${params}`);
+}
+
+/**
+ * Fetch quest progress for all players on an event (ROK-246)
+ */
+export async function fetchQuestProgress(
+    eventId: number,
+): Promise<QuestProgressResponse> {
+    return fetchApi(`/plugins/wow-classic/events/${eventId}/quest-progress`);
+}
+
+/**
+ * Fetch sharable quest coverage for an event (ROK-246)
+ */
+export async function fetchQuestCoverage(
+    eventId: number,
+): Promise<QuestCoverageResponse> {
+    return fetchApi(`/plugins/wow-classic/events/${eventId}/quest-coverage`);
+}
+
+/**
+ * Update quest progress for the current user (ROK-246)
+ */
+export async function updateQuestProgress(
+    eventId: number,
+    body: UpdateQuestProgressBody,
+): Promise<QuestProgressDto> {
+    return fetchApi(`/plugins/wow-classic/events/${eventId}/quest-progress`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
 }

@@ -87,3 +87,6 @@ export * from './dungeon-quests.schema.js';
 
 // Boss Encounters & Loot (ROK-244)
 export * from './boss-encounters.schema.js';
+
+// Quest Progress (ROK-246)
+export * from './quest-progress.schema.js';

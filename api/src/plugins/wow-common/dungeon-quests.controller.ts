@@ -24,10 +24,13 @@ import { WOW_COMMON_MANIFEST } from './manifest';
 @UseGuards(PluginActiveGuard)
 @RequirePlugin(WOW_COMMON_MANIFEST.id)
 export class DungeonQuestsController {
-  constructor(private readonly dungeonQuestsService: DungeonQuestsService) { }
+  constructor(private readonly dungeonQuestsService: DungeonQuestsService) {}
 
   private static readonly VALID_VARIANTS = new Set([
-    'classic_era', 'classic_anniversary', 'classic', 'retail',
+    'classic_era',
+    'classic_anniversary',
+    'classic',
+    'retail',
   ]);
 
   /**
@@ -60,5 +63,29 @@ export class DungeonQuestsController {
   @Get('quests/:questId/chain')
   async getQuestChain(@Param('questId', ParseIntPipe) questId: number) {
     return this.dungeonQuestsService.getQuestChain(questId);
+  }
+
+  /**
+   * GET /plugins/wow-classic/instances/:id/quests/enriched?variant=classic_era
+   *
+   * Returns enriched dungeon quests with resolved reward item details
+   * and prerequisite chains.
+   *
+   * ROK-246: Dungeon Companion — Quest Suggestions UI
+   */
+  @Get('instances/:id/quests/enriched')
+  async getEnrichedQuestsForInstance(
+    @Param('id', ParseIntPipe) instanceId: number,
+    @Query('variant') variant: string = 'classic_era',
+  ) {
+    if (!DungeonQuestsController.VALID_VARIANTS.has(variant)) {
+      throw new BadRequestException(
+        `Invalid variant "${variant}". Valid variants: ${[...DungeonQuestsController.VALID_VARIANTS].join(', ')}`,
+      );
+    }
+    return this.dungeonQuestsService.getEnrichedQuestsForInstance(
+      instanceId,
+      variant,
+    );
   }
 }

@@ -421,6 +421,20 @@
       "when": 1771790794245,
       "tag": "0059_pale_echo",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1771792030617,
+      "tag": "0060_illegal_the_liberteens",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1771799327703,
+      "tag": "0061_plain_vertigo",
+      "breakpoints": true
     }
   ]
 }

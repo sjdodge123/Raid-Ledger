@@ -78,7 +78,8 @@ export function registerSlotComponent(registration: SlotRegistration): void {
     const existingIndex = registry.findIndex(
         (r) =>
             r.pluginSlug === registration.pluginSlug &&
-            r.slotName === registration.slotName,
+            r.slotName === registration.slotName &&
+            r.component === registration.component,
     );
     if (existingIndex !== -1) {
         registry[existingIndex] = registration;

@@ -1,0 +1,154 @@
+/* WowItemCard — Shared item display component */
+
+.wow-item-card {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+    background: var(--surface-2, rgba(255, 255, 255, 0.03));
+    border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.06));
+    transition: background 0.15s ease;
+    overflow: hidden;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+.wow-item-card:hover {
+    background: var(--surface-3, rgba(255, 255, 255, 0.06));
+}
+
+/* Icon */
+.wow-item-card__icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    border: 1.5px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
+    flex-shrink: 0;
+    object-fit: cover;
+}
+
+.wow-item-card__icon-fallback {
+    width: 28px;
+    height: 28px;
+    border-radius: 3px;
+    background: var(--color-faint, rgba(255, 255, 255, 0.04));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.625rem;
+    color: var(--text-muted, #8b8fa3);
+    font-family: monospace;
+    flex-shrink: 0;
+}
+
+/* Quality border colors */
+.wow-item-card__icon--poor {
+    border-color: #9d9d9d;
+}
+
+.wow-item-card__icon--common {
+    border-color: #ffffff;
+}
+
+.wow-item-card__icon--uncommon {
+    border-color: #1eff00;
+}
+
+.wow-item-card__icon--rare {
+    border-color: #0070dd;
+}
+
+.wow-item-card__icon--epic {
+    border-color: #a335ee;
+}
+
+.wow-item-card__icon--legendary {
+    border-color: #ff8000;
+}
+
+/* Content */
+.wow-item-card__content {
+    min-width: 0;
+    flex: 1;
+}
+
+.wow-item-card__name {
+    font-size: 0.8125rem;
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.wow-item-card__name a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.wow-item-card__name a:hover {
+    text-decoration: underline;
+}
+
+/* Quality text colors */
+.wow-item-card__name--poor {
+    color: #9d9d9d;
+}
+
+.wow-item-card__name--common {
+    color: #d4d4d8;
+}
+
+.wow-item-card__name--uncommon {
+    color: #4ade80;
+}
+
+.wow-item-card__name--rare {
+    color: #60a5fa;
+}
+
+.wow-item-card__name--epic {
+    color: #c084fc;
+}
+
+.wow-item-card__name--legendary {
+    color: #fb923c;
+}
+
+/* Meta line: slot · subclass */
+.wow-item-card__meta {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 0.6875rem;
+    color: var(--text-muted, #8b8fa3);
+}
+
+/* Item level badge */
+.wow-item-card__ilvl {
+    font-size: 0.6875rem;
+    color: var(--text-muted, #8b8fa3);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+/* Enchant line */
+.wow-item-card__enchant {
+    font-size: 0.625rem;
+    color: #4ade80;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Constrain Wowhead-injected icons */
+.wow-item-card .iconsmall,
+.wow-item-card .iconsmall img,
+.wow-item-card .iconsmall ins {
+    width: 18px !important;
+    height: 18px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    display: inline-block;
+    vertical-align: middle;
+}
