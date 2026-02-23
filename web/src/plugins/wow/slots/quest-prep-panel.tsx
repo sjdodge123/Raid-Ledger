@@ -162,9 +162,10 @@ export function QuestPrepPanel({
 
     if (!quests || quests.length === 0) return null;
 
+    const charClass = character?.class ?? null;
+
     // Check if a quest is usable by the signed-up character
     const isQuestUsable = (quest: EnrichedDungeonQuestDto): boolean => {
-        const charClass = character?.class ?? null;
         const charRace = character?.race ?? null;
         const classRestrictions = quest.classRestriction as string[] | null;
         const raceRestrictions = quest.raceRestriction as string[] | null;
@@ -413,6 +414,8 @@ export function QuestPrepPanel({
                                                         rewardItemLevel={reward.itemLevel}
                                                         equippedItem={equippedItem}
                                                         gameVariant={wowheadVariant}
+                                                        characterClass={charClass}
+                                                        lootItemSubclass={(reward as Record<string, unknown>).itemSubclass as string | null | undefined}
                                                     />
                                                 )}
                                             </div>
