@@ -210,6 +210,7 @@ export class EmbedSyncProcessor extends WorkerHost {
         username: r.username,
         role: r.role ?? null,
         preferredRoles: r.preferredRoles,
+        status: r.status ?? null,
       }));
 
     const eventData: EmbedEventData = {
