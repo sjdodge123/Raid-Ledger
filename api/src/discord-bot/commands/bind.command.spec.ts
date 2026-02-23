@@ -123,6 +123,8 @@ describe('BindCommand', () => {
         'text',
         'game-announcements',
         null,
+        undefined,
+        null,
       );
     });
 
