@@ -58,7 +58,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
     const cancelSignup = useCancelSignup(event.id);
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
+    const [pendingSlotInfo, setPendingSlotInfo] = useState<{ slotRole: string; slotPosition: number } | null>(null);
     const [pendingRole, setPendingRole] = useState<string | undefined>(undefined);
 
     // Event data
@@ -136,25 +136,24 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
         const nextPos = findNextAvailablePosition(role, assignments, capacity);
         if (!nextPos) return;
 
+        // If game has character selection, open modal first (selection-first flow)
+        if (event.resource?.game?.id) {
+            setPendingSlotInfo({ slotRole: role, slotPosition: nextPos });
+            setPendingRole(role);
+            setShowConfirmModal(true);
+            return;
+        }
+
+        // No game — sign up directly
         try {
-            const result = await signup.mutateAsync({
+            await signup.mutateAsync({
                 slotRole: role,
                 slotPosition: nextPos,
             });
             invalidateCalendar();
-
-            if (event.resource?.game?.id) {
-                toast.success(`Joined ${ROLE_CONFIG[role]?.label ?? role}!`, {
-                    description: 'Now confirm your character.',
-                });
-                setPendingSignupId(result.id);
-                setPendingRole(role);
-                setShowConfirmModal(true);
-            } else {
-                toast.success(`Joined ${ROLE_CONFIG[role]?.label ?? role}!`, {
-                    description: `You're in slot ${nextPos}.`,
-                });
-            }
+            toast.success(`Joined ${ROLE_CONFIG[role]?.label ?? role}!`, {
+                description: `You're in slot ${nextPos}.`,
+            });
         } catch (err) {
             toast.error('Failed to sign up', {
                 description: err instanceof Error ? err.message : 'Please try again.',
@@ -175,25 +174,24 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
         }
         if (!nextPos) return;
 
+        // If game has character selection, open modal first (selection-first flow)
+        if (event.resource?.game?.id) {
+            setPendingSlotInfo({ slotRole: role, slotPosition: nextPos });
+            setPendingRole(undefined);
+            setShowConfirmModal(true);
+            return;
+        }
+
+        // No game — sign up directly
         try {
-            const result = await signup.mutateAsync({
+            await signup.mutateAsync({
                 slotRole: role,
                 slotPosition: nextPos,
             });
             invalidateCalendar();
-
-            if (event.resource?.game?.id) {
-                toast.success('Joined!', {
-                    description: 'Now confirm your character.',
-                });
-                setPendingSignupId(result.id);
-                setPendingRole(undefined);
-                setShowConfirmModal(true);
-            } else {
-                toast.success('Joined!', {
-                    description: 'You\'re on the roster!',
-                });
-            }
+            toast.success('Joined!', {
+                description: 'You\'re on the roster!',
+            });
         } catch (err) {
             toast.error('Failed to sign up', {
                 description: err instanceof Error ? err.message : 'Please try again.',
@@ -215,6 +213,53 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
         }
+    };
+
+    // Selection-first signup: modal confirmed with character/role
+    const handleSignupConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+        if (!pendingSlotInfo) return;
+        try {
+            await signup.mutateAsync({
+                ...pendingSlotInfo,
+                characterId: selection.characterId,
+            });
+            invalidateCalendar();
+            toast.success('Joined!', {
+                description: pendingRole ? `Signed up as ${ROLE_CONFIG[pendingRole]?.label ?? pendingRole}.` : 'You\'re on the roster!',
+            });
+            setShowConfirmModal(false);
+            setPendingSlotInfo(null);
+            setPendingRole(undefined);
+        } catch (err) {
+            toast.error('Failed to sign up', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // Selection-first signup: skip character selection
+    const handleSignupSkip = async () => {
+        if (!pendingSlotInfo) return;
+        try {
+            await signup.mutateAsync(pendingSlotInfo);
+            invalidateCalendar();
+            toast.success('Joined!', {
+                description: 'Signed up without a character.',
+            });
+            setShowConfirmModal(false);
+            setPendingSlotInfo(null);
+            setPendingRole(undefined);
+        } catch (err) {
+            toast.error('Failed to sign up', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    const handleConfirmModalClose = () => {
+        setShowConfirmModal(false);
+        setPendingSlotInfo(null);
+        setPendingRole(undefined);
     };
 
     const isMutating = signup.isPending || cancelSignup.isPending;
@@ -378,18 +423,18 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
 
             {/* Signup confirmation modal for character selection */}
             <div onClick={(e) => e.stopPropagation()}>
-            {pendingSignupId !== null && (
+            {showConfirmModal && (
                 <SignupConfirmationModal
                     isOpen={showConfirmModal}
-                    onClose={() => {
-                        setShowConfirmModal(false);
-                        setPendingSignupId(null);
-                        setPendingRole(undefined);
-                    }}
-                    eventId={event.id}
-                    signupId={pendingSignupId}
+                    onClose={handleConfirmModalClose}
+                    onConfirm={handleSignupConfirm}
+                    onSkip={handleSignupSkip}
+                    isConfirming={signup.isPending}
                     gameId={event.resource?.game?.id ?? undefined}
-                    expectedRole={
+                    gameName={gameName}
+                    hasRoles={isMMOGame}
+                    gameSlug={gameSlug}
+                    preSelectedRole={
                         pendingRole === 'tank' || pendingRole === 'healer' || pendingRole === 'dps'
                             ? (pendingRole as CharacterRole)
                             : undefined

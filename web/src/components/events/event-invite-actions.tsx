@@ -2,7 +2,7 @@
  * EventInviteActions — Reusable Accept/Decline buttons for event invitations (ROK-292).
  *
  * Mirrors the Discord embed flow:
- *   Accept → sign up → character confirmation modal → done
+ *   Accept → character selection modal → sign up → done
  *   Decline → dismiss notification
  *
  * Used by NotificationItem for invite notifications. Can be embedded anywhere
@@ -15,6 +15,7 @@ import { useSignup } from '../../hooks/use-signups';
 import { useNotifications } from '../../hooks/use-notifications';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { toast } from '../../lib/toast';
+import type { CharacterRole } from '@raid-ledger/contract';
 
 const SignupConfirmationModal = lazy(() =>
     import('./signup-confirmation-modal').then(m => ({ default: m.SignupConfirmationModal })),
@@ -38,9 +39,7 @@ export function EventInviteActions({
     const { games } = useGameRegistry();
     const signup = useSignup(eventId);
 
-    const [isAccepting, setIsAccepting] = useState(false);
     const [showConfirmation, setShowConfirmation] = useState(false);
-    const [signupId, setSignupId] = useState<number | null>(null);
 
     // Resolve game config data for character confirmation modal
     // ROK-400: event.game.id is now the games table integer ID directly
@@ -48,28 +47,38 @@ export function EventInviteActions({
         (g) => g.id === event?.game?.id || g.slug === event?.game?.slug,
     );
 
-    const handleAccept = async () => {
-        setIsAccepting(true);
-        try {
-            const result = await signup.mutateAsync(undefined);
-            markRead(notificationId);
+    const handleAccept = () => {
+        markRead(notificationId);
+        // If game supports characters, open selection modal first
+        if (event?.game?.id) {
+            setShowConfirmation(true);
+            return;
+        }
+        // No game — sign up directly
+        doSignup();
+    };
 
-            // If game has character selection, show confirmation modal
-            if (result.id) {
-                setSignupId(result.id);
-                setShowConfirmation(true);
-            } else {
-                toast.success('Signed up!');
-                navigate(`/events/${eventId}`);
-                onComplete?.();
-            }
+    const doSignup = async (characterId?: string) => {
+        try {
+            await signup.mutateAsync(characterId ? { characterId } : undefined);
+            toast.success('Signed up!');
+            navigate(`/events/${eventId}`);
+            onComplete?.();
         } catch (err) {
             toast.error('Failed to sign up', {
                 description: err instanceof Error ? err.message : 'Please try again.',
             });
-        } finally {
-            setIsAccepting(false);
         }
+    };
+
+    const handleConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+        await doSignup(selection.characterId);
+        setShowConfirmation(false);
+    };
+
+    const handleSkip = async () => {
+        await doSignup();
+        setShowConfirmation(false);
     };
 
     const handleDecline = () => {
@@ -79,8 +88,6 @@ export function EventInviteActions({
 
     const handleConfirmationClose = () => {
         setShowConfirmation(false);
-        navigate(`/events/${eventId}`);
-        onComplete?.();
     };
 
     return (
@@ -89,10 +96,10 @@ export function EventInviteActions({
                 <button
                     type="button"
                     onClick={handleAccept}
-                    disabled={isAccepting}
+                    disabled={signup.isPending}
                     className="px-3 py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors"
                 >
-                    {isAccepting ? 'Joining...' : 'Accept'}
+                    {signup.isPending ? 'Joining...' : 'Accept'}
                 </button>
                 <button
                     type="button"
@@ -103,13 +110,14 @@ export function EventInviteActions({
                 </button>
             </div>
 
-            {showConfirmation && signupId !== null && (
+            {showConfirmation && (
                 <Suspense fallback={null}>
                     <SignupConfirmationModal
                         isOpen={showConfirmation}
                         onClose={handleConfirmationClose}
-                        eventId={eventId}
-                        signupId={signupId}
+                        onConfirm={handleConfirm}
+                        onSkip={handleSkip}
+                        isConfirming={signup.isPending}
                         gameId={gameRegistryEntry?.id ?? event?.game?.id ?? undefined}
                         gameName={event?.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
