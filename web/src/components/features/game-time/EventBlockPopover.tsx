@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { GameTimeEventBlock } from '@raid-ledger/contract';
-import { useCancelSignup } from '../../../hooks/use-signups';
+import type { GameTimeEventBlock, CharacterRole } from '@raid-ledger/contract';
+import { useCancelSignup, useConfirmSignup } from '../../../hooks/use-signups';
 import { SignupConfirmationModal } from '../../events/signup-confirmation-modal';
 import { toast } from '../../../lib/toast';
 
@@ -36,6 +36,7 @@ function StatusBadge({ status }: { status: string }) {
 export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopoverProps) {
     const navigate = useNavigate();
     const cancelSignup = useCancelSignup(event.eventId);
+    const confirmSignup = useConfirmSignup(event.eventId);
     const popoverRef = useRef<HTMLDivElement>(null);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
 
@@ -76,6 +77,21 @@ export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopo
             window.removeEventListener('scroll', handler);
         };
     }, [onClose]);
+
+    const handleConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+        try {
+            await confirmSignup.mutateAsync({ signupId: event.signupId, characterId: selection.characterId });
+            toast.success('Signup confirmed!');
+            setShowConfirmModal(false);
+        } catch {
+            toast.error('Failed to confirm signup');
+        }
+    };
+
+    const handleSkip = () => {
+        // Already signed up, just close the modal
+        setShowConfirmModal(false);
+    };
 
     const handleLeave = async () => {
         try {
@@ -147,8 +163,12 @@ export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopo
                 <SignupConfirmationModal
                     isOpen={showConfirmModal}
                     onClose={() => setShowConfirmModal(false)}
-                    eventId={event.eventId}
-                    signupId={event.signupId}
+                    onConfirm={handleConfirm}
+                    onSkip={handleSkip}
+                    isConfirming={confirmSignup.isPending}
+                    gameId={event.gameId ?? undefined}
+                    gameName={event.gameName ?? undefined}
+                    gameSlug={event.gameSlug ?? undefined}
                 />
             )}
         </>

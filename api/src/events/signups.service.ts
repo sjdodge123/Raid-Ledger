@@ -81,6 +81,26 @@ export class SignupsService {
       .where(eq(schema.users.id, userId))
       .limit(1);
 
+    // ROK-439: Validate character belongs to user if provided
+    if (dto?.characterId) {
+      const [character] = await this.db
+        .select()
+        .from(schema.characters)
+        .where(
+          and(
+            eq(schema.characters.id, dto.characterId),
+            eq(schema.characters.userId, userId),
+          ),
+        )
+        .limit(1);
+
+      if (!character) {
+        throw new BadRequestException(
+          'Character not found or does not belong to you',
+        );
+      }
+    }
+
     // Wrap capacity check + insert + roster assignment in a transaction to
     // prevent TOCTOU races where two concurrent signups both read count < max.
     // Uses onConflictDoNothing to handle duplicate signups gracefully (ROK-364).
@@ -108,13 +128,16 @@ export class SignupsService {
         }
       }
 
+      // ROK-439: If characterId provided, set it and mark confirmed in one step
+      const hasCharacter = !!dto?.characterId;
       const rows = await tx
         .insert(schema.eventSignups)
         .values({
           eventId,
           userId,
           note: dto?.note ?? null,
-          confirmationStatus: 'pending', // ROK-131 AC-1
+          characterId: dto?.characterId ?? null,
+          confirmationStatus: hasCharacter ? 'confirmed' : 'pending',
           status: 'signed_up',
         })
         .onConflictDoNothing({
@@ -270,7 +293,12 @@ export class SignupsService {
       action: 'signup_created',
     });
 
-    return this.buildSignupResponse(result.signup, user, null);
+    // ROK-439: If character was provided upfront, include it in the response
+    const character = dto?.characterId
+      ? await this.getCharacterById(dto.characterId)
+      : null;
+
+    return this.buildSignupResponse(result.signup, user, character);
   }
 
   /**

@@ -3,7 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { DiscordEventListener, type EventPayload } from './event.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
-import { ChannelResolverService } from '../services/channel-resolver.service';
+import { EmbedPosterService } from '../services/embed-poster.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
@@ -14,7 +14,7 @@ describe('DiscordEventListener', () => {
   let listener: DiscordEventListener;
   let clientService: jest.Mocked<DiscordBotClientService>;
   let embedFactory: jest.Mocked<DiscordEmbedFactory>;
-  let channelResolver: jest.Mocked<ChannelResolverService>;
+  let embedPoster: jest.Mocked<EmbedPosterService>;
   let mockDb: {
     insert: jest.Mock;
     select: jest.Mock;
@@ -23,13 +23,17 @@ describe('DiscordEventListener', () => {
   };
   const originalClientUrl = process.env.CLIENT_URL;
 
+  // Use a future date so lead-time gating allows posting
+  const futureDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const futureEndDate = new Date(futureDate.getTime() + 3 * 60 * 60 * 1000);
+
   const mockPayload: EventPayload = {
     eventId: 42,
     event: {
       id: 42,
       title: 'Test Raid',
-      startTime: '2026-02-20T20:00:00.000Z',
-      endTime: '2026-02-20T23:00:00.000Z',
+      startTime: futureDate.toISOString(),
+      endTime: futureEndDate.toISOString(),
       signupCount: 5,
       maxAttendees: 20,
       game: { name: 'WoW', coverUrl: 'https://example.com/art.jpg' },
@@ -44,8 +48,6 @@ describe('DiscordEventListener', () => {
     delete process.env.CLIENT_URL;
 
     // Chain-able mock for Drizzle query builder.
-    // The chain is thenable so `await db.select().from(...).where(...)` resolves
-    // to the result array, while `.limit()` also resolves for queries that use it.
     const createChainMock = (resolvedValue: unknown[] = []) => {
       const chain: Record<string, jest.Mock> & { then?: unknown } = {};
       chain.from = jest.fn().mockReturnValue(chain);
@@ -98,9 +100,9 @@ describe('DiscordEventListener', () => {
           },
         },
         {
-          provide: ChannelResolverService,
+          provide: EmbedPosterService,
           useValue: {
-            resolveChannelForEvent: jest.fn().mockResolvedValue('channel-789'),
+            postEmbed: jest.fn().mockResolvedValue(true),
           },
         },
         {
@@ -121,7 +123,7 @@ describe('DiscordEventListener', () => {
     listener = module.get(DiscordEventListener);
     clientService = module.get(DiscordBotClientService);
     embedFactory = module.get(DiscordEmbedFactory);
-    channelResolver = module.get(ChannelResolverService);
+    embedPoster = module.get(EmbedPosterService);
   });
 
   afterEach(async () => {
@@ -137,20 +139,14 @@ describe('DiscordEventListener', () => {
   });
 
   describe('handleEventCreated', () => {
-    it('should post an embed and store the message reference', async () => {
+    it('should delegate to EmbedPosterService for events within lead-time window', async () => {
       await listener.handleEventCreated(mockPayload);
 
-      expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledWith(101);
-      expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect(embedPoster.postEmbed).toHaveBeenCalledWith(
+        42,
         mockPayload.event,
-        { communityName: 'Test Guild', clientUrl: null, timezone: null },
+        101,
       );
-      expect(clientService.sendEmbed).toHaveBeenCalledWith(
-        'channel-789',
-        mockEmbed,
-        mockRow,
-      );
-      expect(mockDb.insert).toHaveBeenCalled();
     });
 
     it('should skip posting when bot is not connected', async () => {
@@ -158,32 +154,45 @@ describe('DiscordEventListener', () => {
 
       await listener.handleEventCreated(mockPayload);
 
-      expect(clientService.sendEmbed).not.toHaveBeenCalled();
+      expect(embedPoster.postEmbed).not.toHaveBeenCalled();
     });
 
-    it('should skip posting when no channel is resolved', async () => {
-      channelResolver.resolveChannelForEvent.mockResolvedValue(null);
+    it('should defer to scheduler when event is outside lead-time window', async () => {
+      // Event is 30 days in the future — outside 6-day lead time
+      const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const farPayload: EventPayload = {
+        ...mockPayload,
+        event: {
+          ...mockPayload.event,
+          startTime: farFuture.toISOString(),
+          endTime: new Date(
+            farFuture.getTime() + 3 * 60 * 60 * 1000,
+          ).toISOString(),
+        },
+      };
 
-      await listener.handleEventCreated(mockPayload);
+      await listener.handleEventCreated(farPayload);
 
-      expect(clientService.sendEmbed).not.toHaveBeenCalled();
+      expect(embedPoster.postEmbed).not.toHaveBeenCalled();
     });
 
-    it('should skip posting when bot is not in any guild', async () => {
-      clientService.getGuildId.mockReturnValue(null);
+    it('should defer recurring series events outside lead-time window', async () => {
+      const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const recurringPayload: EventPayload = {
+        ...mockPayload,
+        event: {
+          ...mockPayload.event,
+          startTime: farFuture.toISOString(),
+          endTime: new Date(
+            farFuture.getTime() + 3 * 60 * 60 * 1000,
+          ).toISOString(),
+        },
+        recurrenceRule: { frequency: 'weekly' },
+      };
 
-      await listener.handleEventCreated(mockPayload);
+      await listener.handleEventCreated(recurringPayload);
 
-      expect(clientService.sendEmbed).not.toHaveBeenCalled();
-    });
-
-    it('should handle send errors gracefully', async () => {
-      clientService.sendEmbed.mockRejectedValue(new Error('Discord API error'));
-
-      // Should not throw
-      await expect(
-        listener.handleEventCreated(mockPayload),
-      ).resolves.not.toThrow();
+      expect(embedPoster.postEmbed).not.toHaveBeenCalled();
     });
   });
 
@@ -196,11 +205,32 @@ describe('DiscordEventListener', () => {
       expect(clientService.editEmbed).not.toHaveBeenCalled();
     });
 
-    it('should skip when no message record exists', async () => {
-      // Default mock returns empty array for select
-      await listener.handleEventUpdated(mockPayload);
+    it('should skip when no message record exists and event is outside lead time', async () => {
+      const farFuture = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      const farPayload: EventPayload = {
+        ...mockPayload,
+        event: {
+          ...mockPayload.event,
+          startTime: farFuture.toISOString(),
+        },
+      };
+
+      await listener.handleEventUpdated(farPayload);
 
       expect(clientService.editEmbed).not.toHaveBeenCalled();
+      expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+    });
+
+    it('should post embed when no message exists but rescheduled into lead-time window', async () => {
+      // Default mock returns empty array for select (no existing embed)
+      await listener.handleEventUpdated(mockPayload);
+
+      // Should post because event is within lead time and has no embed
+      expect(embedPoster.postEmbed).toHaveBeenCalledWith(
+        42,
+        mockPayload.event,
+        101,
+      );
     });
 
     it('should edit the embed when a message record exists', async () => {

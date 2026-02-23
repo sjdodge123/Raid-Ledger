@@ -5,12 +5,13 @@ import type { SignupStatus } from '@raid-ledger/contract';
 /**
  * Hook for signing up to an event
  * ROK-183: Supports optional slot preference for direct assignment
+ * ROK-439: Supports optional characterId for selection-first signup
  */
 export function useSignup(eventId: number) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number }) =>
+        mutationFn: (options?: { note?: string; slotRole?: string; slotPosition?: number; characterId?: string }) =>
             signupForEvent(eventId, options),
         onSuccess: () => {
             // Invalidate roster query to refetch updated roster

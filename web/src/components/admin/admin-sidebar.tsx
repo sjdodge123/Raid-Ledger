@@ -2,10 +2,11 @@ import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useNewBadge } from '../../hooks/use-new-badge';
+import { useSeenAdminSections } from '../../hooks/use-seen-admin-sections';
 import { NewBadge } from '../ui/new-badge';
 import { PluginBadge } from '../ui/plugin-badge';
 import { getPluginBadge } from '../../plugins/plugin-registry';
-import type { IntegrationStatus, NavItem } from './admin-nav-data';
+import type { IntegrationStatus, NavItem, NavSection } from './admin-nav-data';
 import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildNavSections } from './admin-nav-data';
 
 interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
@@ -15,6 +16,7 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
  * All sections are always expanded (no accordion collapse).
  * Integration items show at-a-glance status badges (Online / Offline).
  * Plugin-installed integrations appear in the Integrations section with "New" badges.
+ * Parent section headers show a dot indicator when any child has an unseen "New" badge (ROK-285).
  */
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
@@ -45,26 +47,52 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         <nav className="w-full h-full overflow-y-auto py-4 pr-2" aria-label="Admin settings navigation">
             <div className="space-y-4">
                 {sections.map((section) => (
-                    <div key={section.id}>
-                        <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
-                            <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
-                                {section.icon}{section.label}
-                            </span>
-                        </div>
-                        <div className="mt-1 space-y-0.5">
-                            {section.children.map((child) => (
-                                <SidebarNavItem
-                                    key={child.to}
-                                    item={child}
-                                    isActive={location.pathname === child.to}
-                                    onNavigate={onNavigate}
-                                />
-                            ))}
-                        </div>
-                    </div>
+                    <SidebarSection
+                        key={section.id}
+                        section={section}
+                        currentPath={location.pathname}
+                        onNavigate={onNavigate}
+                    />
                 ))}
             </div>
         </nav>
+    );
+}
+
+/** Section group with parent badge indicator when any child has unseen "New" badge. */
+function SidebarSection({
+    section,
+    currentPath,
+    onNavigate,
+}: {
+    section: NavSection;
+    currentPath: string;
+    onNavigate?: () => void;
+}) {
+    const { isNew } = useSeenAdminSections();
+    const hasNewChild = section.children.some((child) => child.newBadgeKey && isNew(child.newBadgeKey));
+
+    return (
+        <div>
+            <div className="flex items-center gap-2.5 px-3 py-1.5 text-secondary">
+                <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider">
+                    {section.icon}{section.label}
+                </span>
+                {hasNewChild && (
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" aria-label="New items" />
+                )}
+            </div>
+            <div className="mt-1 space-y-0.5">
+                {section.children.map((child) => (
+                    <SidebarNavItem
+                        key={child.to}
+                        item={child}
+                        isActive={currentPath === child.to}
+                        onNavigate={onNavigate}
+                    />
+                ))}
+            </div>
+        </div>
     );
 }
 

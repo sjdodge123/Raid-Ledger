@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
 import { CharactersModule } from '../characters/characters.module';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -37,6 +38,8 @@ import { UnbindCommand } from './commands/unbind.command';
 import { BindingsCommand } from './commands/bindings.command';
 import { InviteCommand } from './commands/invite.command';
 import { EventLinkListener } from './listeners/event-link.listener';
+import { EmbedPosterService } from './services/embed-poster.service';
+import { EmbedSchedulerService } from './services/embed-scheduler.service';
 
 @Module({
   imports: [
@@ -47,6 +50,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
     forwardRef(() => AuthModule),
     CharactersModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
+    CronJobModule,
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -71,6 +75,8 @@ import { EventLinkListener } from './listeners/event-link.listener';
     RoachOutInteractionListener,
     PugInviteListener,
     EventLinkListener,
+    EmbedPosterService,
+    EmbedSchedulerService,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,

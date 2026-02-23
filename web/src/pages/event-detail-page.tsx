@@ -5,7 +5,7 @@ import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
 import { useAuth, isOperatorOrAdmin } from '../hooks/use-auth';
 import { useRoster, useUpdateRoster, useSelfUnassign, useAdminRemoveUser, buildRosterUpdate } from '../hooks/use-roster';
-import type { RosterAssignmentResponse, RosterRole, PugRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, PugRole, CharacterRole } from '@raid-ledger/contract';
 import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
 import { UserLink } from '../components/common/UserLink';
@@ -85,7 +85,9 @@ export function EventDetailPage() {
     const updateStatus = useUpdateSignupStatus(eventId);
 
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [pendingSignupId, setPendingSignupId] = useState<number | null>(null);
+    // ROK-439: Track pre-selected role and slot position for selection-first flow
+    const [preSelectedRole, setPreSelectedRole] = useState<CharacterRole | undefined>(undefined);
+    const [pendingSlot, setPendingSlot] = useState<{ role: RosterRole; position: number } | null>(null);
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
@@ -93,7 +95,6 @@ export function EventDetailPage() {
     // Check if current user is signed up
     const userSignup = roster?.signups.find(s => s.user.id === user?.id);
     const isSignedUp = !!userSignup;
-    const needsConfirmation = userSignup?.confirmationStatus === 'pending';
 
     // ROK-114/183: Roster management
     const isEventCreator = user?.id === event?.creator?.id;
@@ -134,20 +135,76 @@ export function EventDetailPage() {
         }
     };
 
-    const handleSignup = async () => {
+    // ROK-439: Selection-first signup — open modal BEFORE any API call
+    const handleSignup = () => {
+        // If game has character support, show selection modal first
+        if (event?.game?.id) {
+            setPreSelectedRole(undefined);
+            setPendingSlot(null);
+            setShowConfirmModal(true);
+            return;
+        }
+        // No game / no character support → instant signup
+        doSignup();
+    };
+
+    // Perform the actual signup API call (instant path or after modal skip)
+    const doSignup = async (options?: { characterId?: string; slotRole?: string; slotPosition?: number }) => {
         try {
-            const result = await signup.mutateAsync(undefined);
-            if (isMMOGame && event?.game?.id) {
-                toast.success('Successfully signed up!', {
-                    description: 'Now confirm which character you\'re bringing.',
-                });
-                setPendingSignupId(result.id);
-                setShowConfirmModal(true);
-            } else {
-                toast.success('Successfully signed up!', {
-                    description: 'You\'re on the roster!',
-                });
+            await signup.mutateAsync(options);
+            toast.success('Successfully signed up!', {
+                description: 'You\'re on the roster!',
+            });
+        } catch (err) {
+            toast.error('Failed to sign up', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-439: Called when user confirms character/role in the pre-signup modal
+    const handleSelectionConfirm = async (selection: { characterId: string; role?: CharacterRole }) => {
+        try {
+            const options: { characterId: string; slotRole?: string; slotPosition?: number } = {
+                characterId: selection.characterId,
+            };
+            // If a slot was targeted (from handleSlotClick), include slot info
+            if (pendingSlot) {
+                options.slotRole = selection.role ?? pendingSlot.role;
+                options.slotPosition = pendingSlot.position;
+            } else if (selection.role) {
+                // Use the selected role as slot preference
+                options.slotRole = selection.role;
             }
+            await signup.mutateAsync(options);
+            setShowConfirmModal(false);
+            setPendingSlot(null);
+            setPreSelectedRole(undefined);
+            toast.success('Successfully signed up!', {
+                description: 'You\'re on the roster!',
+            });
+        } catch (err) {
+            toast.error('Failed to sign up', {
+                description: err instanceof Error ? err.message : 'Please try again.',
+            });
+        }
+    };
+
+    // ROK-439: Called when user has no characters and skips character selection
+    const handleSelectionSkip = async () => {
+        try {
+            const options: { slotRole?: string; slotPosition?: number } = {};
+            if (pendingSlot) {
+                options.slotRole = pendingSlot.role;
+                options.slotPosition = pendingSlot.position;
+            }
+            await signup.mutateAsync(Object.keys(options).length > 0 ? options : undefined);
+            setShowConfirmModal(false);
+            setPendingSlot(null);
+            setPreSelectedRole(undefined);
+            toast.success('Successfully signed up!', {
+                description: 'You\'re on the roster!',
+            });
         } catch (err) {
             toast.error('Failed to sign up', {
                 description: err instanceof Error ? err.message : 'Please try again.',
@@ -253,27 +310,22 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-183/184: Handle slot click to join directly
-    const handleSlotClick = async (role: RosterRole, position: number) => {
+    // ROK-439: Handle slot click — open selection modal with role pre-selected
+    const handleSlotClick = (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
-        try {
-            const result = await signup.mutateAsync({ slotRole: role, slotPosition: position });
-            if (isMMOGame) {
-                toast.success(`Joined ${role} slot ${position}!`, {
-                    description: 'Now confirm your character.',
-                });
-                setPendingSignupId(result.id);
-                setShowConfirmModal(true);
-            } else {
-                toast.success('Joined!', {
-                    description: `You're in ${role} slot ${position}.`,
-                });
-            }
-        } catch (err) {
-            toast.error('Failed to sign up', {
-                description: err instanceof Error ? err.message : 'Please try again.',
-            });
+
+        // If game has character support, show selection modal first
+        if (event?.game?.id) {
+            // Pre-select role if it's an MMO role (tank/healer/dps)
+            const mmoRoles: string[] = ['tank', 'healer', 'dps'];
+            setPreSelectedRole(mmoRoles.includes(role) ? (role as CharacterRole) : undefined);
+            setPendingSlot({ role, position });
+            setShowConfirmModal(true);
+            return;
         }
+
+        // No game / no character support → instant slot join
+        doSignup({ slotRole: role, slotPosition: position });
     };
 
     if (eventError) {
@@ -540,19 +592,6 @@ export function EventDetailPage() {
                         </div>
                     </div>
 
-                    {/* Confirm Character — full width below header */}
-                    {needsConfirmation && userSignup && (
-                        <button
-                            onClick={() => {
-                                setPendingSignupId(userSignup.id);
-                                setShowConfirmModal(true);
-                            }}
-                            className="btn btn-warning btn-sm w-full mb-3"
-                        >
-                            ❓ Confirm Character
-                        </button>
-                    )}
-
                     <RosterBuilder
                         pool={rosterAssignments.pool}
                         assignments={rosterAssignments.assignments}
@@ -733,21 +772,24 @@ export function EventDetailPage() {
                 }}
             />
 
-            {/* Character Confirmation Modal */}
-            {pendingSignupId && (
+            {/* ROK-439: Pre-signup selection modal — character + role BEFORE API call */}
+            {showConfirmModal && (
                 <Suspense fallback={null}>
                     <SignupConfirmationModal
                         isOpen={showConfirmModal}
                         onClose={() => {
                             setShowConfirmModal(false);
-                            setPendingSignupId(null);
+                            setPendingSlot(null);
+                            setPreSelectedRole(undefined);
                         }}
-                        eventId={eventId}
-                        signupId={pendingSignupId}
+                        onConfirm={handleSelectionConfirm}
+                        onSkip={handleSelectionSkip}
+                        isConfirming={signup.isPending}
                         gameId={gameRegistryEntry?.id ?? event.game?.id ?? undefined}
                         gameName={event.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event.game?.slug ?? undefined}
+                        preSelectedRole={preSelectedRole}
                     />
                 </Suspense>
             )}
