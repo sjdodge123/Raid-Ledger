@@ -1,5 +1,12 @@
 import { lazy, Suspense, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Navigate,
+  useLocation,
+  useNavigationType,
+} from 'react-router-dom';
 import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
 import { useConnectivityStore } from './stores/connectivity-store';
@@ -63,6 +70,23 @@ const DiscordBindingsPanel = lazy(() => import('./pages/admin/discord-bindings-p
 import './plugins/wow/register';
 import './App.css';
 
+/**
+ * Scrolls to top on PUSH navigations (link clicks, programmatic navigate).
+ * Skips POP navigations (back/forward) so the browser can restore scroll natively.
+ */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  const navigationType = useNavigationType();
+
+  useEffect(() => {
+    if (navigationType !== 'POP') {
+      window.scrollTo(0, 0);
+    }
+  }, [pathname, navigationType]);
+
+  return null;
+}
+
 function App() {
   const isDark = useThemeStore((s) => s.resolved.isDark);
   const startPolling = useConnectivityStore((s) => s.startPolling);
@@ -75,6 +99,7 @@ function App() {
   return (
     <StartupGate>
       <BrowserRouter>
+        <ScrollToTop />
         <Toaster
           position="top-right"
           theme={isDark ? 'dark' : 'light'}
