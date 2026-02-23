@@ -36,7 +36,11 @@ export interface EmbedEventData {
   /** Actual per-role signup counts from roster_assignments */
   roleCounts?: Record<string, number> | null;
   /** Discord IDs of signed-up users, grouped by role for mention display */
-  signupMentions?: Array<{ discordId: string; role: string | null; preferredRoles: string[] | null }> | null;
+  signupMentions?: Array<{
+    discordId: string;
+    role: string | null;
+    preferredRoles: string[] | null;
+  }> | null;
   game?: {
     name: string;
     coverUrl?: string | null;
@@ -372,7 +376,11 @@ export class DiscordEmbedFactory {
    * their other available roles (flexibility visible to other signups).
    */
   private getMentionsForRole(
-    mentions: Array<{ discordId: string; role: string | null; preferredRoles: string[] | null }>,
+    mentions: Array<{
+      discordId: string;
+      role: string | null;
+      preferredRoles: string[] | null;
+    }>,
     role: string | null,
   ): string {
     const filtered =

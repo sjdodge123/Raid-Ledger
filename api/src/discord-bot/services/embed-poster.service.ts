@@ -65,7 +65,10 @@ export class EmbedPosterService {
       // Enrich with live roster data so the embed reflects current signups
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
       const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventEmbed(enrichedEvent, context);
+      const { embed, row } = this.embedFactory.buildEventEmbed(
+        enrichedEvent,
+        context,
+      );
 
       const message = await this.clientService.sendEmbed(channelId, embed, row);
 
@@ -158,7 +161,11 @@ export class EmbedPosterService {
       .filter(
         (r): r is typeof r & { discordId: string } => r.discordId !== null,
       )
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null, preferredRoles: r.preferredRoles }));
+      .map((r) => ({
+        discordId: r.discordId,
+        role: r.role ?? null,
+        preferredRoles: r.preferredRoles,
+      }));
 
     return {
       ...event,

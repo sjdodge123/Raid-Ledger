@@ -1428,7 +1428,11 @@ export class EventsService {
     const activeRows = signupRows.filter((r) => r.status !== 'declined');
     const signupMentions = activeRows
       .filter((r) => r.discordId)
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null, preferredRoles: r.preferredRoles }));
+      .map((r) => ({
+        discordId: r.discordId,
+        role: r.role ?? null,
+        preferredRoles: r.preferredRoles,
+      }));
 
     return {
       id: event.id,

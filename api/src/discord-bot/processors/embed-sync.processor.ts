@@ -206,7 +206,11 @@ export class EmbedSyncProcessor extends WorkerHost {
       .filter(
         (r): r is typeof r & { discordId: string } => r.discordId !== null,
       )
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null, preferredRoles: r.preferredRoles }));
+      .map((r) => ({
+        discordId: r.discordId,
+        role: r.role ?? null,
+        preferredRoles: r.preferredRoles,
+      }));
 
     const eventData: EmbedEventData = {
       id: event.id,
