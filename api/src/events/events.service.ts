@@ -1343,6 +1343,8 @@ export class EventsService {
         (event.contentInstances as EventResponseDto['contentInstances']) ??
         null,
       recurrenceGroupId: event.recurrenceGroupId ?? null,
+      recurrenceRule:
+        (event.recurrenceRule as EventResponseDto['recurrenceRule']) ?? null,
       reminder15min: event.reminder15min,
       reminder1hour: event.reminder1hour,
       reminder24hour: event.reminder24hour,
@@ -1380,6 +1382,7 @@ export class EventsService {
           : null,
       },
       gameId: eventResponse.game?.id ?? null,
+      recurrenceRule: eventResponse.recurrenceRule ?? null,
     });
   }
 

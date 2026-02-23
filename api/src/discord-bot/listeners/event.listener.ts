@@ -10,9 +10,16 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from '../services/discord-embed.factory';
-import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { EmbedPosterService } from '../services/embed-poster.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
+import {
+  shouldPostEmbed,
+  getLeadTimeFromRecurrence,
+} from '../utils/embed-lead-time';
+
+/** Default lead time for standalone (non-recurring) events: 6 days. */
+const STANDALONE_LEAD_TIME_MS = 6 * 24 * 60 * 60 * 1000;
 
 /**
  * Payload emitted with event lifecycle events.
@@ -21,6 +28,10 @@ export interface EventPayload {
   eventId: number;
   event: EmbedEventData;
   gameId?: number | null;
+  /** Recurrence rule from the event, if it's part of a series. */
+  recurrenceRule?: {
+    frequency: 'weekly' | 'biweekly' | 'monthly';
+  } | null;
 }
 
 /**
@@ -36,7 +47,7 @@ export class DiscordEventListener {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
-    private readonly channelResolver: ChannelResolverService,
+    private readonly embedPoster: EmbedPosterService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -47,44 +58,26 @@ export class DiscordEventListener {
       return;
     }
 
-    const channelId = await this.channelResolver.resolveChannelForEvent(
-      payload.gameId,
-    );
-    if (!channelId) return;
+    // ROK-434: Lead-time gating — determine if this event should post now
+    const recurrenceRule = payload.recurrenceRule ?? null;
+    const leadTimeMs =
+      getLeadTimeFromRecurrence(recurrenceRule) ?? STANDALONE_LEAD_TIME_MS;
 
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) {
-      this.logger.warn('Bot is not in any guild, skipping event.created embed');
+    const timezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+
+    if (!shouldPostEmbed(payload.event.startTime, leadTimeMs, timezone)) {
+      this.logger.debug(
+        `Event ${payload.eventId} is outside lead-time window, deferring embed to scheduler`,
+      );
       return;
     }
 
-    try {
-      const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventEmbed(
-        payload.event,
-        context,
-      );
-
-      const message = await this.clientService.sendEmbed(channelId, embed, row);
-
-      // Store message reference
-      await this.db.insert(schema.discordEventMessages).values({
-        eventId: payload.eventId,
-        guildId,
-        channelId,
-        messageId: message.id,
-        embedState: EMBED_STATES.POSTED,
-      });
-
-      this.logger.log(
-        `Posted event embed for event ${payload.eventId} to channel ${channelId} (msg: ${message.id})`,
-      );
-    } catch (error) {
-      this.logger.error(
-        `Failed to post event embed for event ${payload.eventId}:`,
-        error,
-      );
-    }
+    // Within the posting window — post immediately via shared service
+    await this.embedPoster.postEmbed(
+      payload.eventId,
+      payload.event,
+      payload.gameId,
+    );
   }
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
@@ -106,9 +99,28 @@ export class DiscordEventListener {
       );
 
     if (records.length === 0) {
-      this.logger.debug(
-        `No Discord message found for event ${payload.eventId}, skipping update`,
-      );
+      // ROK-434 Edge Case: Event was rescheduled to be closer and is now
+      // within lead time. Post immediately (bypass 1pm gate).
+      const recurrenceRule = payload.recurrenceRule ?? null;
+      const leadTimeMs =
+        getLeadTimeFromRecurrence(recurrenceRule) ?? STANDALONE_LEAD_TIME_MS;
+      const timezone =
+        (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
+
+      if (shouldPostEmbed(payload.event.startTime, leadTimeMs, timezone)) {
+        this.logger.log(
+          `Rescheduled event ${payload.eventId} is now within lead-time window, posting embed`,
+        );
+        await this.embedPoster.postEmbed(
+          payload.eventId,
+          payload.event,
+          payload.gameId,
+        );
+      } else {
+        this.logger.debug(
+          `No Discord message found for event ${payload.eventId}, skipping update`,
+        );
+      }
       return;
     }
 

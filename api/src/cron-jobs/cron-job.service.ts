@@ -44,6 +44,10 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   VersionCheckService_handleCron: {
     description: 'Checks GitHub for new Raid Ledger releases daily',
   },
+  EmbedSchedulerService_handleScheduledEmbeds: {
+    description:
+      'Posts deferred Discord embeds for future series events approaching their lead-time window every 15 minutes',
+  },
   SessionCleanupService_cleanupExpiredSessions: {
     description: 'Deletes expired sessions daily at 3 AM',
   },
