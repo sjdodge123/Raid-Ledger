@@ -479,7 +479,7 @@ export function EventDetailPage() {
                             </span>
                             {(roster?.signups?.length ?? 0) > 0 && (
                                 <AttendeeAvatars
-                                    signups={roster!.signups.slice(0, 5).map(s => ({
+                                    signups={[...roster!.signups].sort(alphabetical).slice(0, 5).map(s => ({
                                         id: s.user.id,
                                         username: s.user.username,
                                         avatar: s.user.avatar ?? null,
