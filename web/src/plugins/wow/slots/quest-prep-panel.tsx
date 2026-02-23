@@ -391,7 +391,7 @@ export function QuestPrepPanel({
                             {/* Rewards */}
                             {quest.rewards && quest.rewards.length > 0 && (
                                 <div className="quest-rewards">
-                                    {quest.rewards.map((reward: { itemId: number; itemName: string; quality: string; slot: string | null; itemLevel: number | null; iconUrl: string | null }) => {
+                                    {quest.rewards.map((reward: { itemId: number; itemName: string; quality: string; slot: string | null; itemLevel: number | null; iconUrl: string | null; itemSubclass: string | null }) => {
                                         const equipSlot = reward.slot ? REWARD_TO_EQUIP_SLOT[reward.slot] ?? reward.slot : null;
                                         const equippedItem = equipSlot
                                             ? equippedBySlot.get(equipSlot)
@@ -415,7 +415,7 @@ export function QuestPrepPanel({
                                                         equippedItem={equippedItem}
                                                         gameVariant={wowheadVariant}
                                                         characterClass={charClass}
-                                                        lootItemSubclass={(reward as Record<string, unknown>).itemSubclass as string | null | undefined}
+                                                        lootItemSubclass={reward.itemSubclass}
                                                     />
                                                 )}
                                             </div>
