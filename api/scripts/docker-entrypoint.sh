@@ -27,22 +27,35 @@ if [ -n "$DATABASE_URL" ]; then
       const { migrate } = require('drizzle-orm/postgres-js/migrator');
       const { drizzle } = require('drizzle-orm/postgres-js');
       const postgres = require('postgres');
-      
+      const fs = require('fs');
+
       async function runMigrations() {
         const sql = postgres(process.env.DATABASE_URL);
         const db = drizzle(sql);
         await migrate(db, { migrationsFolder: '/app/drizzle/migrations' });
+
+        // Validate: count applied migrations vs journal entries
+        const journal = JSON.parse(fs.readFileSync('/app/drizzle/migrations/meta/_journal.json', 'utf8'));
+        const expectedCount = journal.entries.length;
+        const [row] = await sql\`SELECT count(*)::int AS applied FROM drizzle.__drizzle_migrations\`;
+        const appliedCount = row.applied;
+
+        if (appliedCount < expectedCount) {
+          console.error('⚠️  MIGRATION MISMATCH: ' + appliedCount + ' applied vs ' + expectedCount + ' in journal.');
+          console.error('   This usually means journal timestamps are out of order.');
+          console.error('   Run: ./scripts/fix-migration-order.sh');
+        } else {
+          console.log('✅ Migrations completed (' + appliedCount + '/' + expectedCount + ' applied)');
+        }
+
         await sql.end();
-        console.log('✅ Migrations completed');
       }
-      
+
       runMigrations().catch(err => {
         console.error('Migration error:', err);
         process.exit(1);
       });
     " 2>&1
-
-    echo "✅ Migrations complete"
 
     # Bootstrap admin account on first run, or sync password if ADMIN_PASSWORD is set
     echo "👤 Checking admin account..."

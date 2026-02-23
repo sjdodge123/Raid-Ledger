@@ -72,18 +72,32 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     try {
       await this.dungeonQuestsService.seedQuests();
     } catch (err) {
-      this.logger.warn(
-        `Dungeon quest seed skipped (may already exist): ${err}`,
-      );
+      const msg = String(err);
+      if (msg.includes('relation') && msg.includes('does not exist')) {
+        this.logger.error(
+          `Dungeon quest seed FAILED — table does not exist. Migrations may not have run: ${err}`,
+        );
+      } else {
+        this.logger.warn(
+          `Dungeon quest seed skipped (may already exist): ${err}`,
+        );
+      }
     }
 
     // Seed boss encounters on first boot
     try {
       await this.bossEncountersService.seedBosses();
     } catch (err) {
-      this.logger.warn(
-        `Boss encounter seed skipped (may already exist): ${err}`,
-      );
+      const msg = String(err);
+      if (msg.includes('relation') && msg.includes('does not exist')) {
+        this.logger.error(
+          `Boss encounter seed FAILED — table does not exist. Migrations may not have run: ${err}`,
+        );
+      } else {
+        this.logger.warn(
+          `Boss encounter seed skipped (may already exist): ${err}`,
+        );
+      }
     }
 
     const reRegister = (payload: { slug: string }) => {
