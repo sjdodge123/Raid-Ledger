@@ -28,3 +28,6 @@ export * from './schema/event-plans';
 export * from './schema/dungeon-quests';
 export * from './schema/boss-encounters';
 export * from './schema/quest-progress';
+export * from './schema/game-activity-sessions';
+export * from './schema/game-activity-rollups';
+export * from './schema/discord-game-mappings';
