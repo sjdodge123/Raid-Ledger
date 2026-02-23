@@ -1,5 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { sql } from 'drizzle-orm';
 import { readFile } from 'fs/promises';
 import { join } from 'path';
 
@@ -45,7 +46,11 @@ export class BossEncounterSeeder {
 
   /**
    * Seed all boss encounters and loot from bundled data files.
-   * Uses upsert (ON CONFLICT DO NOTHING) to be idempotent.
+   * Uses upsert (ON CONFLICT DO UPDATE) so data corrections propagate on re-seed.
+   *
+   * ROK-454: Changed from onConflictDoNothing to onConflictDoUpdate so that
+   * quality, drop rate, item level, icon URL, and other corrections in the JSON
+   * files are applied to existing rows on restart.
    */
   async seed(): Promise<{ bossesInserted: number; lootInserted: number }> {
     // --- Phase 1: Seed bosses ---
@@ -71,7 +76,17 @@ export class BossEncounterSeeder {
             sodModified: b.sodModified,
           })),
         )
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [
+            wowClassicBosses.instanceId,
+            wowClassicBosses.name,
+            wowClassicBosses.expansion,
+          ],
+          set: {
+            order: sql`excluded.order`,
+            sodModified: sql`excluded.sod_modified`,
+          },
+        })
         .returning({ id: wowClassicBosses.id });
 
       bossesInserted += result.length;
@@ -125,7 +140,22 @@ export class BossEncounterSeeder {
       const result = await this.db
         .insert(wowClassicBossLoot)
         .values(batch)
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [
+            wowClassicBossLoot.bossId,
+            wowClassicBossLoot.itemId,
+            wowClassicBossLoot.expansion,
+          ],
+          set: {
+            itemName: sql`excluded.item_name`,
+            slot: sql`excluded.slot`,
+            quality: sql`excluded.quality`,
+            itemLevel: sql`excluded.item_level`,
+            dropRate: sql`excluded.drop_rate`,
+            classRestrictions: sql`excluded.class_restrictions`,
+            iconUrl: sql`excluded.icon_url`,
+          },
+        })
         .returning({ id: wowClassicBossLoot.id });
 
       lootInserted += result.length;

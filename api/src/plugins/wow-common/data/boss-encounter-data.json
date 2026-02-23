@@ -141,6 +141,27 @@
     },
     {
         "instanceId": 531,
+        "name": "Bug Trio",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Battleguard Sartura",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Fankriss the Unyielding",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
         "name": "Princess Huhuran",
         "order": 5,
         "expansion": "classic",
@@ -148,8 +169,22 @@
     },
     {
         "instanceId": 531,
+        "name": "Viscidus",
+        "order": 6,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
         "name": "Twin Emperors",
         "order": 7,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Ouro",
+        "order": 8,
         "expansion": "classic",
         "sodModified": false
     },
@@ -169,8 +204,85 @@
     },
     {
         "instanceId": 533,
+        "name": "Grand Widow Faerlina",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Maexxna",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Noth the Plaguebringer",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
         "name": "Patchwerk",
         "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Grobbulus",
+        "order": 6,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Gluth",
+        "order": 7,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Thaddius",
+        "order": 8,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Instructor Razuvious",
+        "order": 9,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Gothik the Harvester",
+        "order": 10,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "The Four Horsemen",
+        "order": 11,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Heigan the Unclean",
+        "order": 12,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Loatheb",
+        "order": 13,
         "expansion": "classic",
         "sodModified": false
     },
@@ -210,6 +322,62 @@
         "sodModified": false
     },
     {
+        "instanceId": 31601,
+        "name": "Interrogator Vishas",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31601,
+        "name": "Bloodmage Thalnos",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31602,
+        "name": "Houndmaster Loksey",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31602,
+        "name": "Arcanist Doan",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31603,
+        "name": "Herod",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "High Inquisitor Fairbanks",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "Scarlet Commander Mograine",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "High Inquisitor Whitemane",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
         "instanceId": 532,
         "name": "Attumen the Huntsman",
         "order": 1,
@@ -232,6 +400,13 @@
     },
     {
         "instanceId": 532,
+        "name": "Opera Event",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
         "name": "The Curator",
         "order": 5,
         "expansion": "tbc",
@@ -246,8 +421,22 @@
     },
     {
         "instanceId": 532,
+        "name": "Terestian Illhoof",
+        "order": 7,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
         "name": "Netherspite",
         "order": 8,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
+        "name": "Chess Event",
+        "order": 9,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -266,6 +455,27 @@
         "sodModified": false
     },
     {
+        "instanceId": 565,
+        "name": "High King Maulgar",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 565,
+        "name": "Gruul the Dragonkiller",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 544,
+        "name": "Magtheridon",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
         "instanceId": 548,
         "name": "Hydross the Unstable",
         "order": 1,
@@ -274,8 +484,29 @@
     },
     {
         "instanceId": 548,
+        "name": "The Lurker Below",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
         "name": "Leotheras the Blind",
         "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Fathom-Lord Karathress",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Morogrim Tidewalker",
+        "order": 5,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -295,8 +526,57 @@
     },
     {
         "instanceId": 550,
+        "name": "Void Reaver",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 550,
+        "name": "High Astromancer Solarian",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 550,
         "name": "Kael'thas Sunstrider",
         "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Rage Winterchill",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Anetheron",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Kaz'rogal",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Azgalor",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Archimonde",
+        "order": 5,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -309,6 +589,20 @@
     },
     {
         "instanceId": 564,
+        "name": "Supremus",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Shade of Akama",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
         "name": "Gurtogg Bloodboil",
         "order": 4,
         "expansion": "tbc",
@@ -316,8 +610,29 @@
     },
     {
         "instanceId": 564,
+        "name": "Reliquary of Souls",
+        "order": 5,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
         "name": "Mother Shahraz",
         "order": 6,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "The Illidari Council",
+        "order": 7,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Teron Gorefiend",
+        "order": 8,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -332,6 +647,27 @@
         "instanceId": 580,
         "name": "Kalecgos",
         "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Brutallus",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Felmyst",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Eredar Twins",
+        "order": 4,
         "expansion": "tbc",
         "sodModified": false
     },
