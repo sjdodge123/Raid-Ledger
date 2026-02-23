@@ -1414,6 +1414,7 @@ export class EventsService {
         discordId: sql<string>`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
+        preferredRoles: schema.eventSignups.preferredRoles,
       })
       .from(schema.eventSignups)
       .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
@@ -1427,7 +1428,7 @@ export class EventsService {
     const activeRows = signupRows.filter((r) => r.status !== 'declined');
     const signupMentions = activeRows
       .filter((r) => r.discordId)
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
+      .map((r) => ({ discordId: r.discordId, role: r.role ?? null, preferredRoles: r.preferredRoles }));
 
     return {
       id: event.id,

@@ -36,7 +36,7 @@ export interface EmbedEventData {
   /** Actual per-role signup counts from roster_assignments */
   roleCounts?: Record<string, number> | null;
   /** Discord IDs of signed-up users, grouped by role for mention display */
-  signupMentions?: Array<{ discordId: string; role: string | null }> | null;
+  signupMentions?: Array<{ discordId: string; role: string | null; preferredRoles: string[] | null }> | null;
   game?: {
     name: string;
     coverUrl?: string | null;
@@ -360,16 +360,38 @@ export class DiscordEmbedFactory {
     return null;
   }
 
+  private static readonly ROLE_EMOJI: Record<string, string> = {
+    tank: '🛡️',
+    healer: '💚',
+    dps: '⚔️',
+  };
+
   /**
    * Format Discord mentions for a specific role (or all if role is null).
+   * Players with multiple preferred roles get emoji indicators showing
+   * their other available roles (flexibility visible to other signups).
    */
   private getMentionsForRole(
-    mentions: Array<{ discordId: string; role: string | null }>,
+    mentions: Array<{ discordId: string; role: string | null; preferredRoles: string[] | null }>,
     role: string | null,
   ): string {
     const filtered =
       role !== null ? mentions.filter((m) => m.role === role) : mentions;
-    return filtered.map((m) => `<@${m.discordId}>`).join(' ');
+    return filtered
+      .map((m) => {
+        const prefs = m.preferredRoles ?? [];
+        if (prefs.length <= 1) return `<@${m.discordId}>`;
+        // Show emojis for OTHER preferred roles (not the assigned one)
+        const otherEmojis = prefs
+          .filter((r) => r !== m.role)
+          .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
+          .filter(Boolean)
+          .join('');
+        return otherEmojis
+          ? `<@${m.discordId}> ${otherEmojis}`
+          : `<@${m.discordId}>`;
+      })
+      .join(', ');
   }
 
   /**

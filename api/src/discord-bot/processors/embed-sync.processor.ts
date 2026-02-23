@@ -165,6 +165,7 @@ export class EmbedSyncProcessor extends WorkerHost {
         >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
+        preferredRoles: schema.eventSignups.preferredRoles,
       })
       .from(schema.eventSignups)
       .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
@@ -205,7 +206,7 @@ export class EmbedSyncProcessor extends WorkerHost {
       .filter(
         (r): r is typeof r & { discordId: string } => r.discordId !== null,
       )
-      .map((r) => ({ discordId: r.discordId, role: r.role ?? null }));
+      .map((r) => ({ discordId: r.discordId, role: r.role ?? null, preferredRoles: r.preferredRoles }));
 
     const eventData: EmbedEventData = {
       id: event.id,
