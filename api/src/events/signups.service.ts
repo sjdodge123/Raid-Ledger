@@ -1743,70 +1743,137 @@ export class SignupsService {
       }
     }
 
-    // No direct slot available — try rearrangement
-    // Find an existing flexible player who can be moved to free up a slot
-    for (const desiredRole of newPrefs) {
-      if (!(desiredRole in roleCapacity)) continue;
+    // No direct slot available — try chain rearrangement via BFS.
+    // Finds the shortest sequence of moves that frees a slot for the new player.
+    // Example: new player wants DPS (full). Player A in DPS can play Healer (full).
+    //          Player B in Healer can play Tank (open). Chain: B→Tank, A→Healer, new→DPS.
+    const chain = this.findRearrangementChain(
+      newPrefs,
+      currentAssignments,
+      allSignups,
+      roleCapacity,
+      filledPerRole,
+    );
 
-      // Look through current assignments in this role for a flexible player
-      const occupants = currentAssignments.filter(
-        (a) => a.role === desiredRole,
-      );
-
-      for (const occupant of occupants) {
-        const occupantSignup = allSignups.find(
-          (s) => s.id === occupant.signupId,
+    if (chain) {
+      // Execute moves in reverse order (innermost move first to free slots outward)
+      for (let i = chain.moves.length - 1; i >= 0; i--) {
+        const move = chain.moves[i];
+        const newPos = filledPerRole[move.toRole] + 1;
+        await tx
+          .update(schema.rosterAssignments)
+          .set({ role: move.toRole, position: newPos })
+          .where(eq(schema.rosterAssignments.id, move.assignmentId));
+        filledPerRole[move.toRole]++;
+        this.logger.log(
+          `Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`,
         );
-        const occupantPrefs =
-          (occupantSignup?.preferredRoles as string[] | null) ?? [];
-
-        // Skip if the occupant is rigid (only has 1 preferred role)
-        if (occupantPrefs.length <= 1) continue;
-
-        // Check if the occupant has an alternative role with open slots
-        for (const altRole of occupantPrefs) {
-          if (
-            altRole !== desiredRole &&
-            altRole in roleCapacity &&
-            filledPerRole[altRole] < roleCapacity[altRole]
-          ) {
-            // Found a valid swap: move occupant to altRole, new player takes desiredRole
-            const altPosition = filledPerRole[altRole] + 1;
-
-            // Move occupant to alternative slot
-            await tx
-              .update(schema.rosterAssignments)
-              .set({ role: altRole, position: altPosition })
-              .where(eq(schema.rosterAssignments.id, occupant.id));
-
-            // Assign new player to the freed slot
-            await tx.insert(schema.rosterAssignments).values({
-              eventId,
-              signupId: newSignupId,
-              role: desiredRole,
-              position: occupant.position,
-              isOverride: 0,
-            });
-
-            this.logger.log(
-              `Auto-allocated signup ${newSignupId} to ${desiredRole} slot ${occupant.position} ` +
-                `(rearranged signup ${occupant.signupId} from ${desiredRole} to ${altRole} slot ${altPosition})`,
-            );
-            await this.benchPromotionService.cancelPromotion(
-              eventId,
-              desiredRole,
-              occupant.position,
-            );
-            return;
-          }
-        }
       }
+
+      // Assign new player to the freed slot
+      const freedRole = chain.freedRole;
+      const freedPosition = chain.moves[0].position;
+      await tx.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId: newSignupId,
+        role: freedRole,
+        position: freedPosition,
+        isOverride: 0,
+      });
+
+      this.logger.log(
+        `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
+      );
+      await this.benchPromotionService.cancelPromotion(eventId, freedRole, freedPosition);
+      return;
     }
 
     // No rearrangement possible — leave in unassigned pool
     this.logger.log(
       `Auto-allocation: signup ${newSignupId} could not be placed (all preferred slots full, no rearrangement available)`,
     );
+  }
+
+  /**
+   * BFS chain rearrangement solver for auto-allocation.
+   * Finds the shortest chain of moves that frees a slot for the new player.
+   *
+   * BFS frontier: each node is (role to free, set of already-visited assignments).
+   * At each step, find a flexible occupant in that role who can move to another role.
+   * If that other role is open → chain complete. If full → enqueue that role.
+   * Max depth: 3 (prevents combinatorial explosion for large rosters).
+   */
+  private findRearrangementChain(
+    newPrefs: string[],
+    currentAssignments: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    allSignups: Array<{ id: number; preferredRoles: string[] | null }>,
+    roleCapacity: Record<string, number>,
+    filledPerRole: Record<string, number>,
+  ): { freedRole: string; moves: Array<{ assignmentId: number; signupId: number; fromRole: string; toRole: string; position: number }> } | null {
+    const MAX_DEPTH = 3;
+
+    interface QueueEntry {
+      roleToFree: string;
+      moves: Array<{ assignmentId: number; signupId: number; fromRole: string; toRole: string; position: number }>;
+      usedSignupIds: Set<number>;
+    }
+
+    const queue: QueueEntry[] = [];
+
+    // Seed the BFS with the new player's preferred roles
+    for (const pref of newPrefs) {
+      if (pref in roleCapacity) {
+        queue.push({ roleToFree: pref, moves: [], usedSignupIds: new Set() });
+      }
+    }
+
+    while (queue.length > 0) {
+      const entry = queue.shift()!;
+      if (entry.moves.length >= MAX_DEPTH) continue;
+
+      // Find flexible occupants in the role we need to free
+      const occupants = currentAssignments.filter(
+        (a) => a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
+      );
+
+      for (const occupant of occupants) {
+        const occupantSignup = allSignups.find((s) => s.id === occupant.signupId);
+        const occupantPrefs = (occupantSignup?.preferredRoles as string[] | null) ?? [];
+        if (occupantPrefs.length <= 1) continue;
+
+        for (const altRole of occupantPrefs) {
+          if (altRole === entry.roleToFree || !(altRole in roleCapacity)) continue;
+
+          const move = {
+            assignmentId: occupant.id,
+            signupId: occupant.signupId,
+            fromRole: entry.roleToFree,
+            toRole: altRole,
+            position: occupant.position,
+          };
+          const newMoves = [...entry.moves, move];
+
+          // Count how many moves are already targeting this altRole
+          const movesIntoAltRole = newMoves.filter((m) => m.toRole === altRole).length;
+          const effectiveFilled = filledPerRole[altRole] + movesIntoAltRole;
+          // Also subtract any moves OUT of altRole in the chain
+          const movesOutOfAltRole = newMoves.filter((m) => m.fromRole === altRole).length;
+          const netFilled = effectiveFilled - movesOutOfAltRole;
+
+          if (netFilled <= roleCapacity[altRole]) {
+            // This role has space — chain complete
+            return { freedRole: entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole, moves: newMoves };
+          }
+
+          // altRole is also full — continue BFS
+          const newUsed = new Set(entry.usedSignupIds);
+          newUsed.add(occupant.signupId);
+          queue.push({ roleToFree: altRole, moves: newMoves, usedSignupIds: newUsed });
+        }
+      }
+    }
+
+    return null;
   }
 
   /**

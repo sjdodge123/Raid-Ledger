@@ -120,6 +120,7 @@ export class EmbedPosterService {
         discordId: sql<
           string | null
         >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        username: schema.users.username,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
         preferredRoles: schema.eventSignups.preferredRoles,
@@ -158,11 +159,10 @@ export class EmbedPosterService {
     }
 
     const signupMentions = activeSignups
-      .filter(
-        (r): r is typeof r & { discordId: string } => r.discordId !== null,
-      )
+      .filter((r) => r.discordId !== null || r.username !== null)
       .map((r) => ({
         discordId: r.discordId,
+        username: r.username,
         role: r.role ?? null,
         preferredRoles: r.preferredRoles,
       }));

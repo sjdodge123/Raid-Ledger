@@ -132,7 +132,7 @@ export function PlayerCard({
                             {preferredRoleBadges.map((r) => (
                                 <span
                                     key={r}
-                                    className={`inline-flex items-center rounded px-1 py-0.5 text-[10px] leading-none font-medium ${ROLE_BADGE_CLASSES[r] ?? ROLE_BADGE_CLASSES.player}`}
+                                    className={`inline-flex items-center rounded px-1.5 py-1 text-sm leading-none font-medium ${ROLE_BADGE_CLASSES[r] ?? ROLE_BADGE_CLASSES.player}`}
                                 >
                                     {ROLE_EMOJI[r] ?? ''}
                                 </span>

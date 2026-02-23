@@ -35,9 +35,10 @@ export interface EmbedEventData {
   } | null;
   /** Actual per-role signup counts from roster_assignments */
   roleCounts?: Record<string, number> | null;
-  /** Discord IDs of signed-up users, grouped by role for mention display */
+  /** Signed-up users grouped by role for mention/name display */
   signupMentions?: Array<{
-    discordId: string;
+    discordId?: string | null;
+    username?: string | null;
     role: string | null;
     preferredRoles: string[] | null;
   }> | null;
@@ -377,7 +378,8 @@ export class DiscordEmbedFactory {
    */
   private getMentionsForRole(
     mentions: Array<{
-      discordId: string;
+      discordId?: string | null;
+      username?: string | null;
       role: string | null;
       preferredRoles: string[] | null;
     }>,
@@ -387,16 +389,15 @@ export class DiscordEmbedFactory {
       role !== null ? mentions.filter((m) => m.role === role) : mentions;
     return filtered
       .map((m) => {
+        const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         const prefs = m.preferredRoles ?? [];
-        if (prefs.length <= 1) return `<@${m.discordId}>`;
+        if (prefs.length <= 1) return label;
         // Show emojis for ALL preferred roles so flexibility is fully visible
         const allEmojis = prefs
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
           .filter(Boolean)
           .join('');
-        return allEmojis
-          ? `<@${m.discordId}> ${allEmojis}`
-          : `<@${m.discordId}>`;
+        return allEmojis ? `${label} ${allEmojis}` : label;
       })
       .join(', ');
   }

@@ -1408,10 +1408,13 @@ export class EventsService {
       if (row.role) roleCounts[row.role] = row.count;
     }
 
-    // Query signups with Discord IDs and assigned roles for mention display
+    // Query signups with Discord IDs/usernames and assigned roles for display
     const signupRows = await this.db
       .select({
-        discordId: sql<string>`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        discordId: sql<
+          string | null
+        >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
+        username: schema.users.username,
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
         preferredRoles: schema.eventSignups.preferredRoles,
@@ -1427,9 +1430,10 @@ export class EventsService {
     // Exclude declined signups for both count and mentions
     const activeRows = signupRows.filter((r) => r.status !== 'declined');
     const signupMentions = activeRows
-      .filter((r) => r.discordId)
+      .filter((r) => r.discordId || r.username)
       .map((r) => ({
         discordId: r.discordId,
+        username: r.username,
         role: r.role ?? null,
         preferredRoles: r.preferredRoles,
       }));
