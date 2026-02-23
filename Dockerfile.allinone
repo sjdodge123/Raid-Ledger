@@ -210,6 +210,13 @@ else
   echo "🌐 CORS_ORIGIN: $CORS_ORIGIN"
 fi
 
+# Auto-derive CLIENT_URL from CORS_ORIGIN when not explicitly set.
+# The /event plan Discord command and poll embeds need this to generate links.
+if [ -z "$CLIENT_URL" ] && [ -n "$CORS_ORIGIN" ] && [ "$CORS_ORIGIN" != "auto" ]; then
+  export CLIENT_URL="$CORS_ORIGIN"
+  echo "🔗 CLIENT_URL derived from CORS_ORIGIN: $CLIENT_URL"
+fi
+
 # Run entrypoint (migrations, admin bootstrap, seeding)
 cd /app
 exec /usr/local/bin/docker-entrypoint.sh node /app/dist/src/main.js
