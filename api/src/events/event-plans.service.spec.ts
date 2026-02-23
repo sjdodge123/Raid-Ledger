@@ -133,6 +133,7 @@ function makeDiscordMock() {
 
   return {
     getClient: jest.fn().mockReturnValue(mockClient),
+    isConnected: jest.fn().mockReturnValue(true),
     deleteMessage: jest.fn().mockResolvedValue(undefined),
     sendDirectMessage: jest.fn().mockResolvedValue(undefined),
     _mockTextChannel: mockTextChannel,
