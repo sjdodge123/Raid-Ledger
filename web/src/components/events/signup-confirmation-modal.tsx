@@ -3,16 +3,18 @@ import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { useMyCharacters } from '../../hooks/use-characters';
-import { useConfirmSignup } from '../../hooks/use-signups';
 import { InlineCharacterForm } from '../characters/inline-character-form';
 import { useMediaQuery } from '../../hooks/use-media-query';
-import { toast } from '../../lib/toast';
 
 interface SignupConfirmationModalProps {
     isOpen: boolean;
     onClose: () => void;
-    eventId: number;
-    signupId: number;
+    /** ROK-439: Called when user confirms character/role selection BEFORE signup */
+    onConfirm: (selection: { characterId: string; role?: CharacterRole }) => void;
+    /** ROK-439: Called when user has no characters and wants to sign up without one */
+    onSkip: () => void;
+    /** Whether the confirm action is in progress (signup mutation pending) */
+    isConfirming?: boolean;
     gameId?: number;
     /** Game name for display */
     gameName?: string;
@@ -20,8 +22,8 @@ interface SignupConfirmationModalProps {
     hasRoles?: boolean;
     /** Whether the game slug is WoW */
     gameSlug?: string;
-    /** The expected role for this event (e.g., 'tank', 'healer', 'dps') */
-    expectedRole?: CharacterRole;
+    /** Pre-selected role (e.g., from clicking an empty roster slot) */
+    preSelectedRole?: CharacterRole;
 }
 
 /** Role display colors */
@@ -38,24 +40,26 @@ const ROLE_ICONS: Record<CharacterRole, string> = {
     dps: '⚔️',
 };
 
+const ROLES: CharacterRole[] = ['tank', 'healer', 'dps'];
+
 /**
- * Modal for confirming which character a user is bringing to an event.
- * Implements ROK-131 AC-2, AC-3, AC-4, AC-5.
- * Enhanced for ROK-234: inline character creation when no characters exist.
+ * Pre-signup selection modal for character and role selection (ROK-439).
+ * Opens BEFORE any signup API call — user picks character + role, then confirms.
+ * Replaces the old post-signup confirmation pattern.
  */
 export function SignupConfirmationModal({
     isOpen,
     onClose,
-    eventId,
-    signupId,
+    onConfirm,
+    onSkip,
+    isConfirming = false,
     gameId,
     gameName,
     hasRoles = true,
     gameSlug,
-    expectedRole,
+    preSelectedRole,
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
-    const confirmMutation = useConfirmSignup(eventId);
     const isMobile = useMediaQuery('(max-width: 767px)');
     const characters = charactersData?.data ?? [];
     const mainCharacter = characters.find((c) => c.isMain);
@@ -64,6 +68,7 @@ export function SignupConfirmationModal({
     // Track a "session key" that increments when modal opens to reset state
     const [sessionKey, setSessionKey] = useState(0);
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+    const [selectedRole, setSelectedRole] = useState<CharacterRole | null>(null);
     const [showCreateForm, setShowCreateForm] = useState(false);
 
     // Reset selection when modal opens (increment session key)
@@ -79,34 +84,35 @@ export function SignupConfirmationModal({
     useEffect(() => {
         setSelectedCharacterId(defaultCharacterId);
         setShowCreateForm(false);
+        // Pre-select role: use prop if provided, else character's effective role, else null
+        if (preSelectedRole) {
+            setSelectedRole(preSelectedRole);
+        } else {
+            const defaultChar = characters.find((c) => c.id === defaultCharacterId);
+            setSelectedRole((defaultChar?.effectiveRole as CharacterRole) ?? null);
+        }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionKey]);
 
     const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
 
-    // Check if selected character role mismatches expected role (AC-5)
-    const hasRoleMismatch =
-        expectedRole &&
-        selectedCharacter?.effectiveRole &&
-        selectedCharacter.effectiveRole !== expectedRole;
-
-    const handleConfirm = async () => {
-        if (!selectedCharacterId) return;
-
-        try {
-            await confirmMutation.mutateAsync({
-                signupId,
-                characterId: selectedCharacterId,
-            });
-            toast.success('Character confirmed!');
-            onClose();
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to confirm character');
+    // When character selection changes, update role to character's default (unless pre-selected)
+    const handleSelectCharacter = (characterId: string) => {
+        setSelectedCharacterId(characterId);
+        if (!preSelectedRole) {
+            const char = characters.find((c) => c.id === characterId);
+            if (char?.effectiveRole) {
+                setSelectedRole(char.effectiveRole as CharacterRole);
+            }
         }
     };
 
-    const handleSelectCharacter = (characterId: string) => {
-        setSelectedCharacterId(characterId);
+    const handleConfirm = () => {
+        if (!selectedCharacterId) return;
+        onConfirm({
+            characterId: selectedCharacterId,
+            role: hasRoles ? (selectedRole ?? undefined) : undefined,
+        });
     };
 
     const handleCharacterCreated = (character?: CharacterDto) => {
@@ -114,6 +120,9 @@ export function SignupConfirmationModal({
         // If we got a character back, select it
         if (character?.id) {
             setSelectedCharacterId(character.id);
+            if (character.effectiveRole && !preSelectedRole) {
+                setSelectedRole(character.effectiveRole as CharacterRole);
+            }
         }
         // Characters list will refresh via query invalidation
     };
@@ -142,18 +151,27 @@ export function SignupConfirmationModal({
                 </div>
             )}
 
-            {/* No characters state — inline creation (ROK-234) */}
+            {/* No characters state — sign up instantly or create one (ROK-439/234) */}
             {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
                 <div className="text-center py-6 text-muted">
                     <p className="mb-3">
                         No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
                     </p>
-                    <button
-                        onClick={() => setShowCreateForm(true)}
-                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors"
-                    >
-                        Create Character
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <button
+                            onClick={onSkip}
+                            disabled={isConfirming}
+                            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors"
+                        >
+                            {isConfirming ? 'Signing up...' : 'Sign Up Without Character'}
+                        </button>
+                        <button
+                            onClick={() => setShowCreateForm(true)}
+                            className="px-4 py-2 bg-panel hover:bg-overlay text-foreground font-medium rounded-lg transition-colors"
+                        >
+                            Create Character First
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -173,7 +191,7 @@ export function SignupConfirmationModal({
                 </div>
             )}
 
-            {/* Main character section (AC-3) */}
+            {/* Main character section */}
             {mainCharacter && (
                 <div>
                     <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
@@ -188,7 +206,7 @@ export function SignupConfirmationModal({
                 </div>
             )}
 
-            {/* Alt characters section (AC-4) */}
+            {/* Alt characters section */}
             {altCharacters.length > 0 && (
                 <div>
                     <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
@@ -233,18 +251,34 @@ export function SignupConfirmationModal({
                 </div>
             )}
 
-            {/* Role mismatch warning (AC-5) */}
-            {hasRoleMismatch && (
-                <div className="flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-amber-400">
-                    <span className="text-lg">⚠️</span>
-                    <div className="text-sm">
-                        <p className="font-medium">Role Mismatch</p>
-                        <p className="text-amber-400/80">
-                            This character's role ({selectedCharacter?.effectiveRole}) differs from
-                            the expected role ({expectedRole}). This may affect raid
-                            composition.
-                        </p>
+            {/* ROK-439: Role picker for MMO events */}
+            {hasRoles && characters.length > 0 && !showCreateForm && (
+                <div>
+                    <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                        Role
+                    </h3>
+                    <div className="flex gap-2">
+                        {ROLES.map((role) => (
+                            <button
+                                key={role}
+                                onClick={() => setSelectedRole(role)}
+                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                                    selectedRole === role
+                                        ? `${ROLE_COLORS[role]} border-current`
+                                        : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+                                }`}
+                            >
+                                <span>{ROLE_ICONS[role]}</span>
+                                <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                            </button>
+                        ))}
                     </div>
+                    {/* Show mismatch warning when selected role differs from character's default */}
+                    {selectedCharacter?.effectiveRole && selectedRole && selectedCharacter.effectiveRole !== selectedRole && (
+                        <p className="text-xs text-amber-400/80 mt-1.5">
+                            This character's default role is {selectedCharacter.effectiveRole}. Signing up as {selectedRole} instead.
+                        </p>
+                    )}
                 </div>
             )}
 
@@ -259,27 +293,29 @@ export function SignupConfirmationModal({
                     </button>
                     <button
                         onClick={handleConfirm}
-                        disabled={!selectedCharacterId || confirmMutation.isPending}
+                        disabled={!selectedCharacterId || isConfirming}
                         className="flex-1 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground rounded-lg transition-colors font-medium"
                     >
-                        {confirmMutation.isPending ? 'Confirming...' : 'Confirm'}
+                        {isConfirming ? 'Signing up...' : 'Sign Up'}
                     </button>
                 </div>
             )}
         </div>
     );
 
+    const title = 'Select Character' + (hasRoles ? ' & Role' : '');
+
     // ROK-335: Use BottomSheet on mobile, Modal on desktop
     if (isMobile) {
         return (
-            <BottomSheet isOpen={isOpen} onClose={onClose} title="Confirm Your Character">
+            <BottomSheet isOpen={isOpen} onClose={onClose} title={title}>
                 {content}
             </BottomSheet>
         );
     }
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} title="Confirm Your Character">
+        <Modal isOpen={isOpen} onClose={onClose} title={title}>
             {content}
         </Modal>
     );

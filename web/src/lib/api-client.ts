@@ -308,11 +308,13 @@ export async function getGameEventTypes(gameId: number): Promise<EventTypesRespo
 // Signups API
 // ============================================================
 
-/** ROK-183: Signup options with optional slot preference */
+/** ROK-183/439: Signup options with optional slot preference and character */
 interface SignupOptions {
     note?: string;
     slotRole?: string;
     slotPosition?: number;
+    /** ROK-439: Character ID for selection-first signup */
+    characterId?: string;
 }
 
 export async function signupForEvent(eventId: number, options?: SignupOptions): Promise<SignupResponseDto> {

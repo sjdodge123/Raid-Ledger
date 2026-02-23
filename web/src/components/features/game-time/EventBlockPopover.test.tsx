@@ -15,6 +15,10 @@ vi.mock('../../../hooks/use-signups', () => ({
         mutateAsync: vi.fn(),
         isPending: false,
     }),
+    useConfirmSignup: () => ({
+        mutateAsync: vi.fn(),
+        isPending: false,
+    }),
 }));
 
 vi.mock('../../events/signup-confirmation-modal', () => ({

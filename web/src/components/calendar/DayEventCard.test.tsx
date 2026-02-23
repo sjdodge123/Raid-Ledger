@@ -287,28 +287,10 @@ describe('DayEventCard', () => {
         expect(container.querySelector('.day-event-actions-shimmer')).toBeInTheDocument();
     });
 
-    it('calls signup with role and position for MMO role click', async () => {
+    it('opens confirmation modal on MMO role click when game has id (selection-first)', async () => {
         mockUser = { id: 99, username: 'TestUser' };
         mockIsAuthenticated = true;
         mockRosterData = createMMORoster();
-        mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
-
-        renderCard();
-
-        const tankBtn = screen.getByText('Tank 0/2');
-        fireEvent.click(tankBtn);
-
-        expect(mockSignupMutateAsync).toHaveBeenCalledWith({
-            slotRole: 'tank',
-            slotPosition: 1,
-        });
-    });
-
-    it('shows confirmation modal after MMO signup for game with registryId', async () => {
-        mockUser = { id: 99, username: 'TestUser' };
-        mockIsAuthenticated = true;
-        mockRosterData = createMMORoster();
-        mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
 
         const event = createMockEvent({
             game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: null },
@@ -317,11 +299,31 @@ describe('DayEventCard', () => {
         renderCard(event);
 
         const tankBtn = screen.getByText('Tank 0/2');
-        await fireEvent.click(tankBtn);
+        fireEvent.click(tankBtn);
 
-        // Wait for the async handler
-        await vi.waitFor(() => {
-            expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        // Selection-first: modal opens before signup is called
+        expect(screen.getByTestId('confirm-modal')).toBeInTheDocument();
+        expect(mockSignupMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('calls signup directly for MMO role click when game has no id', async () => {
+        mockUser = { id: 99, username: 'TestUser' };
+        mockIsAuthenticated = true;
+        mockRosterData = createMMORoster();
+        mockSignupMutateAsync.mockResolvedValueOnce({ id: 42 });
+
+        const event = createMockEvent({
+            game: undefined,
+        });
+
+        renderCard(event);
+
+        const tankBtn = screen.getByText('Tank 0/2');
+        fireEvent.click(tankBtn);
+
+        expect(mockSignupMutateAsync).toHaveBeenCalledWith({
+            slotRole: 'tank',
+            slotPosition: 1,
         });
     });
 
