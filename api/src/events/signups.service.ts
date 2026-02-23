@@ -2096,7 +2096,7 @@ export class SignupsService {
 
       // Try to rearrange the tentative player to another preferred role (not the displaced role)
       const alternativeRoles = victimPrefs.filter((r) => r !== role && r in roleCapacity);
-      let rearranged = false;
+      let rearrangedToRole: string | undefined;
 
       for (const altRole of alternativeRoles) {
         const filledInAlt = currentAssignments.filter((a) => a.role === altRole).length;
@@ -2112,12 +2112,12 @@ export class SignupsService {
           this.logger.log(
             `ROK-459: Rearranged tentative signup ${victim.signupId} from ${role} slot ${victim.position} to ${altRole} slot ${newPos}`,
           );
-          rearranged = true;
+          rearrangedToRole = altRole;
           break;
         }
       }
 
-      if (!rearranged) {
+      if (!rearrangedToRole) {
         // No alternative — remove assignment (move to unassigned pool)
         await tx
           .delete(schema.rosterAssignments)
@@ -2129,7 +2129,7 @@ export class SignupsService {
       }
 
       // Assign new confirmed player to the freed slot
-      const freedPosition = rearranged ? findFirstAvailablePosition(role) : victim.position;
+      const freedPosition = rearrangedToRole ? findFirstAvailablePosition(role) : victim.position;
       await tx.insert(schema.rosterAssignments).values({
         eventId,
         signupId: newSignupId,
@@ -2152,11 +2152,8 @@ export class SignupsService {
           .where(eq(schema.events.id, eventId))
           .limit(1);
         const eventTitle = event?.title ?? `Event #${eventId}`;
-        const action = rearranged
-          ? `moved to ${alternativeRoles.find((r) => {
-              const filled = currentAssignments.filter((a) => a.role === r).length;
-              return filled < roleCapacity[r];
-            }) ?? 'another role'}`
+        const action = rearrangedToRole
+          ? `moved to ${rearrangedToRole}`
           : 'moved to the unassigned pool';
 
         // Only notify registered users (not anonymous Discord signups)
