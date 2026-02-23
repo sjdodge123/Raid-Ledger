@@ -47,18 +47,18 @@ describe('PluginBadge', () => {
         const { container } = render(
             <PluginBadge icon="/plugins/test/badge.png" label="Test" size="sm" />,
         );
-        const img = container.querySelector('img');
-        expect(img?.className).toContain('w-6');
-        expect(img?.className).toContain('h-6');
+        const wrapper = container.querySelector('img')?.parentElement;
+        expect(wrapper?.className).toContain('w-6');
+        expect(wrapper?.className).toContain('h-6');
     });
 
     it('renders md size with 32x32 dimensions', () => {
         const { container } = render(
             <PluginBadge icon="/plugins/test/badge.png" label="Test" size="md" />,
         );
-        const img = container.querySelector('img');
-        expect(img?.className).toContain('w-8');
-        expect(img?.className).toContain('h-8');
+        const wrapper = container.querySelector('img')?.parentElement;
+        expect(wrapper?.className).toContain('w-8');
+        expect(wrapper?.className).toContain('h-8');
     });
 
     it('has no background, border, or text label', () => {
@@ -86,7 +86,7 @@ describe('PluginBadge', () => {
         const { container } = render(
             <PluginBadge icon="/plugins/test/badge.png" label="My Plugin" />,
         );
-        const img = container.querySelector('img');
-        expect(img?.getAttribute('title')).toBe('My Plugin');
+        const wrapper = container.querySelector('img')?.parentElement;
+        expect(wrapper?.getAttribute('title')).toBe('My Plugin');
     });
 });

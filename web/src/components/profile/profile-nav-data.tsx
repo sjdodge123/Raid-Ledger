@@ -63,6 +63,7 @@ export const SECTIONS: NavSection[] = [
         children: [
             { to: '/profile/gaming/game-time', label: 'Game Time' },
             { to: '/profile/gaming/characters', label: 'Characters' },
+            { to: '/profile/gaming/watched-games', label: 'Watched Games' },
         ],
     },
     {

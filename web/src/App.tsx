@@ -49,6 +49,7 @@ const TimezonePanel = lazy(() => import('./pages/profile/timezone-panel').then(m
 const NotificationsPanel = lazy(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
 const ProfileGameTimePanel = lazy(() => import('./pages/profile/game-time-panel').then(m => ({ default: m.ProfileGameTimePanel })));
 const CharactersPanel = lazy(() => import('./pages/profile/characters-panel').then(m => ({ default: m.CharactersPanel })));
+const WatchedGamesPanel = lazy(() => import('./pages/profile/watched-games-panel').then(m => ({ default: m.WatchedGamesPanel })));
 const DeleteAccountPanel = lazy(() => import('./pages/profile/delete-account-panel').then(m => ({ default: m.DeleteAccountPanel })));
 
 // -- Lazy loaded admin panels --
@@ -153,6 +154,7 @@ function App() {
                   <Route path="preferences/notifications" element={<NotificationsPanel />} />
                   <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
                   <Route path="gaming/characters" element={<CharactersPanel />} />
+                  <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
                   <Route path="danger/delete-account" element={<DeleteAccountPanel />} />
                 </Route>
                 {/* ROK-281: Admin Settings with always-expanded sidebar navigation */}
