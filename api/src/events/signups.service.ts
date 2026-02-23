@@ -335,6 +335,7 @@ export class SignupsService {
     }
 
     // Insert anonymous signup
+    // ROK-457: Discord signups bypass character confirmation — auto-confirm
     const result = await this.db.transaction(async (tx) => {
       const rows = await tx
         .insert(schema.eventSignups)
@@ -344,7 +345,7 @@ export class SignupsService {
           discordUserId: dto.discordUserId,
           discordUsername: dto.discordUsername,
           discordAvatarHash: dto.discordAvatarHash ?? null,
-          confirmationStatus: 'pending',
+          confirmationStatus: 'confirmed',
           status: dto.status ?? 'signed_up',
         })
         .onConflictDoNothing({

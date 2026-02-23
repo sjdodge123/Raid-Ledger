@@ -57,7 +57,7 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
     note: null,
     signedUpAt: new Date(),
     characterId: null,
-    confirmationStatus: 'pending',
+    confirmationStatus: 'confirmed',
     status: 'signed_up',
   };
 
