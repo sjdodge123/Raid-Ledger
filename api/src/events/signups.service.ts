@@ -160,7 +160,12 @@ export class SignupsService {
 
         // ROK-353: If caller requested a slot but the signup has no roster
         // assignment (e.g. after self-unassign), create one now.
-        const slotRole = autoBench ? 'bench' : dto?.slotRole;
+        // ROK-451: Also auto-slot for generic events with open player slots.
+        const slotRole =
+          autoBench
+            ? 'bench'
+            : (dto?.slotRole ??
+              (await this.resolveGenericSlotRole(tx, event[0], eventId)));
         if (slotRole) {
           const existingAssignment = await tx
             .select()
@@ -220,8 +225,13 @@ export class SignupsService {
       const [inserted] = rows;
       this.logger.log(`User ${userId} signed up for event ${eventId}`);
 
-      // ROK-183: Create roster assignment — explicit slot or auto-bench
-      const slotRole = autoBench ? 'bench' : dto?.slotRole;
+      // ROK-183: Create roster assignment — explicit slot, auto-bench, or
+      // ROK-451: auto-slot for generic events with open player slots
+      const slotRole =
+        autoBench
+          ? 'bench'
+          : (dto?.slotRole ??
+            (await this.resolveGenericSlotRole(tx, event[0], eventId)));
       if (slotRole) {
         // Determine position: use provided or find next available
         let position = dto?.slotPosition ?? 0;
@@ -335,6 +345,7 @@ export class SignupsService {
     }
 
     // Insert anonymous signup
+    // ROK-457: Discord signups bypass character confirmation — auto-confirm
     const result = await this.db.transaction(async (tx) => {
       const rows = await tx
         .insert(schema.eventSignups)
@@ -344,7 +355,7 @@ export class SignupsService {
           discordUserId: dto.discordUserId,
           discordUsername: dto.discordUsername,
           discordAvatarHash: dto.discordAvatarHash ?? null,
-          confirmationStatus: 'pending',
+          confirmationStatus: 'confirmed',
           status: dto.status ?? 'signed_up',
         })
         .onConflictDoNothing({
@@ -373,15 +384,18 @@ export class SignupsService {
 
       const [inserted] = rows;
 
-      // If role was provided, create roster assignment
-      if (dto.role) {
+      // Determine role: explicit from dto, or auto-detect for generic events (ROK-451)
+      const assignRole =
+        dto.role ?? (await this.resolveGenericSlotRole(tx, event, eventId));
+
+      if (assignRole) {
         const existingPositions = await tx
           .select({ position: schema.rosterAssignments.position })
           .from(schema.rosterAssignments)
           .where(
             and(
               eq(schema.rosterAssignments.eventId, eventId),
-              eq(schema.rosterAssignments.role, dto.role),
+              eq(schema.rosterAssignments.role, assignRole),
             ),
           );
         const position =
@@ -391,7 +405,7 @@ export class SignupsService {
         await tx.insert(schema.rosterAssignments).values({
           eventId,
           signupId: inserted.id,
-          role: dto.role,
+          role: assignRole,
           position,
           isOverride: 0,
         });
@@ -1589,6 +1603,60 @@ export class SignupsService {
         });
       }
     }
+  }
+
+  /**
+   * ROK-451: For generic (non-MMO) events with an explicit slot configuration,
+   * resolve the auto-slot role to 'player' if there are open slots.
+   * Returns null for MMO events, events without a slot config, or when all slots are full.
+   *
+   * Only auto-slots when the event has:
+   * - An explicit `slotConfig` with `type !== 'mmo'` (generic), OR
+   * - A `maxAttendees` cap (which implies generic player slots)
+   *
+   * Events with no slotConfig and no maxAttendees are left alone — the organizer
+   * manages slots manually via the roster builder.
+   *
+   * @param tx - Transaction handle (or db)
+   * @param event - The event row (needs slotConfig, maxAttendees)
+   * @param eventId - Event ID for querying current assignments
+   * @returns 'player' if a generic slot is open, null otherwise
+   */
+  private async resolveGenericSlotRole(
+    tx: PostgresJsDatabase<typeof schema>,
+    event: { slotConfig: unknown; maxAttendees: number | null },
+    eventId: number,
+  ): Promise<string | null> {
+    const slotConfig = event.slotConfig as Record<string, unknown> | null;
+
+    // MMO events require explicit role selection — never auto-slot
+    if (slotConfig?.type === 'mmo') return null;
+
+    // Determine max player slots from slotConfig or maxAttendees
+    let maxPlayers: number | null = null;
+    if (slotConfig) {
+      maxPlayers = (slotConfig.player as number) ?? null;
+    } else if (event.maxAttendees) {
+      maxPlayers = event.maxAttendees;
+    }
+
+    // No explicit slot config and no maxAttendees — organizer manages manually
+    if (maxPlayers === null) return null;
+
+    // Count current 'player' role assignments
+    const currentAssignments = await tx
+      .select({ position: schema.rosterAssignments.position })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.role, 'player'),
+        ),
+      );
+
+    if (currentAssignments.length >= maxPlayers) return null;
+
+    return 'player';
   }
 
   /**

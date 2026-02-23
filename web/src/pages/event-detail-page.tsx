@@ -357,8 +357,9 @@ export function EventDetailPage() {
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
     // Filter out declined signups from display
     const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
-    const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending').sort(alphabetical);
-    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus !== 'pending').sort(alphabetical);
+    // ROK-457: Anonymous Discord signups can't confirm characters — treat them as confirmed
+    const pendingSignups = activeSignups.filter(s => s.confirmationStatus === 'pending' && !s.isAnonymous).sort(alphabetical);
+    const confirmedSignups = activeSignups.filter(s => s.confirmationStatus !== 'pending' || s.isAnonymous).sort(alphabetical);
     // tentativeSignups can be used to show a separate section if needed
     // const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
 

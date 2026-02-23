@@ -57,7 +57,7 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
     note: null,
     signedUpAt: new Date(),
     characterId: null,
-    confirmationStatus: 'pending',
+    confirmationStatus: 'confirmed',
     status: 'signed_up',
   };
 
@@ -314,6 +314,232 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
       });
 
       expect(result.status).toBe('tentative');
+    });
+  });
+
+  // ============================================================
+  // ROK-451: Generic auto-slot for Discord signups
+  // ============================================================
+
+  describe('signupDiscord — ROK-451 generic auto-slot', () => {
+    const genericEvent = {
+      ...mockEvent,
+      slotConfig: { type: 'generic', player: 4, bench: 2 },
+    };
+
+    const mmoEvent = {
+      ...mockEvent,
+      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+    };
+
+    const maxAttendeesEvent = {
+      ...mockEvent,
+      slotConfig: null,
+      maxAttendees: 4,
+    };
+
+    it('should auto-assign to player slot for generic event without explicit role', async () => {
+      mockDb.select
+        // 1. event exists (generic slotConfig)
+        .mockReturnValueOnce(makeSelectChain([genericEvent]))
+        // 2. no linked RL user
+        .mockReturnValueOnce(makeSelectChain([]))
+        // 3. inside transaction: resolveGenericSlotRole — current player assignments (none)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([]),
+          }),
+        })
+        // 4. inside transaction: position lookup for 'player' role
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([]),
+          }),
+        });
+
+      // First insert: signup, second insert: roster assignment
+      mockDb.insert
+        .mockReturnValueOnce({
+          values: jest.fn().mockReturnValue({
+            onConflictDoNothing: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+      });
+
+      // Signup + roster assignment = 2 inserts
+      expect(mockDb.insert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should NOT auto-slot for MMO events (role selection required)', async () => {
+      mockDb.select
+        // 1. event exists (MMO slotConfig)
+        .mockReturnValueOnce(makeSelectChain([mmoEvent]))
+        // 2. no linked RL user
+        .mockReturnValueOnce(makeSelectChain([]));
+
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+          }),
+        }),
+      });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+      });
+
+      // Only 1 insert: signup (no roster assignment)
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT auto-slot when all generic player slots are full', async () => {
+      mockDb.select
+        // 1. event exists (generic, 4 player slots)
+        .mockReturnValueOnce(makeSelectChain([genericEvent]))
+        // 2. no linked RL user
+        .mockReturnValueOnce(makeSelectChain([]))
+        // 3. inside transaction: resolveGenericSlotRole — 4 existing player assignments (full)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([
+              { position: 1 },
+              { position: 2 },
+              { position: 3 },
+              { position: 4 },
+            ]),
+          }),
+        });
+
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+          }),
+        }),
+      });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+      });
+
+      // Only 1 insert: signup (no roster assignment — slots full)
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('should auto-slot when event has maxAttendees but no slotConfig', async () => {
+      mockDb.select
+        // 1. event exists (maxAttendees=4, no slotConfig)
+        .mockReturnValueOnce(makeSelectChain([maxAttendeesEvent]))
+        // 2. no linked RL user
+        .mockReturnValueOnce(makeSelectChain([]))
+        // 3. inside transaction: resolveGenericSlotRole — 2 existing player assignments (2 open)
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([
+              { position: 1 },
+              { position: 2 },
+            ]),
+          }),
+        })
+        // 4. inside transaction: position lookup for 'player' role
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([
+              { position: 1 },
+              { position: 2 },
+            ]),
+          }),
+        });
+
+      mockDb.insert
+        .mockReturnValueOnce({
+          values: jest.fn().mockReturnValue({
+            onConflictDoNothing: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+      });
+
+      // Signup + roster assignment = 2 inserts
+      expect(mockDb.insert).toHaveBeenCalledTimes(2);
+    });
+
+    it('should NOT auto-slot when event has no slotConfig and no maxAttendees', async () => {
+      // This is the default mockEvent (slotConfig: null, maxAttendees: null)
+      mockDb.select
+        .mockReturnValueOnce(makeSelectChain([mockEvent]))
+        .mockReturnValueOnce(makeSelectChain([]));
+
+      mockDb.insert.mockReturnValueOnce({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+          }),
+        }),
+      });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+      });
+
+      // Only 1 insert: signup (organizer manages slots manually)
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('should prefer explicit role over auto-slot for generic events', async () => {
+      mockDb.select
+        // 1. event exists (generic slotConfig)
+        .mockReturnValueOnce(makeSelectChain([genericEvent]))
+        // 2. no linked RL user
+        .mockReturnValueOnce(makeSelectChain([]))
+        // 3. inside transaction: position lookup for explicit 'dps' role
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockResolvedValue([]),
+          }),
+        });
+
+      mockDb.insert
+        .mockReturnValueOnce({
+          values: jest.fn().mockReturnValue({
+            onConflictDoNothing: jest.fn().mockReturnValue({
+              returning: jest.fn().mockResolvedValue([mockAnonymousSignup]),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
+
+      await service.signupDiscord(1, {
+        discordUserId: 'discord-anon-456',
+        discordUsername: 'AnonUser',
+        role: 'dps',
+      });
+
+      // Explicit role takes precedence — 2 inserts (signup + assignment)
+      expect(mockDb.insert).toHaveBeenCalledTimes(2);
     });
   });
 

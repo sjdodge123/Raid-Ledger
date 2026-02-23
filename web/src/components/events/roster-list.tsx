@@ -92,7 +92,9 @@ interface RosterItemProps {
  */
 function RosterItem({ signup, gameId }: RosterItemProps) {
     const { user, character, confirmationStatus } = signup;
-    const isPending = confirmationStatus === 'pending' || !confirmationStatus;
+    // ROK-457: Anonymous Discord users (id=0) can't confirm characters — never show as pending
+    const canConfirm = user.id !== 0;
+    const isPending = canConfirm && (confirmationStatus === 'pending' || !confirmationStatus);
     const isConfirmed = confirmationStatus === 'confirmed' || confirmationStatus === 'changed';
     const roleBorderClass = character?.role
         ? ROLE_BORDER_CLASSES[character.role] || ''
