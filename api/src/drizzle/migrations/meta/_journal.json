@@ -435,6 +435,13 @@
       "when": 1771900400000,
       "tag": "0061_plain_vertigo",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1771799400000,
+      "tag": "0062_ensure_quest_progress_table",
+      "breakpoints": true
     }
   ]
 }
