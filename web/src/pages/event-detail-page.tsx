@@ -563,6 +563,16 @@ export function EventDetailPage() {
                                     Login to Join
                                 </Link>
                             )}
+                            {/* ROK-452: General join button for non-admin users */}
+                            {canJoinSlot && (
+                                <button
+                                    onClick={handleSignup}
+                                    disabled={signup.isPending}
+                                    className="btn btn-primary btn-sm"
+                                >
+                                    {signup.isPending ? 'Joining...' : 'Join Event'}
+                                </button>
+                            )}
                             {isSignedUp && (
                                 <div className="flex items-center gap-1.5">
                                     {/* ROK-137: Status toggle buttons */}
