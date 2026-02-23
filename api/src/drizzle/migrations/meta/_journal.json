@@ -449,6 +449,13 @@
       "when": 1771900600000,
       "tag": "0063_loud_speed_demon",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1771900700000,
+      "tag": "0064_aberrant_nuke",
+      "breakpoints": true
     }
   ]
 }

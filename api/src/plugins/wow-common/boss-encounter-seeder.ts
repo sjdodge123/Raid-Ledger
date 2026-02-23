@@ -27,6 +27,7 @@ interface LootEntry {
   dropRate: number | null;
   classRestrictions: string[] | null;
   iconUrl: string | null;
+  itemSubclass: string | null;
 }
 
 /**
@@ -34,7 +35,6 @@ interface LootEntry {
  * Called on plugin install; data dropped on plugin uninstall.
  *
  * ROK-244: Variant-Aware Boss & Loot Table Seed Data
- * ROK-247: Added Houndmaster Loksey loot
  */
 @Injectable()
 export class BossEncounterSeeder {
@@ -47,7 +47,11 @@ export class BossEncounterSeeder {
 
   /**
    * Seed all boss encounters and loot from bundled data files.
-   * Uses upsert (ON CONFLICT DO NOTHING) to be idempotent.
+   * Uses upsert (ON CONFLICT DO UPDATE) so data corrections propagate on re-seed.
+   *
+   * ROK-454: Changed from onConflictDoNothing to onConflictDoUpdate so that
+   * quality, drop rate, item level, icon URL, and other corrections in the JSON
+   * files are applied to existing rows on restart.
    */
   async seed(): Promise<{ bossesInserted: number; lootInserted: number }> {
     // --- Phase 1: Seed bosses ---
@@ -73,7 +77,17 @@ export class BossEncounterSeeder {
             sodModified: b.sodModified,
           })),
         )
-        .onConflictDoNothing()
+        .onConflictDoUpdate({
+          target: [
+            wowClassicBosses.instanceId,
+            wowClassicBosses.name,
+            wowClassicBosses.expansion,
+          ],
+          set: {
+            order: sql`excluded.order`,
+            sodModified: sql`excluded.sod_modified`,
+          },
+        })
         .returning({ id: wowClassicBosses.id });
 
       bossesInserted += result.length;
@@ -118,6 +132,7 @@ export class BossEncounterSeeder {
           expansion: l.expansion,
           classRestrictions: l.classRestrictions,
           iconUrl: l.iconUrl,
+          itemSubclass: l.itemSubclass,
         };
       })
       .filter((v): v is NonNullable<typeof v> => v !== null);
@@ -128,7 +143,11 @@ export class BossEncounterSeeder {
         .insert(wowClassicBossLoot)
         .values(batch)
         .onConflictDoUpdate({
-          target: [wowClassicBossLoot.bossId, wowClassicBossLoot.itemId, wowClassicBossLoot.expansion],
+          target: [
+            wowClassicBossLoot.bossId,
+            wowClassicBossLoot.itemId,
+            wowClassicBossLoot.expansion,
+          ],
           set: {
             itemName: sql`excluded.item_name`,
             slot: sql`excluded.slot`,
@@ -137,6 +156,7 @@ export class BossEncounterSeeder {
             dropRate: sql`excluded.drop_rate`,
             classRestrictions: sql`excluded.class_restrictions`,
             iconUrl: sql`excluded.icon_url`,
+            itemSubclass: sql`excluded.item_subclass`,
           },
         })
         .returning({ id: wowClassicBossLoot.id });

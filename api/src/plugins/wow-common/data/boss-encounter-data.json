@@ -1,1111 +1,5 @@
 [
     {
-        "instanceId": 36,
-        "name": "Archmage Arugal",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 48,
-        "name": "Ghamoo-Ra (SoD)",
-        "order": 1,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 48,
-        "name": "Lady Sarevess (SoD)",
-        "order": 2,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 48,
-        "name": "Twilight Lord Kelris (SoD)",
-        "order": 4,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 48,
-        "name": "Aku'mai (SoD)",
-        "order": 7,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 63,
-        "name": "Rhahk'Zor",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Sneed",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Gilnid",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Edwin VanCleef",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Mr. Smite",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Captain Greenskin",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 63,
-        "name": "Cookie",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Rethilgore",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Razorclaw the Butcher",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Baron Silverlaine",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Commander Springvale",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Odo the Blindwatcher",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Fenrus the Devourer",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Wolf Master Nandos",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 64,
-        "name": "Archmage Arugal",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 90,
-        "name": "Grubbis (SoD)",
-        "order": 2,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 90,
-        "name": "Viscous Fallout (SoD)",
-        "order": 3,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 90,
-        "name": "Mekgineer Thermaplugg (SoD)",
-        "order": 6,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 109,
-        "name": "Avatar of Hakkar (SoD)",
-        "order": 3,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 109,
-        "name": "Shade of Eranikus (SoD)",
-        "order": 6,
-        "expansion": "sod",
-        "sodModified": true
-    },
-    {
-        "instanceId": 226,
-        "name": "Oggleflint",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 226,
-        "name": "Taragaman the Hungerer",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 226,
-        "name": "Jergosh the Invoker",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 226,
-        "name": "Bazzalan",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Lady Anacondra",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Lord Cobrahn",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Kresh",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Lord Pythas",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Skum",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Lord Serpentis",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Verdan the Everliving",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 227,
-        "name": "Mutanus the Devourer",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "High Interrogator Gerstahn",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Lord Roccor",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Houndmaster Grebmar",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Ring of Law",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Fineous Darkvire",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Bael'Gar",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "General Angerforge",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Golem Lord Argelmach",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Hurley Blackbreath",
-        "order": 9,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Ambassador Flamelash",
-        "order": 10,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 228,
-        "name": "Emperor Dagran Thaurissan",
-        "order": 11,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Highlord Omokk",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Shadow Hunter Vosh'gajin",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "War Master Voone",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Mother Smolderweb",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Quartermaster Zigris",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Halycon",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "Overlord Wyrmthalak",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 229,
-        "name": "General Drakkisath",
-        "order": 10,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Atal'alarion",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Dreamscythe",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Weaver",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Avatar of Hakkar",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Jammal'an the Prophet",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 230,
-        "name": "Shade of Eranikus",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Revelosh",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Ironaya",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Obsidian Sentinel",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Ancient Stone Keeper",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Galgann Firehammer",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Grimlok",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 231,
-        "name": "Archaedas",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Grubbis",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Viscous Fallout",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Electrocutioner 6000",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Crowd Pummeler 9-60",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Dark Iron Ambassador",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 232,
-        "name": "Mekgineer Thermaplugg",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Roogug",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Aggem Thorncurse",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Death Speaker Jargba",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Overlord Ramtusk",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Agathelos the Raging",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 233,
-        "name": "Charlga Razorflank",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 234,
-        "name": "Tuten'kash",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 234,
-        "name": "Mordresh Fire Eye",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 234,
-        "name": "Glutton",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 234,
-        "name": "Ragglesnout",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 234,
-        "name": "Amnennar the Coldbringer",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Hearthsinger Forresten",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Timmy the Cruel",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Malor the Zealous",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Cannon Master Willey",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Balnazzar",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Magistrate Barthilas",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Baroness Anastari",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Nerub'enkan",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Maleki the Pallid",
-        "order": 9,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Ramstein the Gorger",
-        "order": 10,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 236,
-        "name": "Baron Rivendare",
-        "order": 11,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Antu'sul",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Theka the Martyr",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Witch Doctor Zum'rah",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Nekrum Gutchewer",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Shadowpriest Sezz'ziz",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Hydromancer Velratha",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Gahz'rilla",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 237,
-        "name": "Chief Ukorz Sandscalp",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Ghamoo-Ra",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Lady Sarevess",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Gelihast",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Twilight Lord Kelris",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Old Serra'kis",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 238,
-        "name": "Aku'mai",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Noxxion",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Razorlash",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Lord Vyletongue",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Celebras the Cursed",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Landslide",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Tinkerer Gizlock",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Rotgrip",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 239,
-        "name": "Princess Theradras",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Zevrim Thornhoof",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Alzzin the Wildshaper",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Guard Mol'dar",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Stomper Kreeg",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Guard Fengus",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Guard Slip'kik",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Captain Kromcrush",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "King Gordok",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Tendris Warpwood",
-        "order": 9,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Immol'thar",
-        "order": 10,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 240,
-        "name": "Prince Tortheldrin",
-        "order": 11,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Kirtonos the Herald",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Jandice Barov",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Rattlegore",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Marduk Blackpool",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Vectus",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Ras Frostwhisper",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Instructor Malicia",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Doctor Theolen Krastinov",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Lorekeeper Polkelt",
-        "order": 9,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "The Ravenian",
-        "order": 10,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Lord Alexei Barov",
-        "order": 11,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Lady Illucia Barov",
-        "order": 12,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 241,
-        "name": "Darkmaster Gandling",
-        "order": 13,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Targorr the Dread",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Kam Deepfury",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Hamhock",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Bazil Thredd",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Dextren Ward",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 246,
-        "name": "Bruegal Ironknuckle",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 249,
-        "name": "Onyxia",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Interrogator Vishas",
-        "order": 1,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Bloodmage Thalnos",
-        "order": 2,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Houndmaster Loksey",
-        "order": 3,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Arcanist Doan",
-        "order": 4,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Herod",
-        "order": 5,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "High Inquisitor Fairbanks",
-        "order": 6,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "Scarlet Commander Mograine",
-        "order": 7,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
-        "instanceId": 316,
-        "name": "High Inquisitor Whitemane",
-        "order": 8,
-        "expansion": "classic",
-        "sodModified": false
-    },
-    {
         "instanceId": 409,
         "name": "Lucifron",
         "order": 1,
@@ -1232,9 +126,37 @@
         "sodModified": false
     },
     {
+        "instanceId": 249,
+        "name": "Onyxia",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
         "instanceId": 531,
         "name": "The Prophet Skeram",
         "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Bug Trio",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Battleguard Sartura",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
+        "name": "Fankriss the Unyielding",
+        "order": 4,
         "expansion": "classic",
         "sodModified": false
     },
@@ -1247,6 +169,13 @@
     },
     {
         "instanceId": 531,
+        "name": "Viscidus",
+        "order": 6,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
         "name": "Twin Emperors",
         "order": 7,
         "expansion": "classic",
@@ -1254,8 +183,197 @@
     },
     {
         "instanceId": 531,
+        "name": "Ouro",
+        "order": 8,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 531,
         "name": "C'Thun",
         "order": 9,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Anub'Rekhan",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Grand Widow Faerlina",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Maexxna",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Noth the Plaguebringer",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Patchwerk",
+        "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Grobbulus",
+        "order": 6,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Gluth",
+        "order": 7,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Thaddius",
+        "order": 8,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Instructor Razuvious",
+        "order": 9,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Gothik the Harvester",
+        "order": 10,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "The Four Horsemen",
+        "order": 11,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Heigan the Unclean",
+        "order": 12,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Loatheb",
+        "order": 13,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Sapphiron",
+        "order": 14,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 533,
+        "name": "Kel'Thuzad",
+        "order": 15,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 63,
+        "name": "Edwin VanCleef",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 36,
+        "name": "Archmage Arugal",
+        "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 229,
+        "name": "General Drakkisath",
+        "order": 10,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31601,
+        "name": "Interrogator Vishas",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31601,
+        "name": "Bloodmage Thalnos",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31602,
+        "name": "Houndmaster Loksey",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31602,
+        "name": "Arcanist Doan",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31603,
+        "name": "Herod",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "High Inquisitor Fairbanks",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "Scarlet Commander Mograine",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 31604,
+        "name": "High Inquisitor Whitemane",
+        "order": 3,
         "expansion": "classic",
         "sodModified": false
     },
@@ -1282,6 +400,13 @@
     },
     {
         "instanceId": 532,
+        "name": "Opera Event",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
         "name": "The Curator",
         "order": 5,
         "expansion": "tbc",
@@ -1296,8 +421,22 @@
     },
     {
         "instanceId": 532,
+        "name": "Terestian Illhoof",
+        "order": 7,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
         "name": "Netherspite",
         "order": 8,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 532,
+        "name": "Chess Event",
+        "order": 9,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -1316,31 +455,234 @@
         "sodModified": false
     },
     {
-        "instanceId": 533,
-        "name": "Anub'Rekhan",
+        "instanceId": 565,
+        "name": "High King Maulgar",
         "order": 1,
-        "expansion": "classic",
+        "expansion": "tbc",
         "sodModified": false
     },
     {
-        "instanceId": 533,
-        "name": "Patchwerk",
+        "instanceId": 565,
+        "name": "Gruul the Dragonkiller",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 544,
+        "name": "Magtheridon",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Hydross the Unstable",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "The Lurker Below",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Leotheras the Blind",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Fathom-Lord Karathress",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 548,
+        "name": "Morogrim Tidewalker",
         "order": 5,
-        "expansion": "classic",
+        "expansion": "tbc",
         "sodModified": false
     },
     {
-        "instanceId": 533,
-        "name": "Sapphiron",
-        "order": 14,
-        "expansion": "classic",
+        "instanceId": 548,
+        "name": "Lady Vashj",
+        "order": 6,
+        "expansion": "tbc",
         "sodModified": false
     },
     {
-        "instanceId": 533,
-        "name": "Kel'Thuzad",
-        "order": 15,
-        "expansion": "classic",
+        "instanceId": 550,
+        "name": "Al'ar",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 550,
+        "name": "Void Reaver",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 550,
+        "name": "High Astromancer Solarian",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 550,
+        "name": "Kael'thas Sunstrider",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Rage Winterchill",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Anetheron",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Kaz'rogal",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Azgalor",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 534,
+        "name": "Archimonde",
+        "order": 5,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "High Warlord Naj'entus",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Supremus",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Shade of Akama",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Gurtogg Bloodboil",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Reliquary of Souls",
+        "order": 5,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Mother Shahraz",
+        "order": 6,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "The Illidari Council",
+        "order": 7,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Teron Gorefiend",
+        "order": 8,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 564,
+        "name": "Illidan Stormrage",
+        "order": 9,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Kalecgos",
+        "order": 1,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Brutallus",
+        "order": 2,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Felmyst",
+        "order": 3,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Eredar Twins",
+        "order": 4,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "M'uru",
+        "order": 5,
+        "expansion": "tbc",
+        "sodModified": false
+    },
+    {
+        "instanceId": 580,
+        "name": "Kil'jaeden",
+        "order": 6,
+        "expansion": "tbc",
         "sodModified": false
     },
     {
@@ -1361,111 +703,6 @@
         "instanceId": 543,
         "name": "Vazruden the Herald",
         "order": 3,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 548,
-        "name": "Hydross the Unstable",
-        "order": 1,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 548,
-        "name": "Leotheras the Blind",
-        "order": 3,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 548,
-        "name": "Lady Vashj",
-        "order": 6,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 550,
-        "name": "Al'ar",
-        "order": 1,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 550,
-        "name": "Kael'thas Sunstrider",
-        "order": 4,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 564,
-        "name": "High Warlord Naj'entus",
-        "order": 1,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 564,
-        "name": "Gurtogg Bloodboil",
-        "order": 4,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 564,
-        "name": "Mother Shahraz",
-        "order": 6,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 564,
-        "name": "Illidan Stormrage",
-        "order": 9,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 574,
-        "name": "Prince Keleseth",
-        "order": 1,
-        "expansion": "wotlk",
-        "sodModified": false
-    },
-    {
-        "instanceId": 574,
-        "name": "Skarvald the Constructor",
-        "order": 2,
-        "expansion": "wotlk",
-        "sodModified": false
-    },
-    {
-        "instanceId": 574,
-        "name": "Ingvar the Plunderer",
-        "order": 3,
-        "expansion": "wotlk",
-        "sodModified": false
-    },
-    {
-        "instanceId": 580,
-        "name": "Kalecgos",
-        "order": 1,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 580,
-        "name": "M'uru",
-        "order": 5,
-        "expansion": "tbc",
-        "sodModified": false
-    },
-    {
-        "instanceId": 580,
-        "name": "Kil'jaeden",
-        "order": 6,
         "expansion": "tbc",
         "sodModified": false
     },
@@ -1592,6 +829,27 @@
         "instanceId": 631,
         "name": "The Lich King",
         "order": 12,
+        "expansion": "wotlk",
+        "sodModified": false
+    },
+    {
+        "instanceId": 574,
+        "name": "Prince Keleseth",
+        "order": 1,
+        "expansion": "wotlk",
+        "sodModified": false
+    },
+    {
+        "instanceId": 574,
+        "name": "Skarvald the Constructor",
+        "order": 2,
+        "expansion": "wotlk",
+        "sodModified": false
+    },
+    {
+        "instanceId": 574,
+        "name": "Ingvar the Plunderer",
+        "order": 3,
         "expansion": "wotlk",
         "sodModified": false
     },
@@ -1727,5 +985,68 @@
         "order": 8,
         "expansion": "cata",
         "sodModified": false
+    },
+    {
+        "instanceId": 48,
+        "name": "Ghamoo-Ra (SoD)",
+        "order": 1,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 48,
+        "name": "Lady Sarevess (SoD)",
+        "order": 2,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 48,
+        "name": "Twilight Lord Kelris (SoD)",
+        "order": 4,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 48,
+        "name": "Aku'mai (SoD)",
+        "order": 7,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 90,
+        "name": "Grubbis (SoD)",
+        "order": 2,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 90,
+        "name": "Viscous Fallout (SoD)",
+        "order": 3,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 90,
+        "name": "Mekgineer Thermaplugg (SoD)",
+        "order": 6,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 109,
+        "name": "Avatar of Hakkar (SoD)",
+        "order": 3,
+        "expansion": "sod",
+        "sodModified": true
+    },
+    {
+        "instanceId": 109,
+        "name": "Shade of Eranikus (SoD)",
+        "order": 6,
+        "expansion": "sod",
+        "sodModified": true
     }
 ]

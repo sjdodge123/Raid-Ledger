@@ -390,7 +390,7 @@ function BossLootBody({
                                     equippedItem={equippedItem}
                                     gameVariant={wowheadVariant}
                                     characterClass={characterClass}
-                                    lootItemSubclass={(item as Record<string, unknown>).itemSubclass as string | null | undefined}
+                                    lootItemSubclass={item.itemSubclass}
                                 />
                             )}
 

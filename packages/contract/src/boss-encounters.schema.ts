@@ -36,6 +36,7 @@ export const BossLootDtoSchema = z.object({
     expansion: z.enum(['classic', 'tbc', 'wotlk', 'cata', 'sod']),
     classRestrictions: z.array(z.string()).nullable(),
     iconUrl: z.string().nullable(),
+    itemSubclass: z.string().nullable(),
 });
 
 export type BossLootDto = z.infer<typeof BossLootDtoSchema>;
