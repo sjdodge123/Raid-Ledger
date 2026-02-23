@@ -124,6 +124,17 @@ export const RosterBuilder = memo(function RosterBuilder({
         }
     }, [pendingSlotKey]);
 
+    // ROK-466: Clear pending "Join?" state when user can no longer join
+    // (e.g., they signed up via a different path while pending was showing).
+    // Debounce with 150ms to survive brief React Query refetch races where
+    // canJoin momentarily flips to false from stale data.
+    React.useEffect(() => {
+        if (!canJoin && pendingSlotKey) {
+            const timeout = setTimeout(() => setPendingSlotKey(null), 150);
+            return () => clearTimeout(timeout);
+        }
+    }, [canJoin, pendingSlotKey]);
+
     // ROK-209: Auto-fill and clear-all state
     const [autoFillPreview, setAutoFillPreview] = React.useState<AutoFillResult | null>(null);
     const [clearPending, setClearPending] = React.useState(false);

@@ -97,7 +97,8 @@ export function EventDetailPage() {
     const isSignedUp = !!userSignup;
 
     // ROK-114/183: Roster management
-    const isEventCreator = user?.id === event?.creator?.id;
+    // ROK-466: Guard against undefined === undefined when user or event is loading
+    const isEventCreator = user?.id != null && event?.creator?.id != null && user.id === event.creator.id;
     const canManageEvent = isOperatorOrAdmin(user);
     const canManageRoster = isEventCreator || canManageEvent;
     // ROK-374: Check if event is cancelled
@@ -126,6 +127,13 @@ export function EventDetailPage() {
         pool: RosterAssignmentResponse[],
         assignments: RosterAssignmentResponse[],
     ) => {
+        // ROK-466: Defensive guard — only admins/creators should reach this path
+        if (!canManageRoster) {
+            toast.error('Permission denied', {
+                description: 'Only the event creator, admin, or operator can update the roster.',
+            });
+            return;
+        }
         try {
             await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments));
         } catch (err) {
