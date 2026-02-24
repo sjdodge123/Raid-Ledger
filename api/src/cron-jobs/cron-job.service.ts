@@ -54,6 +54,14 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   NotificationService_cleanupExpiredNotifications: {
     description: 'Deletes expired notifications daily at 4 AM',
   },
+  GameActivityService_sweepStaleSessions: {
+    description:
+      'Closes game activity sessions older than 24h every 15 minutes',
+  },
+  GameActivityService_dailyRollup: {
+    description:
+      'Aggregates closed game sessions into daily/weekly/monthly rollups at 5 AM',
+  },
   BackupService_dailyBackup: {
     description:
       'Creates a pg_dump backup and rotates backups older than 30 days',
