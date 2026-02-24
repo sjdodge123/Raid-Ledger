@@ -373,6 +373,9 @@ export class DiscordEmbedFactory {
     dps: '⚔️',
   };
 
+  /** Max number of individual mentions to display before truncating with "+ N more" */
+  private static readonly MAX_MENTIONS = 25;
+
   /**
    * Format Discord mentions for a specific role (or all if role is null).
    * Players with multiple preferred roles get emoji indicators showing
@@ -390,7 +393,9 @@ export class DiscordEmbedFactory {
   ): string {
     const filtered =
       role !== null ? mentions.filter((m) => m.role === role) : mentions;
-    return filtered
+    const overflow = filtered.length - DiscordEmbedFactory.MAX_MENTIONS;
+    const displayed = filtered.slice(0, DiscordEmbedFactory.MAX_MENTIONS);
+    const result = displayed
       .map((m) => {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         // ROK-459: ⏳ prefix for tentative players
@@ -412,6 +417,7 @@ export class DiscordEmbedFactory {
           : `${tentativePrefix}${label}`;
       })
       .join(', ');
+    return overflow > 0 ? `${result}, + ${overflow} more` : result;
   }
 
   /**
