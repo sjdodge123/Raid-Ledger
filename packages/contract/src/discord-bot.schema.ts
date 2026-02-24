@@ -36,6 +36,14 @@ export const GuildMembershipResponseSchema = z.object({
     isMember: z.boolean(),
 });
 
+/** Query params for GET /admin/settings/discord-bot/members/characters (ROK-428) */
+export const DiscordMemberCharactersQuerySchema = z.object({
+    discordId: z.string().min(1),
+    gameId: z.coerce.number().int().positive(),
+});
+
+export type DiscordMemberCharactersQueryDto = z.infer<typeof DiscordMemberCharactersQuerySchema>;
+
 export type DiscordBotConfigDto = z.infer<typeof DiscordBotConfigSchema>;
 export type DiscordBotTestConnectionDto = z.infer<typeof DiscordBotTestConnectionSchema>;
 export type DiscordBotStatusResponse = z.infer<typeof DiscordBotStatusSchema>;

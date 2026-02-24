@@ -165,6 +165,13 @@ export const CharacterListResponseSchema = z.object({
 
 export type CharacterListResponseDto = z.infer<typeof CharacterListResponseSchema>;
 
+/** Query params for GET /users/me/characters (ROK-428) */
+export const CharacterListQuerySchema = z.object({
+    gameId: z.coerce.number().int().positive().optional(),
+});
+
+export type CharacterListQueryDto = z.infer<typeof CharacterListQuerySchema>;
+
 /**
  * Group characters by game for UI display.
  * Used by frontend to organize characters into collapsible game sections.
