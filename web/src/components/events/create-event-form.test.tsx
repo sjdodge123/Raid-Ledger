@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { CreateEventForm } from './create-event-form';
 
+// ─── jsdom does not implement scrollIntoView — suppress unhandled errors ─────
+window.HTMLElement.prototype.scrollIntoView = vi.fn();
+
 // ─── Router/Navigation mock ───────────────────────────────────────────────────
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -364,5 +367,158 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
         expect(screen.getByText('Bench')).toBeInTheDocument();
+    });
+});
+
+// ─── Recurrence section tests (ROK-422 QA hardening) ─────────────────────────
+
+describe('CreateEventForm — recurrence section visibility', () => {
+    it('shows the Repeat select in create mode', () => {
+        renderForm();
+        expect(screen.getByLabelText(/repeat/i)).toBeInTheDocument();
+    });
+
+    it('does not show the recurrence until field when no frequency is selected', () => {
+        renderForm();
+        expect(screen.queryByLabelText(/repeat until/i)).not.toBeInTheDocument();
+    });
+
+    it('shows Repeat Until date input when a frequency is selected', () => {
+        renderForm();
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        expect(screen.getByLabelText(/repeat until/i)).toBeInTheDocument();
+    });
+
+    it('hides the recurrence section when in edit mode', () => {
+        const editEvent = {
+            id: 1,
+            title: 'Test Event',
+            description: null,
+            startTime: '2026-03-01T19:00:00.000Z',
+            endTime: '2026-03-01T21:00:00.000Z',
+            creator: { id: 1, username: 'user', avatar: null, discordId: null, customAvatarUrl: null },
+            game: null,
+            signupCount: 0,
+            slotConfig: null,
+            maxAttendees: null,
+            autoUnbench: true,
+            contentInstances: null,
+            recurrenceGroupId: null,
+            recurrenceRule: null,
+            reminder15min: true,
+            reminder1hour: false,
+            reminder24hour: false,
+            cancelledAt: null,
+            cancellationReason: null,
+            createdAt: '2026-03-01T00:00:00.000Z',
+            updatedAt: '2026-03-01T00:00:00.000Z',
+        };
+        render(
+            <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+                <MemoryRouter>
+                    <CreateEventForm event={editEvent as never} />
+                </MemoryRouter>
+            </QueryClientProvider>,
+        );
+
+        // Repeat select should not be in the DOM in edit mode
+        expect(screen.queryByLabelText(/repeat/i)).not.toBeInTheDocument();
+    });
+});
+
+describe('CreateEventForm — recurrence validation', () => {
+    it('shows error when frequency is set but until date is missing', async () => {
+        const { container } = renderForm();
+
+        // Fill in required fields to reach recurrence validation
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-01' } });
+        fireEvent.change(container.querySelector('#startTime')!, { target: { value: '19:00' } });
+        // Set a title via the hidden input approach
+        const titleInput = container.querySelector('#title') as HTMLInputElement | null;
+        if (titleInput) fireEvent.change(titleInput, { target: { value: 'Test Event' } });
+
+        // Select a recurrence frequency without setting until
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        // Submit the form
+        fireEvent.submit(container.querySelector('form')!);
+
+        // Error message should appear
+        expect(await screen.findByText('End date is required for recurring events')).toBeInTheDocument();
+    });
+
+    it('shows error when recurrence until is on or before start date', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-15' } });
+        fireEvent.change(container.querySelector('#startTime')!, { target: { value: '19:00' } });
+        const titleInput = container.querySelector('#title') as HTMLInputElement | null;
+        if (titleInput) fireEvent.change(titleInput, { target: { value: 'Test Event' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        // Set until to same day as start (should fail: must be AFTER start)
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2026-03-15' } });
+
+        fireEvent.submit(container.querySelector('form')!);
+
+        expect(await screen.findByText('End date must be after start date')).toBeInTheDocument();
+    });
+});
+
+describe('CreateEventForm — recurrence instance count preview', () => {
+    it('shows instance count preview when frequency and until are set', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-01' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        // 4 weeks after start = 4 weekly occurrences (Mar 1, 8, 15, 22)
+        fireEvent.change(untilInput, { target: { value: '2026-03-22' } });
+
+        // The preview text should appear with the count
+        const preview = await screen.findByText(/creates/i);
+        expect(preview).toBeInTheDocument();
+        expect(preview.textContent).toMatch(/4/);
+    });
+
+    it('shows no instance count preview when until is before start', () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-03-15' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2026-03-10' } }); // before start
+
+        // Count is 0 when until <= start, so preview text should NOT appear
+        expect(screen.queryByText(/creates/i)).not.toBeInTheDocument();
+    });
+
+    it('caps instance count preview at 52 for a far-future until date', async () => {
+        const { container } = renderForm();
+
+        fireEvent.change(container.querySelector('#startDate')!, { target: { value: '2026-01-01' } });
+
+        const repeatSelect = screen.getByLabelText(/repeat/i);
+        fireEvent.change(repeatSelect, { target: { value: 'weekly' } });
+
+        const untilInput = screen.getByLabelText(/repeat until/i);
+        fireEvent.change(untilInput, { target: { value: '2030-12-31' } }); // far future
+
+        const preview = await screen.findByText(/creates/i);
+        expect(preview).toBeInTheDocument();
+        // The count shown must be exactly 52 (cap), not more
+        expect(preview.textContent).toMatch(/52/);
     });
 });

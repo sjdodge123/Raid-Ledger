@@ -245,4 +245,139 @@ describe('generateRecurringDates', () => {
       expect(dates[3].toISOString()).toBe('2027-01-18T19:00:00.000Z');
     });
   });
+
+  // --- Adversarial / additional edge cases (ROK-422 QA hardening) ------------
+
+  describe('adversarial edge cases', () => {
+    // until before start — function should still return [start]
+
+    it('returns only start when until is strictly before start (weekly)', () => {
+      const start = utc('2026-06-15T19:00:00Z');
+      const until = utc('2026-06-01T00:00:00Z');
+      const dates = generateRecurringDates(start, 'weekly', until);
+
+      expect(dates).toHaveLength(1);
+      expect(dates[0].toISOString()).toBe('2026-06-15T19:00:00.000Z');
+    });
+
+    it('returns only start when until is strictly before start (monthly)', () => {
+      const start = utc('2026-06-15T19:00:00Z');
+      const until = utc('2026-05-01T00:00:00Z');
+      const dates = generateRecurringDates(start, 'monthly', until);
+
+      expect(dates).toHaveLength(1);
+      expect(dates[0].toISOString()).toBe('2026-06-15T19:00:00.000Z');
+    });
+
+    // biweekly cap enforcement
+
+    it('caps biweekly recurrence at MAX_RECURRENCE_INSTANCES', () => {
+      const start = utc('2026-01-01T19:00:00Z');
+      const until = utc('2050-12-31T23:59:59Z');
+      const dates = generateRecurringDates(start, 'biweekly', until);
+
+      expect(dates).toHaveLength(MAX_RECURRENCE_INSTANCES);
+    });
+
+    // December 31 monthly rolls over into next year correctly
+
+    it('handles Dec 31 monthly chain: Dec 31 -> Jan 31 -> Feb 28 -> Mar 31 (non-leap)', () => {
+      const start = utc('2025-12-31T19:00:00Z');
+      const until = utc('2026-03-31T23:59:59Z');
+      const dates = generateRecurringDates(start, 'monthly', until);
+
+      expect(dates).toHaveLength(4);
+      expect(dates[0].toISOString()).toBe('2025-12-31T19:00:00.000Z');
+      expect(dates[1].toISOString()).toBe('2026-01-31T19:00:00.000Z');
+      expect(dates[2].toISOString()).toBe('2026-02-28T19:00:00.000Z'); // clamped
+      expect(dates[3].toISOString()).toBe('2026-03-31T19:00:00.000Z'); // recovered
+    });
+
+    // Long clamping sequence — drift prevention over 6+ months
+
+    it('prevents drift over a Jan 31 chain spanning 7 months', () => {
+      // Jan 31 -> Feb 28 -> Mar 31 -> Apr 30 -> May 31 -> Jun 30 -> Jul 31
+      const start = utc('2026-01-31T12:00:00Z');
+      const until = utc('2026-07-31T23:59:59Z');
+      const dates = generateRecurringDates(start, 'monthly', until);
+
+      expect(dates).toHaveLength(7);
+      expect(dates[0].toISOString()).toBe('2026-01-31T12:00:00.000Z');
+      expect(dates[1].toISOString()).toBe('2026-02-28T12:00:00.000Z'); // clamped
+      expect(dates[2].toISOString()).toBe('2026-03-31T12:00:00.000Z'); // recovered
+      expect(dates[3].toISOString()).toBe('2026-04-30T12:00:00.000Z'); // clamped (Apr has 30)
+      expect(dates[4].toISOString()).toBe('2026-05-31T12:00:00.000Z'); // recovered
+      expect(dates[5].toISOString()).toBe('2026-06-30T12:00:00.000Z'); // clamped (Jun has 30)
+      expect(dates[6].toISOString()).toBe('2026-07-31T12:00:00.000Z'); // recovered
+    });
+
+    // Feb 28 start should NOT clamp — day 28 is valid in all months
+
+    it('handles Feb 28 start in non-leap year without spurious clamping', () => {
+      const start = utc('2026-02-28T19:00:00Z');
+      const until = utc('2026-05-28T23:59:59Z');
+      const dates = generateRecurringDates(start, 'monthly', until);
+
+      expect(dates).toHaveLength(4);
+      expect(dates[0].toISOString()).toBe('2026-02-28T19:00:00.000Z');
+      expect(dates[1].toISOString()).toBe('2026-03-28T19:00:00.000Z');
+      expect(dates[2].toISOString()).toBe('2026-04-28T19:00:00.000Z');
+      expect(dates[3].toISOString()).toBe('2026-05-28T19:00:00.000Z');
+    });
+
+    // Exactly 52nd instance lands on until — inclusive boundary
+
+    it('includes the 52nd instance when it falls exactly on until', () => {
+      const start = utc('2026-01-01T19:00:00Z');
+      // 51 weeks after start = the 52nd weekly occurrence
+      const fiftySecondDate = new Date(start.getTime() + 51 * 7 * 24 * 60 * 60 * 1000);
+      const until = new Date(fiftySecondDate.getTime()); // exactly equal
+      const dates = generateRecurringDates(start, 'weekly', until);
+
+      expect(dates).toHaveLength(MAX_RECURRENCE_INSTANCES);
+      expect(dates[51].toISOString()).toBe(fiftySecondDate.toISOString());
+    });
+
+    // Cap never exceeded across all three frequencies
+
+    it('never generates more than 52 instances regardless of frequency', () => {
+      const start = utc('2026-01-01T00:00:00Z');
+      const until = utc('2099-12-31T23:59:59Z');
+
+      const weekly = generateRecurringDates(start, 'weekly', until);
+      const biweekly = generateRecurringDates(start, 'biweekly', until);
+      const monthly = generateRecurringDates(start, 'monthly', until);
+
+      expect(weekly.length).toBeLessThanOrEqual(MAX_RECURRENCE_INSTANCES);
+      expect(biweekly.length).toBeLessThanOrEqual(MAX_RECURRENCE_INSTANCES);
+      expect(monthly.length).toBeLessThanOrEqual(MAX_RECURRENCE_INSTANCES);
+    });
+
+    // Start always first element — even with inverted until
+
+    it('always returns start as the first element regardless of until value', () => {
+      const start = utc('2026-03-15T10:00:00Z');
+
+      const d1 = generateRecurringDates(start, 'weekly', utc('2020-01-01T00:00:00Z'));
+      expect(d1[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
+
+      const d2 = generateRecurringDates(start, 'monthly', utc('2026-03-15T10:00:00Z'));
+      expect(d2[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
+    });
+
+    // DST boundary: weekly uses UTC math so time must not drift
+
+    it('weekly recurrence does not drift across a US DST transition (UTC-stable)', () => {
+      // US clocks spring forward on 2026-03-08. UTC-based +7 days must not shift the time.
+      const start = utc('2026-03-01T03:00:00Z');
+      const until = utc('2026-03-22T23:59:59Z');
+      const dates = generateRecurringDates(start, 'weekly', until);
+
+      expect(dates).toHaveLength(4);
+      for (const d of dates) {
+        expect(d.getUTCHours()).toBe(3);
+        expect(d.getUTCMinutes()).toBe(0);
+      }
+    });
+  });
 });
