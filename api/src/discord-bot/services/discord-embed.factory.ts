@@ -413,7 +413,7 @@ export class DiscordEmbedFactory {
           .filter(Boolean)
           .join('');
         return allEmojis
-          ? `${tentativePrefix}${label}${allEmojis}`
+          ? `${tentativePrefix}${label} (${allEmojis})`
           : `${tentativePrefix}${label}`;
       })
       .join(', ');
