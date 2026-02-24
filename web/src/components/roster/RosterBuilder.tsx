@@ -425,7 +425,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                     <div className="flex-1 min-w-0">
                         <UnassignedBar
                             pool={pool}
-                            onBarClick={() => setBrowseAll(true)}
+                            onBarClick={canEdit ? () => setBrowseAll(true) : undefined}
                             inline
                         />
                     </div>
@@ -436,7 +436,7 @@ export const RosterBuilder = memo(function RosterBuilder({
             ) : (
                 <UnassignedBar
                     pool={pool}
-                    onBarClick={() => setBrowseAll(true)}
+                    onBarClick={canEdit ? () => setBrowseAll(true) : undefined}
                 />
             )}
 
