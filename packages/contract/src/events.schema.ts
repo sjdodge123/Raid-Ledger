@@ -174,6 +174,8 @@ export const EventListQuerySchema = z.object({
     creatorId: z.string().optional(),
     /** Filter events the user has signed up for. Use "me" (ROK-213) */
     signedUpAs: z.string().optional(),
+    /** Include cancelled events in results. Default false (ROK-469) */
+    includeCancelled: z.enum(['true', 'false']).optional(),
 }).refine(
     (data) => {
         if (data.startAfter && data.endBefore) {

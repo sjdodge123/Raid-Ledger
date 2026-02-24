@@ -224,6 +224,8 @@ export function CalendarView({
         if (!eventsData?.data) return [];
         return eventsData.data
             .filter((event) => {
+                // ROK-469: Defensive filter — exclude cancelled events client-side
+                if (event.cancelledAt) return false;
                 // If no filter prop is provided (undefined), show all events
                 if (selectedGames === undefined) return true;
                 // If filter is set (even if empty), respect it
