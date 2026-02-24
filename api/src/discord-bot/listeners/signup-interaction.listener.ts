@@ -25,6 +25,7 @@ import {
   DiscordEmbedFactory,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
 
 /**
@@ -71,6 +72,7 @@ export class SignupInteractionListener {
     private readonly charactersService: CharactersService,
     private readonly intentTokenService: IntentTokenService,
     private readonly embedFactory: DiscordEmbedFactory,
+    private readonly emojiService: DiscordEmojiService,
     private readonly settingsService: SettingsService,
   ) {}
 
@@ -712,16 +714,19 @@ export class SignupInteractionListener {
       : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
 
     // ROK-452: Allow multi-role selection (1-3 roles)
+    // ROK-465: Use custom WoW role emojis when available
+    const roleOptions: Array<{ label: string; value: string; emoji?: import('discord.js').ComponentEmojiResolvable }> = [
+      { label: 'Tank', value: 'tank', emoji: this.emojiService.getRoleEmojiComponent('tank') },
+      { label: 'Healer', value: 'healer', emoji: this.emojiService.getRoleEmojiComponent('healer') },
+      { label: 'DPS', value: 'dps', emoji: this.emojiService.getRoleEmojiComponent('dps') },
+    ];
+
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(customId)
       .setPlaceholder('Select your preferred role(s)')
       .setMinValues(1)
       .setMaxValues(3)
-      .addOptions([
-        { label: 'Tank', value: 'tank', emoji: '🛡️' },
-        { label: 'Healer', value: 'healer', emoji: '💚' },
-        { label: 'DPS', value: 'dps', emoji: '⚔️' },
-      ]);
+      .addOptions(roleOptions);
 
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
       selectMenu,
@@ -764,10 +769,16 @@ export class SignupInteractionListener {
         parts.push('\u2B50');
       }
 
+      // ROK-465: Class emoji in character select dropdown
+      const classEmoji = char.class
+        ? this.emojiService.getClassEmojiComponent(char.class)
+        : undefined;
+
       return {
         label: char.name,
         value: char.id,
         description: parts.join(' \u2014 ') || undefined,
+        emoji: classEmoji,
         // Only pre-select main when there are multiple characters.
         // With 1 character, pre-selecting prevents Discord from firing
         // the interaction (no "change" detected on click).

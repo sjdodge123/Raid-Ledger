@@ -11,6 +11,7 @@ import {
   type EmbedState,
   SIGNUP_BUTTON_IDS,
 } from '../discord-bot.constants';
+import { DiscordEmojiService } from './discord-emoji.service';
 
 /**
  * Minimal event data needed to build an embed.
@@ -43,6 +44,8 @@ export interface EmbedEventData {
     preferredRoles: string[] | null;
     /** ROK-459: Signup attendance status */
     status?: string | null;
+    /** ROK-465: WoW class name for class emoji in roster */
+    className?: string | null;
   }> | null;
   game?: {
     name: string;
@@ -81,6 +84,8 @@ export interface BuildEventEmbedOptions {
  */
 @Injectable()
 export class DiscordEmbedFactory {
+  constructor(private readonly emojiService: DiscordEmojiService) {}
+
   /**
    * Build a standard event embed with consistent layout.
    * The embed body is always the same: title, game, date/time, full roster breakdown.
@@ -326,21 +331,17 @@ export class DiscordEmbedFactory {
       const lines: string[] = [];
       lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
 
-      if (tankMax > 0) {
-        const playerLines = this.getMentionsForRole(mentions, 'tank');
-        lines.push(`🛡️ **Tanks** (${rc['tank'] ?? 0}/${tankMax}):`);
-        lines.push(playerLines || '  —');
-      }
-      if (healerMax > 0) {
-        const playerLines = this.getMentionsForRole(mentions, 'healer');
-        lines.push(`💚 **Healers** (${rc['healer'] ?? 0}/${healerMax}):`);
-        lines.push(playerLines || '  —');
-      }
-      if (dpsMax > 0) {
-        const playerLines = this.getMentionsForRole(mentions, 'dps');
-        lines.push(`⚔️ **DPS** (${rc['dps'] ?? 0}/${dpsMax}):`);
-        lines.push(playerLines || '  —');
-      }
+      const roleSections: Array<{ emoji: string; label: string; count: number; max: number; role: string }> = [];
+      if (tankMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('tank'), label: 'Tanks', count: rc['tank'] ?? 0, max: tankMax, role: 'tank' });
+      if (healerMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('healer'), label: 'Healers', count: rc['healer'] ?? 0, max: healerMax, role: 'healer' });
+      if (dpsMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('dps'), label: 'DPS', count: rc['dps'] ?? 0, max: dpsMax, role: 'dps' });
+
+      roleSections.forEach((section, idx) => {
+        if (idx > 0) lines.push('');
+        lines.push(`${section.emoji} **${section.label}** (${section.count}/${section.max}):`);
+        const playerLines = this.getMentionsForRole(mentions, section.role);
+        lines.push(playerLines || '\u2003—');
+      });
 
       return lines.join('\n');
     }
@@ -364,19 +365,13 @@ export class DiscordEmbedFactory {
     return null;
   }
 
-  private static readonly ROLE_EMOJI: Record<string, string> = {
-    tank: '🛡️',
-    healer: '💚',
-    dps: '⚔️',
-  };
-
   /** Max number of individual mentions to display before truncating with "+ N more" */
   private static readonly MAX_MENTIONS = 25;
 
   /**
    * Format Discord mentions for a specific role (or all if role is null).
-   * Each player gets their own line with role preference emoji before the
-   * name (Raid Helper style) for mobile-friendly readability.
+   * Layout: class icon before name, role preferences after name, indented
+   * under the role header.
    */
   private getMentionsForRole(
     mentions: Array<{
@@ -385,6 +380,7 @@ export class DiscordEmbedFactory {
       role: string | null;
       preferredRoles: string[] | null;
       status?: string | null;
+      className?: string | null;
     }>,
     role: string | null,
   ): string {
@@ -397,24 +393,27 @@ export class DiscordEmbedFactory {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         // ROK-459: ⏳ prefix for tentative players
         const tentativePrefix = m.status === 'tentative' ? '⏳ ' : '';
-        // Fall back to assigned role if no explicit preferences stored
+        // Class emoji before the name
+        const classEmoji = m.className
+          ? this.emojiService.getClassEmoji(m.className)
+          : '';
+        // Role preferences after the name
         const prefs =
           m.preferredRoles && m.preferredRoles.length > 0
             ? m.preferredRoles
             : m.role
               ? [m.role]
               : [];
-        // Role emoji before the name for at-a-glance scanning
-        const allEmojis = prefs
-          .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
+        const roleEmojis = prefs
+          .map((r) => this.emojiService.getRoleEmoji(r))
           .filter(Boolean)
           .join('');
-        return allEmojis
-          ? `  ${tentativePrefix}${allEmojis} ${label}`
-          : `  ${tentativePrefix}${label}`;
+        const prefix = [tentativePrefix, classEmoji].filter(Boolean).join('');
+        const suffix = roleEmojis ? ` ${roleEmojis}` : '';
+        return `\u2003${prefix}${prefix ? ' ' : ''}${label}${suffix}`;
       })
       .join('\n');
-    return overflow > 0 ? `${result}\n  + ${overflow} more` : result;
+    return overflow > 0 ? `${result}\n\u2003+ ${overflow} more` : result;
   }
 
   /**

@@ -16,6 +16,7 @@ import * as schema from '../../drizzle/schema';
 import { buildWordMatchFilters } from '../../common/search.util';
 import { SignupsService } from '../../events/signups.service';
 import { EMBED_COLORS } from '../discord-bot.constants';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -30,6 +31,7 @@ export class RosterViewCommand
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly signupsService: SignupsService,
+    private readonly emojiService: DiscordEmojiService,
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
@@ -108,10 +110,7 @@ export class RosterViewCommand
 
       const lines: string[] = [];
       const roleOrder = ['tank', 'healer', 'dps', 'flex', 'player', 'bench'];
-      const roleEmojis: Record<string, string> = {
-        tank: '\uD83D\uDEE1\uFE0F',
-        healer: '\uD83D\uDC9A',
-        dps: '\u2694\uFE0F',
+      const staticEmojis: Record<string, string> = {
         flex: '\uD83D\uDD00',
         player: '\uD83C\uDFAE',
         bench: '\uD83E\uDE91',
@@ -121,7 +120,8 @@ export class RosterViewCommand
         const members = roleGroups.get(role);
         if (!members || members.length === 0) continue;
 
-        const emoji = roleEmojis[role] ?? '';
+        const emoji =
+          this.emojiService.getRoleEmoji(role) || staticEmojis[role] || '';
         const slotCount = roster.slots
           ? ((roster.slots as Record<string, number>)[role] ?? 0)
           : 0;

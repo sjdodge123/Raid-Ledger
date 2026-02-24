@@ -23,6 +23,7 @@ import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
@@ -158,6 +159,16 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
             buildEventEmbed: jest
               .fn()
               .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+          },
+        },
+        {
+          provide: DiscordEmojiService,
+          useValue: {
+            getRoleEmoji: jest.fn(() => ''),
+            getClassEmoji: jest.fn(() => ''),
+            getRoleEmojiComponent: jest.fn(() => undefined),
+            getClassEmojiComponent: jest.fn(() => undefined),
+            isUsingCustomEmojis: jest.fn(() => false),
           },
         },
         {

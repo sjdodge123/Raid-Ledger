@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RosterViewCommand } from './roster-view.command';
 import { SignupsService } from '../../events/signups.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { EMBED_COLORS } from '../discord-bot.constants';
 
 describe('RosterViewCommand', () => {
@@ -61,6 +62,20 @@ describe('RosterViewCommand', () => {
           provide: SignupsService,
           useValue: {
             getRosterWithAssignments: jest.fn(),
+          },
+        },
+        {
+          provide: DiscordEmojiService,
+          useValue: {
+            getRoleEmoji: jest.fn((role: string) => {
+              const map: Record<string, string> = {
+                tank: '\uD83D\uDEE1\uFE0F',
+                healer: '\uD83D\uDC9A',
+                dps: '\u2694\uFE0F',
+              };
+              return map[role] ?? '';
+            }),
+            isUsingCustomEmojis: jest.fn(() => false),
           },
         },
       ],

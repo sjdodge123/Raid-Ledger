@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
+import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -121,7 +122,18 @@ export function CharacterCardCompact({
                     )}
                     {race && <span className="truncate max-w-[100px] sm:max-w-none">{race}</span>}
                     {race && charClass && <span>•</span>}
-                    {charClass && <span className="truncate max-w-[100px] sm:max-w-none">{charClass}</span>}
+                    {charClass && (
+                        <span className="inline-flex items-center gap-1 truncate max-w-[120px] sm:max-w-none">
+                            {getClassIconUrl(charClass) && (
+                                <img
+                                    src={getClassIconUrl(charClass)!}
+                                    alt=""
+                                    className="w-4 h-4 rounded-sm flex-shrink-0"
+                                />
+                            )}
+                            {charClass}
+                        </span>
+                    )}
                     {spec && <span className="truncate max-w-[80px] sm:max-w-none">• {spec}</span>}
                     {role && (
                         <span className={`px-1.5 py-0.5 rounded text-xs text-foreground flex-shrink-0 ${ROLE_COLORS[role] ?? 'bg-faint'}`}>

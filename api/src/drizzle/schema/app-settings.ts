@@ -47,6 +47,22 @@ export const SETTING_KEYS = {
   DISCORD_BOT_COMMUNITY_NAME: 'discord_bot_community_name',
   DISCORD_BOT_TIMEZONE: 'discord_bot_timezone',
   CLIENT_URL: 'client_url',
+  DISCORD_EMOJI_TANK: 'discord_emoji_tank',
+  DISCORD_EMOJI_HEALER: 'discord_emoji_healer',
+  DISCORD_EMOJI_DPS: 'discord_emoji_dps',
+  DISCORD_EMOJI_CLASS_WARRIOR: 'discord_emoji_class_warrior',
+  DISCORD_EMOJI_CLASS_PALADIN: 'discord_emoji_class_paladin',
+  DISCORD_EMOJI_CLASS_HUNTER: 'discord_emoji_class_hunter',
+  DISCORD_EMOJI_CLASS_ROGUE: 'discord_emoji_class_rogue',
+  DISCORD_EMOJI_CLASS_PRIEST: 'discord_emoji_class_priest',
+  DISCORD_EMOJI_CLASS_DEATHKNIGHT: 'discord_emoji_class_deathknight',
+  DISCORD_EMOJI_CLASS_SHAMAN: 'discord_emoji_class_shaman',
+  DISCORD_EMOJI_CLASS_MAGE: 'discord_emoji_class_mage',
+  DISCORD_EMOJI_CLASS_WARLOCK: 'discord_emoji_class_warlock',
+  DISCORD_EMOJI_CLASS_MONK: 'discord_emoji_class_monk',
+  DISCORD_EMOJI_CLASS_DRUID: 'discord_emoji_class_druid',
+  DISCORD_EMOJI_CLASS_DEMONHUNTER: 'discord_emoji_class_demonhunter',
+  DISCORD_EMOJI_CLASS_EVOKER: 'discord_emoji_class_evoker',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
