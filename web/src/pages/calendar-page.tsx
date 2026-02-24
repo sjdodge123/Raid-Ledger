@@ -7,9 +7,11 @@ import { CalendarMobileToolbar, type CalendarViewMode } from '../components/cale
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { FAB } from '../components/ui/fab';
 import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Modal } from '../components/ui/modal';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
+import { useFilterCap } from '../hooks/use-filter-cap';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -26,15 +28,20 @@ export function CalendarPage() {
         }
         return new Date();
     });
-    const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
+    const [allKnownGames, setAllKnownGames] = useState<GameInfo[]>([]);
     const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
         () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
     );
     const [gameFilterOpen, setGameFilterOpen] = useState(false);
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
 
     // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
     const hasInitialized = useRef(false);
+
+    // Sidebar ref for dynamic filter cap calculation
+    const sidebarRef = useRef<HTMLElement>(null);
+    const maxVisible = useFilterCap(sidebarRef);
 
     // Game time overlay for calendar indicator
     const { isAuthenticated } = useAuth();
@@ -56,25 +63,23 @@ export function CalendarPage() {
     };
 
     // Handler for when calendar reports available games
-    // Show only games from current view, but persist selections
+    // Merges into allKnownGames (accumulator that only grows) so filters persist across views
     const handleGamesAvailable = useCallback((games: GameInfo[]) => {
-        // Update available games to show only current view
-        setAvailableGames(games);
+        setAllKnownGames(prev => {
+            const map = new Map(prev.map(g => [g.slug, g]));
+            for (const g of games) map.set(g.slug, g);
+            return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+        });
 
-        // Auto-select all games on first load
         if (!hasInitialized.current && games.length > 0) {
             hasInitialized.current = true;
             setSelectedGames(new Set(games.map(g => g.slug)));
         } else {
-            // For subsequent loads, auto-select any NEW games that weren't previously selected
             setSelectedGames(prev => {
                 const next = new Set(prev);
-                games.forEach(g => {
-                    // Add games that are new (not already in selection)
-                    if (!prev.has(g.slug)) {
-                        next.add(g.slug);
-                    }
-                });
+                for (const g of games) {
+                    if (!prev.has(g.slug)) next.add(g.slug);
+                }
                 return next;
             });
         }
@@ -95,13 +100,19 @@ export function CalendarPage() {
 
     // Select all games
     const selectAllGames = () => {
-        setSelectedGames(new Set(availableGames.map(g => g.slug)));
+        setSelectedGames(new Set(allKnownGames.map(g => g.slug)));
     };
 
     // Deselect all games
     const deselectAllGames = () => {
         setSelectedGames(new Set());
     };
+
+    // Games to show inline in sidebar (capped)
+    const inlineGames = allKnownGames.length > maxVisible
+        ? allKnownGames.slice(0, maxVisible)
+        : allKnownGames;
+    const hasOverflow = allKnownGames.length > maxVisible;
 
     // Mobile date navigation handlers
     const handleMobileNavPrev = useCallback(() => {
@@ -137,7 +148,7 @@ export function CalendarPage() {
 
                 <div className="calendar-page-layout">
                     {/* Sidebar (desktop only) */}
-                    <aside className="calendar-sidebar">
+                    <aside className="calendar-sidebar" ref={sidebarRef}>
                         {/* Mini Calendar Navigator */}
                         <MiniCalendar
                             currentDate={currentDate}
@@ -145,7 +156,7 @@ export function CalendarPage() {
                         />
 
                         {/* Game Filter Section */}
-                        {availableGames.length > 0 && (
+                        {allKnownGames.length > 0 && (
                             <div className="sidebar-section">
                                 <div className="game-filter-header">
                                     <h3 className="sidebar-section-title">Filter by Game</h3>
@@ -169,7 +180,7 @@ export function CalendarPage() {
                                     </div>
                                 </div>
                                 <div className="game-filter-list">
-                                    {availableGames.map((game) => {
+                                    {inlineGames.map((game) => {
                                         const isSelected = selectedGames.has(game.slug);
                                         const colors = getGameColors(game.slug);
                                         return (
@@ -205,6 +216,15 @@ export function CalendarPage() {
                                         );
                                     })}
                                 </div>
+                                {hasOverflow && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterModalOpen(true)}
+                                        className="game-filter-show-all"
+                                    >
+                                        Show all {allKnownGames.length} games...
+                                    </button>
+                                )}
                             </div>
                         )}
 
@@ -243,7 +263,7 @@ export function CalendarPage() {
                 </div>
             </div>
 
-            {availableGames.length > 0 && (
+            {allKnownGames.length > 0 && (
                 <FAB
                     onClick={() => setGameFilterOpen(true)}
                     icon={FunnelIcon}
@@ -258,7 +278,7 @@ export function CalendarPage() {
             >
                 <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-muted">
-                        {selectedGames.size} of {availableGames.length} selected
+                        {selectedGames.size} of {allKnownGames.length} selected
                     </span>
                     <div className="flex gap-2">
                         <button
@@ -278,7 +298,7 @@ export function CalendarPage() {
                     </div>
                 </div>
                 <div className="space-y-1">
-                    {availableGames.map((game) => {
+                    {allKnownGames.map((game) => {
                         const isSelected = selectedGames.has(game.slug);
                         const colors = getGameColors(game.slug);
                         return (
@@ -323,6 +343,73 @@ export function CalendarPage() {
                     })}
                 </div>
             </BottomSheet>
+
+            {/* Desktop overflow modal for game filters */}
+            <Modal
+                isOpen={filterModalOpen}
+                onClose={() => setFilterModalOpen(false)}
+                title="Filter by Game"
+                maxWidth="max-w-sm"
+            >
+                <div className="flex items-center justify-between mb-4">
+                    <span className="text-sm text-muted">
+                        {selectedGames.size} of {allKnownGames.length} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={selectAllGames}
+                            className="filter-action-btn"
+                        >
+                            All
+                        </button>
+                        <button
+                            type="button"
+                            onClick={deselectAllGames}
+                            className="filter-action-btn"
+                        >
+                            None
+                        </button>
+                    </div>
+                </div>
+                <div className="game-filter-list">
+                    {allKnownGames.map((game) => {
+                        const isSelected = selectedGames.has(game.slug);
+                        const colors = getGameColors(game.slug);
+                        return (
+                            <label
+                                key={game.slug}
+                                className={`game-filter-item ${isSelected ? 'selected' : ''}`}
+                                style={{
+                                    '--game-color': colors.bg,
+                                    '--game-border': colors.border,
+                                } as React.CSSProperties}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleGame(game.slug)}
+                                    className="game-filter-checkbox"
+                                />
+                                <div className="game-filter-icon">
+                                    {game.coverUrl ? (
+                                        <img
+                                            src={game.coverUrl}
+                                            alt={game.name}
+                                            className="game-filter-cover"
+                                        />
+                                    ) : (
+                                        <span className="game-filter-emoji">
+                                            {colors.icon}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="game-filter-name">{game.name}</span>
+                            </label>
+                        );
+                    })}
+                </div>
+            </Modal>
         </div>
     );
 }
