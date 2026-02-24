@@ -92,10 +92,6 @@ describe('PostEventReminderService', () => {
     service = module.get<PostEventReminderService>(PostEventReminderService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('handlePostEventReminders', () => {
     it('should exit early when bot is not connected', async () => {
       mockClientService.isConnected.mockReturnValue(false);

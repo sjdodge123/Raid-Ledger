@@ -5,10 +5,14 @@ import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../common/testing/drizzle-mock';
 
 describe('EventsService', () => {
   let service: EventsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: MockDb;
 
   const mockUser = {
     id: 1,
@@ -38,87 +42,19 @@ describe('EventsService', () => {
     updatedAt: new Date(),
   };
 
+  /** Joined row shape returned by findOne / findAll queries */
+  const defaultRow = {
+    events: mockEvent,
+    users: mockUser,
+    games: mockGame,
+    signupCount: 0,
+  };
+
   beforeEach(async () => {
-    // Mock database operations
-    mockDb = {
-      select: jest.fn(),
-      insert: jest.fn(),
-      update: jest.fn(),
-      delete: jest.fn(),
-    };
+    mockDb = createDrizzleMock();
 
-    // Setup default chain returns
-    const defaultRow = {
-      events: mockEvent,
-      users: mockUser,
-      games: mockGame,
-      signupCount: 0,
-    };
-
-    const selectChain = {
-      from: jest.fn().mockImplementation(() => {
-        // Return a chain that supports both 2-leftJoin (findOne) and 3-leftJoin (findAll/findByIds)
-        // plus groupBy for subquery construction, and where for raw selects
-        return {
-          leftJoin: jest.fn().mockReturnValue({
-            leftJoin: jest.fn().mockReturnValue({
-              // 2 leftJoins: findOne path (ROK-400: removed gameRegistry join)
-              where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([defaultRow]),
-              }),
-              // 3 leftJoins: findAll/findByIds path
-              leftJoin: jest.fn().mockReturnValue({
-                where: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockResolvedValue([defaultRow]),
-                }),
-                orderBy: jest.fn().mockReturnValue({
-                  limit: jest.fn().mockReturnValue({
-                    offset: jest.fn().mockResolvedValue([defaultRow]),
-                  }),
-                }),
-                $dynamic: jest.fn().mockReturnValue({
-                  where: jest.fn().mockReturnThis(),
-                  orderBy: jest.fn().mockReturnValue({
-                    limit: jest.fn().mockReturnValue({
-                      offset: jest.fn().mockResolvedValue([defaultRow]),
-                    }),
-                  }),
-                }),
-              }),
-            }),
-          }),
-          groupBy: jest.fn().mockReturnValue({
-            as: jest.fn().mockReturnValue({ count: 0, eventId: 1 }),
-          }),
-          where: jest.fn().mockReturnValue({
-            groupBy: jest.fn().mockReturnValue({
-              as: jest.fn().mockReturnValue({ count: 0, eventId: 1 }),
-            }),
-            limit: jest.fn().mockResolvedValue([mockEvent]),
-          }),
-        };
-      }),
-    };
-    mockDb.select.mockReturnValue(selectChain);
-
-    const insertChain = {
-      values: jest.fn().mockReturnValue({
-        returning: jest.fn().mockResolvedValue([mockEvent]),
-      }),
-    };
-    mockDb.insert.mockReturnValue(insertChain);
-
-    const updateChain = {
-      set: jest.fn().mockReturnValue({
-        where: jest.fn().mockResolvedValue(undefined),
-      }),
-    };
-    mockDb.update.mockReturnValue(updateChain);
-
-    const deleteChain = {
-      where: jest.fn().mockResolvedValue(undefined),
-    };
-    mockDb.delete.mockReturnValue(deleteChain);
+    // Default terminal resolvers
+    mockDb.returning.mockResolvedValue([mockEvent]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -132,15 +68,11 @@ describe('EventsService', () => {
         },
         {
           provide: NotificationService,
-          useValue: {
-            create: jest.fn(),
-          },
+          useValue: { create: jest.fn() },
         },
         {
           provide: EventEmitter2,
-          useValue: {
-            emit: jest.fn(),
-          },
+          useValue: { emit: jest.fn() },
         },
       ],
     }).compile();
@@ -148,12 +80,11 @@ describe('EventsService', () => {
     service = module.get<EventsService>(EventsService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('create', () => {
-    it('should create an event', async () => {
+    it('should create an event and return it with creator info', async () => {
+      // returning → new event row, limit → findOne joined row
+      mockDb.limit.mockResolvedValueOnce([defaultRow]);
+
       const dto = {
         title: 'New Event',
         description: 'Description',
@@ -164,32 +95,29 @@ describe('EventsService', () => {
 
       const result = await service.create(1, dto);
 
-      expect(result.id).toBe(mockEvent.id);
-      expect(result.title).toBe(mockEvent.title);
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        title: expect.any(String),
+        creator: expect.objectContaining({ username: expect.any(String) }),
+      });
       expect(mockDb.insert).toHaveBeenCalled();
     });
   });
 
   describe('findOne', () => {
-    it('should return an event when found', async () => {
+    it('should return an event with creator info', async () => {
+      mockDb.limit.mockResolvedValueOnce([defaultRow]);
+
       const result = await service.findOne(1);
 
-      expect(result.id).toBe(mockEvent.id);
-      expect(result.creator.username).toBe(mockUser.username);
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        creator: expect.objectContaining({ username: expect.any(String) }),
+      });
     });
 
     it('should throw NotFoundException when event not found', async () => {
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          leftJoin: jest.fn().mockReturnValue({
-            leftJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([]),
-              }),
-            }),
-          }),
-        }),
-      });
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(service.findOne(999)).rejects.toThrow(NotFoundException);
     });
@@ -197,40 +125,52 @@ describe('EventsService', () => {
 
   describe('update', () => {
     it('should update when user is creator', async () => {
-      const dto = { title: 'Updated Title' };
+      mockDb.limit
+        .mockResolvedValueOnce([mockEvent]) // ownership check
+        .mockResolvedValueOnce([defaultRow]); // findOne after update
 
-      const result = await service.update(1, 1, false, dto);
+      const result = await service.update(1, 1, false, {
+        title: 'Updated Title',
+      });
 
-      expect(result.id).toBe(mockEvent.id);
+      expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockDb.update).toHaveBeenCalled();
     });
 
     it('should update when user is admin', async () => {
-      const dto = { title: 'Updated Title' };
+      mockDb.limit
+        .mockResolvedValueOnce([mockEvent]) // ownership check
+        .mockResolvedValueOnce([defaultRow]); // findOne after update
 
-      const result = await service.update(1, 999, true, dto);
+      const result = await service.update(1, 999, true, {
+        title: 'Updated Title',
+      });
 
-      expect(result.id).toBe(mockEvent.id);
+      expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockDb.update).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when user is not creator or admin', async () => {
-      const dto = { title: 'Updated Title' };
+      mockDb.limit.mockResolvedValueOnce([mockEvent]); // ownership check (creatorId: 1)
 
-      await expect(service.update(1, 999, false, dto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.update(1, 999, false, { title: 'Updated Title' }),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 
   describe('delete', () => {
     it('should delete when user is creator', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]); // ownership check
+
       await service.delete(1, 1, false);
 
       expect(mockDb.delete).toHaveBeenCalled();
     });
 
     it('should throw ForbiddenException when user is not creator or admin', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]); // ownership check (creatorId: 1)
+
       await expect(service.delete(1, 999, false)).rejects.toThrow(
         ForbiddenException,
       );

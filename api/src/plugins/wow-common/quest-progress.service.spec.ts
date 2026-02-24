@@ -1,35 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { QuestProgressService } from './quest-progress.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 describe('QuestProgressService', () => {
   let service: QuestProgressService;
-
-  const mockDb = {
-    select: jest.fn().mockReturnThis(),
-    from: jest.fn().mockReturnThis(),
-    innerJoin: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockReturnThis(),
-    insert: jest.fn().mockReturnThis(),
-    values: jest.fn().mockReturnThis(),
-    returning: jest.fn(),
-    update: jest.fn().mockReturnThis(),
-    set: jest.fn().mockReturnThis(),
-  };
+  let mockDb: MockDb;
 
   beforeEach(async () => {
-    // Reset all mocks
-    Object.values(mockDb).forEach((fn) => fn.mockClear());
-    mockDb.select.mockReturnThis();
-    mockDb.from.mockReturnThis();
-    mockDb.innerJoin.mockReturnThis();
-    mockDb.where.mockReturnThis();
-    mockDb.limit.mockReturnThis();
-    mockDb.insert.mockReturnThis();
-    mockDb.values.mockReturnThis();
-    mockDb.update.mockReturnThis();
-    mockDb.set.mockReturnThis();
+    mockDb = createDrizzleMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

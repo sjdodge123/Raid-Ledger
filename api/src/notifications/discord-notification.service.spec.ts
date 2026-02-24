@@ -7,21 +7,15 @@ import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../common/testing/drizzle-mock';
 
 describe('DiscordNotificationService', () => {
   let service: DiscordNotificationService;
 
-  const mockDb = {
-    select: jest.fn().mockReturnThis(),
-    from: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockResolvedValue([]),
-    insert: jest.fn().mockReturnThis(),
-    values: jest.fn().mockReturnThis(),
-    update: jest.fn().mockReturnThis(),
-    set: jest.fn().mockReturnThis(),
-    returning: jest.fn().mockResolvedValue([]),
-  };
+  let mockDb: MockDb;
 
   const mockQueue = {
     add: jest.fn().mockResolvedValue({ id: 'job-1' }),
@@ -61,15 +55,9 @@ describe('DiscordNotificationService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    // Reset chain methods
-    mockDb.select.mockReturnThis();
-    mockDb.from.mockReturnThis();
-    mockDb.where.mockReturnThis();
+    mockDb = createDrizzleMock();
     mockDb.limit.mockResolvedValue([]);
-    mockDb.insert.mockReturnThis();
-    mockDb.values.mockReturnThis();
-    mockDb.update.mockReturnThis();
-    mockDb.set.mockReturnThis();
+    mockDb.returning.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -92,10 +80,6 @@ describe('DiscordNotificationService', () => {
     service = module.get<DiscordNotificationService>(
       DiscordNotificationService,
     );
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
   });
 
   describe('dispatch', () => {

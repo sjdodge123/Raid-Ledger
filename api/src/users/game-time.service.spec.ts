@@ -1,44 +1,21 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GameTimeService } from './game-time.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-
-/**
- * Chain-mock: each method returns `this` so all Drizzle chain calls work.
- * Terminal calls (where, limit) resolve with mockResolvedValue.
- */
-function createChainMock() {
-  const mock: Record<string, jest.Mock> = {};
-  const chainMethods = [
-    'select',
-    'from',
-    'innerJoin',
-    'leftJoin',
-    'where',
-    'limit',
-    'delete',
-    'insert',
-    'values',
-    'onConflictDoUpdate',
-    'returning',
-    'groupBy',
-  ];
-  for (const m of chainMethods) {
-    mock[m] = jest.fn().mockReturnThis();
-  }
-  mock.transaction = jest.fn();
-  return mock;
-}
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../common/testing/drizzle-mock';
 
 describe('GameTimeService', () => {
   let service: GameTimeService;
-  let mockDb: ReturnType<typeof createChainMock>;
+  let mockDb: MockDb;
 
   // Track which .where() call we're on to return different results
   let whereCallIndex: number;
   let whereResults: unknown[];
 
   beforeEach(async () => {
-    mockDb = createChainMock();
+    mockDb = createDrizzleMock();
     whereCallIndex = 0;
     whereResults = [];
 
@@ -68,9 +45,6 @@ describe('GameTimeService', () => {
     service = module.get<GameTimeService>(GameTimeService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   describe('getTemplate', () => {
     it('should return empty slots for new user', async () => {
@@ -127,7 +101,7 @@ describe('GameTimeService', () => {
       // No existing template slots → no committed keys to preserve
       setupSaveTemplateMocks([]);
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
@@ -151,7 +125,7 @@ describe('GameTimeService', () => {
     it('should handle empty slots (clear all) with no committed slots', async () => {
       setupSaveTemplateMocks([]);
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
         async (fn: (tx: typeof mockTx) => Promise<void>) => fn(mockTx),
@@ -178,7 +152,7 @@ describe('GameTimeService', () => {
         [{ duration: [eventStart, eventEnd] }],
       );
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
@@ -220,7 +194,7 @@ describe('GameTimeService', () => {
         [{ duration: [eventStart, eventEnd] }],
       );
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
@@ -252,7 +226,7 @@ describe('GameTimeService', () => {
         [{ duration: [eventStart, eventEnd] }],
       );
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(
@@ -274,7 +248,7 @@ describe('GameTimeService', () => {
         [], // no event signups
       );
 
-      const mockTx = createChainMock();
+      const mockTx = createDrizzleMock();
       mockTx.where.mockResolvedValue(undefined);
       mockTx.values.mockResolvedValue(undefined);
       mockDb.transaction.mockImplementation(

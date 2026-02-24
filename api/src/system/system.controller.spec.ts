@@ -41,9 +41,6 @@ describe('SystemController', () => {
     controller = module.get<SystemController>(SystemController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   describe('getStatus', () => {
     it('should return isFirstRun: true when no users exist (AC-4)', async () => {

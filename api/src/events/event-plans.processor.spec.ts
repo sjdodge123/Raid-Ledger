@@ -34,9 +34,6 @@ describe('EventPlansProcessor', () => {
     processor = module.get<EventPlansProcessor>(EventPlansProcessor);
   });
 
-  it('should be defined', () => {
-    expect(processor).toBeDefined();
-  });
 
   describe('process', () => {
     it('should delegate to EventPlansService.processPollClose with the planId', async () => {

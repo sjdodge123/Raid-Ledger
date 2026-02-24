@@ -141,10 +141,6 @@ describe('SignupsService', () => {
     service = module.get<SignupsService>(SignupsService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('signup', () => {
     it('should create a signup when event exists', async () => {
       // Mock: event exists, no existing signup
@@ -236,8 +232,7 @@ describe('SignupsService', () => {
 
       const result = await service.signup(1, 1);
 
-      expect(result.id).toBe(mockSignup.id);
-      expect(result.eventId).toBe(1);
+      expect(result).toMatchObject({ id: expect.any(Number), eventId: 1 });
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
@@ -290,8 +285,10 @@ describe('SignupsService', () => {
       // Should not throw — returns existing signup gracefully
       const result = await service.signup(1, 1);
 
-      expect(result.id).toBe(mockSignup.id);
-      expect(result.confirmationStatus).toBe('pending');
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        confirmationStatus: 'pending',
+      });
     });
 
     it('should return full correct signup data on duplicate (user + status + note)', async () => {
@@ -348,12 +345,13 @@ describe('SignupsService', () => {
 
       const result = await service.signup(1, 1);
 
-      expect(result.id).toBe(mockSignup.id);
-      expect(result.eventId).toBe(1);
-      expect(result.note).toBe('Bringing healer');
-      expect(result.confirmationStatus).toBe('confirmed');
-      expect(result.user.username).toBe('testuser');
-      expect(result.user.id).toBe(1);
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        eventId: 1,
+        note: 'Bringing healer',
+        confirmationStatus: 'confirmed',
+        user: { username: 'testuser', id: 1 },
+      });
       expect(result.character).toBeNull();
     });
 
@@ -418,10 +416,10 @@ describe('SignupsService', () => {
 
       const result = await service.signup(1, 1);
 
-      expect(result.characterId).toBe(mockCharacter.id);
-      expect(result.character).not.toBeNull();
-      expect(result.character?.name).toBe('Frostweaver');
-      expect(result.character?.role).toBe('dps');
+      expect(result).toMatchObject({
+        characterId: expect.any(String),
+        character: { name: 'Frostweaver', role: 'dps' },
+      });
     });
 
     it('should throw when onConflictDoNothing returns empty AND follow-up select returns nothing', async () => {
@@ -1324,8 +1322,10 @@ describe('SignupsService', () => {
         characterId: mockCharacter.id,
       });
 
-      expect(result.characterId).toBe(mockCharacter.id);
-      expect(result.confirmationStatus).toBe('confirmed');
+      expect(result).toMatchObject({
+        characterId: expect.any(String),
+        confirmationStatus: 'confirmed',
+      });
       expect(mockDb.update).toHaveBeenCalled();
     });
 

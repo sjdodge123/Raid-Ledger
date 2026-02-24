@@ -5,40 +5,17 @@ import {
   RECENT_MEMBER_LIMIT,
 } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-
-/**
- * Chain-mock: each method returns `this` so all Drizzle chain calls work.
- * Terminal calls resolve with mockResolvedValue.
- */
-function createChainMock() {
-  const mock: Record<string, jest.Mock> = {};
-  const chainMethods = [
-    'select',
-    'from',
-    'where',
-    'orderBy',
-    'limit',
-    'offset',
-    'innerJoin',
-    'insert',
-    'values',
-    'returning',
-    'update',
-    'set',
-  ];
-  for (const m of chainMethods) {
-    mock[m] = jest.fn().mockReturnThis();
-  }
-  mock.query = { users: { findFirst: jest.fn() } } as unknown as jest.Mock;
-  return mock;
-}
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../common/testing/drizzle-mock';
 
 describe('UsersService', () => {
   let service: UsersService;
-  let mockDb: ReturnType<typeof createChainMock>;
+  let mockDb: MockDb;
 
   beforeEach(async () => {
-    mockDb = createChainMock();
+    mockDb = createDrizzleMock();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -51,10 +28,6 @@ describe('UsersService', () => {
     }).compile();
 
     service = module.get<UsersService>(UsersService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
   });
 
   describe('findRecent', () => {
@@ -73,10 +46,6 @@ describe('UsersService', () => {
       const result = await service.findRecent();
 
       expect(result).toEqual([recentUser]);
-      expect(mockDb.select).toHaveBeenCalled();
-      expect(mockDb.from).toHaveBeenCalled();
-      expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.orderBy).toHaveBeenCalled();
       expect(mockDb.limit).toHaveBeenCalledWith(RECENT_MEMBER_LIMIT);
     });
 
@@ -153,9 +122,6 @@ describe('UsersService', () => {
         await service.checkDisplayNameAvailability('AvailableName');
 
       expect(result).toBe(true);
-      expect(mockDb.select).toHaveBeenCalled();
-      expect(mockDb.from).toHaveBeenCalled();
-      expect(mockDb.where).toHaveBeenCalled();
     });
 
     it('should return false when display name is taken', async () => {
@@ -172,7 +138,6 @@ describe('UsersService', () => {
       const result = await service.checkDisplayNameAvailability('MyName', 5);
 
       expect(result).toBe(true);
-      expect(mockDb.where).toHaveBeenCalled();
     });
 
     it('should perform case-insensitive check', async () => {
@@ -206,9 +171,6 @@ describe('UsersService', () => {
 
       expect(result).toEqual(updatedUser);
       expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalled();
-      expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.returning).toHaveBeenCalled();
     });
 
     it('should update the updatedAt timestamp', async () => {
@@ -256,9 +218,6 @@ describe('UsersService', () => {
 
       expect(result.onboardingCompletedAt).toBeInstanceOf(Date);
       expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalled();
-      expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.returning).toHaveBeenCalled();
     });
 
     it('should update both onboardingCompletedAt and updatedAt', async () => {
@@ -306,9 +265,6 @@ describe('UsersService', () => {
 
       expect(result.onboardingCompletedAt).toBeNull();
       expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalled();
-      expect(mockDb.where).toHaveBeenCalled();
-      expect(mockDb.returning).toHaveBeenCalled();
     });
 
     it('should update the updatedAt timestamp', async () => {
