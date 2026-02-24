@@ -25,7 +25,7 @@ const createMockGame = (overrides: Partial<GameDetailDto> = {}): GameDetailDto =
     name: 'World of Warcraft',
     slug: 'world-of-warcraft',
     coverUrl: 'https://example.com/wow-cover.jpg',
-    genres: [36], // MMORPG
+    genres: [36], // MOBA
     gameModes: [5], // MMO
     summary: 'A massively multiplayer online role-playing game',
     rating: 85,
@@ -59,7 +59,7 @@ describe('MobileGameCard', () => {
 
     it('renders genre tag', () => {
         renderWithRouter(<MobileGameCard game={createMockGame()} />);
-        expect(screen.getByTestId('mobile-game-genre')).toHaveTextContent('MMORPG');
+        expect(screen.getByTestId('mobile-game-genre')).toHaveTextContent('MOBA');
     });
 
     it('renders heart button when authenticated', () => {

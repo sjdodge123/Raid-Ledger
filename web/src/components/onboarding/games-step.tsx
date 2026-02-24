@@ -5,19 +5,7 @@ import { useWantToPlay } from '../../hooks/use-want-to-play';
 import { useAuth } from '../../hooks/use-auth';
 import { WantToPlayProvider } from '../../hooks/use-want-to-play-batch';
 import type { GameDetailDto } from '@raid-ledger/contract';
-
-
-
-/** IGDB genre ID → display name (subset for onboarding) */
-const GENRE_MAP: Record<number, string> = {
-    5: 'Shooter',
-    12: 'RPG',
-    13: 'Simulator',
-    15: 'Strategy',
-    31: 'Adventure',
-    32: 'Indie',
-    36: 'MMORPG',
-};
+import { GENRE_MAP } from '../../lib/game-utils';
 
 /** Genre filter chips for narrowing discover results */
 const GENRE_CHIPS = [

@@ -7,16 +7,7 @@ import { ScreenshotGallery } from '../components/games/ScreenshotGallery';
 import { TwitchStreamEmbed } from '../components/games/TwitchStreamEmbed';
 import { EventCard } from '../components/events/event-card';
 import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars';
-
-/** IGDB genre ID → display name */
-const GENRE_MAP: Record<number, string> = {
-    2: 'Point-and-click', 4: 'Fighting', 5: 'Shooter', 7: 'Music',
-    8: 'Platform', 9: 'Puzzle', 10: 'Racing', 11: 'RTS', 12: 'RPG',
-    13: 'Simulator', 14: 'Sport', 15: 'Strategy', 16: 'TBS',
-    24: 'Tactical', 25: 'Hack and slash', 26: 'Quiz', 30: 'Pinball',
-    31: 'Adventure', 32: 'Indie', 33: 'Arcade', 34: 'Visual Novel',
-    35: 'Card Game', 36: 'MOBA',
-};
+import { GENRE_MAP } from '../lib/game-utils';
 
 /** IGDB platform ID → display name (common ones) */
 const PLATFORM_MAP: Record<number, string> = {
