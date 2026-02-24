@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { GuildPremiumTier } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -348,9 +349,16 @@ export class DiscordEmojiService {
     }
   }
 
+  /** Compute MD5 hash of a file for change detection. */
+  private fileHash(filePath: string): string {
+    const buf = fs.readFileSync(filePath);
+    return crypto.createHash('md5').update(buf).digest('hex');
+  }
+
   /**
    * Sync a single emoji: check if it already exists in the guild,
-   * otherwise upload it. Returns the formatted emoji string.
+   * otherwise upload it. Detects changed asset files and re-uploads.
+   * Returns the formatted emoji string.
    */
   private async syncSingleEmoji(
     guild: import('discord.js').Guild,
@@ -358,32 +366,57 @@ export class DiscordEmojiService {
     filePath: string,
     settingKey: SettingKey,
   ): Promise<string | null> {
-    // Check if we already have a cached ID in settings
-    const cachedId = await this.settingsService.get(settingKey);
-
-    if (cachedId) {
-      // Verify the emoji still exists in the guild
-      const existing = guild.emojis.cache.get(cachedId);
-      if (existing) {
-        return `<:${existing.name}:${existing.id}>`;
-      }
-      // Cached ID is stale, clear it
-      this.logger.debug('Cached emoji ID %s is stale, re-uploading', cachedId);
-    }
-
-    // Check if emoji already exists by name (maybe uploaded manually)
-    const existingByName = guild.emojis.cache.find((e) => e.name === emojiName);
-    if (existingByName) {
-      await this.settingsService.set(settingKey, existingByName.id);
-      return `<:${existingByName.name}:${existingByName.id}>`;
-    }
-
-    // Upload new emoji
     if (!fs.existsSync(filePath)) {
       this.logger.error('Icon file not found: %s', filePath);
       return null;
     }
 
+    const currentHash = this.fileHash(filePath);
+
+    // Check if we already have a cached ID in settings
+    const cachedRaw = await this.settingsService.get(settingKey);
+    // Settings may store "emojiId:hash" or just "emojiId" (legacy)
+    const [cachedId, cachedHash] = cachedRaw?.includes(':')
+      ? cachedRaw.split(':')
+      : [cachedRaw, null];
+
+    if (cachedId) {
+      const existing = guild.emojis.cache.get(cachedId);
+      if (existing) {
+        if (cachedHash === currentHash) {
+          // Emoji exists and file hasn't changed — reuse
+          return `<:${existing.name}:${existing.id}>`;
+        }
+        // File changed — delete old emoji and re-upload
+        this.logger.log(
+          'Asset changed for %s, replacing emoji (old hash: %s, new: %s)',
+          emojiName,
+          cachedHash ?? 'none',
+          currentHash,
+        );
+        try {
+          await existing.delete('Raid Ledger icon asset updated');
+        } catch {
+          this.logger.warn('Could not delete stale emoji %s, continuing', emojiName);
+        }
+      }
+    }
+
+    // Check if emoji already exists by name (maybe uploaded manually or from old version)
+    const existingByName = guild.emojis.cache.find((e) => e.name === emojiName);
+    if (existingByName) {
+      // Delete old version so we can upload the current asset
+      this.logger.log('Replacing existing emoji %s (no hash match)', emojiName);
+      try {
+        await existingByName.delete('Raid Ledger icon asset updated');
+        // Refresh cache after deletion
+        await guild.emojis.fetch();
+      } catch {
+        this.logger.warn('Could not delete existing emoji %s', emojiName);
+      }
+    }
+
+    // Upload new emoji
     const attachment = fs.readFileSync(filePath);
     const emoji = await guild.emojis.create({
       attachment,
@@ -393,8 +426,8 @@ export class DiscordEmojiService {
 
     this.logger.log('Uploaded custom emoji: %s (ID: %s)', emoji.name, emoji.id);
 
-    // Cache the ID in settings
-    await this.settingsService.set(settingKey, emoji.id);
+    // Cache the ID + hash in settings
+    await this.settingsService.set(settingKey, `${emoji.id}:${currentHash}`);
 
     return `<:${emoji.name}:${emoji.id}>`;
   }
