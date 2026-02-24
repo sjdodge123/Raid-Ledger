@@ -250,6 +250,80 @@ describe('SignupInteractionListener', () => {
   });
 
   // ============================================================
+  // onBotDisconnected
+  // ============================================================
+
+  describe('onBotDisconnected', () => {
+    it('should clear boundHandler to null', () => {
+      const mockOn = jest.fn();
+      const fakeClient = { on: mockOn, removeListener: jest.fn() };
+      mockClientService.getClient.mockReturnValue(fakeClient);
+
+      // Connect first to set boundHandler
+      listener.onBotConnected();
+      expect(listener.boundHandler).not.toBeNull();
+
+      // Disconnect — should clear
+      listener.onBotDisconnected();
+      expect(listener.boundHandler).toBeNull();
+    });
+
+    it('should not call removeListener on reconnect after disconnect (no stale reference)', () => {
+      const mockOn1 = jest.fn();
+      const mockRemove1 = jest.fn();
+      const fakeClient1 = { on: mockOn1, removeListener: mockRemove1 };
+
+      const mockOn2 = jest.fn();
+      const mockRemove2 = jest.fn();
+      const fakeClient2 = { on: mockOn2, removeListener: mockRemove2 };
+
+      // Connect with client 1
+      mockClientService.getClient.mockReturnValue(fakeClient1);
+      listener.onBotConnected();
+
+      // Disconnect — clears boundHandler
+      listener.onBotDisconnected();
+
+      // Reconnect with client 2
+      mockClientService.getClient.mockReturnValue(fakeClient2);
+      listener.onBotConnected();
+
+      // Should NOT call removeListener on the new client (boundHandler was null)
+      expect(mockRemove2).not.toHaveBeenCalled();
+    });
+
+    it('should properly re-register handler on new client after disconnect', () => {
+      const mockOn1 = jest.fn();
+      const fakeClient1 = { on: mockOn1, removeListener: jest.fn() };
+
+      const mockOn2 = jest.fn();
+      const fakeClient2 = { on: mockOn2, removeListener: jest.fn() };
+
+      // Connect with client 1
+      mockClientService.getClient.mockReturnValue(fakeClient1);
+      listener.onBotConnected();
+      expect(mockOn1).toHaveBeenCalledWith(
+        'interactionCreate',
+        expect.any(Function),
+      );
+
+      // Disconnect
+      listener.onBotDisconnected();
+
+      // Reconnect with client 2
+      mockClientService.getClient.mockReturnValue(fakeClient2);
+      listener.onBotConnected();
+
+      // New client should have a fresh handler registered
+      expect(mockOn2).toHaveBeenCalledWith(
+        'interactionCreate',
+        expect.any(Function),
+      );
+      expect(listener.boundHandler).not.toBeNull();
+    });
+  });
+
+  // ============================================================
   // handleButtonInteraction — sign up button (linked user)
   // Tests access handleButtonInteraction directly (private method via type assertion)
   // to avoid the void wrapper in the interactionCreate handler.

@@ -65,7 +65,12 @@ export class SignupInteractionListener {
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   onBotConnected(): void {
     const client = this.clientService.getClient();
-    if (!client) return;
+    if (!client) {
+      this.logger.warn(
+        'Discord client unavailable — signup buttons will not register',
+      );
+      return;
+    }
 
     // Remove only our own listener to prevent duplicates on reconnect
     if (this.boundHandler) {
@@ -86,18 +91,37 @@ export class SignupInteractionListener {
   }
 
   /**
+   * When the bot disconnects, clear the stored handler reference.
+   * The old client is destroyed, so we must re-register on next connect.
+   */
+  @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
+  onBotDisconnected(): void {
+    this.boundHandler = null;
+  }
+
+  /**
    * Handle button clicks on event embeds.
    */
   private async handleButtonInteraction(
     interaction: ButtonInteraction,
   ): Promise<void> {
     const customId = interaction.customId;
+    this.logger.debug(`Button interaction received: customId=${customId}`);
+
     const parts = customId.split(':');
-    if (parts.length !== 2) return;
+    if (parts.length !== 2) {
+      this.logger.warn(
+        `Unexpected customId format (expected 2 parts, got ${parts.length}): ${customId}`,
+      );
+      return;
+    }
 
     const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
-    if (isNaN(eventId)) return;
+    if (isNaN(eventId)) {
+      this.logger.warn(`Non-numeric eventId in customId: ${customId}`);
+      return;
+    }
 
     // Check if this is a signup-related button
     const validActions = [
@@ -107,7 +131,10 @@ export class SignupInteractionListener {
       SIGNUP_BUTTON_IDS.JOIN_SIGNUP,
       SIGNUP_BUTTON_IDS.QUICK_SIGNUP,
     ];
-    if (!validActions.includes(action as (typeof validActions)[number])) return;
+    if (!validActions.includes(action as (typeof validActions)[number])) {
+      this.logger.warn(`Unknown signup action: ${action}`);
+      return;
+    }
 
     // Defer immediately to capture the interaction token before it expires.
     // This prevents 10062 (Unknown interaction) from slow async operations
