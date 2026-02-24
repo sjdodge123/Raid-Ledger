@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from 'react';
+import type { ComponentType } from 'react';
 import {
   BrowserRouter,
   Routes,
@@ -17,56 +18,90 @@ import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 
+const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
+
+function isChunkLoadError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('dynamically imported module') ||
+    msg.includes('failed to fetch') ||
+    msg.includes('loading chunk') ||
+    msg.includes('loading css chunk')
+  );
+}
+
+/**
+ * Wraps React.lazy() to auto-reload the page on stale chunk import failures.
+ * On first failure: sets a sessionStorage flag and reloads (fetches fresh HTML).
+ * On second failure: throws so the ErrorBoundary can show a fallback.
+ */
+function lazyWithRetry<T extends ComponentType<Record<string, never>>>(
+  importFn: () => Promise<{ default: T }>,
+) {
+  return lazy(() =>
+    importFn().catch((error: unknown) => {
+      if (isChunkLoadError(error) && !sessionStorage.getItem(CHUNK_RELOAD_KEY)) {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+        window.location.reload();
+        // Return a never-resolving promise — the page is reloading
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw error;
+    }),
+  );
+}
+
 // -- Eagerly loaded pages (critical path) --
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
 
 // -- Lazy loaded public pages --
-const JoinPage = lazy(() => import('./pages/join-page').then(m => ({ default: m.JoinPage })));
-const InvitePage = lazy(() => import('./pages/invite-page').then(m => ({ default: m.InvitePage })));
+const JoinPage = lazyWithRetry(() => import('./pages/join-page').then(m => ({ default: m.JoinPage })));
+const InvitePage = lazyWithRetry(() => import('./pages/invite-page').then(m => ({ default: m.InvitePage })));
 
 // -- Lazy loaded pages --
-const CalendarPage = lazy(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
-const CreateEventPage = lazy(() => import('./pages/create-event-page').then(m => ({ default: m.CreateEventPage })));
-const PlanEventPage = lazy(() => import('./pages/plan-event-page').then(m => ({ default: m.PlanEventPage })));
-const EditEventPage = lazy(() => import('./pages/edit-event-page').then(m => ({ default: m.EditEventPage })));
-const GamesPage = lazy(() => import('./pages/games-page').then(m => ({ default: m.GamesPage })));
-const GameDetailPage = lazy(() => import('./pages/game-detail-page').then(m => ({ default: m.GameDetailPage })));
-const CharacterDetailPage = lazy(() => import('./pages/character-detail-page').then(m => ({ default: m.CharacterDetailPage })));
-const PlayersPage = lazy(() => import('./pages/players-page').then(m => ({ default: m.PlayersPage })));
-const MyEventsPage = lazy(() => import('./pages/my-events-page').then(m => ({ default: m.MyEventsPage })));
-const UserProfilePage = lazy(() => import('./pages/user-profile-page').then(m => ({ default: m.UserProfilePage })));
-const OnboardingWizardPage = lazy(() => import('./pages/onboarding-wizard-page').then(m => ({ default: m.OnboardingWizardPage })));
+const CalendarPage = lazyWithRetry(() => import('./pages/calendar-page').then(m => ({ default: m.CalendarPage })));
+const CreateEventPage = lazyWithRetry(() => import('./pages/create-event-page').then(m => ({ default: m.CreateEventPage })));
+const PlanEventPage = lazyWithRetry(() => import('./pages/plan-event-page').then(m => ({ default: m.PlanEventPage })));
+const EditEventPage = lazyWithRetry(() => import('./pages/edit-event-page').then(m => ({ default: m.EditEventPage })));
+const GamesPage = lazyWithRetry(() => import('./pages/games-page').then(m => ({ default: m.GamesPage })));
+const GameDetailPage = lazyWithRetry(() => import('./pages/game-detail-page').then(m => ({ default: m.GameDetailPage })));
+const CharacterDetailPage = lazyWithRetry(() => import('./pages/character-detail-page').then(m => ({ default: m.CharacterDetailPage })));
+const PlayersPage = lazyWithRetry(() => import('./pages/players-page').then(m => ({ default: m.PlayersPage })));
+const MyEventsPage = lazyWithRetry(() => import('./pages/my-events-page').then(m => ({ default: m.MyEventsPage })));
+const UserProfilePage = lazyWithRetry(() => import('./pages/user-profile-page').then(m => ({ default: m.UserProfilePage })));
+const OnboardingWizardPage = lazyWithRetry(() => import('./pages/onboarding-wizard-page').then(m => ({ default: m.OnboardingWizardPage })));
 
 // -- Lazy loaded profile panels --
-const ProfileLayout = lazy(() => import('./components/profile/profile-layout').then(m => ({ default: m.ProfileLayout })));
-const IdentityPanel = lazy(() => import('./pages/profile/identity-panel').then(m => ({ default: m.IdentityPanel })));
-const ProfileDiscordPanel = lazy(() => import('./pages/profile/discord-panel').then(m => ({ default: m.ProfileDiscordPanel })));
-const AvatarPanel = lazy(() => import('./pages/profile/avatar-panel').then(m => ({ default: m.AvatarPanel })));
-const AppearancePanel = lazy(() => import('./pages/profile/appearance-panel').then(m => ({ default: m.AppearancePanel })));
-const TimezonePanel = lazy(() => import('./pages/profile/timezone-panel').then(m => ({ default: m.TimezonePanel })));
-const NotificationsPanel = lazy(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
-const ProfileGameTimePanel = lazy(() => import('./pages/profile/game-time-panel').then(m => ({ default: m.ProfileGameTimePanel })));
-const CharactersPanel = lazy(() => import('./pages/profile/characters-panel').then(m => ({ default: m.CharactersPanel })));
-const WatchedGamesPanel = lazy(() => import('./pages/profile/watched-games-panel').then(m => ({ default: m.WatchedGamesPanel })));
-const DeleteAccountPanel = lazy(() => import('./pages/profile/delete-account-panel').then(m => ({ default: m.DeleteAccountPanel })));
+const ProfileLayout = lazyWithRetry(() => import('./components/profile/profile-layout').then(m => ({ default: m.ProfileLayout })));
+const IdentityPanel = lazyWithRetry(() => import('./pages/profile/identity-panel').then(m => ({ default: m.IdentityPanel })));
+const ProfileDiscordPanel = lazyWithRetry(() => import('./pages/profile/discord-panel').then(m => ({ default: m.ProfileDiscordPanel })));
+const AvatarPanel = lazyWithRetry(() => import('./pages/profile/avatar-panel').then(m => ({ default: m.AvatarPanel })));
+const AppearancePanel = lazyWithRetry(() => import('./pages/profile/appearance-panel').then(m => ({ default: m.AppearancePanel })));
+const TimezonePanel = lazyWithRetry(() => import('./pages/profile/timezone-panel').then(m => ({ default: m.TimezonePanel })));
+const NotificationsPanel = lazyWithRetry(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
+const ProfileGameTimePanel = lazyWithRetry(() => import('./pages/profile/game-time-panel').then(m => ({ default: m.ProfileGameTimePanel })));
+const CharactersPanel = lazyWithRetry(() => import('./pages/profile/characters-panel').then(m => ({ default: m.CharactersPanel })));
+const WatchedGamesPanel = lazyWithRetry(() => import('./pages/profile/watched-games-panel').then(m => ({ default: m.WatchedGamesPanel })));
+const DeleteAccountPanel = lazyWithRetry(() => import('./pages/profile/delete-account-panel').then(m => ({ default: m.DeleteAccountPanel })));
 
 // -- Lazy loaded admin panels --
-const AdminSettingsLayout = lazy(() => import('./components/admin/admin-settings-layout').then(m => ({ default: m.AdminSettingsLayout })));
-const AdminSetupWizard = lazy(() => import('./pages/admin/admin-setup-wizard').then(m => ({ default: m.AdminSetupWizard })));
-const GeneralPanel = lazy(() => import('./pages/admin/general-panel').then(m => ({ default: m.GeneralPanel })));
-const RolesPanel = lazy(() => import('./pages/admin/roles-panel').then(m => ({ default: m.RolesPanel })));
-const DemoDataPanel = lazy(() => import('./pages/admin/demo-data-panel').then(m => ({ default: m.DemoDataPanel })));
-const DiscordPanel = lazy(() => import('./pages/admin/discord-panel').then(m => ({ default: m.DiscordPanel })));
-const IgdbPanel = lazy(() => import('./pages/admin/igdb-panel').then(m => ({ default: m.IgdbPanel })));
-const DiscordBotPanel = lazy(() => import('./pages/admin/discord-bot-panel').then(m => ({ default: m.DiscordBotPanel })));
-const PluginsPanel = lazy(() => import('./pages/admin/plugins-panel').then(m => ({ default: m.PluginsPanel })));
-const BrandingPanel = lazy(() => import('./pages/admin/branding-panel').then(m => ({ default: m.BrandingPanel })));
-const PluginIntegrationPanel = lazy(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
-const CronJobsPanel = lazy(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
-const BackupsPanel = lazy(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
-const DiscordBindingsPanel = lazy(() => import('./pages/admin/discord-bindings-panel').then(m => ({ default: m.DiscordBindingsPanel })));
+const AdminSettingsLayout = lazyWithRetry(() => import('./components/admin/admin-settings-layout').then(m => ({ default: m.AdminSettingsLayout })));
+const AdminSetupWizard = lazyWithRetry(() => import('./pages/admin/admin-setup-wizard').then(m => ({ default: m.AdminSetupWizard })));
+const GeneralPanel = lazyWithRetry(() => import('./pages/admin/general-panel').then(m => ({ default: m.GeneralPanel })));
+const RolesPanel = lazyWithRetry(() => import('./pages/admin/roles-panel').then(m => ({ default: m.RolesPanel })));
+const DemoDataPanel = lazyWithRetry(() => import('./pages/admin/demo-data-panel').then(m => ({ default: m.DemoDataPanel })));
+const DiscordPanel = lazyWithRetry(() => import('./pages/admin/discord-panel').then(m => ({ default: m.DiscordPanel })));
+const IgdbPanel = lazyWithRetry(() => import('./pages/admin/igdb-panel').then(m => ({ default: m.IgdbPanel })));
+const DiscordBotPanel = lazyWithRetry(() => import('./pages/admin/discord-bot-panel').then(m => ({ default: m.DiscordBotPanel })));
+const PluginsPanel = lazyWithRetry(() => import('./pages/admin/plugins-panel').then(m => ({ default: m.PluginsPanel })));
+const BrandingPanel = lazyWithRetry(() => import('./pages/admin/branding-panel').then(m => ({ default: m.BrandingPanel })));
+const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
+const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
+const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
+const DiscordBindingsPanel = lazyWithRetry(() => import('./pages/admin/discord-bindings-panel').then(m => ({ default: m.DiscordBindingsPanel })));
 
 import './plugins/wow/register';
 import './App.css';
@@ -91,6 +126,12 @@ function ScrollToTop() {
 function App() {
   const isDark = useThemeStore((s) => s.resolved.isDark);
   const startPolling = useConnectivityStore((s) => s.startPolling);
+
+  useEffect(() => {
+    // App mounted successfully — clear the chunk reload flag so future
+    // navigations can retry a reload if a new deploy lands.
+    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+  }, []);
 
   useEffect(() => {
     const cleanup = startPolling();
