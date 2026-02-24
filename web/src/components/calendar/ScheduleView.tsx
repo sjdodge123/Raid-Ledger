@@ -251,10 +251,12 @@ export function ScheduleView({
                 const prevDay = idx > 0 ? daysWithEvents[idx - 1] : null;
                 const isNewWeek = !prevDay || !isSameWeek(day, prevDay, { weekStartsOn: 0 });
 
-                // Compute now-line position for today
+                // Compute now-line position for today — line goes before the
+                // first event that hasn't started yet. In-progress events
+                // (start <= now < end) appear above the line.
                 let nowLineIndex = -1;
                 if (isToday) {
-                    nowLineIndex = dayEvents.findIndex((e) => e.end > now);
+                    nowLineIndex = dayEvents.findIndex((e) => e.start > now);
                     if (nowLineIndex === -1) nowLineIndex = dayEvents.length;
                 }
 
