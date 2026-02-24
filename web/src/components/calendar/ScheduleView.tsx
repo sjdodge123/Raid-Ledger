@@ -134,6 +134,7 @@ export function ScheduleView({
 }: ScheduleViewProps) {
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
+    const touchStartTarget = useRef<EventTarget | null>(null);
     const todayRef = useRef<HTMLDivElement>(null);
 
     // Scroll direction for sticky header offset (matches CalendarView toolbar pattern)
@@ -172,6 +173,7 @@ export function ScheduleView({
     const handleTouchStart = useCallback((e: React.TouchEvent) => {
         touchStartX.current = e.touches[0].clientX;
         touchStartY.current = e.touches[0].clientY;
+        touchStartTarget.current = e.target;
     }, []);
 
     const handleTouchEnd = useCallback(
@@ -179,8 +181,20 @@ export function ScheduleView({
             const dx = e.changedTouches[0].clientX - touchStartX.current;
             const dy = e.changedTouches[0].clientY - touchStartY.current;
 
-            // Only trigger if horizontal movement dominates vertical
-            if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+            // Check if touch originated on an interactive element (event card button)
+            const startedOnButton =
+                touchStartTarget.current instanceof HTMLElement &&
+                touchStartTarget.current.closest('button');
+
+            // Only trigger if horizontal movement dominates vertical.
+            // If touch started on a button, require a larger threshold so taps
+            // with slight jitter let the click event fire instead of swiping.
+            const threshold = startedOnButton ? 100 : 50;
+            if (Math.abs(dx) > threshold && Math.abs(dx) > Math.abs(dy)) {
+                // Prevent the subsequent click from firing when we're swiping
+                if (startedOnButton) {
+                    e.preventDefault();
+                }
                 const offset = dx > 0 ? -1 : 1; // swipe right = prev, swipe left = next
                 const next = new Date(currentDate);
                 next.setDate(next.getDate() + offset);
