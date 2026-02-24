@@ -14,7 +14,9 @@
  */
 
 /** Grid position in format 'a1' through 'i4' */
-type GridPosition = string;
+type GridRow = 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i';
+type GridColumn = '1' | '2' | '3' | '4';
+type GridPosition = `${GridRow}${GridColumn}`;
 
 /** Map from talent slug → grid position within a single talent tree */
 type TreePositionMap = Record<string, GridPosition>;
