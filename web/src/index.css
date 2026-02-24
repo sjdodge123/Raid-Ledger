@@ -335,6 +335,49 @@ body {
 }
 
 /* ============================================
+   Light Mode — Badge Overlay Contrast (ROK-473)
+   Badges overlaid on cover images need opaque
+   backgrounds in light mode so text remains
+   readable regardless of the underlying image.
+   WCAG AA ≥ 4.5:1 for normal text.
+   ============================================ */
+
+[data-scheme="light"] .badge-overlay {
+    backdrop-filter: blur(4px);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* Emerald status badges (Upcoming) on cover images */
+[data-scheme="light"] .badge-overlay.bg-emerald-500\/20 {
+    background-color: rgba(209, 250, 229, 0.92);  /* emerald-100 near-opaque */
+    border-color: rgba(16, 185, 129, 0.5);
+}
+
+/* Yellow status badges (Live) on cover images */
+[data-scheme="light"] .badge-overlay.bg-yellow-500\/20 {
+    background-color: rgba(254, 249, 195, 0.92);  /* yellow-100 near-opaque */
+    border-color: rgba(202, 138, 4, 0.5);
+}
+
+/* Neutral status badges (Ended) on cover images */
+[data-scheme="light"] .badge-overlay.bg-dim\/20 {
+    background-color: rgba(241, 245, 249, 0.92);  /* slate-100 near-opaque */
+    border-color: rgba(100, 116, 139, 0.5);
+}
+
+/* Red status badges (Cancelled) on cover images */
+[data-scheme="light"] .badge-overlay.bg-red-500\/20 {
+    background-color: rgba(254, 226, 226, 0.92);  /* red-100 near-opaque */
+    border-color: rgba(220, 38, 38, 0.5);
+}
+
+/* Cyan badges (Inside Game Time) on cover images */
+[data-scheme="light"] .badge-overlay.bg-cyan-500\/20 {
+    background-color: rgba(207, 250, 254, 0.92);  /* cyan-100 near-opaque */
+    border-color: rgba(8, 145, 178, 0.5);
+}
+
+/* ============================================
    Light Mode — Status Color Contrast Fixes (ROK-464)
    Tailwind -400 shades (~3:1 on white) bumped to
    -600/-700 shades (>4.5:1) for WCAG AA compliance.

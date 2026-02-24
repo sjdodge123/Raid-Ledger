@@ -21,7 +21,7 @@ function StatusBadge({ status }: { status: EventDisplayStatus }) {
         <span
             data-testid="event-status-badge"
             aria-label={`Event status: ${status}`}
-            className={`px-2 py-0.5 text-xs font-medium rounded-full border ${STATUS_STYLES[status]}`}
+            className={`badge-overlay px-2 py-0.5 text-xs font-medium rounded-full border ${STATUS_STYLES[status]}`}
         >
             {STATUS_LABELS[status]}
         </span>
@@ -108,7 +108,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
                 {/* Game Time badge - top left */}
                 {matchesGameTime && (
                     <div className="absolute top-2 left-2">
-                        <span className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
+                        <span className="badge-overlay flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border bg-cyan-500/20 text-cyan-300 border-cyan-500/30">
                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
