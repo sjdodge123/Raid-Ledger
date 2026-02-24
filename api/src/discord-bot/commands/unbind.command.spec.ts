@@ -2,11 +2,22 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UnbindCommand } from './unbind.command';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ChannelType } from 'discord.js';
 
 describe('UnbindCommand', () => {
   let command: UnbindCommand;
   let bindingsService: jest.Mocked<ChannelBindingsService>;
+
+  const mockDb = {
+    select: jest.fn().mockReturnValue({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    }),
+  };
 
   const mockInteraction = (overrides: Record<string, unknown> = {}) => ({
     deferReply: jest.fn().mockResolvedValue(undefined),
@@ -19,6 +30,7 @@ describe('UnbindCommand', () => {
     },
     options: {
       getChannel: jest.fn().mockReturnValue(null),
+      getString: jest.fn().mockReturnValue(null),
     },
     ...overrides,
   });
@@ -32,6 +44,10 @@ describe('UnbindCommand', () => {
           useValue: {
             unbind: jest.fn().mockResolvedValue(true),
           },
+        },
+        {
+          provide: DrizzleAsyncProvider,
+          useValue: mockDb,
         },
       ],
     }).compile();
@@ -92,7 +108,10 @@ describe('UnbindCommand', () => {
     it('should reject when no channel option and no current channel', async () => {
       const interaction = mockInteraction({
         channel: null,
-        options: { getChannel: jest.fn().mockReturnValue(null) },
+        options: {
+          getChannel: jest.fn().mockReturnValue(null),
+          getString: jest.fn().mockReturnValue(null),
+        },
       });
 
       await command.handleInteraction(
@@ -119,6 +138,7 @@ describe('UnbindCommand', () => {
       expect(bindingsService.unbind).toHaveBeenCalledWith(
         'guild-123',
         'channel-456',
+        null,
       );
     });
 
@@ -130,6 +150,7 @@ describe('UnbindCommand', () => {
             name: 'raids',
             type: ChannelType.GuildText,
           }),
+          getString: jest.fn().mockReturnValue(null),
         },
       });
 
@@ -142,6 +163,7 @@ describe('UnbindCommand', () => {
       expect(bindingsService.unbind).toHaveBeenCalledWith(
         'guild-123',
         'channel-999',
+        null,
       );
     });
 

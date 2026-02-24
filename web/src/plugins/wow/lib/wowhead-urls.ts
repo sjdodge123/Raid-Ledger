@@ -53,3 +53,59 @@ export function getWowheadNpcSearchUrl(bossName: string, variant?: string | null
     const { urlBase } = getWowheadDomain(variant);
     return `https://${urlBase}/search?q=${encodeURIComponent(bossName)}`;
 }
+
+/**
+ * Build a Wowhead talent calculator URL for a given class.
+ * Maps the Blizzard API class name to the Wowhead URL slug, then builds the
+ * appropriate talent-calc URL for the game variant.
+ *
+ * Returns null if the class name cannot be mapped.
+ */
+export function getWowheadTalentCalcUrl(
+    className: string,
+    variant?: string | null,
+): string | null {
+    const slug = wowClassToSlug(className);
+    if (!slug) return null;
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/talent-calc/${slug}`;
+}
+
+/**
+ * Build a Wowhead talent calculator embed URL for a specific Classic talent build.
+ * The embed URL includes the talent string so Wowhead displays the exact build.
+ *
+ * Format: https://www.wowhead.com/classic/talent-calc/embed/{class}/{talent-string}
+ *
+ * Returns null if the class name cannot be mapped.
+ */
+export function getWowheadTalentCalcEmbedUrl(
+    className: string,
+    talentString: string,
+    variant?: string | null,
+): string | null {
+    const slug = wowClassToSlug(className);
+    if (!slug) return null;
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/talent-calc/embed/${slug}/${talentString}`;
+}
+
+/** Map a WoW class display name (from Blizzard API) to a Wowhead URL slug. */
+function wowClassToSlug(className: string): string | null {
+    const map: Record<string, string> = {
+        'death knight': 'death-knight',
+        'demon hunter': 'demon-hunter',
+        druid: 'druid',
+        evoker: 'evoker',
+        hunter: 'hunter',
+        mage: 'mage',
+        monk: 'monk',
+        paladin: 'paladin',
+        priest: 'priest',
+        rogue: 'rogue',
+        shaman: 'shaman',
+        warlock: 'warlock',
+        warrior: 'warrior',
+    };
+    return map[className.toLowerCase()] ?? null;
+}

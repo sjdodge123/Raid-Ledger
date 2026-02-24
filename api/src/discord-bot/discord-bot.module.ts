@@ -7,6 +7,7 @@ import { EventsModule } from '../events/events.module';
 import { UsersModule } from '../users/users.module';
 import { CharactersModule } from '../characters/characters.module';
 import { CronJobModule } from '../cron-jobs/cron-job.module';
+import { NotificationModule } from '../notifications/notification.module';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
@@ -18,12 +19,14 @@ import { ChannelResolverService } from './services/channel-resolver.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { PugInviteService } from './services/pug-invite.service';
+import { GameActivityService } from './services/game-activity.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
+import { ActivityListener } from './listeners/activity.listener';
 import {
   EmbedSyncQueueService,
   EMBED_SYNC_QUEUE,
@@ -50,9 +53,10 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     forwardRef(() => UsersModule),
     forwardRef(() => EventsModule),
     forwardRef(() => AuthModule),
+    forwardRef(() => NotificationModule),
     CharactersModule,
-    BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     CronJobModule,
+    BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -77,6 +81,8 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     SignupInteractionListener,
     RoachOutInteractionListener,
     PugInviteListener,
+    ActivityListener,
+    GameActivityService,
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,

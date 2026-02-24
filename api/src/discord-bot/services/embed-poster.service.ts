@@ -46,13 +46,17 @@ export class EmbedPosterService {
     eventId: number,
     event: EmbedEventData,
     gameId?: number | null,
+    recurrenceGroupId?: string | null,
   ): Promise<boolean> {
     if (!this.clientService.isConnected()) {
       this.logger.debug('Bot not connected, skipping embed post');
       return false;
     }
 
-    const channelId = await this.channelResolver.resolveChannelForEvent(gameId);
+    const channelId = await this.channelResolver.resolveChannelForEvent(
+      gameId,
+      recurrenceGroupId,
+    );
     if (!channelId) return false;
 
     const guildId = this.clientService.getGuildId();

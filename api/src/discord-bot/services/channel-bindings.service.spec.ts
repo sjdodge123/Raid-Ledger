@@ -82,7 +82,7 @@ describe('ChannelBindingsService', () => {
         null,
       );
 
-      expect(result).toEqual(mockBinding);
+      expect(result).toEqual({ binding: mockBinding, replacedChannelIds: [] });
       expect(mockInsert).toHaveBeenCalled();
     });
   });

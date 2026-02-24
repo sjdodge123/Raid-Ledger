@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/unbound-method */
 import { Test, TestingModule } from '@nestjs/testing';
-import { DiscordEventListener, type EventPayload } from './event.listener';
+import { DiscordEventListener } from './event.listener';
+import type { EventPayload } from './event.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { EmbedPosterService } from '../services/embed-poster.service';
@@ -146,6 +147,7 @@ describe('DiscordEventListener', () => {
         42,
         mockPayload.event,
         101,
+        undefined,
       );
     });
 
@@ -230,6 +232,7 @@ describe('DiscordEventListener', () => {
         42,
         mockPayload.event,
         101,
+        undefined,
       );
     });
 

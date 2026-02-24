@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -16,6 +16,7 @@ export interface BindingRecord {
   channelType: string;
   bindingPurpose: string;
   gameId: number | null;
+  recurrenceGroupId: string | null;
   config: ChannelBindingConfig | null;
   createdAt: Date;
   updatedAt: Date;
@@ -32,7 +33,8 @@ export class ChannelBindingsService {
 
   /**
    * Create or update a channel binding.
-   * Uses upsert: if a binding already exists for the same guild+channel, it is replaced.
+   * Uses upsert: if a binding already exists for the same guild+channel+series, it is replaced.
+   * ROK-435: Added recurrenceGroupId for series-specific bindings.
    */
   async bind(
     guildId: string,
@@ -41,7 +43,30 @@ export class ChannelBindingsService {
     bindingPurpose: BindingPurpose,
     gameId: number | null,
     config?: ChannelBindingConfig,
-  ): Promise<BindingRecord> {
+    recurrenceGroupId?: string | null,
+  ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
+    // ROK-435: If binding a series, remove any existing binding for the same
+    // series in this guild (regardless of channel) so a series has at most one
+    // channel binding. Return old channel IDs so the caller can warn the user.
+    let replacedChannelIds: string[] = [];
+    if (recurrenceGroupId) {
+      const deleted = await this.db
+        .delete(schema.channelBindings)
+        .where(
+          and(
+            eq(schema.channelBindings.guildId, guildId),
+            eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+            isNotNull(schema.channelBindings.recurrenceGroupId),
+          ),
+        )
+        .returning({ channelId: schema.channelBindings.channelId });
+
+      // Only flag channels that differ from the new target
+      replacedChannelIds = deleted
+        .map((d) => d.channelId)
+        .filter((id) => id !== channelId);
+    }
+
     const [result] = await this.db
       .insert(schema.channelBindings)
       .values({
@@ -50,12 +75,14 @@ export class ChannelBindingsService {
         channelType,
         bindingPurpose,
         gameId,
+        recurrenceGroupId: recurrenceGroupId ?? null,
         config: config ?? {},
       })
       .onConflictDoUpdate({
         target: [
           schema.channelBindings.guildId,
           schema.channelBindings.channelId,
+          schema.channelBindings.recurrenceGroupId,
         ],
         set: {
           channelType,
@@ -68,28 +95,46 @@ export class ChannelBindingsService {
       .returning();
 
     this.logger.log(
-      `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}`,
+      `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +
+        (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
     );
 
-    return result as BindingRecord;
+    return { binding: result as BindingRecord, replacedChannelIds };
   }
 
   /**
    * Remove a channel binding.
+   * ROK-435: If recurrenceGroupId is provided, only the series binding is removed.
+   * Otherwise removes bindings without a series (game-level bindings).
    */
-  async unbind(guildId: string, channelId: string): Promise<boolean> {
+  async unbind(
+    guildId: string,
+    channelId: string,
+    recurrenceGroupId?: string | null,
+  ): Promise<boolean> {
+    const conditions = [
+      eq(schema.channelBindings.guildId, guildId),
+      eq(schema.channelBindings.channelId, channelId),
+    ];
+
+    if (recurrenceGroupId) {
+      conditions.push(
+        eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+      );
+    } else {
+      conditions.push(sql`${schema.channelBindings.recurrenceGroupId} IS NULL`);
+    }
+
     const result = await this.db
       .delete(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.guildId, guildId),
-          eq(schema.channelBindings.channelId, channelId),
-        ),
-      )
+      .where(and(...conditions))
       .returning();
 
     if (result.length > 0) {
-      this.logger.log(`Unbound channel ${channelId} in guild ${guildId}`);
+      this.logger.log(
+        `Unbound channel ${channelId} in guild ${guildId}` +
+          (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
+      );
       return true;
     }
 
@@ -136,6 +181,29 @@ export class ChannelBindingsService {
         and(
           eq(schema.channelBindings.guildId, guildId),
           eq(schema.channelBindings.gameId, gameId),
+          eq(schema.channelBindings.bindingPurpose, 'game-announcements'),
+        ),
+      )
+      .limit(1);
+
+    return row?.channelId ?? null;
+  }
+
+  /**
+   * Get the channel binding for a specific recurrence group (event series) in a guild.
+   * ROK-435: Series-specific binding takes priority over game-specific binding.
+   */
+  async getChannelForSeries(
+    guildId: string,
+    recurrenceGroupId: string,
+  ): Promise<string | null> {
+    const [row] = await this.db
+      .select({ channelId: schema.channelBindings.channelId })
+      .from(schema.channelBindings)
+      .where(
+        and(
+          eq(schema.channelBindings.guildId, guildId),
+          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
           eq(schema.channelBindings.bindingPurpose, 'game-announcements'),
         ),
       )
