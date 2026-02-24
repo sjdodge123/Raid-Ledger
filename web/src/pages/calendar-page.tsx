@@ -343,7 +343,7 @@ export function CalendarPage() {
                     onChange={(e) => setFilterSearch(e.target.value)}
                     placeholder="Search games..."
                     className="w-full px-3 py-2 mb-3 rounded-lg bg-base border border-edge text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-emerald-500 transition-colors"
-                    autoFocus
+                    ref={(el) => el?.focus()}
                 />
                 <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
                     {filteredModalGames.map((game) => {

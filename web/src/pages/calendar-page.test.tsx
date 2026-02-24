@@ -182,7 +182,7 @@ describe('CalendarPage — auto-select behaviour', () => {
         checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
 
-    it('auto-selects new games from subsequent deliveries', () => {
+    it('does NOT auto-select new games from subsequent deliveries', () => {
         renderPage();
         deliverGames([makeGame('wow', 'World of Warcraft')]);
 
@@ -191,15 +191,15 @@ describe('CalendarPage — auto-select behaviour', () => {
         fireEvent.change(wowCheckbox, { target: { checked: false } });
         expect(wowCheckbox).not.toBeChecked();
 
-        // A new game arrives
+        // A new game arrives (e.g. different month)
         deliverGames([makeGame('apex', 'Apex Legends')]);
 
-        // apex is new and not previously known — should be auto-selected
+        // apex is new but should NOT be auto-selected — user curated their filter
         const checkboxes = screen.getAllByRole('checkbox');
         const apexCb = checkboxes.find(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent === 'Apex Legends',
         );
-        expect(apexCb).toBeChecked();
+        expect(apexCb).not.toBeChecked();
     });
 });
 

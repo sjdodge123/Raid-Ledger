@@ -55,23 +55,19 @@ export const useGameFilterStore = create<GameFilterState>((set, get) => ({
         }
 
         // 3. Update selection
-        let nextSelected: Set<string>;
         if (!state.hasInitialized && games.length > 0) {
             // First time we see any games — select all of them
-            nextSelected = new Set(games.map((g) => g.slug));
             set({
                 allKnownGames: nextAllKnown,
-                selectedGames: nextSelected,
+                selectedGames: new Set(games.map((g) => g.slug)),
                 seenSlugs: nextSeen,
                 hasInitialized: true,
             });
         } else if (newSlugs.length > 0) {
-            // Auto-select only games we've never seen before
-            nextSelected = new Set(state.selectedGames);
-            for (const slug of newSlugs) nextSelected.add(slug);
+            // New games discovered — add to known list but do NOT auto-select.
+            // The user has already curated their filter; new games appear unchecked.
             set({
                 allKnownGames: nextAllKnown,
-                selectedGames: nextSelected,
                 seenSlugs: nextSeen,
             });
         } else {
