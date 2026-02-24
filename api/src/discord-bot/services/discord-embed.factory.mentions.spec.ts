@@ -7,6 +7,12 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from './discord-embed.factory';
+import { DiscordEmojiService } from './discord-emoji.service';
+
+const mockEmojiService = {
+  getRoleEmoji: () => '',
+  getClassEmoji: () => '',
+} as unknown as DiscordEmojiService;
 
 type SignupMention = {
   discordId?: string | null;
@@ -37,7 +43,7 @@ function buildEventWithMentions(
   mentions: SignupMention[],
   role: string = 'dps',
 ): string {
-  const factory = new DiscordEmbedFactory();
+  const factory = new DiscordEmbedFactory(mockEmojiService);
   const slotConfig =
     role === 'dps' || role === 'tank' || role === 'healer'
       ? { type: 'mmo', tank: 2, healer: 4, dps: 30 }
@@ -68,7 +74,7 @@ function buildEventWithMentions(
  * Helper for non-role embeds that use getMentionsForRole(mentions, null).
  */
 function buildEventWithAllMentions(mentions: SignupMention[]): string {
-  const factory = new DiscordEmbedFactory();
+  const factory = new DiscordEmbedFactory(mockEmojiService);
 
   const event: EmbedEventData = {
     id: 1,
