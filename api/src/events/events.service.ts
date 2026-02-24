@@ -35,6 +35,7 @@ import {
 } from '../discord-bot/discord-bot.constants';
 import type { MemberInviteCreatedPayload } from '../discord-bot/discord-bot.constants';
 import type { EmbedEventData } from '../discord-bot/services/discord-embed.factory';
+import { generateRecurringDates } from './recurrence.util';
 
 /** Constants for events service */
 const EVENTS_CONFIG = {
@@ -90,7 +91,7 @@ export class EventsService {
 
     if (dto.recurrence) {
       // Generate all recurring instances
-      const instances = this.generateRecurringDates(
+      const instances = generateRecurringDates(
         startTime,
         dto.recurrence.frequency,
         new Date(dto.recurrence.until),
@@ -142,36 +143,6 @@ export class EventsService {
     this.emitEventLifecycle(APP_EVENT_EVENTS.CREATED, createdEvent);
 
     return createdEvent;
-  }
-
-  /**
-   * Generate recurring date instances from a start date.
-   */
-  private generateRecurringDates(
-    start: Date,
-    frequency: 'weekly' | 'biweekly' | 'monthly',
-    until: Date,
-  ): Date[] {
-    const dates: Date[] = [new Date(start)];
-    let current = new Date(start);
-
-    while (true) {
-      const next = new Date(current);
-      if (frequency === 'weekly') {
-        next.setDate(next.getDate() + 7);
-      } else if (frequency === 'biweekly') {
-        next.setDate(next.getDate() + 14);
-      } else {
-        // monthly: same day of month, next month
-        next.setMonth(next.getMonth() + 1);
-      }
-
-      if (next > until) break;
-      dates.push(next);
-      current = next;
-    }
-
-    return dates;
   }
 
   /**

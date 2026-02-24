@@ -255,19 +255,45 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         });
     }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
 
-    // Compute recurrence count preview
+    // Compute recurrence count preview (capped at 52 to match backend)
+    // This mirrors the backend's generateRecurringDates() logic in recurrence.util.ts,
+    // including UTC month-addition with day clamping and original-day restoration.
+    const MAX_RECURRENCE_INSTANCES = 52;
     const recurrenceCount = useMemo(() => {
         if (!form.recurrenceFrequency || !form.startDate || !form.recurrenceUntil) return 0;
         const start = new Date(form.startDate);
         const until = new Date(form.recurrenceUntil);
         if (until <= start) return 0;
+        const originalDay = start.getUTCDate();
         let count = 1;
         let current = new Date(start);
-        while (true) {
+        while (count < MAX_RECURRENCE_INSTANCES) {
             const next = new Date(current);
-            if (form.recurrenceFrequency === 'weekly') next.setDate(next.getDate() + 7);
-            else if (form.recurrenceFrequency === 'biweekly') next.setDate(next.getDate() + 14);
-            else next.setMonth(next.getMonth() + 1);
+            if (form.recurrenceFrequency === 'weekly') {
+                next.setUTCDate(next.getUTCDate() + 7);
+            } else if (form.recurrenceFrequency === 'biweekly') {
+                next.setUTCDate(next.getUTCDate() + 14);
+            } else {
+                // Monthly: advance by one calendar month with day clamping
+                next.setUTCMonth(next.getUTCMonth() + 1);
+
+                // Clamp: if the day overflowed (e.g. 31 -> Mar 3), roll back to
+                // the last day of the intended month.
+                const intendedMonth = (current.getUTCMonth() + 1) % 12;
+                if (next.getUTCMonth() !== intendedMonth) {
+                    next.setUTCDate(0);
+                }
+
+                // Restore the original day if the target month can hold it,
+                // to prevent drift from clamped months (e.g. Jan 31 -> Feb 28 -> Mar 31).
+                if (next.getUTCDate() !== originalDay) {
+                    const testDate = new Date(next);
+                    testDate.setUTCDate(originalDay);
+                    if (testDate.getUTCMonth() === next.getUTCMonth()) {
+                        next.setUTCDate(originalDay);
+                    }
+                }
+            }
             if (next > until) break;
             count++;
             current = next;
