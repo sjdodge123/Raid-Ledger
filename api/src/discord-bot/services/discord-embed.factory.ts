@@ -373,14 +373,14 @@ export class DiscordEmbedFactory {
     dps: '⚔️',
   };
 
+  /** Max number of individual mentions to display before truncating with "+ N more" */
+  private static readonly MAX_MENTIONS = 25;
+
   /**
    * Format Discord mentions for a specific role (or all if role is null).
    * Players with multiple preferred roles get emoji indicators showing
    * their other available roles (flexibility visible to other signups).
    */
-  /** Max number of individual mentions to display before truncating with "+ N more" */
-  private static readonly MAX_MENTIONS = 25;
-
   private getMentionsForRole(
     mentions: Array<{
       discordId?: string | null;
