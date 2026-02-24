@@ -1,4 +1,37 @@
-type EventStatus = 'upcoming' | 'live' | 'ended';
+export type EventStatus = 'upcoming' | 'live' | 'ended';
+
+/** EventStatus extended with 'cancelled' for display purposes */
+export type EventDisplayStatus = EventStatus | 'cancelled';
+
+export const STATUS_STYLES: Record<EventDisplayStatus, string> = {
+    upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    ended: 'bg-dim/20 text-muted border-dim/30',
+    cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+export const STATUS_LABELS: Record<EventDisplayStatus, string> = {
+    upcoming: 'Upcoming',
+    live: 'Live',
+    ended: 'Ended',
+    cancelled: 'Cancelled',
+};
+
+/**
+ * Format date/time in user's preferred timezone
+ */
+export function formatEventTime(dateString: string, timeZone?: string): string {
+    const date = new Date(dateString);
+    return new Intl.DateTimeFormat('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        timeZoneName: 'short',
+        ...(timeZone ? { timeZone } : {}),
+    }).format(date);
+}
 
 /**
  * Determine event status based on current time vs start/end times
