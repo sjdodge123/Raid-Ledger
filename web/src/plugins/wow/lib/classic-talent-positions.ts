@@ -681,19 +681,6 @@ export const CLASSIC_TALENT_POSITIONS: Record<string, ClassPositionMap> = {
     },
 };
 
-/** Ordered list of all grid positions in a talent tree (left-to-right, top-to-bottom) */
-const GRID_POSITIONS = [
-    'a1', 'a2', 'a3', 'a4',
-    'b1', 'b2', 'b3', 'b4',
-    'c1', 'c2', 'c3', 'c4',
-    'd1', 'd2', 'd3', 'd4',
-    'e1', 'e2', 'e3', 'e4',
-    'f1', 'f2', 'f3', 'f4',
-    'g1', 'g2', 'g3', 'g4',
-    'h1', 'h2', 'h3', 'h4',
-    'i1', 'i2', 'i3', 'i4',
-] as const;
-
 /**
  * Normalize a Blizzard API talent name to a URL slug for matching.
  * "Nature's Grasp" → "natures-grasp"
@@ -712,28 +699,22 @@ function nameToSlug(name: string): string {
 
 /**
  * Build a Wowhead talent string for a single tree from a map of talent slugs → ranks.
- * Returns a string like "005323105" where each digit is the rank at that grid position.
+ *
+ * Wowhead talent strings encode one digit per ACTUAL talent (not per grid cell).
+ * Talents are sorted by grid position (row letter, then column number) and empty
+ * grid cells are skipped. E.g. if a tree has talents at a2, a3, b1, b3, the string
+ * has 4 digits — one per talent in that order.
  */
 function buildTreeString(
     treePositionMap: TreePositionMap,
     talentRanks: Record<string, number>,
 ): string {
-    // Invert position map: grid position → talent slug
-    const posToSlug: Record<string, string> = {};
-    for (const [slug, pos] of Object.entries(treePositionMap)) {
-        posToSlug[pos] = slug;
-    }
+    // Sort talents by grid position (row then column)
+    const sortedTalents = Object.entries(treePositionMap)
+        .sort(([, posA], [, posB]) => posA.localeCompare(posB));
 
-    // Build the string by iterating all grid positions
-    const digits: number[] = [];
-    for (const pos of GRID_POSITIONS) {
-        const talentSlug = posToSlug[pos];
-        if (talentSlug && talentRanks[talentSlug]) {
-            digits.push(talentRanks[talentSlug]);
-        } else {
-            digits.push(0);
-        }
-    }
+    // One digit per talent in sorted order
+    const digits = sortedTalents.map(([slug]) => talentRanks[slug] ?? 0);
 
     // Trim trailing zeros
     let str = digits.join('');
@@ -757,22 +738,25 @@ interface ClassicTalentTree {
 
 /**
  * Build a tree string directly from API tier/column positions.
- * Converts tierIndex (0-8) + columnIndex (0-3) to grid positions (a1-i4).
+ * Uses the static position map to determine talent ordering, then fills in
+ * ranks from API-provided tier/column data.
  */
 function buildTreeStringFromApi(
     talents: ClassicTalentTree['talents'],
+    treePositionMap: TreePositionMap,
 ): string {
-    const digits: number[] = new Array(GRID_POSITIONS.length).fill(0);
-
+    // Build a lookup: grid position → rank from API data
+    const posRanks: Record<string, number> = {};
     for (const talent of talents) {
         if (talent.rank && talent.rank > 0 && talent.tierIndex != null && talent.columnIndex != null) {
             const pos = String.fromCharCode(97 + talent.tierIndex) + (talent.columnIndex + 1);
-            const idx = GRID_POSITIONS.indexOf(pos as typeof GRID_POSITIONS[number]);
-            if (idx >= 0) {
-                digits[idx] = talent.rank;
-            }
+            posRanks[pos] = talent.rank;
         }
     }
+
+    // Sort talent positions and output one digit per talent
+    const sortedPositions = Object.values(treePositionMap).sort();
+    const digits = sortedPositions.map((pos) => posRanks[pos] ?? 0);
 
     let str = digits.join('');
     str = str.replace(/0+$/, '');
@@ -825,7 +809,7 @@ export function buildWowheadTalentString(
 
         // Prefer API positions (tier_index/column_index) over static slug mapping
         if (hasApiPositions(treeData.talents)) {
-            treeStrings.push(buildTreeStringFromApi(treeData.talents));
+            treeStrings.push(buildTreeStringFromApi(treeData.talents, positionMap));
         } else {
             // Fallback to static slug-based mapping:
             // Convert API talent names to slugs and match against position map
