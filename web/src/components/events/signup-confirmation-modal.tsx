@@ -5,6 +5,7 @@ import { BottomSheet } from '../ui/bottom-sheet';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { InlineCharacterForm } from '../characters/inline-character-form';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { RoleIcon } from '../shared/RoleIcon';
 
 interface SignupConfirmationModalProps {
     isOpen: boolean;
@@ -33,7 +34,7 @@ const ROLE_COLORS: Record<CharacterRole, string> = {
     dps: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-/** Role emoji indicators */
+/** @deprecated - use <RoleIcon> component instead. Kept for non-MMO fallback */
 const ROLE_ICONS: Record<CharacterRole, string> = {
     tank: '🛡️',
     healer: '💚',
@@ -292,7 +293,7 @@ export function SignupConfirmationModal({
                                             : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
                                     }`}
                                 >
-                                    <span>{ROLE_ICONS[role]}</span>
+                                    <RoleIcon role={role} size="w-5 h-5" />
                                     <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
                                 </button>
                             );
@@ -427,7 +428,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                 <span
                     className={`px-2 py-1 text-xs font-medium rounded border ${ROLE_COLORS[role]}`}
                 >
-                    {ROLE_ICONS[role]} {role.charAt(0).toUpperCase() + role.slice(1)}
+                    <RoleIcon role={role} size="w-3.5 h-3.5" /> {role.charAt(0).toUpperCase() + role.slice(1)}
                 </span>
             )}
 

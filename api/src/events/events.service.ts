@@ -1392,12 +1392,17 @@ export class EventsService {
         role: schema.rosterAssignments.role,
         status: schema.eventSignups.status,
         preferredRoles: schema.eventSignups.preferredRoles,
+        className: schema.characters.class,
       })
       .from(schema.eventSignups)
       .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
       .leftJoin(
         schema.rosterAssignments,
         eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
+      )
+      .leftJoin(
+        schema.characters,
+        eq(schema.eventSignups.characterId, schema.characters.id),
       )
       .where(eq(schema.eventSignups.eventId, eventId));
 
@@ -1411,6 +1416,7 @@ export class EventsService {
         role: r.role ?? null,
         preferredRoles: r.preferredRoles,
         status: r.status ?? null,
+        className: r.className ?? null,
       }));
 
     return {

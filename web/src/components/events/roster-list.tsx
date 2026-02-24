@@ -1,6 +1,7 @@
 import type { SignupUserDto, SignupCharacterDto, ConfirmationStatus } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
-import { ROLE_BORDER_CLASSES, ROLE_EMOJI } from '../../lib/role-colors';
+import { ROLE_BORDER_CLASSES } from '../../lib/role-colors';
+import { RoleIcon } from '../shared/RoleIcon';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 
 interface RosterListProps {
@@ -148,7 +149,7 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
                             </p>
                             {character.role && (
                                 <span className="text-xs" title={character.role}>
-                                    {ROLE_EMOJI[character.role]}
+                                    <RoleIcon role={character.role} size="w-3.5 h-3.5" />
                                 </span>
                             )}
                             {/* Desktop: inline main badge + details */}

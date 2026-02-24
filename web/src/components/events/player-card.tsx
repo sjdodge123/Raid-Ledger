@@ -12,8 +12,9 @@ import { Link } from 'react-router-dom';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
 import type { AvatarUser } from '../../lib/avatar';
-import { ROLE_BADGE_CLASSES, ROLE_EMOJI, formatRole } from '../../lib/role-colors';
+import { ROLE_BADGE_CLASSES, formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
+import { RoleIcon } from '../shared/RoleIcon';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments */
@@ -68,13 +69,10 @@ export function PlayerCard({
     const isCompact = size === 'compact';
     const avatarSize = isCompact ? 'h-8 w-8' : 'h-10 w-10';
 
-    const roleBadge = showRole && player.character?.role ? (
-        <span
-            className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[player.character.role] ?? ROLE_BADGE_CLASSES.player}`}
-        >
-            {ROLE_EMOJI[player.character.role] ?? ''} {formatRole(player.character.role)}
-        </span>
-    ) : null;
+    // ROK-465: Role badge hidden — the character's spec-derived role is misleading
+    // when the player is assigned to a different slot (e.g. Feral→Dps in a Healer slot).
+    // The slot itself already communicates the assigned role.
+    const roleBadge = null;
 
     // ROK-459: Tentative badge
     const isTentative = player.signupStatus === 'tentative';
@@ -145,9 +143,9 @@ export function PlayerCard({
                             {preferredRoleBadges.map((r) => (
                                 <span
                                     key={r}
-                                    className={`inline-flex items-center rounded px-1.5 py-1 text-sm leading-none font-medium ${ROLE_BADGE_CLASSES[r] ?? ROLE_BADGE_CLASSES.player}`}
+                                    className="inline-flex items-center"
                                 >
-                                    {ROLE_EMOJI[r] ?? ''}
+                                    <RoleIcon role={r} size="w-5 h-5" />
                                 </span>
                             ))}
                         </span>

@@ -8,6 +8,7 @@ import { PugCard } from '../pugs/pug-card';
 import type { AvailableSlot } from './AssignmentPopup';
 import { Modal } from '../ui/modal';
 import { computeAutoFill } from './roster-auto-fill';
+import { RoleIcon } from '../shared/RoleIcon';
 import type { AutoFillResult } from './roster-auto-fill';
 import { useAriaLive } from '../../hooks/use-aria-live';
 
@@ -550,7 +551,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                     return (
                         <div key={role} className="rounded-lg border border-edge bg-surface/50 p-2 sm:p-4">
                             <h4 className="mb-2 sm:mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
-                                <span className={`inline-block h-3 w-3 rounded ${color}`} />
+                                <RoleIcon role={role} size="w-4 h-4" />
                                 {/* ROK-183: For generic games show "Players" instead of just "Player" */}
                                 {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})
                             </h4>

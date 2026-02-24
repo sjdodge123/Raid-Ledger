@@ -2,7 +2,9 @@ import { useState, useMemo } from 'react';
 import type { RosterAssignmentResponse, RosterRole, CharacterDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { PlayerCard } from '../events/player-card';
-import { ROLE_EMOJI, ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
+import { ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
+import { RoleIcon } from '../shared/RoleIcon';
+import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { useUserCharacters } from '../../hooks/use-characters';
 import './AssignmentPopup.css';
 
@@ -20,12 +22,7 @@ const ROLE_COLORS: Record<CombatRole, string> = {
     dps: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-/** Role emoji indicators */
-const ROLE_ICONS: Record<CombatRole, string> = {
-    tank: '\u{1F6E1}\u{FE0F}',
-    healer: '\u{1F49A}',
-    dps: '\u{2694}\u{FE0F}',
-};
+// Role icons now rendered via <RoleIcon> component (ROK-465)
 
 /** A single slot for the slot picker (may be empty or occupied) */
 export interface AvailableSlot {
@@ -320,7 +317,6 @@ export function AssignmentPopup({
                     <PlayerCard
                         player={selectionTarget}
                         size="default"
-                        showRole
                     />
 
                     {/* Loading state */}
@@ -397,8 +393,8 @@ export function AssignmentPopup({
                                 </div>
                             )}
 
-                            {/* Role picker (MMO events only) */}
-                            {isMMO && (
+                            {/* ROK-465: Role picker removed — the slot determines the role at assignment time */}
+                            {false && isMMO && !slotRole && (
                                 <div className="assignment-popup__section">
                                     <h4 className="assignment-popup__section-title">
                                         Role
@@ -416,7 +412,7 @@ export function AssignmentPopup({
                                                             : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
                                                     }`}
                                                 >
-                                                    <span>{ROLE_ICONS[role]}</span>
+                                                    <RoleIcon role={role} size="w-5 h-5" />
                                                     <span>{formatRole(role)}</span>
                                                 </button>
                                             );
@@ -469,7 +465,7 @@ export function AssignmentPopup({
                     {slotsByRole.map(({ role, label, slots }) => (
                         <div key={role} className="assignment-popup__section">
                             <h4 className="assignment-popup__section-title">
-                                {ROLE_EMOJI[role] ?? '🎯'} {label}
+                                <RoleIcon role={role} size="w-4 h-4" /> {label}
                             </h4>
                             <div className="assignment-popup__slot-grid">
                                 {slots.map(slot => {
@@ -556,7 +552,7 @@ export function AssignmentPopup({
                     {slotsByRole.map(({ role, label, slots }) => (
                         <div key={role} className="assignment-popup__section">
                             <h4 className="assignment-popup__section-title">
-                                {ROLE_EMOJI[role] ?? '🎯'} {label}
+                                <RoleIcon role={role} size="w-4 h-4" /> {label}
                             </h4>
                             <div className="assignment-popup__slot-grid">
                                 {slots.map(slot => {
@@ -679,7 +675,7 @@ export function AssignmentPopup({
                 {slotRole && matching.length > 0 && (
                     <div className="assignment-popup__section">
                         <h4 className="assignment-popup__section-title">
-                            {ROLE_EMOJI[slotRole] ?? '🎯'} Matching Role — {formatRole(slotRole)}
+                            <RoleIcon role={slotRole} size="w-4 h-4" /> Matching Role — {formatRole(slotRole)}
                         </h4>
                         {matching.map(player => (
                             <ModalPlayerRow
@@ -851,7 +847,14 @@ function SelectableCharacterCard({
                 <div className="flex items-center gap-2 text-sm text-muted">
                     {character.level && <span>Lv.{character.level}</span>}
                     {character.level && character.class && <span>·</span>}
-                    {character.class && <span>{character.class}</span>}
+                    {character.class && (
+                        <span className="inline-flex items-center gap-1">
+                            {getClassIconUrl(character.class) && (
+                                <img src={getClassIconUrl(character.class)!} alt="" className="w-4 h-4 rounded-sm" />
+                            )}
+                            {character.class}
+                        </span>
+                    )}
                     {character.spec && (
                         <>
                             <span>·</span>
@@ -866,14 +869,6 @@ function SelectableCharacterCard({
                     )}
                 </div>
             </div>
-
-            {role && (
-                <span
-                    className={`px-2 py-1 text-xs font-medium rounded border ${ROLE_COLORS[role]}`}
-                >
-                    {ROLE_ICONS[role]} {formatRole(role)}
-                </span>
-            )}
 
             {isSelected && (
                 <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">

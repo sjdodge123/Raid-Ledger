@@ -6,7 +6,8 @@
 import { useState } from 'react';
 import type { PugSlotResponseDto } from '@raid-ledger/contract';
 import { PugAvatar } from './pug-avatar';
-import { ROLE_BADGE_CLASSES, ROLE_EMOJI, formatRole } from '../../lib/role-colors';
+import { ROLE_BADGE_CLASSES, formatRole } from '../../lib/role-colors';
+import { RoleIcon } from '../shared/RoleIcon';
 import { toast } from '../../lib/toast';
 
 /** Status indicator colors */
@@ -90,7 +91,7 @@ export function PugCard({ pug, canManage = false, onEdit, onRemove, onRegenerate
                         <span
                             className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${ROLE_BADGE_CLASSES[pug.role] ?? ''}`}
                         >
-                            {ROLE_EMOJI[pug.role] ?? ''} {formatRole(pug.role)}
+                            <RoleIcon role={pug.role} size="w-3.5 h-3.5" /> {formatRole(pug.role)}
                         </span>
                     )}
                 </div>
