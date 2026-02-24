@@ -351,35 +351,35 @@ body {
 [data-scheme="light"] .badge-overlay.bg-emerald-500\/20 {
     background-color: rgba(209, 250, 229, 0.92);  /* emerald-100 near-opaque */
     border-color: rgba(16, 185, 129, 0.5);
-    color: #047857;  /* emerald-700: 6.0:1 on emerald-100 */
+    color: #047857 !important;  /* emerald-700: 6.0:1 on emerald-100 */
 }
 
 /* Yellow status badges (Live) on cover images */
 [data-scheme="light"] .badge-overlay.bg-yellow-500\/20 {
     background-color: rgba(254, 249, 195, 0.92);  /* yellow-100 near-opaque */
     border-color: rgba(202, 138, 4, 0.5);
-    color: #a16207;  /* yellow-700: 5.2:1 on yellow-100 */
+    color: #a16207 !important;  /* yellow-700: 5.2:1 on yellow-100 */
 }
 
 /* Neutral status badges (Ended) on cover images */
 [data-scheme="light"] .badge-overlay.bg-dim\/20 {
     background-color: rgba(241, 245, 249, 0.92);  /* slate-100 near-opaque */
     border-color: rgba(100, 116, 139, 0.5);
-    color: #475569;  /* slate-600: 4.6:1 on slate-100 */
+    color: #475569 !important;  /* slate-600: 4.6:1 on slate-100 */
 }
 
 /* Red status badges (Cancelled) on cover images */
 [data-scheme="light"] .badge-overlay.bg-red-500\/20 {
     background-color: rgba(254, 226, 226, 0.92);  /* red-100 near-opaque */
     border-color: rgba(220, 38, 38, 0.5);
-    color: #b91c1c;  /* red-700: 5.8:1 on red-100 */
+    color: #b91c1c !important;  /* red-700: 5.8:1 on red-100 */
 }
 
 /* Cyan badges (Inside Game Time) on cover images */
 [data-scheme="light"] .badge-overlay.bg-cyan-500\/20 {
     background-color: rgba(207, 250, 254, 0.92);  /* cyan-100 near-opaque */
     border-color: rgba(8, 145, 178, 0.5);
-    color: #0e7490;  /* cyan-700: 4.6:1 on cyan-100 */
+    color: #0e7490 !important;  /* cyan-700: 4.6:1 on cyan-100 */
 }
 
 /* ============================================
