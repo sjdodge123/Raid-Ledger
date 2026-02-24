@@ -8,6 +8,7 @@ import {
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
 import { and, isNotNull, gte, sql, ilike, eq } from 'drizzle-orm';
+import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -147,7 +148,7 @@ export class UnbindCommand
             gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
             sql`${schema.events.cancelledAt} IS NULL`,
             searchValue
-              ? ilike(schema.events.title, `%${searchValue}%`)
+              ? ilike(schema.events.title, `%${escapeLikePattern(searchValue)}%`)
               : undefined,
           ),
         )

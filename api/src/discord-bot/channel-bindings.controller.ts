@@ -168,6 +168,7 @@ export class ChannelBindingsController {
     await this.channelBindingsService.unbind(
       binding.guildId,
       binding.channelId,
+      binding.recurrenceGroupId,
     );
   }
 }
