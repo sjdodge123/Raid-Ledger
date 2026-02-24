@@ -2,7 +2,7 @@ import { useState, useCallback, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
-import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
+import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { FAB } from '../components/ui/fab';
@@ -12,6 +12,7 @@ import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
 import { useFilterCap } from '../hooks/use-filter-cap';
+import { useGameFilterStore } from '../stores/game-filter-store';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -28,18 +29,20 @@ export function CalendarPage() {
         }
         return new Date();
     });
-    const [allKnownGames, setAllKnownGames] = useState<GameInfo[]>([]);
-    const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
         () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
     );
     const [gameFilterOpen, setGameFilterOpen] = useState(false);
     const [filterModalOpen, setFilterModalOpen] = useState(false);
 
-    // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
-    const hasInitialized = useRef(false);
-    // Track all slugs ever seen so we only auto-select truly new games
-    const seenSlugs = useRef(new Set<string>());
+    // Game filter state lives in a Zustand store so it survives component remounts
+    // (React StrictMode, HMR, Suspense boundaries, etc.)
+    const allKnownGames = useGameFilterStore((s) => s.allKnownGames);
+    const selectedGames = useGameFilterStore((s) => s.selectedGames);
+    const reportGames = useGameFilterStore((s) => s.reportGames);
+    const toggleGame = useGameFilterStore((s) => s.toggleGame);
+    const selectAllGames = useGameFilterStore((s) => s.selectAll);
+    const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
 
     // Sidebar ref for dynamic filter cap calculation
     const sidebarRef = useRef<HTMLElement>(null);
@@ -62,60 +65,6 @@ export function CalendarPage() {
     // Handler for mini-calendar date selection
     const handleDateSelect = (date: Date) => {
         setCurrentDate(date);
-    };
-
-    // Handler for when calendar reports available games
-    // Merges into allKnownGames (accumulator that only grows) so filters persist across views
-    const handleGamesAvailable = useCallback((games: GameInfo[]) => {
-        setAllKnownGames(prev => {
-            const map = new Map(prev.map(g => [g.slug, g]));
-            for (const g of games) map.set(g.slug, g);
-            return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-        });
-
-        // Determine which slugs are truly new (never seen before)
-        const newSlugs: string[] = [];
-        for (const g of games) {
-            if (!seenSlugs.current.has(g.slug)) {
-                newSlugs.push(g.slug);
-                seenSlugs.current.add(g.slug);
-            }
-        }
-
-        if (!hasInitialized.current && games.length > 0) {
-            hasInitialized.current = true;
-            setSelectedGames(new Set(games.map(g => g.slug)));
-        } else if (newSlugs.length > 0) {
-            // Only auto-select games we've never seen before
-            setSelectedGames(prev => {
-                const next = new Set(prev);
-                for (const slug of newSlugs) next.add(slug);
-                return next;
-            });
-        }
-    }, []);
-
-    // Toggle a single game filter
-    const toggleGame = (slug: string) => {
-        setSelectedGames(prev => {
-            const next = new Set(prev);
-            if (next.has(slug)) {
-                next.delete(slug);
-            } else {
-                next.add(slug);
-            }
-            return next;
-        });
-    };
-
-    // Select all games
-    const selectAllGames = () => {
-        setSelectedGames(new Set(allKnownGames.map(g => g.slug)));
-    };
-
-    // Deselect all games
-    const deselectAllGames = () => {
-        setSelectedGames(new Set());
     };
 
     // Games to show inline in sidebar (capped)
@@ -264,7 +213,7 @@ export function CalendarPage() {
                             currentDate={currentDate}
                             onDateChange={setCurrentDate}
                             selectedGames={selectedGames}
-                            onGamesAvailable={handleGamesAvailable}
+                            onGamesAvailable={reportGames}
                             gameTimeSlots={gameTimeSlots}
                             calendarView={calendarView}
                             onCalendarViewChange={setCalendarView}
@@ -423,4 +372,3 @@ export function CalendarPage() {
         </div>
     );
 }
-

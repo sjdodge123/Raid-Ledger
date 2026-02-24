@@ -70,6 +70,7 @@ vi.mock('../components/calendar/calendar-styles.css', () => ({}));
 // Component under test (imported after mocks are in place)
 // ---------------------------------------------------------------------------
 import { CalendarPage } from './calendar-page';
+import { useGameFilterStore } from '../stores/game-filter-store';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -103,6 +104,7 @@ function deliverGames(games: ReturnType<typeof makeGame>[]) {
 describe('CalendarPage — allKnownGames accumulator', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('renders the calendar view', () => {
@@ -172,6 +174,7 @@ describe('CalendarPage — allKnownGames accumulator', () => {
 describe('CalendarPage — auto-select behaviour', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('auto-selects all games on first delivery', () => {
@@ -207,6 +210,7 @@ describe('CalendarPage — auto-select behaviour', () => {
 describe('CalendarPage — inline list capping (maxVisible=3)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('shows all games inline when count <= maxVisible (3)', () => {
@@ -264,6 +268,7 @@ describe('CalendarPage — inline list capping (maxVisible=3)', () => {
 describe('CalendarPage — filter modal (overflow)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     function setupWithOverflow() {
@@ -357,6 +362,7 @@ describe('CalendarPage — filter modal (overflow)', () => {
 describe('CalendarPage — game toggle', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('unchecking a game deselects it (checkbox becomes unchecked)', () => {
@@ -430,6 +436,7 @@ describe('CalendarPage — game toggle', () => {
 describe('CalendarPage — All / None buttons', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('"All" button selects all known games (inline area)', () => {
@@ -504,6 +511,7 @@ describe('CalendarPage — All / None buttons', () => {
 describe('CalendarPage — filter persistence when view changes', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('filter selections persist across re-renders with same games (no new games delivered)', () => {
@@ -546,6 +554,71 @@ describe('CalendarPage — filter persistence when view changes', () => {
         }
     });
 
+    it('filter selections survive component unmount/remount (ROK-372 regression)', () => {
+        // This is the core bug: when CalendarPage remounts (StrictMode, HMR, Suspense),
+        // the old approach using useRef lost hasInitialized and seenSlugs, causing
+        // all games to be re-selected. With the Zustand store, state persists.
+        const { unmount } = renderPage();
+        deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
+
+        // Deselect wow
+        const wowLabel = screen.getAllByRole('checkbox')
+            .map((cb) => cb.closest('label') as HTMLElement | null)
+            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        expect(wowLabel).toBeTruthy();
+        fireEvent.click(wowLabel!);
+
+        const wowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(wowCb).not.toBeChecked();
+
+        // Unmount the component (simulates what happens on remount)
+        unmount();
+
+        // Re-render a fresh CalendarPage — old ref-based state would be gone,
+        // but Zustand store retains hasInitialized, seenSlugs, and selectedGames
+        renderPage();
+
+        // Re-deliver the same games (as CalendarView would on mount)
+        deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
+
+        // wow must STILL be deselected (store remembers the user's toggle)
+        const updatedCheckboxes = screen.getAllByRole('checkbox');
+        const updatedWowLabel = updatedCheckboxes
+            .map((cb) => cb.closest('label') as HTMLElement | null)
+            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        expect(updatedWowLabel).toBeTruthy();
+        const updatedWowCb = updatedWowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(updatedWowCb).not.toBeChecked();
+
+        // apex must still be selected
+        const updatedApexLabel = updatedCheckboxes
+            .map((cb) => cb.closest('label') as HTMLElement | null)
+            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('Apex'));
+        expect(updatedApexLabel).toBeTruthy();
+        const updatedApexCb = updatedApexLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(updatedApexCb).toBeChecked();
+    });
+
+    it('filter selections persist when same games are re-reported (month change scenario)', () => {
+        renderPage();
+        // Initial delivery
+        deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
+
+        // Deselect wow
+        const wowLabel = screen.getAllByRole('checkbox')
+            .map((cb) => cb.closest('label') as HTMLElement | null)
+            .find((lbl) => lbl?.querySelector('.game-filter-name')?.textContent?.includes('World'));
+        fireEvent.click(wowLabel!);
+
+        // Simulate month change: empty delivery (loading), then same games
+        deliverGames([]);
+        deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
+
+        // wow must still be deselected
+        const updatedWowCb = wowLabel!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+        expect(updatedWowCb).not.toBeChecked();
+    });
+
     it('games do not get removed from allKnownGames when a different date range is loaded', () => {
         renderPage();
         // Month A games
@@ -565,6 +638,7 @@ describe('CalendarPage — filter persistence when view changes', () => {
 describe('CalendarPage — FAB and BottomSheet', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
     });
 
     it('FAB is not visible before any games arrive', () => {
