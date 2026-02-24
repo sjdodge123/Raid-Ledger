@@ -13,6 +13,7 @@ import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
 import type { AvatarUser } from '../../lib/avatar';
 import { ROLE_BADGE_CLASSES, ROLE_EMOJI, formatRole } from '../../lib/role-colors';
+import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments */
@@ -154,14 +155,23 @@ export function PlayerCard({
                 </div>
                 {player.character && (
                     <p
-                        className="truncate text-xs text-muted"
+                        className="flex items-center gap-1 truncate text-xs text-muted"
                         title={[
                             player.character.name,
                             player.character.className,
                         ].filter(Boolean).join(' \u2022 ')}
                     >
-                        {player.character.name}
-                        {player.character.className && ` \u2022 ${player.character.className}`}
+                        {getClassIconUrl(player.character.className) && (
+                            <img
+                                src={getClassIconUrl(player.character.className)!}
+                                alt=""
+                                className="w-3.5 h-3.5 rounded-sm flex-shrink-0"
+                            />
+                        )}
+                        <span className="truncate">
+                            {player.character.name}
+                            {player.character.className && ` \u2022 ${player.character.className}`}
+                        </span>
                     </p>
                 )}
             </div>

@@ -44,6 +44,8 @@ export interface EmbedEventData {
     preferredRoles: string[] | null;
     /** ROK-459: Signup attendance status */
     status?: string | null;
+    /** ROK-465: WoW class name for class emoji in roster */
+    className?: string | null;
   }> | null;
   game?: {
     name: string;
@@ -385,6 +387,7 @@ export class DiscordEmbedFactory {
       role: string | null;
       preferredRoles: string[] | null;
       status?: string | null;
+      className?: string | null;
     }>,
     role: string | null,
   ): string {
@@ -397,6 +400,10 @@ export class DiscordEmbedFactory {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         // ROK-459: ⏳ prefix for tentative players
         const tentativePrefix = m.status === 'tentative' ? '⏳ ' : '';
+        // ROK-465: Class emoji before the name (e.g. <:rl_class_warrior:id>)
+        const classEmoji = m.className
+          ? this.emojiService.getClassEmoji(m.className)
+          : '';
         // Fall back to assigned role if no explicit preferences stored
         const prefs =
           m.preferredRoles && m.preferredRoles.length > 0
@@ -405,10 +412,11 @@ export class DiscordEmbedFactory {
               ? [m.role]
               : [];
         // Role emoji before the name for at-a-glance scanning
-        const allEmojis = prefs
+        const roleEmojis = prefs
           .map((r) => this.emojiService.getRoleEmoji(r))
           .filter(Boolean)
           .join('');
+        const allEmojis = [classEmoji, roleEmojis].filter(Boolean).join(' ');
         return allEmojis
           ? `  ${tentativePrefix}${allEmojis} ${label}`
           : `  ${tentativePrefix}${label}`;

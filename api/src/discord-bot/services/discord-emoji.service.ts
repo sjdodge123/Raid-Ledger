@@ -11,27 +11,136 @@ import { SETTING_KEYS, type SettingKey } from '../../drizzle/schema';
 /** Prefix for all Raid Ledger custom emojis to avoid collisions. */
 const EMOJI_PREFIX = 'rl_';
 
+interface EmojiDef {
+  key: string;
+  name: string;
+  file: string;
+  assetsSubdir: string;
+  settingKey: SettingKey;
+}
+
 /** Role definitions with their emoji name, asset file, and setting key. */
-const ROLE_EMOJI_DEFS = [
+const ROLE_EMOJI_DEFS: EmojiDef[] = [
   {
-    role: 'tank',
+    key: 'tank',
     name: `${EMOJI_PREFIX}tank`,
     file: 'tank.png',
+    assetsSubdir: 'role-icons',
     settingKey: SETTING_KEYS.DISCORD_EMOJI_TANK,
   },
   {
-    role: 'healer',
+    key: 'healer',
     name: `${EMOJI_PREFIX}healer`,
     file: 'healer.png',
+    assetsSubdir: 'role-icons',
     settingKey: SETTING_KEYS.DISCORD_EMOJI_HEALER,
   },
   {
-    role: 'dps',
+    key: 'dps',
     name: `${EMOJI_PREFIX}dps`,
     file: 'dps.png',
+    assetsSubdir: 'role-icons',
     settingKey: SETTING_KEYS.DISCORD_EMOJI_DPS,
   },
-] as const;
+];
+
+/** Class definitions: maps WoW class name → emoji def */
+const CLASS_EMOJI_DEFS: EmojiDef[] = [
+  {
+    key: 'Warrior',
+    name: `${EMOJI_PREFIX}class_warrior`,
+    file: 'warrior.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_WARRIOR,
+  },
+  {
+    key: 'Paladin',
+    name: `${EMOJI_PREFIX}class_paladin`,
+    file: 'paladin.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_PALADIN,
+  },
+  {
+    key: 'Hunter',
+    name: `${EMOJI_PREFIX}class_hunter`,
+    file: 'hunter.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_HUNTER,
+  },
+  {
+    key: 'Rogue',
+    name: `${EMOJI_PREFIX}class_rogue`,
+    file: 'rogue.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_ROGUE,
+  },
+  {
+    key: 'Priest',
+    name: `${EMOJI_PREFIX}class_priest`,
+    file: 'priest.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_PRIEST,
+  },
+  {
+    key: 'Death Knight',
+    name: `${EMOJI_PREFIX}class_deathknight`,
+    file: 'deathknight.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_DEATHKNIGHT,
+  },
+  {
+    key: 'Shaman',
+    name: `${EMOJI_PREFIX}class_shaman`,
+    file: 'shaman.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_SHAMAN,
+  },
+  {
+    key: 'Mage',
+    name: `${EMOJI_PREFIX}class_mage`,
+    file: 'mage.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_MAGE,
+  },
+  {
+    key: 'Warlock',
+    name: `${EMOJI_PREFIX}class_warlock`,
+    file: 'warlock.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_WARLOCK,
+  },
+  {
+    key: 'Monk',
+    name: `${EMOJI_PREFIX}class_monk`,
+    file: 'monk.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_MONK,
+  },
+  {
+    key: 'Druid',
+    name: `${EMOJI_PREFIX}class_druid`,
+    file: 'druid.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_DRUID,
+  },
+  {
+    key: 'Demon Hunter',
+    name: `${EMOJI_PREFIX}class_demonhunter`,
+    file: 'demonhunter.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_DEMONHUNTER,
+  },
+  {
+    key: 'Evoker',
+    name: `${EMOJI_PREFIX}class_evoker`,
+    file: 'evoker.png',
+    assetsSubdir: 'class-icons',
+    settingKey: SETTING_KEYS.DISCORD_EMOJI_CLASS_EVOKER,
+  },
+];
+
+/** All emoji definitions combined */
+const ALL_EMOJI_DEFS: EmojiDef[] = [...ROLE_EMOJI_DEFS, ...CLASS_EMOJI_DEFS];
 
 /** Unicode fallbacks when custom emojis are unavailable. */
 const UNICODE_FALLBACK: Record<string, string> = {
@@ -44,11 +153,14 @@ const UNICODE_FALLBACK: Record<string, string> = {
 export class DiscordEmojiService {
   private readonly logger = new Logger(DiscordEmojiService.name);
 
-  /** In-memory cache: role -> formatted emoji string (e.g. <:rl_tank:123456>) */
+  /** In-memory cache: key -> formatted emoji string (e.g. <:rl_tank:123456>) */
   private emojiCache = new Map<string, string>();
 
-  /** Whether custom emojis are available (false = fallback to Unicode). */
-  private customEmojisAvailable = false;
+  /** Whether role custom emojis are available (false = fallback to Unicode). */
+  private roleEmojisAvailable = false;
+
+  /** Whether class custom emojis are available. */
+  private classEmojisAvailable = false;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -56,18 +168,19 @@ export class DiscordEmojiService {
   ) {}
 
   /**
-   * On bot connect, ensure role emojis are uploaded and cached.
+   * On bot connect, ensure role and class emojis are uploaded and cached.
    */
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async onBotConnected(): Promise<void> {
     try {
-      await this.syncRoleEmojis();
+      await this.syncAllEmojis();
     } catch (error) {
       this.logger.warn(
-        'Failed to sync role emojis, falling back to Unicode: %s',
+        'Failed to sync emojis, falling back to Unicode: %s',
         error instanceof Error ? error.message : 'Unknown error',
       );
-      this.customEmojisAvailable = false;
+      this.roleEmojisAvailable = false;
+      this.classEmojisAvailable = false;
     }
   }
 
@@ -77,7 +190,8 @@ export class DiscordEmojiService {
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   onBotDisconnected(): void {
     this.emojiCache.clear();
-    this.customEmojisAvailable = false;
+    this.roleEmojisAvailable = false;
+    this.classEmojisAvailable = false;
   }
 
   /**
@@ -85,7 +199,7 @@ export class DiscordEmojiService {
    * if available, otherwise falls back to Unicode.
    */
   getRoleEmoji(role: string): string {
-    if (this.customEmojisAvailable) {
+    if (this.roleEmojisAvailable) {
       const cached = this.emojiCache.get(role);
       if (cached) return cached;
     }
@@ -93,17 +207,30 @@ export class DiscordEmojiService {
   }
 
   /**
-   * Check if custom emojis are being used (vs Unicode fallback).
+   * Get the emoji string for a WoW class name (e.g. "Warrior", "Death Knight").
+   * Returns custom Discord emoji format if available, otherwise empty string.
    */
-  isUsingCustomEmojis(): boolean {
-    return this.customEmojisAvailable;
+  getClassEmoji(className: string): string {
+    if (this.classEmojisAvailable) {
+      const cached = this.emojiCache.get(className);
+      if (cached) return cached;
+    }
+    return '';
   }
 
   /**
-   * Sync role emojis: check existing guild emojis, upload missing ones,
-   * cache the emoji IDs in app_settings.
+   * Check if custom role emojis are being used (vs Unicode fallback).
    */
-  private async syncRoleEmojis(): Promise<void> {
+  isUsingCustomEmojis(): boolean {
+    return this.roleEmojisAvailable;
+  }
+
+  /**
+   * Sync all emojis: role icons + class icons.
+   * Checks guild capacity before uploading. Role icons are prioritized;
+   * class icons are best-effort (won't prevent role emojis on failure).
+   */
+  private async syncAllEmojis(): Promise<void> {
     const client = this.clientService.getClient();
     if (!client?.isReady()) return;
 
@@ -123,12 +250,13 @@ export class DiscordEmojiService {
             ? 150
             : 250;
     const currentCount = guild.emojis.cache.filter((e) => !e.animated).size;
-    const needed = ROLE_EMOJI_DEFS.length;
+    const totalNeeded = ALL_EMOJI_DEFS.length;
+    const roleNeeded = ROLE_EMOJI_DEFS.length;
 
-    if (currentCount + needed > emojiLimit) {
+    if (currentCount + roleNeeded > emojiLimit) {
       this.logger.warn(
         `Guild has ${currentCount}/${emojiLimit} emoji slots. ` +
-          `Need ${needed} for role icons. Falling back to Unicode.`,
+          `Need ${roleNeeded} for role icons. Falling back to Unicode.`,
       );
       return;
     }
@@ -136,23 +264,23 @@ export class DiscordEmojiService {
     // Fetch fresh emoji list
     await guild.emojis.fetch();
 
-    const assetsDir = path.resolve(__dirname, '../../../../assets/role-icons');
+    const assetsBase = path.resolve(__dirname, '../../../../assets');
 
-    let allSynced = true;
-
+    // Sync role emojis first
+    let allRolesSynced = true;
     for (const def of ROLE_EMOJI_DEFS) {
       try {
         const emojiStr = await this.syncSingleEmoji(
           guild,
           def.name,
-          path.join(assetsDir, def.file),
+          path.join(assetsBase, def.assetsSubdir, def.file),
           def.settingKey,
         );
 
         if (emojiStr) {
-          this.emojiCache.set(def.role, emojiStr);
+          this.emojiCache.set(def.key, emojiStr);
         } else {
-          allSynced = false;
+          allRolesSynced = false;
         }
       } catch (error) {
         this.logger.warn(
@@ -160,18 +288,63 @@ export class DiscordEmojiService {
           def.name,
           error instanceof Error ? error.message : 'Unknown error',
         );
-        allSynced = false;
+        allRolesSynced = false;
       }
     }
 
-    this.customEmojisAvailable = allSynced;
+    this.roleEmojisAvailable = allRolesSynced;
 
-    if (allSynced) {
+    if (allRolesSynced) {
       this.logger.log('All role emojis synced successfully');
     } else {
       this.logger.warn(
         'Some role emojis failed to sync, using Unicode fallback for missing',
       );
+    }
+
+    // Sync class emojis (best-effort, won't affect role emoji status)
+    const currentCountAfterRoles = guild.emojis.cache.filter(
+      (e) => !e.animated,
+    ).size;
+    if (currentCountAfterRoles + CLASS_EMOJI_DEFS.length > emojiLimit) {
+      this.logger.warn(
+        `Guild has ${currentCountAfterRoles}/${emojiLimit} emoji slots after role sync. ` +
+          `Need ${CLASS_EMOJI_DEFS.length} more for class icons. Skipping class emojis.`,
+      );
+      return;
+    }
+
+    let allClassesSynced = true;
+    for (const def of CLASS_EMOJI_DEFS) {
+      try {
+        const emojiStr = await this.syncSingleEmoji(
+          guild,
+          def.name,
+          path.join(assetsBase, def.assetsSubdir, def.file),
+          def.settingKey,
+        );
+
+        if (emojiStr) {
+          this.emojiCache.set(def.key, emojiStr);
+        } else {
+          allClassesSynced = false;
+        }
+      } catch (error) {
+        this.logger.warn(
+          'Failed to sync class emoji %s: %s',
+          def.name,
+          error instanceof Error ? error.message : 'Unknown error',
+        );
+        allClassesSynced = false;
+      }
+    }
+
+    this.classEmojisAvailable = allClassesSynced;
+
+    if (allClassesSynced) {
+      this.logger.log('All class emojis synced successfully');
+    } else {
+      this.logger.warn('Some class emojis failed to sync');
     }
   }
 
@@ -207,7 +380,7 @@ export class DiscordEmojiService {
 
     // Upload new emoji
     if (!fs.existsSync(filePath)) {
-      this.logger.error('Role icon file not found: %s', filePath);
+      this.logger.error('Icon file not found: %s', filePath);
       return null;
     }
 
@@ -215,7 +388,7 @@ export class DiscordEmojiService {
     const emoji = await guild.emojis.create({
       attachment,
       name: emojiName,
-      reason: 'Raid Ledger role icon',
+      reason: 'Raid Ledger icon',
     });
 
     this.logger.log('Uploaded custom emoji: %s (ID: %s)', emoji.name, emoji.id);

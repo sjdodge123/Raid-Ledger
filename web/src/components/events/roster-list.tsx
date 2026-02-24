@@ -1,6 +1,7 @@
 import type { SignupUserDto, SignupCharacterDto, ConfirmationStatus } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import { ROLE_BORDER_CLASSES, ROLE_EMOJI } from '../../lib/role-colors';
+import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 
 interface RosterListProps {
     signups: Array<{
@@ -162,7 +163,16 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
                                 {character.class && (
                                     <>
                                         <span className="text-faint">&#183;</span>
-                                        <span className="text-muted">{character.class}</span>
+                                        <span className="inline-flex items-center gap-1 text-muted">
+                                            {getClassIconUrl(character.class) && (
+                                                <img
+                                                    src={getClassIconUrl(character.class)!}
+                                                    alt=""
+                                                    className="w-4 h-4 rounded-sm"
+                                                />
+                                            )}
+                                            {character.class}
+                                        </span>
                                     </>
                                 )}
                                 {character.spec && (
@@ -183,7 +193,16 @@ function RosterItem({ signup, gameId }: RosterItemProps) {
                         {(character.class || character.spec || character.itemLevel) && (
                             <div className="flex sm:hidden items-center gap-1.5 text-xs text-muted">
                                 {character.class && (
-                                    <span>{character.class}</span>
+                                    <span className="inline-flex items-center gap-1">
+                                        {getClassIconUrl(character.class) && (
+                                            <img
+                                                src={getClassIconUrl(character.class)!}
+                                                alt=""
+                                                className="w-3.5 h-3.5 rounded-sm"
+                                            />
+                                        )}
+                                        {character.class}
+                                    </span>
                                 )}
                                 {character.spec && (
                                     <>
