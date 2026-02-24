@@ -54,7 +54,6 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     CharactersModule,
     CronJobModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
-    CronJobModule,
   ],
   controllers: [
     DiscordBotSettingsController,

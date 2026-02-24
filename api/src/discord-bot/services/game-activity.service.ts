@@ -204,8 +204,11 @@ export class GameActivityService
           .limit(1);
 
         if (session) {
-          const durationSeconds = Math.floor(
-            (ev.endedAt.getTime() - session.startedAt.getTime()) / 1000,
+          const durationSeconds = Math.max(
+            0,
+            Math.floor(
+              (ev.endedAt.getTime() - session.startedAt.getTime()) / 1000,
+            ),
           );
           const cappedDuration = Math.min(
             durationSeconds,
@@ -426,7 +429,7 @@ export class GameActivityService
             schema.gameActivityRollups.periodStart,
           ],
           set: {
-            totalSeconds: sql`${schema.gameActivityRollups.totalSeconds} + ${rollup.totalSeconds}`,
+            totalSeconds: sql`EXCLUDED.total_seconds`,
           },
         });
       upsertCount++;
