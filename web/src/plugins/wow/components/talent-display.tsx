@@ -24,6 +24,8 @@ interface ClassicTalents {
             id?: number;
             spellId?: number;
             rank?: number;
+            tierIndex?: number;
+            columnIndex?: number;
         }>;
     }>;
     summary: string;
@@ -53,7 +55,7 @@ function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
     if (error) return null;
 
     return (
-        <div className="relative w-full rounded-lg overflow-hidden border border-edge bg-overlay/30">
+        <div className="hidden md:block relative w-full rounded-lg overflow-hidden border border-edge bg-overlay/30">
             {!loaded && (
                 <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
                     Loading talent calculator...
@@ -63,7 +65,7 @@ function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
                 src={embedUrl}
                 title="Wowhead Talent Calculator"
                 className="w-full border-0"
-                style={{ height: 540, minHeight: 400 }}
+                style={{ height: 514 }}
                 loading="lazy"
                 sandbox="allow-scripts allow-same-origin allow-popups"
                 onLoad={() => setLoaded(true)}

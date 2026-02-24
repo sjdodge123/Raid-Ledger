@@ -582,12 +582,51 @@ interface ClassicTalentTree {
     talents: Array<{
         name: string;
         rank?: number;
+        tierIndex?: number;
+        columnIndex?: number;
     }>;
+}
+
+/**
+ * Build a tree string directly from API tier/column positions.
+ * Converts tierIndex (0-6) + columnIndex (0-3) to grid positions (a1-g4).
+ */
+function buildTreeStringFromApi(
+    talents: ClassicTalentTree['talents'],
+): string {
+    const digits: number[] = new Array(GRID_POSITIONS.length).fill(0);
+
+    for (const talent of talents) {
+        if (talent.rank && talent.rank > 0 && talent.tierIndex != null && talent.columnIndex != null) {
+            // tierIndex 0-6 → row a-g, columnIndex 0-3 → column 1-4
+            const pos = String.fromCharCode(97 + talent.tierIndex) + (talent.columnIndex + 1);
+            const idx = GRID_POSITIONS.indexOf(pos as typeof GRID_POSITIONS[number]);
+            if (idx >= 0) {
+                digits[idx] = talent.rank;
+            }
+        }
+    }
+
+    let str = digits.join('');
+    str = str.replace(/0+$/, '');
+    return str || '0';
+}
+
+/**
+ * Check if a tree's talents have API position data (tierIndex/columnIndex).
+ */
+function hasApiPositions(talents: ClassicTalentTree['talents']): boolean {
+    const ranked = talents.filter((t) => t.rank && t.rank > 0);
+    if (ranked.length === 0) return false;
+    return ranked.every((t) => t.tierIndex != null && t.columnIndex != null);
 }
 
 /**
  * Build a complete Wowhead talent string from Classic talent data.
  * Returns a string like "05230051-33200520200501-05" or null if the class is unknown.
+ *
+ * Prefers API-provided tier/column positions when available, falling back
+ * to the static CLASSIC_TALENT_POSITIONS name-based mapping.
  *
  * @param className - Blizzard API class name (e.g. "Warrior", "Priest")
  * @param trees - Talent tree data from the Blizzard API
@@ -617,15 +656,19 @@ export function buildWowheadTalentString(
             continue;
         }
 
-        // Build talent name → rank map
-        const talentRanks: Record<string, number> = {};
-        for (const talent of treeData.talents) {
-            if (talent.rank && talent.rank > 0) {
-                talentRanks[talent.name] = talent.rank;
+        // Prefer API positions (tier_index/column_index) over static name mapping
+        if (hasApiPositions(treeData.talents)) {
+            treeStrings.push(buildTreeStringFromApi(treeData.talents));
+        } else {
+            // Fallback to static name-based mapping
+            const talentRanks: Record<string, number> = {};
+            for (const talent of treeData.talents) {
+                if (talent.rank && talent.rank > 0) {
+                    talentRanks[talent.name] = talent.rank;
+                }
             }
+            treeStrings.push(buildTreeString(positionMap, talentRanks));
         }
-
-        treeStrings.push(buildTreeString(positionMap, talentRanks));
     }
 
     // Trim trailing "0" trees
