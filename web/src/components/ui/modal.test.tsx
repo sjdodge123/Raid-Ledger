@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { axe } from 'vitest-axe';
 import { Modal } from './modal';
 
 describe('Modal', () => {
@@ -268,6 +269,17 @@ describe('Modal', () => {
             expect(dialog).toBeInTheDocument();
 
             wrapper.remove();
+        });
+    });
+
+    describe('accessibility', () => {
+        it('has no accessibility violations when open', async () => {
+            const { container } = render(
+                <Modal isOpen={true} onClose={vi.fn()} title="Accessible Modal">
+                    <p>Modal content</p>
+                </Modal>,
+            );
+            expect(await axe(container)).toHaveNoViolations();
         });
     });
 });

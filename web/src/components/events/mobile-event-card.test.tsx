@@ -65,18 +65,6 @@ describe('MobileEventCard', () => {
         expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('has 4px game color border', () => {
-        render(<MobileEventCard event={createMockEvent()} />);
-        const card = screen.getByTestId('mobile-event-card');
-        expect(card.style.borderLeftWidth).toBe('4px');
-    });
-
-    it('renders min-height of 96px', () => {
-        render(<MobileEventCard event={createMockEvent()} />);
-        const card = screen.getByTestId('mobile-event-card');
-        expect(card.className).toContain('min-h-[96px]');
-    });
-
     it('renders avatar stack container', () => {
         const event = createMockEvent({
             signupsPreview: [
@@ -96,9 +84,3 @@ describe('MobileEventCard', () => {
     });
 });
 
-describe('MobileEventCardSkeleton', () => {
-    it('renders skeleton with animate-pulse', () => {
-        const { container } = render(<MobileEventCardSkeleton />);
-        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-    });
-});

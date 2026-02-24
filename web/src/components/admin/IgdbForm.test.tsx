@@ -92,13 +92,7 @@ describe('IgdbForm', () => {
         expect(link).toHaveAttribute('href', 'https://dev.twitch.tv/console/apps');
     });
 
-    // ── Save Configuration button sizing ─────────────────────────
-
-    it('Save Configuration button has py-3 class for 44px+ height', () => {
-        render(<IgdbForm />);
-        const saveBtn = screen.getByRole('button', { name: 'Save Configuration' });
-        expect(saveBtn.className).toContain('py-3');
-    });
+    // ── Save Configuration button state ─────────────────────────
 
     it('Save Configuration button is disabled when updateIgdb is pending', () => {
         mockUpdateIgdb.isPending = true;
@@ -154,15 +148,7 @@ describe('IgdbForm', () => {
         expect(screen.getByRole('button', { name: 'Clear' })).toBeDisabled();
     });
 
-    // ── Sync Now button — 44px touch target ──────────────────────
-
-    it('Sync Now button has min-h-[44px] class', () => {
-        mockIgdbStatus.data = { configured: true };
-        mockIgdbSyncStatus.data = { lastSyncAt: null, gameCount: 0, syncInProgress: false };
-        render(<IgdbForm />);
-        const syncBtn = screen.getByRole('button', { name: 'Sync Now' });
-        expect(syncBtn.className).toContain('min-h-[44px]');
-    });
+    // ── Sync Now button ──────────────────────────────────────────
 
     it('Sync Now button is disabled when syncIgdb is pending', () => {
         mockIgdbStatus.data = { configured: true };

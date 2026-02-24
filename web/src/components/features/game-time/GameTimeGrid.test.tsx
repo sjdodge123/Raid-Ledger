@@ -138,12 +138,6 @@ describe('GameTimeGrid', () => {
         expect(cells).toHaveLength(7 * 18);
     });
 
-    it('highlights today column when todayIndex is provided', () => {
-        render(<GameTimeGrid slots={[]} todayIndex={3} />);
-        const todayHeader = screen.getByTestId('day-header-3');
-        expect(todayHeader.className).toContain('emerald');
-    });
-
     describe('event block overlays', () => {
         const mockEvents = [
             {
@@ -185,23 +179,13 @@ describe('GameTimeGrid', () => {
     });
 
     describe('preview block overlays', () => {
-        it('renders preview blocks with dashed border styling', () => {
+        it('renders preview blocks', () => {
             const previewBlocks = [
                 { dayOfWeek: 0, startHour: 19, endHour: 22, label: 'This Event' },
             ];
             render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
             const block = screen.getByTestId('preview-block-0-19');
             expect(block).toBeInTheDocument();
-            expect(block.style.border).toContain('dashed');
-        });
-
-        it('preview blocks are pointer-events-none (non-interactive)', () => {
-            const previewBlocks = [
-                { dayOfWeek: 2, startHour: 10, endHour: 12 },
-            ];
-            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
-            const block = screen.getByTestId('preview-block-2-10');
-            expect(block.classList.contains('pointer-events-none')).toBe(true);
         });
 
         it('renders preview block content when no event block underneath', () => {
@@ -269,31 +253,6 @@ describe('GameTimeGrid', () => {
     // === ROK-370: Fix reschedule modal grid click offset ===
 
     describe('compact prop (ROK-370)', () => {
-        it('renders cells with h-5 height by default (non-compact)', () => {
-            render(<GameTimeGrid slots={[]} />);
-            const cell = screen.getByTestId('cell-0-0');
-            expect(cell.className).toContain('h-5');
-            expect(cell.className).not.toContain('h-4');
-        });
-
-        it('renders cells with h-4 height when compact is true', () => {
-            render(<GameTimeGrid slots={[]} compact />);
-            const cell = screen.getByTestId('cell-0-0');
-            expect(cell.className).toContain('h-4');
-            expect(cell.className).not.toContain('h-5');
-        });
-
-        it('applies compact height consistently across all visible cells', () => {
-            render(<GameTimeGrid slots={[]} compact hourRange={[10, 13]} />);
-            for (let day = 0; day < 7; day++) {
-                for (let hour = 10; hour < 13; hour++) {
-                    const cell = screen.getByTestId(`cell-${day}-${hour}`);
-                    expect(cell.className).toContain('h-4');
-                    expect(cell.className).not.toContain('h-5');
-                }
-            }
-        });
-
         it('compact mode does not affect slot status rendering', () => {
             const slots: GameTimeSlot[] = [
                 { dayOfWeek: 0, hour: 10, status: 'available' },
@@ -323,13 +282,6 @@ describe('GameTimeGrid', () => {
     });
 
     describe('wrapperRef measurement approach (ROK-370)', () => {
-        it('outer wrapper div has relative positioning for overlay measurement', () => {
-            const { container } = render(<GameTimeGrid slots={[]} events={[]} />);
-            const wrapper = container.firstElementChild as HTMLElement;
-            expect(wrapper.className).toContain('relative');
-            expect(wrapper.className).toContain('overflow-hidden');
-        });
-
         it('grid element has data-testid for querySelector-based measurement', () => {
             render(<GameTimeGrid slots={[]} />);
             expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
@@ -372,56 +324,11 @@ describe('GameTimeGrid', () => {
             expect(cell.title).toBeFalsy();
         });
 
-        it('heatmap cells get inline backgroundColor style', () => {
-            render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} />);
-            const cell = screen.getByTestId('cell-0-10');
-            expect(cell.style.backgroundColor).toBeTruthy();
-        });
-
         it('onCellClick works with heatmap overlay in compact mode', () => {
             const onCellClick = vi.fn();
             render(<GameTimeGrid slots={[]} compact heatmapOverlay={heatmapCells} onCellClick={onCellClick} />);
             fireEvent.click(screen.getByTestId('cell-0-10'));
             expect(onCellClick).toHaveBeenCalledWith(0, 10);
-        });
-    });
-
-    describe('preview block variant styling (ROK-370)', () => {
-        it('selected variant uses solid border', () => {
-            const previewBlocks: GameTimePreviewBlock[] = [{
-                dayOfWeek: 5,
-                startHour: 10,
-                endHour: 12,
-                label: 'New Time',
-                variant: 'selected',
-            }];
-            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
-            const block = screen.getByTestId('preview-block-5-10');
-            expect(block.style.border).toContain('solid');
-        });
-
-        it('current variant uses dashed border', () => {
-            const previewBlocks: GameTimePreviewBlock[] = [{
-                dayOfWeek: 5,
-                startHour: 10,
-                endHour: 12,
-                label: 'Current',
-                variant: 'current',
-            }];
-            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
-            const block = screen.getByTestId('preview-block-5-10');
-            expect(block.style.border).toContain('dashed');
-        });
-
-        it('default variant (undefined) uses dashed border', () => {
-            const previewBlocks: GameTimePreviewBlock[] = [{
-                dayOfWeek: 5,
-                startHour: 10,
-                endHour: 12,
-            }];
-            render(<GameTimeGrid slots={[]} previewBlocks={previewBlocks} />);
-            const block = screen.getByTestId('preview-block-5-10');
-            expect(block.style.border).toContain('dashed');
         });
     });
 

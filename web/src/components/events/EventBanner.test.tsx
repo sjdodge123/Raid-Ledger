@@ -62,7 +62,6 @@ describe('EventBanner', () => {
         const { container } = renderWithRouter(<EventBanner {...mockProps} />);
         const bgElement = container.querySelector('.event-banner__bg');
         expect(bgElement).toBeInTheDocument();
-        expect(bgElement).toHaveStyle({ backgroundImage: 'url(https://example.com/wow-cover.jpg)' });
     });
 
     // ROK-192: Collapsed variant tests

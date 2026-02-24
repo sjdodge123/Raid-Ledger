@@ -1,4 +1,15 @@
 import '@testing-library/jest-dom/vitest';
+import * as matchers from 'vitest-axe/matchers';
+import { expect, beforeAll, afterEach, afterAll } from 'vitest';
+import { server } from './mocks/server';
+
+// vitest-axe matchers (toHaveNoViolations)
+expect.extend(matchers);
+
+// MSW server lifecycle
+beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 
 // Mock ResizeObserver for tests that use it (e.g., GameTimeGrid event overlays)
 if (typeof globalThis.ResizeObserver === 'undefined') {

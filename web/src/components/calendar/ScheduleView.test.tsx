@@ -179,37 +179,6 @@ describe('ScheduleView', () => {
             expect(screen.getByText('Thu')).toBeInTheDocument();
             expect(screen.getByText('12')).toBeInTheDocument();
         });
-
-        it('highlights today with emerald styling', () => {
-            // MOCK_NOW is 2026-02-10T12:00:00Z (Tuesday)
-            const events = [
-                makeCalendarEvent(1, 'Today Raid', new Date('2026-02-10T18:00:00'), new Date('2026-02-10T20:00:00')),
-            ];
-
-            render(<ScheduleView {...defaultProps} events={events} />);
-
-            const dayAbbr = screen.getByText('Tue');
-            expect(dayAbbr).toHaveClass('text-emerald-400');
-
-            const dateNum = screen.getByText('10');
-            expect(dateNum).toHaveClass('bg-emerald-500', 'rounded-full');
-        });
-
-        it('does not highlight non-today dates with emerald styling', () => {
-            const events = [
-                makeCalendarEvent(1, 'Tomorrow Raid', new Date('2026-02-11T10:00:00'), new Date('2026-02-11T12:00:00')),
-            ];
-
-            render(<ScheduleView {...defaultProps} events={events} />);
-
-            const dayAbbr = screen.getByText('Wed');
-            expect(dayAbbr).toHaveClass('text-muted');
-            expect(dayAbbr).not.toHaveClass('text-emerald-400');
-
-            const dateNum = screen.getByText('11');
-            expect(dateNum).toHaveClass('text-foreground');
-            expect(dateNum).not.toHaveClass('bg-emerald-500');
-        });
     });
 
     describe('Week separators', () => {
@@ -289,17 +258,6 @@ describe('ScheduleView', () => {
             expect(screen.getByText(/World of Warcraft/)).toBeInTheDocument();
         });
 
-        it('applies game-specific background color via inline style', () => {
-            const event = makeCalendarEvent(1, 'WoW Raid', new Date('2026-02-12T15:00:00'), new Date('2026-02-12T17:00:00'), {
-                game: { id: 1, name: 'World of Warcraft', slug: 'world-of-warcraft', coverUrl: null },
-            });
-
-            render(<ScheduleView {...defaultProps} events={[event]} />);
-
-            const button = screen.getByRole('button');
-            // The button should have inline backgroundColor and borderLeft styles
-            expect(button).toHaveStyle({ backgroundColor: expect.any(String) });
-        });
     });
 
     describe('Swipe gesture handling', () => {

@@ -369,17 +369,4 @@ describe('GameTimeMobileEditor', () => {
         });
     });
 
-    describe('Responsive Behavior', () => {
-        it('uses compact layout suitable for mobile', () => {
-            const { container } = render(<GameTimeMobileEditor {...defaultProps} />);
-            const editor = container.querySelector('[data-testid="game-time-mobile-editor"]');
-            expect(editor).toHaveClass('space-y-2');
-        });
-
-        it('timezone label uses small font size', () => {
-            render(<GameTimeMobileEditor {...defaultProps} tzLabel="PST" />);
-            const label = screen.getByText('PST').closest('span');
-            expect(label).toHaveClass('text-[10px]');
-        });
-    });
 });

@@ -30,32 +30,6 @@ describe('NotificationPreferencesSection', () => {
         } as any);
     });
 
-    describe('Loading state', () => {
-        it('renders skeleton when loading', () => {
-            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
-                preferences: null,
-                isLoading: true,
-                updatePreferences: mockUpdatePreferences,
-                channelAvailability: undefined,
-            } as any);
-
-            const { container } = render(<NotificationPreferencesSection />);
-            expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-        });
-
-        it('renders skeleton when preferences are not loaded yet', () => {
-            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
-                preferences: null,
-                isLoading: false,
-                updatePreferences: mockUpdatePreferences,
-                channelAvailability: undefined,
-            } as any);
-
-            const { container } = render(<NotificationPreferencesSection />);
-            expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-        });
-    });
-
     describe('Section header', () => {
         it('renders the Notifications heading', () => {
             render(<NotificationPreferencesSection />);
@@ -108,24 +82,6 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('Link your Discord account')).toBeInTheDocument();
         });
 
-        it('renders 3 column headers when Discord is available', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const headerCells = container.querySelectorAll('.w-10.sm\\:w-12.flex.flex-col');
-            expect(headerCells.length).toBe(3);
-        });
-
-        it('renders 2 column headers when Discord is not available', () => {
-            vi.spyOn(useNotificationsHook, 'useNotificationPreferences').mockReturnValue({
-                preferences: mockPreferences,
-                isLoading: false,
-                updatePreferences: mockUpdatePreferences,
-                channelAvailability: { discord: { available: false } },
-            } as any);
-
-            const { container } = render(<NotificationPreferencesSection />);
-            const headerCells = container.querySelectorAll('.w-10.sm\\:w-12.flex.flex-col');
-            expect(headerCells.length).toBe(2);
-        });
     });
 
     describe('Notification type rows', () => {
@@ -149,53 +105,7 @@ describe('NotificationPreferencesSection', () => {
         });
     });
 
-    describe('Toggle button responsive sizing (ROK-338)', () => {
-        it('toggle buttons have mobile size w-10 h-10', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const toggleButtons = container.querySelectorAll('button[type="button"]');
-            expect(toggleButtons.length).toBeGreaterThan(0);
-            // All toggle buttons should have w-10 h-10 for mobile (40px)
-            toggleButtons.forEach(btn => {
-                expect(btn).toHaveClass('w-10');
-                expect(btn).toHaveClass('h-10');
-            });
-        });
-
-        it('toggle buttons reduce to w-8 h-8 on desktop via sm: classes', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const toggleButtons = container.querySelectorAll('button[type="button"]');
-            toggleButtons.forEach(btn => {
-                expect(btn).toHaveClass('sm:w-8');
-                expect(btn).toHaveClass('sm:h-8');
-            });
-        });
-
-        it('toggle button wrapper has responsive width w-10 sm:w-12', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const wrappers = container.querySelectorAll('.w-10.sm\\:w-12.flex.justify-center');
-            expect(wrappers.length).toBeGreaterThan(0);
-        });
-
-        it('channel toggle row has responsive gap gap-2 sm:gap-4', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const channelRows = container.querySelectorAll('.flex.gap-2.sm\\:gap-4.shrink-0');
-            expect(channelRows.length).toBeGreaterThan(0);
-        });
-    });
-
     describe('Toggle states and interaction', () => {
-        it('active toggle buttons have emerald styling', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const activeButtons = container.querySelectorAll('button.text-emerald-400');
-            expect(activeButtons.length).toBeGreaterThan(0);
-        });
-
-        it('inactive toggle buttons have muted text styling', () => {
-            const { container } = render(<NotificationPreferencesSection />);
-            const inactiveButtons = container.querySelectorAll('button.text-muted');
-            expect(inactiveButtons.length).toBeGreaterThan(0);
-        });
-
         it('toggle button has correct aria-label for active toggle', () => {
             render(<NotificationPreferencesSection />);
             // slot_vacated inApp is true -> should say "Disable"

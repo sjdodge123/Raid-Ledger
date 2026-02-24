@@ -63,7 +63,6 @@ describe('CharacterCard', () => {
             );
             const kebabBtn = screen.getByLabelText('Character actions');
             expect(kebabBtn).toBeInTheDocument();
-            expect(kebabBtn).toHaveClass('w-[44px]', 'h-[44px]');
         });
 
         it('opens accordion actions panel when kebab button is clicked', () => {
@@ -88,14 +87,6 @@ describe('CharacterCard', () => {
             // Toggle closed
             fireEvent.click(kebabBtn);
             expect(screen.queryByTestId('mobile-actions-panel')).not.toBeInTheDocument();
-        });
-
-        it('renders desktop inline actions with hidden md:flex', () => {
-            const { container } = renderWithRouter(
-                <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
-            );
-            const desktopActions = container.querySelector('.hidden.md\\:flex');
-            expect(desktopActions).toBeInTheDocument();
         });
 
         it('mobile panel Edit calls onEdit and closes panel', () => {

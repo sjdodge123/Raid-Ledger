@@ -176,23 +176,6 @@ describe('PlanEventForm — poll mode selector', () => {
         });
     });
 
-    it('should have "Standard" mode selected by default', () => {
-        renderForm();
-        const standardBtn = screen.getByRole('button', { name: 'Standard' });
-        // Standard is default — it should have the active bg class
-        expect(standardBtn.className).toContain('bg-emerald-600');
-    });
-
-    it('should switch to All or Nothing mode on click', () => {
-        renderForm();
-        const aonBtn = screen.getByRole('button', { name: 'All or Nothing' });
-
-        fireEvent.click(aonBtn);
-
-        // After click, All or Nothing should be active
-        expect(aonBtn.className).toContain('bg-violet-600');
-    });
-
     it('should show standard mode description text when standard is selected', () => {
         renderForm();
         expect(

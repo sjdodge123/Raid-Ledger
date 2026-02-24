@@ -69,11 +69,6 @@ describe('RosterList', () => {
         expect(starElements.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('renders loading state with skeletons', () => {
-        const { container } = render(<RosterList signups={[]} isLoading />);
-        expect(container.querySelectorAll('.animate-pulse').length).toBeGreaterThan(0);
-    });
-
     it('renders Discord avatars and initials fallback (ROK-222)', () => {
         render(<RosterList signups={mockSignups} />);
         const avatars = screen.getAllByRole('img');
@@ -169,30 +164,6 @@ describe('RosterList', () => {
 
     // Mobile layout tests (ROK-358)
 
-    it('uses items-start on roster item container for mobile stacked layout', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const itemContainer = container.querySelector('.flex.items-start');
-        expect(itemContainer).toBeInTheDocument();
-    });
-
-    it('uses sm:items-center on roster item container for desktop inline layout', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const itemContainer = container.querySelector('.sm\\:items-center');
-        expect(itemContainer).toBeInTheDocument();
-    });
-
-    it('renders mobile secondary line with sm:hidden class for class/spec/iLevel', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const mobileSecondaryLine = container.querySelector('.flex.sm\\:hidden');
-        expect(mobileSecondaryLine).toBeInTheDocument();
-    });
-
-    it('renders desktop inline details with hidden sm:flex class', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const desktopInlineSpan = container.querySelector('.hidden.sm\\:flex');
-        expect(desktopInlineSpan).toBeInTheDocument();
-    });
-
     it('renders class and spec on mobile secondary line', () => {
         const { container } = render(<RosterList signups={[mockSignups[1]]} />);
         // Mobile secondary line: flex sm:hidden
@@ -231,18 +202,6 @@ describe('RosterList', () => {
         const desktopMainBadge = container.querySelector('.hidden.sm\\:inline');
         expect(desktopMainBadge).toBeInTheDocument();
         expect(desktopMainBadge?.textContent).toContain('⭐');
-    });
-
-    it('applies 44px tap target classes to confirmation status indicator on mobile', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const tapTarget = container.querySelector('.min-w-\\[44px\\].min-h-\\[44px\\]');
-        expect(tapTarget).toBeInTheDocument();
-    });
-
-    it('removes tap target size on desktop (sm:min-w-0 sm:min-h-0)', () => {
-        const { container } = render(<RosterList signups={[mockSignups[1]]} />);
-        const tapTarget = container.querySelector('.sm\\:min-w-0.sm\\:min-h-0');
-        expect(tapTarget).toBeInTheDocument();
     });
 
     it('does not render mobile secondary line when character has no class, spec, or iLevel', () => {

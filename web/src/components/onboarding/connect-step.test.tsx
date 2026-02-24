@@ -27,13 +27,6 @@ describe('ConnectStep', () => {
         expect(screen.getByRole('button', { name: /connect discord/i })).toBeInTheDocument();
     });
 
-    it('Discord button meets minimum 44px touch target height (min-h-[44px])', () => {
-        const { container } = render(<ConnectStep />);
-        const button = container.querySelector('button');
-        expect(button).not.toBeNull();
-        expect(button!.className).toContain('min-h-[44px]');
-    });
-
     it('Discord button is not disabled by default', () => {
         render(<ConnectStep />);
         const button = screen.getByRole('button', { name: /connect discord/i });

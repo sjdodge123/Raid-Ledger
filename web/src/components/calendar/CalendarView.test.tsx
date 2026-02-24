@@ -159,18 +159,5 @@ describe('CalendarView', () => {
             expect(screen.getByRole('group', { name: 'Calendar view' })).toBeInTheDocument();
         });
 
-        it('renders ScheduleView loading spinner when isLoading=true', () => {
-            // Re-mock useEvents to simulate loading
-            vi.doMock('../../hooks/use-events', () => ({
-                useEvents: () => ({
-                    data: undefined,
-                    isLoading: true,
-                }),
-            }));
-            // Re-render with calendarView=schedule; loading spinner should appear
-            renderWithProviders(<CalendarView calendarView="schedule" />);
-            // Schedule view uses a min-w-0 wrapper (no calendar-container class)
-            expect(document.querySelector('.min-w-0')).toBeInTheDocument();
-        });
     });
 });

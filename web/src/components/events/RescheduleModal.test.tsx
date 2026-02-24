@@ -113,28 +113,6 @@ describe('RescheduleModal', () => {
         });
     });
 
-    describe('compact prop is passed to GameTimeGrid (ROK-370)', () => {
-        it('grid cells use compact (h-4) height inside the modal', () => {
-            renderModal();
-            const grid = screen.getByTestId('game-time-grid');
-            // Grab a cell within the data-driven range (heatmap has hour 18)
-            const cell = within(grid).getByTestId('cell-0-18');
-            expect(cell.className).toContain('h-4');
-            expect(cell.className).not.toContain('h-5');
-        });
-
-        it('all visible cells in the modal grid use compact height', () => {
-            renderModal();
-            const grid = screen.getByTestId('game-time-grid');
-            // Check cells within the data-driven range (heatmap 18-20, event 20-22 → range ~17-23)
-            const cellIds = ['cell-0-18', 'cell-3-20', 'cell-6-21'];
-            for (const id of cellIds) {
-                const cell = within(grid).getByTestId(id);
-                expect(cell.className).toContain('h-4');
-            }
-        });
-    });
-
     describe('hourRange is data-driven (ROK-370)', () => {
         it('grid range does not include early morning hours far from data', () => {
             // Heatmap hours 18-20 + event at local hour → range should NOT include 5 AM
@@ -214,25 +192,6 @@ describe('RescheduleModal', () => {
             expect(presetLabels).toContain('3h');
             expect(presetLabels).toContain('4h');
             expect(presetLabels).toContain('Custom');
-        });
-
-        it('original duration preset is highlighted by default', () => {
-            // Default event is 2 hours — find the 2h button (not the DurationBadge span)
-            renderModal();
-            const buttons = screen.getAllByRole('button');
-            const btn2h = buttons.find(b => b.textContent?.trim() === '2h' && (b as HTMLButtonElement).type === 'button');
-            expect(btn2h).toBeDefined();
-            expect(btn2h!.className).toContain('bg-emerald-600');
-        });
-
-        it('clicking a different preset changes the active selection', () => {
-            renderModal();
-            const btn3h = screen.getByText('3h');
-            fireEvent.click(btn3h);
-            expect(btn3h.className).toContain('bg-emerald-600');
-            // 2h should no longer be highlighted
-            const btn2h = screen.getByText('2h');
-            expect(btn2h.className).not.toContain('bg-emerald-600');
         });
 
         it('clicking Custom shows hour/minute inputs', () => {

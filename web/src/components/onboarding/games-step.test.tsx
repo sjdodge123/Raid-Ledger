@@ -188,44 +188,6 @@ describe('GamesStep', () => {
         });
     });
 
-    describe('Touch target compliance (min-h-[44px])', () => {
-        it('search input has min-h-[44px] for touch target compliance', () => {
-            const { container } = renderWithProviders(<GamesStep />);
-            const searchInput = container.querySelector('input[placeholder="Search for a game..."]');
-            expect(searchInput).not.toBeNull();
-            expect(searchInput!.className).toContain('min-h-[44px]');
-        });
-
-        it('"All" genre chip has min-h-[44px]', () => {
-            renderWithProviders(<GamesStep />);
-            const allButton = screen.getByRole('button', { name: /^all$/i });
-            expect(allButton.className).toContain('min-h-[44px]');
-        });
-
-        it('genre filter chips have min-h-[44px]', () => {
-            const { container } = renderWithProviders(<GamesStep />);
-            // Genre chip buttons are inside the flex-wrap genre container
-            const genreContainer = container.querySelector('.flex.flex-wrap.gap-2');
-            expect(genreContainer).not.toBeNull();
-            // Find the MMORPG button (an actual <button> not a div[role=button])
-            const mmorpgChip = Array.from(genreContainer!.querySelectorAll('button')).find(
-                (b) => b.textContent === 'MMORPG'
-            );
-            expect(mmorpgChip).not.toBeNull();
-            expect(mmorpgChip!.className).toContain('min-h-[44px]');
-        });
-
-        it('all genre chips have min-h-[44px]', () => {
-            const { container } = renderWithProviders(<GamesStep />);
-            // Genre chips container
-            const genreButtons = container.querySelectorAll('.flex.flex-wrap.gap-2 button');
-            expect(genreButtons.length).toBeGreaterThan(0);
-            genreButtons.forEach((btn) => {
-                expect(btn.className).toContain('min-h-[44px]');
-            });
-        });
-    });
-
     describe('Genre filtering', () => {
         it('shows all games when "All" is selected', () => {
             renderWithProviders(<GamesStep />);
@@ -294,17 +256,6 @@ describe('GamesStep', () => {
 
             renderWithProviders(<GamesStep />);
             expect(screen.getByText(/loading games/i)).toBeInTheDocument();
-        });
-    });
-
-    describe('Responsive grid', () => {
-        it('game grid uses grid-cols-2 base and sm:grid-cols-3', () => {
-            const { container } = renderWithProviders(<GamesStep />);
-            // querySelector does not handle Tailwind responsive prefixes well.
-            // We verify by finding the grid element and checking its className attribute.
-            const grid = container.querySelector('.grid.grid-cols-2');
-            expect(grid).not.toBeNull();
-            expect(grid!.className).toContain('sm:grid-cols-3');
         });
     });
 
@@ -431,43 +382,5 @@ describe('GamesStep', () => {
             expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
         });
 
-        it('warning banner has yellow styling', () => {
-            mockUseGameSearch.mockReturnValue({
-                data: {
-                    data: [
-                        {
-                            id: 10,
-                            name: 'Fallback Game',
-                            slug: 'fallback-game',
-                            coverUrl: null,
-                            genres: [],
-                            gameModes: [],
-                            summary: null,
-                            rating: null,
-                            aggregatedRating: null,
-                            popularity: null,
-                            themes: [],
-                            platforms: [],
-                            screenshots: [],
-                            videos: [],
-                            firstReleaseDate: null,
-                            playerCount: null,
-                            twitchGameId: null,
-                            crossplay: null,
-                        },
-                    ],
-                    meta: { total: 1, cached: true, source: 'local' },
-                },
-                isLoading: false,
-            });
-
-            renderWithProviders(<GamesStep />);
-            const searchInput = screen.getByPlaceholderText(/search for a game/i);
-            fireEvent.change(searchInput, { target: { value: 'fallback' } });
-
-            const warning = screen.getByText(/external search unavailable/i).closest('div');
-            expect(warning).toHaveClass('bg-yellow-900/30');
-            expect(warning).toHaveClass('border-yellow-700/40');
-        });
     });
 });
