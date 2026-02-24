@@ -40,12 +40,15 @@ import { BackupModule } from './backup/backup.module';
     DrizzleModule,
     RedisModule,
     PluginHostModule,
+    // ROK-466: CharactersModule MUST come before UsersModule so that
+    // GET /users/me/characters (specific) registers before
+    // GET /users/:id/characters (parameterized) in UsersController.
+    CharactersModule,
     UsersModule,
     AuthModule,
     AdminModule,
     IgdbModule,
     EventsModule,
-    CharactersModule,
     AvailabilityModule,
     SystemModule,
     SettingsModule,
