@@ -4,8 +4,20 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
 // Mock fs/promises so the test never reads real data files (avoids CI worker OOM)
 const fakeBosses = [
-  { instanceId: 409, name: 'Ragnaros', order: 1, expansion: 'classic', sodModified: false },
-  { instanceId: 409, name: 'Lucifron', order: 2, expansion: 'classic', sodModified: false },
+  {
+    instanceId: 409,
+    name: 'Ragnaros',
+    order: 1,
+    expansion: 'classic',
+    sodModified: false,
+  },
+  {
+    instanceId: 409,
+    name: 'Lucifron',
+    order: 2,
+    expansion: 'classic',
+    sodModified: false,
+  },
 ];
 
 const fakeLoot = [

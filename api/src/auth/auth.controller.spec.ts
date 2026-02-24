@@ -262,7 +262,11 @@ describe('AuthController — redeemIntent', () => {
       // once for the claim-anonymous-signups lookup
       mockUsersService.findById
         .mockResolvedValueOnce({ id: 1, username: 'testuser', discordId: null })
-        .mockResolvedValueOnce({ id: 1, username: 'testuser', discordId: null });
+        .mockResolvedValueOnce({
+          id: 1,
+          username: 'testuser',
+          discordId: null,
+        });
 
       await controller.redeemIntent(
         mockRequest as unknown as Parameters<typeof controller.redeemIntent>[0],

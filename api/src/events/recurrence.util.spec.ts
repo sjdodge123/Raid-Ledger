@@ -330,7 +330,9 @@ describe('generateRecurringDates', () => {
     it('includes the 52nd instance when it falls exactly on until', () => {
       const start = utc('2026-01-01T19:00:00Z');
       // 51 weeks after start = the 52nd weekly occurrence
-      const fiftySecondDate = new Date(start.getTime() + 51 * 7 * 24 * 60 * 60 * 1000);
+      const fiftySecondDate = new Date(
+        start.getTime() + 51 * 7 * 24 * 60 * 60 * 1000,
+      );
       const until = new Date(fiftySecondDate.getTime()); // exactly equal
       const dates = generateRecurringDates(start, 'weekly', until);
 
@@ -358,10 +360,18 @@ describe('generateRecurringDates', () => {
     it('always returns start as the first element regardless of until value', () => {
       const start = utc('2026-03-15T10:00:00Z');
 
-      const d1 = generateRecurringDates(start, 'weekly', utc('2020-01-01T00:00:00Z'));
+      const d1 = generateRecurringDates(
+        start,
+        'weekly',
+        utc('2020-01-01T00:00:00Z'),
+      );
       expect(d1[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
 
-      const d2 = generateRecurringDates(start, 'monthly', utc('2026-03-15T10:00:00Z'));
+      const d2 = generateRecurringDates(
+        start,
+        'monthly',
+        utc('2026-03-15T10:00:00Z'),
+      );
       expect(d2[0].toISOString()).toBe('2026-03-15T10:00:00.000Z');
     });
 

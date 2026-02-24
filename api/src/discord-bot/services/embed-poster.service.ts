@@ -53,7 +53,10 @@ export class EmbedPosterService {
       return false;
     }
 
-    const channelId = await this.channelResolver.resolveChannelForEvent(gameId, recurrenceGroupId);
+    const channelId = await this.channelResolver.resolveChannelForEvent(
+      gameId,
+      recurrenceGroupId,
+    );
     if (!channelId) return false;
 
     const guildId = this.clientService.getGuildId();

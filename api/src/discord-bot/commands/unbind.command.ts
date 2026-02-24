@@ -148,7 +148,10 @@ export class UnbindCommand
             gte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
             sql`${schema.events.cancelledAt} IS NULL`,
             searchValue
-              ? ilike(schema.events.title, `%${escapeLikePattern(searchValue)}%`)
+              ? ilike(
+                  schema.events.title,
+                  `%${escapeLikePattern(searchValue)}%`,
+                )
               : undefined,
           ),
         )

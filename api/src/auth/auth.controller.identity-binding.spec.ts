@@ -28,7 +28,9 @@ interface AuthenticatedRequest {
 }
 
 function buildMockRequest(userId = 1): AuthenticatedRequest {
-  return { user: { id: userId, username: 'testuser', role: 'member' as UserRole } };
+  return {
+    user: { id: userId, username: 'testuser', role: 'member' as UserRole },
+  };
 }
 
 async function buildModule(overrides: {
@@ -67,7 +69,10 @@ async function buildModule(overrides: {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [AuthController],
     providers: [
-      { provide: AuthService, useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) } },
+      {
+        provide: AuthService,
+        useValue: { login: jest.fn().mockReturnValue({ access_token: 'tok' }) },
+      },
       { provide: IntentTokenService, useValue: mockIntentTokenService },
       { provide: UsersService, useValue: mockUsersService },
       {
@@ -79,14 +84,37 @@ async function buildModule(overrides: {
         },
       },
       { provide: SignupsService, useValue: mockSignupsService },
-      { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') } },
-      { provide: JwtService, useValue: { verify: jest.fn().mockReturnValue({ sub: 1 }), sign: jest.fn() } },
-      { provide: SettingsService, useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() } },
-      { provide: CharactersService, useValue: { findAllForUser: jest.fn().mockResolvedValue({ data: [] }), getAvatarUrlByName: jest.fn().mockResolvedValue(null) } },
+      {
+        provide: ConfigService,
+        useValue: { get: jest.fn().mockReturnValue('http://localhost:3000') },
+      },
+      {
+        provide: JwtService,
+        useValue: {
+          verify: jest.fn().mockReturnValue({ sub: 1 }),
+          sign: jest.fn(),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: { getDiscordOAuthConfig: jest.fn(), getBranding: jest.fn() },
+      },
+      {
+        provide: CharactersService,
+        useValue: {
+          findAllForUser: jest.fn().mockResolvedValue({ data: [] }),
+          getAvatarUrlByName: jest.fn().mockResolvedValue(null),
+        },
+      },
       { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       {
         provide: REDIS_CLIENT,
-        useValue: { get: jest.fn(), set: jest.fn(), setex: jest.fn(), del: jest.fn() },
+        useValue: {
+          get: jest.fn(),
+          set: jest.fn(),
+          setex: jest.fn(),
+          del: jest.fn(),
+        },
       },
     ],
   }).compile();
