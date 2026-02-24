@@ -443,6 +443,16 @@ export async function deleteCharacter(characterId: string): Promise<void> {
 }
 
 /**
+ * ROK-461: Fetch a user's characters, optionally filtered by game.
+ * Used by admin roster assignment to pick a character on behalf of a player.
+ */
+export async function getUserCharacters(userId: number, gameId?: number): Promise<CharacterDto[]> {
+    const params = gameId ? `?gameId=${gameId}` : '';
+    const result = await fetchApi<{ data: CharacterDto[] }>(`/users/${userId}/characters${params}`);
+    return result.data;
+}
+
+/**
  * Fetch a single character by ID (public — for detail page)
  */
 export async function getCharacterDetail(characterId: string): Promise<CharacterDto> {

@@ -123,9 +123,11 @@ export function EventDetailPage() {
     const isMMOGame = isMMOSlotConfig(rosterAssignments?.slots);
 
     // Handler for roster changes from RosterBuilder
+    // ROK-461: characterIdMap carries admin-selected characters during assignment
     const handleRosterChange = async (
         pool: RosterAssignmentResponse[],
         assignments: RosterAssignmentResponse[],
+        characterIdMap?: Map<number, string>,
     ) => {
         // ROK-466: Defensive guard — only admins/creators should reach this path
         if (!canManageRoster) {
@@ -135,7 +137,7 @@ export function EventDetailPage() {
             return;
         }
         try {
-            await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments));
+            await updateRoster.mutateAsync(buildRosterUpdate(pool, assignments, characterIdMap));
         } catch (err) {
             toast.error('Failed to update roster', {
                 description: err instanceof Error ? err.message : 'Please try again.',
@@ -635,6 +637,8 @@ export function EventDetailPage() {
                         onRegeneratePugLink={canManageRoster ? handleRegeneratePugLink : undefined}
                         eventId={eventId}
                         onRemoveFromEvent={canManageRoster ? handleRemoveFromEvent : undefined}
+                        gameId={event.game?.id}
+                        isMMOEvent={isMMOGame}
                         stickyExtra={isAuthenticated && event.startTime && event.endTime ? (
                             <GameTimeWidget
                                 eventStartTime={event.startTime}

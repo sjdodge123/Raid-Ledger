@@ -1401,6 +1401,22 @@ export class SignupsService {
       .delete(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId));
 
+    // ROK-461: Update character on signups where admin provided characterId
+    for (const a of dto.assignments) {
+      if (a.characterId) {
+        const signup = signupByUserId.get(a.userId);
+        if (signup) {
+          await this.db
+            .update(schema.eventSignups)
+            .set({
+              characterId: a.characterId,
+              confirmationStatus: 'confirmed',
+            })
+            .where(eq(schema.eventSignups.id, signup.id));
+        }
+      }
+    }
+
     // Insert new assignments
     if (dto.assignments.length > 0) {
       const assignmentValues = dto.assignments.map((a) => {
@@ -1447,6 +1463,20 @@ export class SignupsService {
     ).catch((err) => {
       this.logger.warn(
         'Failed to send roster reassign notifications: %s',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+    });
+
+    // ROK-461: Notify newly assigned players (no previous assignment)
+    this.notifyNewAssignments(
+      eventId,
+      event.title,
+      dto.assignments,
+      signupByUserId,
+      oldRoleBySignupId,
+    ).catch((err) => {
+      this.logger.warn(
+        'Failed to send roster assignment notifications: %s',
         err instanceof Error ? err.message : 'Unknown error',
       );
     });
@@ -1710,6 +1740,43 @@ export class SignupsService {
           payload: { eventId, oldRole, newRole },
         });
       }
+    }
+  }
+
+  /**
+   * ROK-461: Notify players who were newly assigned to a slot (no previous assignment).
+   * Sends an FYI notification so the player knows an admin placed them on the roster.
+   */
+  private async notifyNewAssignments(
+    eventId: number,
+    eventTitle: string,
+    newAssignments: UpdateRosterDto['assignments'],
+    signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
+    oldRoleBySignupId: Map<number, string | null>,
+  ): Promise<void> {
+    for (const assignment of newAssignments) {
+      if (!assignment.userId) continue;
+
+      const signup = signupByUserId.get(assignment.userId);
+      if (!signup) continue;
+
+      const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
+      const newRole = assignment.slot;
+
+      // Only notify if this is a NEW assignment (no previous role)
+      if (oldRole !== null) continue;
+      if (newRole === null) continue;
+
+      const formatLabel = (r: string) =>
+        r.charAt(0).toUpperCase() + r.slice(1);
+
+      await this.notificationService.create({
+        userId: assignment.userId,
+        type: 'roster_reassigned',
+        title: 'Roster Assignment',
+        message: `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
+        payload: { eventId, newRole },
+      });
     }
   }
 

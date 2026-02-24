@@ -25,10 +25,11 @@ interface RosterBuilderProps {
         player?: number;  // ROK-183: Generic player slots
         bench?: number;   // ROK-183: Overflow slots
     };
-    /** Called when roster changes */
+    /** Called when roster changes. ROK-461: characterIdMap carries admin-selected characters. */
     onRosterChange: (
         pool: RosterAssignmentResponse[],
         assignments: RosterAssignmentResponse[],
+        characterIdMap?: Map<number, string>,
     ) => void;
     /** Whether the user can edit (creator/admin) */
     canEdit: boolean;
@@ -56,6 +57,10 @@ interface RosterBuilderProps {
     eventId?: number;
     /** ROK-402: Called when admin removes a signup from the event entirely */
     onRemoveFromEvent?: (signupId: number, username: string) => void;
+    /** ROK-461: Game ID for character selection during admin assignment */
+    gameId?: number;
+    /** ROK-461: Whether this is an MMO event (has role-based slots) */
+    isMMOEvent?: boolean;
 }
 
 // MMO-style role slots
@@ -98,6 +103,8 @@ export const RosterBuilder = memo(function RosterBuilder({
     onRegeneratePugLink,
     eventId,
     onRemoveFromEvent,
+    gameId,
+    isMMOEvent,
 }: RosterBuilderProps) {
     const { announce } = useAriaLive();
 
@@ -179,8 +186,8 @@ export const RosterBuilder = memo(function RosterBuilder({
         setAssignmentTarget({ role, position, occupant });
     };
 
-    // ROK-208: Assign a player from popup to slot
-    const handleAssign = (signupId: number) => {
+    // ROK-208/461: Assign a player from popup to slot, with optional character/role selection
+    const handleAssign = (signupId: number, selection?: { characterId?: string; role?: RosterRole }) => {
         if (!assignmentTarget) return;
         const sourceItem = pool.find(p => p.signupId === signupId);
         if (!sourceItem) return;
@@ -204,7 +211,12 @@ export const RosterBuilder = memo(function RosterBuilder({
             isOverride: sourceItem.character?.role !== assignmentTarget.role,
         });
 
-        onRosterChange(newPool, newAssignments);
+        // ROK-461: Pass characterId through if admin selected one
+        const charMap = selection?.characterId
+            ? new Map([[signupId, selection.characterId]])
+            : undefined;
+
+        onRosterChange(newPool, newAssignments, charMap);
         const msg = `${sourceItem.username} assigned to ${assignmentTarget.role} ${assignmentTarget.position}`;
         toast.success(msg);
         announce(msg);
@@ -379,8 +391,8 @@ export const RosterBuilder = memo(function RosterBuilder({
         setAssignmentTarget(null);
     };
 
-    // ROK-208: Assign player to a specific slot (from browse-all slot picker)
-    const handleAssignToSlot = (signupId: number, role: RosterRole, position: number) => {
+    // ROK-208/461: Assign player to a specific slot (from browse-all slot picker)
+    const handleAssignToSlot = (signupId: number, role: RosterRole, position: number, selection?: { characterId?: string }) => {
         const sourceItem = pool.find(p => p.signupId === signupId);
         if (!sourceItem) return;
 
@@ -394,7 +406,11 @@ export const RosterBuilder = memo(function RosterBuilder({
             isOverride: sourceItem.character?.role !== role,
         });
 
-        onRosterChange(newPool, newAssignments);
+        const charMap = selection?.characterId
+            ? new Map([[signupId, selection.characterId]])
+            : undefined;
+
+        onRosterChange(newPool, newAssignments, charMap);
         const msg = `${sourceItem.username} assigned to ${role} ${position}`;
         toast.success(msg);
         announce(msg);
@@ -585,6 +601,8 @@ export const RosterBuilder = memo(function RosterBuilder({
                 } : undefined}
                 onRemoveFromEvent={onRemoveFromEvent}
                 onReassignToSlot={assignmentTarget?.occupant ? handleReassignToSlot : undefined}
+                gameId={gameId}
+                isMMO={isMMOEvent}
             />
         </div>
     );

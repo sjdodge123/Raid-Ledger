@@ -23,6 +23,8 @@ export const RosterAssignmentSchema = z.object({
     position: z.number().int().min(1).default(1),
     /** Override flag for off-spec assignments */
     isOverride: z.boolean().default(false),
+    /** ROK-461: Character ID to set on the signup (admin assignment) */
+    characterId: z.string().uuid().optional(),
 });
 export type RosterAssignment = z.infer<typeof RosterAssignmentSchema>;
 
