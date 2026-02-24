@@ -955,9 +955,9 @@ export function GameTimeGrid({
                     // ROK-223: variant styling — both use amber/gold border
                     const isSelected = block.variant === 'selected';
                     const borderStyle = isSelected
-                        ? '2px solid rgba(251, 191, 36, 0.8)'
-                        : '2px dashed rgba(251, 191, 36, 0.7)';
-                    const shadowStyle = '0 0 12px rgba(251, 191, 36, 0.25), inset 0 0 8px rgba(251, 191, 36, 0.08)';
+                        ? '3px solid rgba(6, 182, 212, 0.95)'
+                        : '3px dashed rgba(6, 182, 212, 0.85)';
+                    const shadowStyle = '0 0 14px rgba(6, 182, 212, 0.4), inset 0 0 8px rgba(6, 182, 212, 0.1)';
 
                     return (
                         <div

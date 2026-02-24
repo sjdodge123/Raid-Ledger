@@ -135,35 +135,23 @@ describe('RescheduleModal', () => {
         });
     });
 
-    describe('hourRange is data-driven (ROK-370)', () => {
-        it('grid range does not include early morning hours far from data', () => {
-            // Heatmap hours 18-20 + event at local hour → range should NOT include 5 AM
+    describe('full 24h scrollable grid (ROK-475)', () => {
+        it('grid renders all 24 hours (no hourRange filtering)', () => {
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
-            expect(within(grid).queryByTestId('cell-0-5')).not.toBeInTheDocument();
+            // All hours 0-23 should be rendered for any day
+            for (let h = 0; h < 24; h++) {
+                expect(within(grid).getByTestId(`cell-0-${h}`)).toBeInTheDocument();
+            }
         });
 
-        it('grid range includes heatmap hours', () => {
+        it('grid includes heatmap hours', () => {
             // Heatmap has cells at hours 18, 19, 20 — all should be visible
             renderModal();
             const grid = screen.getByTestId('game-time-grid');
             expect(within(grid).getByTestId('cell-0-18')).toBeInTheDocument();
             expect(within(grid).getByTestId('cell-0-19')).toBeInTheDocument();
             expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
-        });
-
-        it('grid range spans at least 12 hours (ROK-475)', () => {
-            renderModal();
-            const grid = screen.getByTestId('game-time-grid');
-            // Collect all visible hour cells for Sunday (day 0)
-            const visibleHours: number[] = [];
-            for (let h = 0; h < 24; h++) {
-                if (within(grid).queryByTestId(`cell-0-${h}`)) {
-                    visibleHours.push(h);
-                }
-            }
-            // Must span at least 12 hours (minimum window) + 2 padding = 14, but clamped to [0,24]
-            expect(visibleHours.length).toBeGreaterThanOrEqual(12);
         });
     });
 
@@ -325,37 +313,18 @@ describe('RescheduleModal', () => {
 });
 
 // ---------------------------------------------------------------------------
-// ROK-475: Minimum 12-hour window tests (adversarial / edge-case suite)
+// ROK-475: Full 24h scrollable grid tests
 // ---------------------------------------------------------------------------
 
-// Helper to override the useAggregateGameTime mock for specific test scenarios
 import { useAggregateGameTime } from '../../hooks/use-reschedule';
 
-/** Count the number of distinct hour rows rendered by the grid for day 0 */
-function countVisibleHoursForDay(grid: HTMLElement, day = 0): number {
-    let count = 0;
-    for (let h = 0; h < 25; h++) {
-        if (within(grid).queryByTestId(`cell-${day}-${h}`)) count++;
-    }
-    return count;
-}
-
-/** Collect visible hours for day 0 */
-function visibleHoursForDay(grid: HTMLElement, day = 0): number[] {
-    const hours: number[] = [];
-    for (let h = 0; h < 25; h++) {
-        if (within(grid).queryByTestId(`cell-${day}-${h}`)) hours.push(h);
-    }
-    return hours;
-}
-
-describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)', () => {
+describe('ROK-475: full 24h scrollable grid', () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
 
-    it('renders at least 12 hour rows when availability data spans only 1 hour', () => {
-        // Data covers only hour 20 — far too narrow without the fix
+    it('renders all 24 hours regardless of availability data range', () => {
+        // Data covers only hour 20, but grid should still show all 24 hours
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 3,
@@ -370,124 +339,24 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
         });
 
         const grid = screen.getByTestId('game-time-grid');
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
+        for (let h = 0; h < 24; h++) {
+            expect(within(grid).getByTestId(`cell-0-${h}`)).toBeInTheDocument();
+        }
     });
 
-    it('shows "no players" message and hides the grid when there is no availability data at all', () => {
-        // When totalUsers === 0, the component shows the "no players" fallback
-        // message instead of the grid. The hourRange logic is not exercised in this
-        // branch, so this is the correct expected behavior.
+    it('shows "no players" message and hides the grid when signups are 0', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 0, cells: [] },
             isLoading: false,
         } as unknown as ReturnType<typeof useAggregateGameTime>);
 
-        renderModal({
-            currentStartTime: '2026-02-25T14:00:00.000Z',
-            currentEndTime: '2026-02-25T15:00:00.000Z',
-        });
+        renderModal();
 
         expect(screen.getByText(/No players signed up yet/)).toBeInTheDocument();
         expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
     });
 
-    it('renders at least 12 hour rows when event is 1 hour (minimal event)', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 5,
-                cells: [
-                    { dayOfWeek: 2, hour: 12, availableCount: 5, totalCount: 5 },
-                ],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal({
-            currentStartTime: '2026-02-25T12:00:00.000Z',
-            currentEndTime: '2026-02-25T13:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
-    });
-
-    it('renders at least 12 hour rows when availability data spans exactly 2 hours', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 4,
-                cells: [
-                    { dayOfWeek: 1, hour: 18, availableCount: 4, totalCount: 4 },
-                    { dayOfWeek: 1, hour: 19, availableCount: 3, totalCount: 4 },
-                ],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal({
-            currentStartTime: '2026-02-25T18:00:00.000Z',
-            currentEndTime: '2026-02-25T20:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
-    });
-
-    it('does not truncate the window when data already spans > 12 hours', () => {
-        // Availability from hour 6 to hour 22 → 16 hours
-        const wideCells = Array.from({ length: 16 }, (_, i) => ({
-            dayOfWeek: 0,
-            hour: 6 + i,
-            availableCount: 3,
-            totalCount: 4,
-        }));
-
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: { totalUsers: 4, cells: wideCells },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal({
-            currentStartTime: '2026-02-25T14:00:00.000Z',
-            currentEndTime: '2026-02-25T16:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const hourCount = countVisibleHoursForDay(grid);
-        // Should still show all 16+ hours (not clamped down to 12)
-        expect(hourCount).toBeGreaterThanOrEqual(14);
-    });
-});
-
-describe('ROK-475: current event time is visible within the rendered window (AC2)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('current event hour is always included in the visible range', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 3,
-                cells: [{ dayOfWeek: 3, hour: 22, availableCount: 2, totalCount: 3 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal({
-            currentStartTime: '2026-02-25T20:00:00.000Z',
-            currentEndTime: '2026-02-25T22:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const currentDay = new Date('2026-02-25T20:00:00.000Z').getDay();
-        const currentHour = new Date('2026-02-25T20:00:00.000Z').getHours();
-        // The current event hour cell must exist in the grid
-        expect(within(grid).queryByTestId(`cell-${currentDay}-${currentHour}`)).toBeInTheDocument();
-    });
-
-    it('event block for the current event is rendered in the grid', () => {
+    it('current event block is rendered in the grid', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 2,
@@ -502,17 +371,10 @@ describe('ROK-475: current event time is visible within the rendered window (AC2
         });
 
         const currentDay = new Date('2026-02-25T10:00:00.000Z').getDay();
-        // The event block for eventId=42 should be in the DOM
         expect(screen.getByTestId(`event-block-42-${currentDay}`)).toBeInTheDocument();
     });
-});
 
-describe('ROK-475: player availability data displays correctly within expanded window (AC3)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('heatmap cells at hours within the expanded window have correct data-testid attributes', () => {
+    it('heatmap cells are rendered at the correct positions', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: {
                 totalUsers: 5,
@@ -528,37 +390,9 @@ describe('ROK-475: player availability data displays correctly within expanded w
         renderModal();
 
         const grid = screen.getByTestId('game-time-grid');
-        // All heatmap data hours must be visible in the grid
         expect(within(grid).getByTestId('cell-0-18')).toBeInTheDocument();
         expect(within(grid).getByTestId('cell-0-19')).toBeInTheDocument();
         expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
-    });
-
-    it('cells with <25% availability are not used to expand the window beyond the minimum', () => {
-        // Only cells where >25% are available expand the window.
-        // Cell at hour 2 has 1/5 = 20% — should NOT expand.
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 5,
-                cells: [
-                    { dayOfWeek: 0, hour: 2, availableCount: 1, totalCount: 5 },  // 20% — weak
-                    { dayOfWeek: 0, hour: 20, availableCount: 4, totalCount: 5 }, // 80% — strong
-                ],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        // Event at hour 20 — if weak cell at hour 2 were included, window would be 18+h
-        renderModal({
-            currentStartTime: '2026-02-25T20:00:00.000Z',
-            currentEndTime: '2026-02-25T22:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        // Hour 2 should NOT be visible (weak cell, and far from the strong cells/event)
-        expect(within(grid).queryByTestId('cell-0-2')).not.toBeInTheDocument();
-        // Hour 20 MUST be visible (strong cell)
-        expect(within(grid).getByTestId('cell-0-20')).toBeInTheDocument();
     });
 
     it('shows signup count in the instruction text', () => {
@@ -573,252 +407,8 @@ describe('ROK-475: player availability data displays correctly within expanded w
         renderModal();
         expect(screen.getByText(/7 signed up/)).toBeInTheDocument();
     });
-});
 
-describe('ROK-475: edge case — event at midnight boundary (AC1 + AC2)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('event at midnight (hour 0) produces a window that does not include negative hours', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 3,
-                cells: [{ dayOfWeek: 0, hour: 0, availableCount: 3, totalCount: 3 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        // Event at midnight local time — derive ISO string for UTC midnight mapping
-        // We use getDay()/getHours() in the component so we need to control the local time.
-        // Use a fixed prop that maps to hour 0 in whatever timezone the test runner uses.
-        const startOfDay = new Date('2026-02-25');
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date('2026-02-25');
-        endOfDay.setHours(1, 0, 0, 0);
-
-        renderModal({
-            currentStartTime: startOfDay.toISOString(),
-            currentEndTime: endOfDay.toISOString(),
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        // No cell with a negative hour should appear (grid only has 0-23)
-        for (let h = -5; h < 0; h++) {
-            expect(within(grid).queryByTestId(`cell-0-${h}`)).not.toBeInTheDocument();
-        }
-        // Hour 0 must be visible
-        const day = startOfDay.getDay();
-        expect(within(grid).queryByTestId(`cell-${day}-0`)).toBeInTheDocument();
-    });
-
-    it('event near end of day (hour 23) produces a window clamped to hour 24 max', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 2,
-                cells: [{ dayOfWeek: 3, hour: 23, availableCount: 2, totalCount: 2 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        const late = new Date('2026-02-25');
-        late.setHours(23, 0, 0, 0);
-        const lateEnd = new Date('2026-02-26');
-        lateEnd.setHours(0, 0, 0, 0);
-
-        renderModal({
-            currentStartTime: late.toISOString(),
-            currentEndTime: lateEnd.toISOString(),
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        // No hour >= 24 should appear
-        for (let h = 24; h < 30; h++) {
-            expect(within(grid).queryByTestId(`cell-0-${h}`)).not.toBeInTheDocument();
-        }
-    });
-});
-
-describe('ROK-475: edge case — data spanning full 0-24h range (AC1)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('renders all 24 hours when availability data covers the full day', () => {
-        const fullDayCells = Array.from({ length: 24 }, (_, h) => ({
-            dayOfWeek: 0,
-            hour: h,
-            availableCount: 3,
-            totalCount: 4,
-        }));
-
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: { totalUsers: 4, cells: fullDayCells },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal();
-        const grid = screen.getByTestId('game-time-grid');
-        // With full-day data + 1-hr padding, window is clamped to [0,24] → 24 hours max
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
-        expect(hourCount).toBeLessThanOrEqual(24);
-    });
-});
-
-describe('ROK-475: symmetric expansion from midpoint (AC1)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('expands symmetrically when span is less than 12 hours', () => {
-        // Event from hour 12 to 13 (1h), no data → span=1, midpoint=12.5
-        // Expected: minHour = round(12.5 - 6) = 7, maxHour = 7+12 = 19
-        // With 1h padding: rangeStart = max(0, 6) = 6, rangeEnd = min(24, 20) = 20
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: { totalUsers: 0, cells: [] },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        // Force the component to show the grid by giving it users (otherwise "no players" message)
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 2,
-                cells: [
-                    { dayOfWeek: 3, hour: 12, availableCount: 2, totalCount: 2 },
-                ],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        // Create times in local timezone to control currentHour
-        const noon = new Date('2026-02-25');
-        noon.setHours(12, 0, 0, 0);
-        const noonEnd = new Date('2026-02-25');
-        noonEnd.setHours(13, 0, 0, 0);
-
-        renderModal({
-            currentStartTime: noon.toISOString(),
-            currentEndTime: noonEnd.toISOString(),
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const hours = visibleHoursForDay(grid, 3);
-        expect(hours.length).toBeGreaterThanOrEqual(12);
-        // The window should be centered around noon — hours significantly before and after noon
-        // should both be included (symmetric expansion)
-        const minVisible = Math.min(...hours);
-        const maxVisible = Math.max(...hours);
-        expect(maxVisible - minVisible + 1).toBeGreaterThanOrEqual(12);
-    });
-
-    it('the expanded window contains the event hour', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 3,
-                cells: [{ dayOfWeek: 0, hour: 15, availableCount: 3, totalCount: 3 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        const three = new Date('2026-02-25');
-        three.setHours(15, 0, 0, 0);
-        const threeEnd = new Date('2026-02-25');
-        threeEnd.setHours(16, 0, 0, 0);
-
-        renderModal({
-            currentStartTime: three.toISOString(),
-            currentEndTime: threeEnd.toISOString(),
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const day = three.getDay();
-        // Event hour (15) must always be in the visible window
-        expect(within(grid).queryByTestId(`cell-${day}-15`)).toBeInTheDocument();
-    });
-});
-
-describe('ROK-475: grid selection expands window (AC1)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('clicking a cell far from the event extends the window to include that cell', () => {
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 5,
-                cells: [
-                    { dayOfWeek: 0, hour: 18, availableCount: 4, totalCount: 5 },
-                    { dayOfWeek: 0, hour: 19, availableCount: 4, totalCount: 5 },
-                    { dayOfWeek: 3, hour: 20, availableCount: 5, totalCount: 5 },
-                ],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal();
-        const grid = screen.getByTestId('game-time-grid');
-
-        // Click a cell that's already in the grid (e.g. hour 18, day 0)
-        fireEvent.click(within(grid).getByTestId('cell-0-18'));
-
-        // After selection, window should still be at least 12 hours
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
-    });
-});
-
-describe('ROK-475: no regression to create-event heatmap (AC5)', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-    });
-
-    it('RescheduleModal uses GameTimeGrid (not TeamAvailabilityPicker) for its heatmap', () => {
-        // RescheduleModal renders game-time-grid with the hourRange fix applied.
-        // Create event uses a separate component (TeamAvailabilityPicker) — verified in
-        // create-event-form.test.tsx. This test confirms the reschedule modal is using
-        // the correct grid component and is isolated from the create event form.
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 5,
-                cells: [{ dayOfWeek: 0, hour: 18, availableCount: 4, totalCount: 5 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal();
-
-        // RescheduleModal renders game-time-grid
-        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
-        // RescheduleModal does NOT render the create-event's TeamAvailabilityPicker
-        expect(screen.queryByTestId('team-availability-picker')).not.toBeInTheDocument();
-    });
-
-    it('hourRange is only applied inside RescheduleModal — source constant MIN_WINDOW=12 enforces minimum', () => {
-        // Verify that with a very narrow data range the grid still shows ≥ 12 hours,
-        // confirming the MIN_WINDOW constant in RescheduleModal is functioning.
-        vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: {
-                totalUsers: 3,
-                // Only one hour of data
-                cells: [{ dayOfWeek: 1, hour: 21, availableCount: 3, totalCount: 3 }],
-            },
-            isLoading: false,
-        } as unknown as ReturnType<typeof useAggregateGameTime>);
-
-        renderModal({
-            currentStartTime: '2026-02-25T21:00:00.000Z',
-            currentEndTime: '2026-02-25T22:00:00.000Z',
-        });
-
-        const grid = screen.getByTestId('game-time-grid');
-        const hourCount = countVisibleHoursForDay(grid);
-        expect(hourCount).toBeGreaterThanOrEqual(12);
-    });
-});
-
-describe('ROK-475: loading state does not render grid (AC3)', () => {
-    it('shows loading message when data is loading', () => {
+    it('does not render the grid when loading', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: undefined,
             isLoading: true,
@@ -829,14 +419,17 @@ describe('ROK-475: loading state does not render grid (AC3)', () => {
         expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
     });
 
-    it('shows "no players" message when signup count is 0', () => {
+    it('uses GameTimeGrid (not TeamAvailabilityPicker) for the heatmap', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
-            data: { totalUsers: 0, cells: [] },
+            data: {
+                totalUsers: 5,
+                cells: [{ dayOfWeek: 0, hour: 18, availableCount: 4, totalCount: 5 }],
+            },
             isLoading: false,
         } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
-        expect(screen.getByText(/No players signed up yet/)).toBeInTheDocument();
-        expect(screen.queryByTestId('game-time-grid')).not.toBeInTheDocument();
+        expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+        expect(screen.queryByTestId('team-availability-picker')).not.toBeInTheDocument();
     });
 });
