@@ -1,34 +1,8 @@
 import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
-import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
+import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
-
-type EventStatus = 'upcoming' | 'live' | 'ended';
-
-const STATUS_STYLES: Record<EventStatus, string> = {
-    upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-    ended: 'bg-dim/20 text-muted border-dim/30',
-};
-
-const STATUS_LABELS: Record<EventStatus, string> = {
-    upcoming: 'Upcoming',
-    live: 'Live',
-    ended: 'Ended',
-};
-
-function formatEventTime(dateString: string, timeZone?: string): string {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        ...(timeZone ? { timeZone } : {}),
-    }).format(date);
-}
 
 interface MobileEventCardProps {
     event: EventResponseDto;

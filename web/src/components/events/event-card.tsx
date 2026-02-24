@@ -1,6 +1,7 @@
 import React from 'react';
 import type { EventResponseDto } from '@raid-ledger/contract';
-import { getEventStatus, getRelativeTime } from '../../lib/event-utils';
+import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS_LABELS } from '../../lib/event-utils';
+import type { EventDisplayStatus } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 
@@ -12,51 +13,19 @@ interface EventCardProps {
     matchesGameTime?: boolean;
 }
 
-type EventStatus = 'upcoming' | 'live' | 'ended' | 'cancelled';
-
 /**
  * Status badge component with color coding
  */
-function StatusBadge({ status }: { status: EventStatus }) {
-    const styles: Record<EventStatus, string> = {
-        upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-        live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
-        ended: 'bg-dim/20 text-muted border-dim/30',
-        cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
-    };
-
-    const labels: Record<EventStatus, string> = {
-        upcoming: 'Upcoming',
-        live: 'Live',
-        ended: 'Ended',
-        cancelled: 'Cancelled',
-    };
-
+function StatusBadge({ status }: { status: EventDisplayStatus }) {
     return (
         <span
             data-testid="event-status-badge"
             aria-label={`Event status: ${status}`}
-            className={`px-2 py-0.5 text-xs font-medium rounded-full border ${styles[status]}`}
+            className={`px-2 py-0.5 text-xs font-medium rounded-full border ${STATUS_STYLES[status]}`}
         >
-            {labels[status]}
+            {STATUS_LABELS[status]}
         </span>
     );
-}
-
-/**
- * Format date/time in user's preferred timezone
- */
-function formatEventTime(dateString: string, timeZone?: string): string {
-    const date = new Date(dateString);
-    return new Intl.DateTimeFormat('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-        timeZoneName: 'short',
-        ...(timeZone ? { timeZone } : {}),
-    }).format(date);
 }
 
 /**
@@ -94,7 +63,7 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
     const resolved = useTimezoneStore((s) => s.resolved);
     const gameCoverUrl = event.game?.coverUrl || null;
     const isCancelled = !!event.cancelledAt;
-    const status: EventStatus = isCancelled ? 'cancelled' : getEventStatus(event.startTime, event.endTime);
+    const status: EventDisplayStatus = isCancelled ? 'cancelled' : getEventStatus(event.startTime, event.endTime);
     const relativeTime = getRelativeTime(event.startTime, event.endTime);
     const placeholderPath = getPlaceholderPath(event.game?.slug);
 
