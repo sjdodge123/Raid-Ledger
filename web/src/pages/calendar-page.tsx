@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
@@ -11,7 +11,6 @@ import { Modal } from '../components/ui/modal';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
-import { useFilterCap } from '../hooks/use-filter-cap';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import '../components/calendar/calendar-styles.css';
 
@@ -44,9 +43,8 @@ export function CalendarPage() {
     const selectAllGames = useGameFilterStore((s) => s.selectAll);
     const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
 
-    // Sidebar ref for dynamic filter cap calculation
-    const sidebarRef = useRef<HTMLElement>(null);
-    const maxVisible = useFilterCap(sidebarRef);
+    // Hard cap — show at most 5 games inline, overflow to modal
+    const maxVisible = 5;
 
     // Game time overlay for calendar indicator
     const { isAuthenticated } = useAuth();
@@ -107,7 +105,7 @@ export function CalendarPage() {
 
                 <div className="calendar-page-layout">
                     {/* Sidebar (desktop only) */}
-                    <aside className="calendar-sidebar" ref={sidebarRef}>
+                    <aside className="calendar-sidebar">
                         {/* Mini Calendar Navigator */}
                         <MiniCalendar
                             currentDate={currentDate}

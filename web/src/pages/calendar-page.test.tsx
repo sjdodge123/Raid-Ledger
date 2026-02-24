@@ -59,10 +59,6 @@ vi.mock('../constants/game-colors', () => ({
     getGameColors: () => ({ bg: '#fff', border: '#ccc', icon: '🎮' }),
 }));
 
-vi.mock('../hooks/use-filter-cap', () => ({
-    useFilterCap: () => 3,
-}));
-
 // Suppress CSS import
 vi.mock('../components/calendar/calendar-styles.css', () => ({}));
 
@@ -207,19 +203,25 @@ describe('CalendarPage — auto-select behaviour', () => {
     });
 });
 
-describe('CalendarPage — inline list capping (maxVisible=3)', () => {
+describe('CalendarPage — inline list capping (maxVisible=5)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
     });
 
-    it('shows all games inline when count <= maxVisible (3)', () => {
+    it('shows all games inline when count <= maxVisible (5)', () => {
         renderPage();
-        deliverGames([makeGame('a', 'Alpha'), makeGame('b', 'Beta'), makeGame('c', 'Gamma')]);
+        deliverGames([
+            makeGame('a', 'Alpha'),
+            makeGame('b', 'Beta'),
+            makeGame('c', 'Gamma'),
+            makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+        ]);
 
-        // Exactly 3 checkboxes in inline list
+        // Exactly 5 checkboxes in inline list
         const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(3);
+        expect(checkboxes).toHaveLength(5);
 
         // No overflow button when count equals cap
         expect(screen.queryByText(/Show all/i)).not.toBeInTheDocument();
@@ -232,23 +234,27 @@ describe('CalendarPage — inline list capping (maxVisible=3)', () => {
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
 
-        expect(screen.getByText(/Show all 4 games/i)).toBeInTheDocument();
+        expect(screen.getByText(/Show all 6 games/i)).toBeInTheDocument();
     });
 
-    it('only shows maxVisible (3) items inline when overflow', () => {
+    it('only shows maxVisible (5) items inline when overflow', () => {
         renderPage();
         deliverGames([
             makeGame('a', 'Alpha'),
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
 
-        // Only 3 checkboxes in inline list (4th is in overflow)
+        // Only 5 checkboxes in inline list (6th is in overflow)
         const checkboxes = screen.getAllByRole('checkbox');
-        expect(checkboxes).toHaveLength(3);
+        expect(checkboxes).toHaveLength(5);
     });
 
     it('"Show all" button count reflects total game count including overflow', () => {
@@ -259,9 +265,11 @@ describe('CalendarPage — inline list capping (maxVisible=3)', () => {
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
             makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
+            makeGame('g', 'Golf'),
         ]);
 
-        expect(screen.getByText(/Show all 5 games/i)).toBeInTheDocument();
+        expect(screen.getByText(/Show all 7 games/i)).toBeInTheDocument();
     });
 });
 
@@ -278,6 +286,8 @@ describe('CalendarPage — filter modal (overflow)', () => {
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
     }
 
@@ -305,6 +315,8 @@ describe('CalendarPage — filter modal (overflow)', () => {
         expect(dialog).toHaveTextContent('Beta');
         expect(dialog).toHaveTextContent('Gamma');
         expect(dialog).toHaveTextContent('Delta');
+        expect(dialog).toHaveTextContent('Epsilon');
+        expect(dialog).toHaveTextContent('Foxtrot');
     });
 
     it('modal title is "Filter by Game"', () => {
@@ -351,11 +363,13 @@ describe('CalendarPage — filter modal (overflow)', () => {
         const names = checkboxes.map(
             (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
         );
-        // Sorted: Alpha, Beta, Delta, Gamma
+        // Sorted: Alpha, Beta, Delta, Epsilon, Foxtrot, Gamma
         expect(names[0]).toBe('Alpha');
         expect(names[1]).toBe('Beta');
         expect(names[2]).toBe('Delta');
-        expect(names[3]).toBe('Gamma');
+        expect(names[3]).toBe('Epsilon');
+        expect(names[4]).toBe('Foxtrot');
+        expect(names[5]).toBe('Gamma');
     });
 });
 
@@ -390,12 +404,14 @@ describe('CalendarPage — game toggle', () => {
 
     it('toggling in modal stays synced with inline list', () => {
         renderPage();
-        // 4 games to force overflow (cap=3); sorted: Alpha, Beta, Delta, Gamma
+        // 6 games to force overflow (cap=5); sorted: Alpha, Beta, Delta, Epsilon, Foxtrot, Gamma
         deliverGames([
             makeGame('a', 'Alpha'),
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
 
         // Open modal and toggle Alpha off by clicking its label
@@ -422,7 +438,7 @@ describe('CalendarPage — game toggle', () => {
         // Close modal
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
 
-        // Alpha is in the first 3 alphabetically (Alpha, Beta, Delta), so it's in inline list
+        // Alpha is in the first 5 alphabetically (Alpha, Beta, Delta, Epsilon, Foxtrot), so it's in inline list
         const inlineCheckboxes = screen.getAllByRole('checkbox');
         const inlineAlpha = inlineCheckboxes.find((cb) =>
             (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent === 'Alpha',
@@ -473,6 +489,8 @@ describe('CalendarPage — All / None buttons', () => {
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
 
         // Open modal, deselect all via "None", then re-select via "All"
@@ -678,6 +696,8 @@ describe('CalendarPage — FAB and BottomSheet', () => {
             makeGame('b', 'Beta'),
             makeGame('c', 'Gamma'),
             makeGame('d', 'Delta'),
+            makeGame('e', 'Epsilon'),
+            makeGame('f', 'Foxtrot'),
         ]);
 
         const sheet = screen.getByTestId('bottom-sheet');
@@ -685,6 +705,8 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         expect(sheet).toHaveTextContent('Beta');
         expect(sheet).toHaveTextContent('Gamma');
         expect(sheet).toHaveTextContent('Delta');
+        expect(sheet).toHaveTextContent('Epsilon');
+        expect(sheet).toHaveTextContent('Foxtrot');
     });
 
     it('bottom sheet shows count of selected vs total games', () => {
