@@ -146,6 +146,7 @@ describe('DiscordEventListener', () => {
         42,
         mockPayload.event,
         101,
+        undefined,
       );
     });
 

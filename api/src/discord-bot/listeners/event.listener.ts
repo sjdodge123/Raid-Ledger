@@ -32,6 +32,7 @@ export interface EventPayload {
   recurrenceRule?: {
     frequency: 'weekly' | 'biweekly' | 'monthly';
   } | null;
+  recurrenceGroupId?: string | null;
 }
 
 /**
@@ -77,6 +78,7 @@ export class DiscordEventListener {
       payload.eventId,
       payload.event,
       payload.gameId,
+      payload.recurrenceGroupId,
     );
   }
 
@@ -115,6 +117,7 @@ export class DiscordEventListener {
           payload.eventId,
           payload.event,
           payload.gameId,
+          payload.recurrenceGroupId,
         );
       } else {
         this.logger.debug(
