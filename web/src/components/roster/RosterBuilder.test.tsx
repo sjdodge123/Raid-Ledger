@@ -2,14 +2,22 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RosterBuilder } from './RosterBuilder';
 import { computeAutoFill } from './roster-auto-fill';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import type { ReactElement } from 'react';
 
-/** Wrap component in MemoryRouter for Link context */
+/** Wrap component in MemoryRouter + QueryClientProvider for hook context */
 function renderWithRouter(ui: ReactElement) {
-    return render(<MemoryRouter>{ui}</MemoryRouter>);
+    const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+        <QueryClientProvider client={queryClient}>
+            <MemoryRouter>{ui}</MemoryRouter>
+        </QueryClientProvider>
+    );
 }
 
 // Mock sonner toast
@@ -642,17 +650,20 @@ describe('RosterBuilder', () => {
             expect(screen.getByText('Join?')).toBeInTheDocument();
 
             // Re-render with same props (simulates background refetch re-render)
+            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
             rerender(
-                <MemoryRouter>
-                    <RosterBuilder
-                        pool={[]}
-                        assignments={[]}
-                        onRosterChange={mockOnRosterChange}
-                        canEdit={false}
-                        canJoin={true}
-                        onSlotClick={mockSlotClick}
-                    />
-                </MemoryRouter>
+                <QueryClientProvider client={qc}>
+                    <MemoryRouter>
+                        <RosterBuilder
+                            pool={[]}
+                            assignments={[]}
+                            onRosterChange={mockOnRosterChange}
+                            canEdit={false}
+                            canJoin={true}
+                            onSlotClick={mockSlotClick}
+                        />
+                    </MemoryRouter>
+                </QueryClientProvider>
             );
 
             // "Join?" should still be showing after re-render
@@ -684,17 +695,20 @@ describe('RosterBuilder', () => {
 
             // Simulate a background refetch that briefly sets canJoin=false
             // (e.g., isSignedUp momentarily reflects stale data)
+            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
             rerender(
-                <MemoryRouter>
-                    <RosterBuilder
-                        pool={[]}
-                        assignments={[]}
-                        onRosterChange={mockOnRosterChange}
-                        canEdit={false}
-                        canJoin={false}
-                        onSlotClick={mockSlotClick}
-                    />
-                </MemoryRouter>
+                <QueryClientProvider client={qc}>
+                    <MemoryRouter>
+                        <RosterBuilder
+                            pool={[]}
+                            assignments={[]}
+                            onRosterChange={mockOnRosterChange}
+                            canEdit={false}
+                            canJoin={false}
+                            onSlotClick={mockSlotClick}
+                        />
+                    </MemoryRouter>
+                </QueryClientProvider>
             );
 
             // The pending "Join?" should still be visible because pendingSlotKey

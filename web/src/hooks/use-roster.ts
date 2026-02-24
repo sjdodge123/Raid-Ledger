@@ -108,10 +108,12 @@ export function useAdminRemoveUser(eventId: number) {
 
 /**
  * Helper to build UpdateRosterDto from component state.
+ * ROK-461: characterId map allows admin assignment to set a character on the signup.
  */
 export function buildRosterUpdate(
     _pool: RosterAssignmentResponse[],
     assignments: RosterAssignmentResponse[],
+    characterIdMap?: Map<number, string>,
 ): UpdateRosterDto {
     return {
         assignments: assignments
@@ -122,6 +124,7 @@ export function buildRosterUpdate(
                 slot: a.slot,
                 position: a.position,
                 isOverride: a.isOverride,
+                characterId: characterIdMap?.get(a.signupId),
             })),
     };
 }

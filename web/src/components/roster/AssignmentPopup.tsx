@@ -1,12 +1,31 @@
 import { useState, useMemo } from 'react';
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { RosterAssignmentResponse, RosterRole, CharacterDto } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { PlayerCard } from '../events/player-card';
 import { ROLE_EMOJI, ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';
+import { useUserCharacters } from '../../hooks/use-characters';
 import './AssignmentPopup.css';
 
 /** PUG-eligible roles (only MMO combat roles map to PugRole) */
 const PUG_ELIGIBLE_ROLES = new Set<RosterRole>(['tank', 'healer', 'dps']);
+
+/** MMO combat roles */
+const MMO_ROLES = ['tank', 'healer', 'dps'] as const;
+type CombatRole = (typeof MMO_ROLES)[number];
+
+/** Role display colors */
+const ROLE_COLORS: Record<CombatRole, string> = {
+    tank: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    healer: 'bg-green-500/20 text-green-400 border-green-500/30',
+    dps: 'bg-red-500/20 text-red-400 border-red-500/30',
+};
+
+/** Role emoji indicators */
+const ROLE_ICONS: Record<CombatRole, string> = {
+    tank: '\u{1F6E1}\u{FE0F}',
+    healer: '\u{1F49A}',
+    dps: '\u{2694}\u{FE0F}',
+};
 
 /** A single slot for the slot picker (may be empty or occupied) */
 export interface AvailableSlot {
@@ -16,6 +35,13 @@ export interface AvailableSlot {
     color: string;
     /** If occupied, the name of the player in this slot */
     occupantName?: string;
+}
+
+/** ROK-461: Data from character/role selection step */
+export interface AssignmentSelection {
+    signupId: number;
+    characterId?: string;
+    role?: RosterRole;
 }
 
 interface AssignmentPopupProps {
@@ -31,8 +57,8 @@ interface AssignmentPopupProps {
     unassigned: RosterAssignmentResponse[];
     /** Current occupant of the slot (for swap/remove) */
     currentOccupant?: RosterAssignmentResponse;
-    /** Called when admin clicks Assign on a player (slot already known) */
-    onAssign: (signupId: number) => void;
+    /** ROK-461: Called when admin confirms assignment with optional character/role */
+    onAssign: (signupId: number, selection?: { characterId?: string; role?: RosterRole }) => void;
     /** Called when admin clicks Remove to Unassigned */
     onRemove?: (signupId: number) => void;
     /** Called when admin wants to assign themselves (sign up + claim slot) */
@@ -40,7 +66,7 @@ interface AssignmentPopupProps {
     /** Available empty slots for slot picker (browse-all mode) */
     availableSlots?: AvailableSlot[];
     /** Called when admin picks a slot for a player (browse-all mode) */
-    onAssignToSlot?: (signupId: number, role: RosterRole, position: number) => void;
+    onAssignToSlot?: (signupId: number, role: RosterRole, position: number, selection?: { characterId?: string }) => void;
     /** Called when admin clicks "Invite a PUG" — generates invite link (ROK-263) */
     onGenerateInviteLink?: () => void;
     /** ROK-402: Called when admin removes a signup from the event entirely */
@@ -51,6 +77,10 @@ interface AssignmentPopupProps {
         toRole: RosterRole,
         toPosition: number,
     ) => void;
+    /** ROK-461: Game ID for fetching player's characters */
+    gameId?: number;
+    /** ROK-461: Whether this is an MMO event with roles */
+    isMMO?: boolean;
 }
 
 
@@ -59,6 +89,8 @@ interface AssignmentPopupProps {
  * Two modes:
  * 1. Targeted: Opened from a specific slot click — shows player list, clicking Assign assigns directly.
  * 2. Browse-all: Opened from Unassigned bar — shows player list, clicking Assign opens slot picker.
+ *
+ * ROK-461: After admin selects a player, shows character/role selection step before confirming.
  */
 export function AssignmentPopup({
     isOpen,
@@ -75,17 +107,29 @@ export function AssignmentPopup({
     onGenerateInviteLink,
     onRemoveFromEvent,
     onReassignToSlot,
+    gameId,
+    isMMO = false,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
     const [selectedPlayerId, setSelectedPlayerId] = useState<number | null>(null);
     // ROK-390: Reassign mode — shows slot picker for moving current occupant
     const [reassignMode, setReassignMode] = useState(false);
+    // ROK-461: Character/role selection step
+    const [selectionTarget, setSelectionTarget] = useState<RosterAssignmentResponse | null>(null);
+    const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
+    const [selectedRole, setSelectedRole] = useState<RosterRole | null>(null);
 
     const isBrowseAll = slotRole === null;
     const selectedPlayer = selectedPlayerId != null
         ? unassigned.find(u => u.signupId === selectedPlayerId)
         : null;
+
+    // ROK-461: Fetch characters for the player being assigned
+    const { data: playerCharacters, isLoading: isLoadingCharacters } = useUserCharacters(
+        selectionTarget?.userId ?? null,
+        gameId,
+    );
 
     // Sort: matching role first (character role OR preferred roles), then alphabetical
     const { matching, other } = useMemo(() => {
@@ -127,35 +171,108 @@ export function AssignmentPopup({
         }));
     }, [availableSlots]);
 
-    const title = reassignMode && currentOccupant
-        ? `Reassign ${currentOccupant.username}`
-        : selectedPlayer
-            ? `Pick a slot for ${selectedPlayer.username}`
-            : slotRole && slotPosition > 0
-                ? `Assign to ${formatRole(slotRole)} ${slotPosition}`
-                : 'Unassigned Players';
+    const title = selectionTarget
+        ? `Select Character for ${selectionTarget.username}`
+        : reassignMode && currentOccupant
+            ? `Reassign ${currentOccupant.username}`
+            : selectedPlayer
+                ? `Pick a slot for ${selectedPlayer.username}`
+                : slotRole && slotPosition > 0
+                    ? `Assign to ${formatRole(slotRole)} ${slotPosition}`
+                    : 'Unassigned Players';
+
+    // ROK-461: Enter character selection step for a player
+    const enterSelectionStep = (player: RosterAssignmentResponse) => {
+        // If game has no characters (no gameId), skip selection step
+        if (!gameId) {
+            if (isBrowseAll && onAssignToSlot && availableSlots) {
+                setSelectedPlayerId(player.signupId);
+            } else {
+                onAssign(player.signupId);
+                setSearch('');
+            }
+            return;
+        }
+        setSelectionTarget(player);
+        setSelectedCharacterId(player.character?.id ?? null);
+        setSelectedRole(slotRole);
+    };
 
     const handleAssign = (signupId: number) => {
+        const player = unassigned.find(u => u.signupId === signupId);
+        if (!player) return;
+
         if (isBrowseAll && onAssignToSlot && availableSlots) {
-            // Browse-all mode: show slot picker
-            setSelectedPlayerId(signupId);
+            // Browse-all mode: enter selection step, then show slot picker
+            if (gameId) {
+                // Enter selection, but remember we need slot picker after
+                enterSelectionStep(player);
+            } else {
+                setSelectedPlayerId(signupId);
+            }
         } else {
-            // Targeted mode: assign directly
-            onAssign(signupId);
+            // Targeted mode: enter selection step
+            enterSelectionStep(player);
+        }
+    };
+
+    // ROK-461: Confirm character/role selection and proceed
+    const handleSelectionConfirm = () => {
+        if (!selectionTarget) return;
+        const selection = {
+            characterId: selectedCharacterId ?? undefined,
+            role: selectedRole ?? undefined,
+        };
+
+        if (isBrowseAll && onAssignToSlot && availableSlots) {
+            // After selection, show slot picker
+            setSelectedPlayerId(selectionTarget.signupId);
+            // Store selection data on the target for later use
+            setSelectionTarget(null);
+        } else {
+            // Targeted mode: assign with selection
+            onAssign(selectionTarget.signupId, selection);
+            setSelectionTarget(null);
+            setSelectedCharacterId(null);
+            setSelectedRole(null);
+            setSearch('');
+        }
+    };
+
+    // ROK-461: Skip character selection (no characters or admin chooses to skip)
+    const handleSelectionSkip = () => {
+        if (!selectionTarget) return;
+
+        if (isBrowseAll && onAssignToSlot && availableSlots) {
+            setSelectedPlayerId(selectionTarget.signupId);
+            setSelectionTarget(null);
+        } else {
+            onAssign(selectionTarget.signupId);
+            setSelectionTarget(null);
+            setSelectedCharacterId(null);
+            setSelectedRole(null);
             setSearch('');
         }
     };
 
     const handleSlotPick = (role: RosterRole, position: number) => {
         if (selectedPlayerId != null && onAssignToSlot) {
-            onAssignToSlot(selectedPlayerId, role, position);
+            onAssignToSlot(selectedPlayerId, role, position, {
+                characterId: selectedCharacterId ?? undefined,
+            });
             setSelectedPlayerId(null);
+            setSelectedCharacterId(null);
+            setSelectedRole(null);
             setSearch('');
         }
     };
 
     const handleBack = () => {
-        if (reassignMode) {
+        if (selectionTarget) {
+            setSelectionTarget(null);
+            setSelectedCharacterId(null);
+            setSelectedRole(null);
+        } else if (reassignMode) {
             setReassignMode(false);
         } else {
             setSelectedPlayerId(null);
@@ -165,6 +282,9 @@ export function AssignmentPopup({
     const handleClose = () => {
         setSelectedPlayerId(null);
         setReassignMode(false);
+        setSelectionTarget(null);
+        setSelectedCharacterId(null);
+        setSelectedRole(null);
         setSearch('');
         onClose();
     };
@@ -179,6 +299,154 @@ export function AssignmentPopup({
 
     // Whether the invite section should be shown (targeted mode + MMO combat role)
     const canInvitePug = !isBrowseAll && slotRole !== null && PUG_ELIGIBLE_ROLES.has(slotRole) && !!onGenerateInviteLink;
+
+    // ROK-461: Character/role selection step view
+    if (selectionTarget) {
+        const characters = playerCharacters ?? [];
+        const mainCharacter = characters.find((c: CharacterDto) => c.isMain);
+        const altCharacters = characters.filter((c: CharacterDto) => !c.isMain);
+        const hasCharacters = characters.length > 0;
+
+        return (
+            <Modal isOpen={isOpen} onClose={handleClose} title={title}>
+                <div className="assignment-popup">
+                    <button
+                        onClick={handleBack}
+                        className="assignment-popup__back-btn"
+                    >
+                        &larr; Back to players
+                    </button>
+
+                    <PlayerCard
+                        player={selectionTarget}
+                        size="default"
+                        showRole
+                    />
+
+                    {/* Loading state */}
+                    {isLoadingCharacters && (
+                        <div className="space-y-3 mt-3">
+                            {[1, 2].map((i) => (
+                                <div
+                                    key={i}
+                                    className="h-14 bg-panel rounded-lg animate-pulse"
+                                />
+                            ))}
+                        </div>
+                    )}
+
+                    {/* No characters */}
+                    {!isLoadingCharacters && !hasCharacters && (
+                        <div className="assignment-popup__section">
+                            <p className="text-sm text-muted text-center py-3">
+                                This player has no characters for this game.
+                            </p>
+                            <button
+                                onClick={handleSelectionSkip}
+                                className="btn btn-primary btn-sm w-full"
+                            >
+                                Assign Without Character
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Character picker */}
+                    {!isLoadingCharacters && hasCharacters && (
+                        <>
+                            {/* Main character */}
+                            {mainCharacter && (
+                                <div className="assignment-popup__section">
+                                    <h4 className="assignment-popup__section-title">
+                                        Main Character
+                                    </h4>
+                                    <SelectableCharacterCard
+                                        character={mainCharacter}
+                                        isSelected={selectedCharacterId === mainCharacter.id}
+                                        onSelect={() => {
+                                            setSelectedCharacterId(mainCharacter.id);
+                                            if (!slotRole && mainCharacter.effectiveRole) {
+                                                setSelectedRole(mainCharacter.effectiveRole as RosterRole);
+                                            }
+                                        }}
+                                        isMain
+                                    />
+                                </div>
+                            )}
+
+                            {/* Alt characters */}
+                            {altCharacters.length > 0 && (
+                                <div className="assignment-popup__section">
+                                    <h4 className="assignment-popup__section-title">
+                                        Alt Characters
+                                    </h4>
+                                    <div className="space-y-1.5">
+                                        {altCharacters.map((char: CharacterDto) => (
+                                            <SelectableCharacterCard
+                                                key={char.id}
+                                                character={char}
+                                                isSelected={selectedCharacterId === char.id}
+                                                onSelect={() => {
+                                                    setSelectedCharacterId(char.id);
+                                                    if (!slotRole && char.effectiveRole) {
+                                                        setSelectedRole(char.effectiveRole as RosterRole);
+                                                    }
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Role picker (MMO events only) */}
+                            {isMMO && (
+                                <div className="assignment-popup__section">
+                                    <h4 className="assignment-popup__section-title">
+                                        Role
+                                    </h4>
+                                    <div className="flex gap-2">
+                                        {MMO_ROLES.map((role) => {
+                                            const isSelected = selectedRole === role;
+                                            return (
+                                                <button
+                                                    key={role}
+                                                    onClick={() => setSelectedRole(role)}
+                                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                                                        isSelected
+                                                            ? `${ROLE_COLORS[role]} border-current`
+                                                            : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+                                                    }`}
+                                                >
+                                                    <span>{ROLE_ICONS[role]}</span>
+                                                    <span>{formatRole(role)}</span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Confirm button */}
+                            <div className="flex gap-2 pt-2">
+                                <button
+                                    onClick={handleSelectionSkip}
+                                    className="btn btn-secondary btn-sm flex-1"
+                                >
+                                    Skip
+                                </button>
+                                <button
+                                    onClick={handleSelectionConfirm}
+                                    disabled={!selectedCharacterId}
+                                    className="btn btn-primary btn-sm flex-1"
+                                >
+                                    Confirm &amp; Assign
+                                </button>
+                            </div>
+                        </>
+                    )}
+                </div>
+            </Modal>
+        );
+    }
 
     // ROK-390: Reassign slot picker view — shown when admin clicks "Reassign" on an occupied slot
     if (reassignMode && currentOccupant && availableSlots) {
@@ -274,7 +542,7 @@ export function AssignmentPopup({
                         onClick={handleBack}
                         className="assignment-popup__back-btn"
                     >
-                        ← Back to players
+                        &larr; Back to players
                     </button>
 
                     {/* Selected player info - uses PlayerCard for consistency (AC-1) */}
@@ -314,7 +582,7 @@ export function AssignmentPopup({
                                             </span>
                                             {isLocked && (
                                                 <span className="assignment-popup__slot-occupant">
-                                                    🔒 {slot.occupantName}
+                                                    {slot.occupantName}
                                                 </span>
                                             )}
                                         </button>
@@ -357,7 +625,7 @@ export function AssignmentPopup({
                             onClick={onSelfAssign}
                             className="assignment-popup__self-assign-btn"
                         >
-                            🙋 Assign Myself to {formatRole(slotRole)} {slotPosition}
+                            Assign Myself to {formatRole(slotRole)} {slotPosition}
                         </button>
                     </div>
                 )}
@@ -530,5 +798,100 @@ function ModalPlayerRow({
                 )}
             </div>
         </div>
+    );
+}
+
+/**
+ * ROK-461: Selectable character card for admin assignment flow.
+ */
+function SelectableCharacterCard({
+    character,
+    isSelected,
+    onSelect,
+    isMain,
+}: {
+    character: CharacterDto;
+    isSelected: boolean;
+    onSelect: () => void;
+    isMain?: boolean;
+}) {
+    const role = character.effectiveRole as CombatRole | null;
+
+    return (
+        <button
+            onClick={onSelect}
+            className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${isSelected
+                ? 'border-indigo-500 bg-indigo-500/10'
+                : 'border-edge bg-panel/50 hover:border-edge-strong hover:bg-panel'
+                }`}
+        >
+            {character.avatarUrl ? (
+                <img
+                    src={character.avatarUrl}
+                    alt={character.name}
+                    className="w-10 h-10 rounded-full bg-overlay"
+                />
+            ) : (
+                <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-lg">
+                    {character.name.charAt(0).toUpperCase()}
+                </div>
+            )}
+
+            <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                    <span className="font-medium text-foreground truncate">
+                        {character.name}
+                    </span>
+                    {isMain && (
+                        <span className="text-yellow-400 text-sm" title="Main Character">
+                            *
+                        </span>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted">
+                    {character.level && <span>Lv.{character.level}</span>}
+                    {character.level && character.class && <span>·</span>}
+                    {character.class && <span>{character.class}</span>}
+                    {character.spec && (
+                        <>
+                            <span>·</span>
+                            <span>{character.spec}</span>
+                        </>
+                    )}
+                    {character.itemLevel && (
+                        <>
+                            <span>·</span>
+                            <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            {role && (
+                <span
+                    className={`px-2 py-1 text-xs font-medium rounded border ${ROLE_COLORS[role]}`}
+                >
+                    {ROLE_ICONS[role]} {formatRole(role)}
+                </span>
+            )}
+
+            {isSelected && (
+                <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                    <svg
+                        className="w-3 h-3 text-foreground"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                    >
+                        <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M5 13l4 4L19 7"
+                        />
+                    </svg>
+                </div>
+            )}
+        </button>
     );
 }

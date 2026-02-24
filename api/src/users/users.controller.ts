@@ -163,6 +163,28 @@ export class UsersController {
   }
 
   /**
+   * ROK-461: Get a user's characters, optionally filtered by game.
+   * Used by admin roster assignment to select a character on behalf of a player.
+   */
+  @Get(':id/characters')
+  async getUserCharacters(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('gameId') gameId?: string,
+  ): Promise<{ data: import('@raid-ledger/contract').CharacterDto[] }> {
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
+    const result = await this.charactersService.findAllForUser(
+      id,
+      parsedGameId || undefined,
+    );
+    return { data: result.data };
+  }
+
+  /**
    * ROK-282: Get games a user has hearted.
    * Public endpoint for displaying hearted games on a user's profile.
    */
