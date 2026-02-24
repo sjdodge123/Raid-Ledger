@@ -378,6 +378,9 @@ export class DiscordEmbedFactory {
    * Players with multiple preferred roles get emoji indicators showing
    * their other available roles (flexibility visible to other signups).
    */
+  /** Max number of individual mentions to display before truncating with "+ N more" */
+  private static readonly MAX_MENTIONS = 25;
+
   private getMentionsForRole(
     mentions: Array<{
       discordId?: string | null;
@@ -390,7 +393,9 @@ export class DiscordEmbedFactory {
   ): string {
     const filtered =
       role !== null ? mentions.filter((m) => m.role === role) : mentions;
-    return filtered
+    const overflow = filtered.length - DiscordEmbedFactory.MAX_MENTIONS;
+    const displayed = filtered.slice(0, DiscordEmbedFactory.MAX_MENTIONS);
+    const result = displayed
       .map((m) => {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         // ROK-459: ⏳ prefix for tentative players
@@ -412,6 +417,7 @@ export class DiscordEmbedFactory {
           : `${tentativePrefix}${label}`;
       })
       .join(', ');
+    return overflow > 0 ? `${result}, + ${overflow} more` : result;
   }
 
   /**

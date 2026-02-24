@@ -194,7 +194,8 @@ export class DiscordNotificationService {
     const failureKey = `discord-notif:failures:${userId}`;
 
     const count = await this.redis.incr(failureKey);
-    // Set TTL on first failure (24 hours — rolling window for consecutive failures)
+    // Set TTL on first failure only (fixed 24-hour window, not rolling).
+    // Counter resets after 24h regardless of subsequent failures within that window.
     if (count === 1) {
       await this.redis.expire(failureKey, 86400);
     }
@@ -247,7 +248,7 @@ export class DiscordNotificationService {
 
     await this.db.insert(schema.notifications).values({
       userId,
-      type: 'slot_vacated', // Using existing type; message content explains the issue
+      type: 'system',
       title,
       message,
     });

@@ -527,6 +527,24 @@ export class AuthController {
       };
     }
 
+    // Verify the intent token's Discord ID matches the logged-in user's Discord account.
+    // Prevents token theft: even if someone intercepts the URL, they can't redeem it
+    // under a different Discord identity.
+    const currentUser = await this.usersService.findById(req.user.id);
+    if (
+      currentUser?.discordId &&
+      payload.discordId &&
+      currentUser.discordId !== payload.discordId
+    ) {
+      this.logger.warn(
+        `Intent token Discord ID mismatch: token=${payload.discordId}, user=${currentUser.discordId}`,
+      );
+      return {
+        success: false,
+        message: 'This signup link was generated for a different Discord user',
+      };
+    }
+
     try {
       // Auto-complete the signup
       await this.signupsService.signup(payload.eventId, req.user.id);

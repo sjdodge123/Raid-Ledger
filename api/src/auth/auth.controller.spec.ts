@@ -258,12 +258,11 @@ describe('AuthController — redeemIntent', () => {
         discordId: 'discord-123',
         action: 'signup',
       });
-      // User without discordId
-      mockUsersService.findById.mockResolvedValueOnce({
-        id: 1,
-        username: 'testuser',
-        discordId: null,
-      });
+      // User without discordId — mocked twice: once for identity binding check,
+      // once for the claim-anonymous-signups lookup
+      mockUsersService.findById
+        .mockResolvedValueOnce({ id: 1, username: 'testuser', discordId: null })
+        .mockResolvedValueOnce({ id: 1, username: 'testuser', discordId: null });
 
       await controller.redeemIntent(
         mockRequest as unknown as Parameters<typeof controller.redeemIntent>[0],
@@ -276,7 +275,7 @@ describe('AuthController — redeemIntent', () => {
     it('should parse token from request body using RedeemIntentSchema', async () => {
       mockIntentTokenService.validate.mockReturnValueOnce({
         eventId: 1,
-        discordId: 'discord-abc',
+        discordId: 'discord-123',
         action: 'signup',
       });
 
@@ -301,6 +300,28 @@ describe('AuthController — redeemIntent', () => {
           {} as { token: string }, // invalid body — missing token
         ),
       ).rejects.toThrow();
+    });
+
+    it('should reject when intent token discordId does not match logged-in user', async () => {
+      mockIntentTokenService.validate.mockReturnValueOnce({
+        eventId: 42,
+        discordId: 'discord-other-user',
+        action: 'signup',
+      });
+      mockUsersService.findById.mockResolvedValueOnce({
+        id: 1,
+        username: 'testuser',
+        discordId: 'discord-123',
+      });
+
+      const result = await controller.redeemIntent(
+        mockRequest as unknown as Parameters<typeof controller.redeemIntent>[0],
+        { token: 'stolen.intent.token' },
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('different Discord user');
+      expect(mockSignupsService.signup).not.toHaveBeenCalled();
     });
   });
 });

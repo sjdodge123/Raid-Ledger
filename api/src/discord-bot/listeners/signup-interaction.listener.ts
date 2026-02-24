@@ -30,9 +30,24 @@ import { SettingsService } from '../../settings/settings.service';
 /**
  * Rate-limit tracker for signup button interactions.
  * Prevents spam clicks within a cooldown window.
+ * Lazy cleanup runs periodically to prevent unbounded growth.
  */
 const interactionCooldowns = new Map<string, number>();
 const COOLDOWN_MS = 3000; // 3 seconds between interactions per user per event
+const CLEANUP_INTERVAL_MS = 60_000; // Run cleanup at most once per minute
+let lastCleanup = 0;
+
+/** Remove expired entries from the cooldown map to prevent unbounded growth. */
+function cleanupCooldowns(): void {
+  const now = Date.now();
+  if (now - lastCleanup < CLEANUP_INTERVAL_MS) return;
+  lastCleanup = now;
+  for (const [key, timestamp] of interactionCooldowns) {
+    if (now - timestamp >= COOLDOWN_MS) {
+      interactionCooldowns.delete(key);
+    }
+  }
+}
 
 /**
  * Handles Discord button interactions for event signup actions (ROK-137).
@@ -140,6 +155,9 @@ export class SignupInteractionListener {
     // This prevents 10062 (Unknown interaction) from slow async operations
     // and 40060 (already acknowledged) from concurrent rapid clicks.
     await interaction.deferReply({ ephemeral: true });
+
+    // Lazy cleanup of expired cooldown entries to prevent unbounded map growth
+    cleanupCooldowns();
 
     // Rate limiting — uses editReply since we already deferred
     const cooldownKey = `${interaction.user.id}:${eventId}`;
