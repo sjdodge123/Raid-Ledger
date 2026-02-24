@@ -52,6 +52,15 @@ Use the **Admin Panel** to install demo data after starting the test environment
 
 Use `/verify-ui` workflow for browser testing. See `.agent/workflows/verify-ui.md`.
 
+## Pull Requests
+
+When creating pull requests, always use **squash merge** with **auto-merge** enabled:
+
+```bash
+gh pr create --title "..." --body "..."
+gh pr merge --squash --auto
+```
+
 ## Development
 
 ### Local Development (without Docker)
