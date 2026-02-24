@@ -29,15 +29,21 @@ export default defineConfig({
 
     /* Shared settings for all the projects below */
     use: {
-        /* Base URL to use in actions like `await page.goto('/')` */
-        /* Docker-first: default to port 80 (production container), override with BASE_URL for dev server */
-        baseURL: process.env.BASE_URL || 'http://localhost:80',
+        baseURL: process.env.BASE_URL || 'http://localhost:5173',
 
         /* Collect trace when retrying the failed test */
         trace: 'on-first-retry',
 
         /* Screenshot on failure */
         screenshot: 'only-on-failure',
+    },
+
+    /* Auto-start dev server when running locally */
+    webServer: {
+        command: 'npm run dev -w web',
+        url: 'http://localhost:5173',
+        reuseExistingServer: !process.env.CI,
+        timeout: 120_000,
     },
 
     /* Configure projects for major browsers */
