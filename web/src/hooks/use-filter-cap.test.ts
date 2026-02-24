@@ -23,28 +23,24 @@ function computeExpected(sidebarHeight: number): number {
 
 describe('useFilterCap', () => {
     let observeCallback: ResizeObserverCallback | null = null;
-    let observedElement: Element | null = null;
     let mockObserve: ReturnType<typeof vi.fn>;
     let mockDisconnect: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         observeCallback = null;
-        observedElement = null;
-        mockObserve = vi.fn((el: Element) => {
-            observedElement = el;
-        });
+        mockObserve = vi.fn();
         mockDisconnect = vi.fn();
 
         // Must be a real class so `new ResizeObserver(...)` works
-        const _mockObserve = mockObserve;
-        const _mockDisconnect = mockDisconnect;
+        const observeFn = mockObserve as (el: Element) => void;
+        const disconnectFn = mockDisconnect as () => void;
         globalThis.ResizeObserver = class MockResizeObserver {
             constructor(cb: ResizeObserverCallback) {
                 observeCallback = cb;
             }
-            observe(el: Element) { _mockObserve(el); }
+            observe(el: Element) { observeFn(el); }
             unobserve() {}
-            disconnect() { _mockDisconnect(); }
+            disconnect() { disconnectFn(); }
         } as unknown as typeof ResizeObserver;
     });
 
