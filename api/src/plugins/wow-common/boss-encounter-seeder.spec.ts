@@ -2,6 +2,38 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
+// Mock fs/promises so the test never reads real data files (avoids CI worker OOM)
+const fakeBosses = [
+  { instanceId: 409, name: 'Ragnaros', order: 1, expansion: 'classic', sodModified: false },
+  { instanceId: 409, name: 'Lucifron', order: 2, expansion: 'classic', sodModified: false },
+];
+
+const fakeLoot = [
+  {
+    bossName: 'Ragnaros',
+    expansion: 'classic',
+    itemId: 17182,
+    itemName: 'Sulfuras, Hand of Ragnaros',
+    slot: 'Two-Hand',
+    quality: 'Legendary',
+    itemLevel: 80,
+    dropRate: 1.2,
+    classRestrictions: null,
+    iconUrl: null,
+    itemSubclass: 'Mace',
+  },
+];
+
+jest.mock('fs/promises', () => ({
+  readFile: jest.fn().mockImplementation((path: string) => {
+    if (path.includes('boss-encounter-data'))
+      return Promise.resolve(JSON.stringify(fakeBosses));
+    if (path.includes('boss-loot-data'))
+      return Promise.resolve(JSON.stringify(fakeLoot));
+    return Promise.reject(new Error(`Unexpected readFile: ${path}`));
+  }),
+}));
+
 describe('BossEncounterSeeder', () => {
   let seeder: BossEncounterSeeder;
   let mockDb: {
@@ -20,53 +52,9 @@ describe('BossEncounterSeeder', () => {
       .mockReturnValue({ onConflictDoUpdate: mockOnConflictDoUpdate });
 
     // Mock for select().from() — returns boss rows for loot FK resolution
-    // Must include all boss names referenced by loot entries in boss-loot-data.json
     const mockFrom = jest.fn().mockResolvedValue([
       { id: 1, name: 'Ragnaros', expansion: 'classic' },
-      { id: 2, name: 'Nefarian', expansion: 'classic' },
-      { id: 3, name: "Kel'Thuzad", expansion: 'classic' },
-      { id: 4, name: 'Lucifron', expansion: 'classic' },
-      { id: 5, name: 'Garr', expansion: 'classic' },
-      { id: 6, name: 'Baron Geddon', expansion: 'classic' },
-      { id: 7, name: 'Golemagg the Incinerator', expansion: 'classic' },
-      { id: 8, name: 'Chromaggus', expansion: 'classic' },
-      { id: 9, name: 'Onyxia', expansion: 'classic' },
-      { id: 11, name: "C'Thun", expansion: 'classic' },
-      { id: 12, name: 'Sapphiron', expansion: 'classic' },
-      { id: 13, name: 'Edwin VanCleef', expansion: 'classic' },
-      { id: 14, name: 'Interrogator Vishas', expansion: 'classic' },
-      { id: 15, name: 'Bloodmage Thalnos', expansion: 'classic' },
-      { id: 16, name: 'Houndmaster Loksey', expansion: 'classic' },
-      { id: 17, name: 'Arcanist Doan', expansion: 'classic' },
-      { id: 18, name: 'Herod', expansion: 'classic' },
-      { id: 19, name: 'Scarlet Commander Mograine', expansion: 'classic' },
-      { id: 20, name: 'High Inquisitor Whitemane', expansion: 'classic' },
-      { id: 30, name: 'Attumen the Huntsman', expansion: 'tbc' },
-      { id: 31, name: 'The Curator', expansion: 'tbc' },
-      { id: 32, name: 'Prince Malchezaar', expansion: 'tbc' },
-      { id: 33, name: 'Lady Vashj', expansion: 'tbc' },
-      { id: 34, name: "Kael'thas Sunstrider", expansion: 'tbc' },
-      { id: 35, name: 'Illidan Stormrage', expansion: 'tbc' },
-      { id: 36, name: "Kil'jaeden", expansion: 'tbc' },
-      { id: 40, name: 'Yogg-Saron', expansion: 'wotlk' },
-      { id: 41, name: 'Algalon the Observer', expansion: 'wotlk' },
-      { id: 42, name: 'Mimiron', expansion: 'wotlk' },
-      { id: 43, name: 'Hodir', expansion: 'wotlk' },
-      { id: 44, name: 'The Lich King', expansion: 'wotlk' },
-      { id: 45, name: 'Professor Putricide', expansion: 'wotlk' },
-      { id: 46, name: 'Sindragosa', expansion: 'wotlk' },
-      { id: 50, name: 'Ragnaros', expansion: 'cata' },
-      { id: 51, name: 'Majordomo Staghelm', expansion: 'cata' },
-      { id: 52, name: "Beth'tilac", expansion: 'cata' },
-      { id: 53, name: 'Alysrazor', expansion: 'cata' },
-      { id: 54, name: 'Madness of Deathwing', expansion: 'cata' },
-      { id: 55, name: 'Spine of Deathwing', expansion: 'cata' },
-      { id: 56, name: 'Nefarian', expansion: 'cata' },
-      { id: 57, name: 'Magmaw', expansion: 'cata' },
-      { id: 60, name: "Aku'mai (SoD)", expansion: 'sod' },
-      { id: 61, name: 'Twilight Lord Kelris (SoD)', expansion: 'sod' },
-      { id: 62, name: 'Mekgineer Thermaplugg (SoD)', expansion: 'sod' },
-      { id: 63, name: 'Shade of Eranikus (SoD)', expansion: 'sod' },
+      { id: 2, name: 'Lucifron', expansion: 'classic' },
     ]);
 
     mockDb = {
@@ -89,8 +77,7 @@ describe('BossEncounterSeeder', () => {
     it('should insert boss encounters from bundled data', async () => {
       const result = await seeder.seed();
 
-      expect(result).toHaveProperty('bossesInserted');
-      expect(result).toHaveProperty('lootInserted');
+      expect(result).toEqual({ bossesInserted: 1, lootInserted: 1 });
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
