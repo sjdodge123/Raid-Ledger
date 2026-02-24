@@ -33,6 +33,7 @@ export function CalendarPage() {
     );
     const [gameFilterOpen, setGameFilterOpen] = useState(false);
     const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [filterSearch, setFilterSearch] = useState('');
 
     // Game filter state lives in a Zustand store so it survives component remounts
     // (React StrictMode, HMR, Suspense boundaries, etc.)
@@ -70,6 +71,13 @@ export function CalendarPage() {
         ? allKnownGames.slice(0, maxVisible)
         : allKnownGames;
     const hasOverflow = allKnownGames.length > maxVisible;
+
+    // Games filtered by search term (for modal)
+    const filteredModalGames = useMemo(() => {
+        if (!filterSearch.trim()) return allKnownGames;
+        const q = filterSearch.toLowerCase();
+        return allKnownGames.filter((g) => g.name.toLowerCase().includes(q));
+    }, [allKnownGames, filterSearch]);
 
     // Mobile date navigation handlers
     const handleMobileNavPrev = useCallback(() => {
@@ -304,11 +312,11 @@ export function CalendarPage() {
             {/* Desktop overflow modal for game filters */}
             <Modal
                 isOpen={filterModalOpen}
-                onClose={() => setFilterModalOpen(false)}
+                onClose={() => { setFilterModalOpen(false); setFilterSearch(''); }}
                 title="Filter by Game"
                 maxWidth="max-w-sm"
             >
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-3">
                     <span className="text-sm text-muted">
                         {selectedGames.size} of {allKnownGames.length} selected
                     </span>
@@ -329,8 +337,16 @@ export function CalendarPage() {
                         </button>
                     </div>
                 </div>
-                <div className="game-filter-list">
-                    {allKnownGames.map((game) => {
+                <input
+                    type="text"
+                    value={filterSearch}
+                    onChange={(e) => setFilterSearch(e.target.value)}
+                    placeholder="Search games..."
+                    className="w-full px-3 py-2 mb-3 rounded-lg bg-base border border-edge text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-emerald-500 transition-colors"
+                    autoFocus
+                />
+                <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                    {filteredModalGames.map((game) => {
                         const isSelected = selectedGames.has(game.slug);
                         const colors = getGameColors(game.slug);
                         return (
