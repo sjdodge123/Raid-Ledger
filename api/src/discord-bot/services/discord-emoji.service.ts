@@ -136,7 +136,7 @@ export class DiscordEmojiService {
     // Fetch fresh emoji list
     await guild.emojis.fetch();
 
-    const assetsDir = path.resolve(__dirname, '../../../assets/role-icons');
+    const assetsDir = path.resolve(__dirname, '../../../../assets/role-icons');
 
     let allSynced = true;
 
