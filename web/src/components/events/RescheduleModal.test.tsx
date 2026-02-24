@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, within, act } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
 
@@ -362,7 +362,7 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
                 cells: [{ dayOfWeek: 0, hour: 20, availableCount: 3, totalCount: 3 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T20:00:00.000Z',
@@ -381,7 +381,7 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 0, cells: [] },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T14:00:00.000Z',
@@ -401,7 +401,7 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T12:00:00.000Z',
@@ -423,7 +423,7 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T18:00:00.000Z',
@@ -447,7 +447,7 @@ describe('ROK-475: heatmap minimum 12-hour window (AC1 — always ≥ 12 hours)'
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 4, cells: wideCells },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T14:00:00.000Z',
@@ -473,7 +473,7 @@ describe('ROK-475: current event time is visible within the rendered window (AC2
                 cells: [{ dayOfWeek: 3, hour: 22, availableCount: 2, totalCount: 3 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T20:00:00.000Z',
@@ -494,7 +494,7 @@ describe('ROK-475: current event time is visible within the rendered window (AC2
                 cells: [{ dayOfWeek: 0, hour: 10, availableCount: 2, totalCount: 2 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T10:00:00.000Z',
@@ -523,7 +523,7 @@ describe('ROK-475: player availability data displays correctly within expanded w
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
 
@@ -546,7 +546,7 @@ describe('ROK-475: player availability data displays correctly within expanded w
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         // Event at hour 20 — if weak cell at hour 2 were included, window would be 18+h
         renderModal({
@@ -568,7 +568,7 @@ describe('ROK-475: player availability data displays correctly within expanded w
                 cells: [{ dayOfWeek: 0, hour: 19, availableCount: 5, totalCount: 7 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
         expect(screen.getByText(/7 signed up/)).toBeInTheDocument();
@@ -587,7 +587,7 @@ describe('ROK-475: edge case — event at midnight boundary (AC1 + AC2)', () => 
                 cells: [{ dayOfWeek: 0, hour: 0, availableCount: 3, totalCount: 3 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         // Event at midnight local time — derive ISO string for UTC midnight mapping
         // We use getDay()/getHours() in the component so we need to control the local time.
@@ -619,7 +619,7 @@ describe('ROK-475: edge case — event at midnight boundary (AC1 + AC2)', () => 
                 cells: [{ dayOfWeek: 3, hour: 23, availableCount: 2, totalCount: 2 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         const late = new Date('2026-02-25');
         late.setHours(23, 0, 0, 0);
@@ -655,7 +655,7 @@ describe('ROK-475: edge case — data spanning full 0-24h range (AC1)', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 4, cells: fullDayCells },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
         const grid = screen.getByTestId('game-time-grid');
@@ -678,7 +678,7 @@ describe('ROK-475: symmetric expansion from midpoint (AC1)', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 0, cells: [] },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         // Force the component to show the grid by giving it users (otherwise "no players" message)
         vi.mocked(useAggregateGameTime).mockReturnValue({
@@ -689,7 +689,7 @@ describe('ROK-475: symmetric expansion from midpoint (AC1)', () => {
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         // Create times in local timezone to control currentHour
         const noon = new Date('2026-02-25');
@@ -719,7 +719,7 @@ describe('ROK-475: symmetric expansion from midpoint (AC1)', () => {
                 cells: [{ dayOfWeek: 0, hour: 15, availableCount: 3, totalCount: 3 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         const three = new Date('2026-02-25');
         three.setHours(15, 0, 0, 0);
@@ -754,7 +754,7 @@ describe('ROK-475: grid selection expands window (AC1)', () => {
                 ],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
         const grid = screen.getByTestId('game-time-grid');
@@ -784,7 +784,7 @@ describe('ROK-475: no regression to create-event heatmap (AC5)', () => {
                 cells: [{ dayOfWeek: 0, hour: 18, availableCount: 4, totalCount: 5 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
 
@@ -804,7 +804,7 @@ describe('ROK-475: no regression to create-event heatmap (AC5)', () => {
                 cells: [{ dayOfWeek: 1, hour: 21, availableCount: 3, totalCount: 3 }],
             },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal({
             currentStartTime: '2026-02-25T21:00:00.000Z',
@@ -822,7 +822,7 @@ describe('ROK-475: loading state does not render grid (AC3)', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: undefined,
             isLoading: true,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
         expect(screen.getByText(/Loading availability data/)).toBeInTheDocument();
@@ -833,7 +833,7 @@ describe('ROK-475: loading state does not render grid (AC3)', () => {
         vi.mocked(useAggregateGameTime).mockReturnValue({
             data: { totalUsers: 0, cells: [] },
             isLoading: false,
-        } as ReturnType<typeof useAggregateGameTime>);
+        } as unknown as ReturnType<typeof useAggregateGameTime>);
 
         renderModal();
         expect(screen.getByText(/No players signed up yet/)).toBeInTheDocument();
