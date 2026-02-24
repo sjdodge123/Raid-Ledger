@@ -254,7 +254,7 @@ describe('EventCard badge-overlay class (ROK-473)', () => {
     });
 
     it('status badge is positioned absolutely at top-right of cover image', () => {
-        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} />);
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
         const badgeWrapper = screen.getByTestId('event-status-badge').closest('.absolute');
         expect(badgeWrapper).toHaveClass('top-2', 'right-2');
     });
