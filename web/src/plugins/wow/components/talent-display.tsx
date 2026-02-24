@@ -249,23 +249,18 @@ export function TalentDisplay({ talents, isArmoryImported, characterClass, gameV
     }
 
     if (isClassicTalents(talents)) {
-        // Build the Wowhead embed URL with the character's actual talent build
-        let embedUrl: string | null = null;
-        if (characterClass) {
-            const talentString = buildWowheadTalentString(characterClass, talents.trees);
-            if (talentString) {
-                embedUrl = getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant);
-            }
-        }
+        // Build the Wowhead talent string once and reuse for both embed and link-out
+        const talentString = characterClass
+            ? buildWowheadTalentString(characterClass, talents.trees)
+            : null;
 
-        // Update the link-out URL to include talent build if we have a talent string
-        let talentCalcUrl = wowheadUrl;
-        if (characterClass) {
-            const talentString = buildWowheadTalentString(characterClass, talents.trees);
-            if (talentString && wowheadUrl) {
-                talentCalcUrl = `${wowheadUrl}/${talentString}`;
-            }
-        }
+        const embedUrl = characterClass && talentString
+            ? getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant)
+            : null;
+
+        const talentCalcUrl = talentString && wowheadUrl
+            ? `${wowheadUrl}/${talentString}`
+            : wowheadUrl;
 
         return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
     }
