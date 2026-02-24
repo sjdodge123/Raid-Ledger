@@ -89,15 +89,17 @@ describe('BossEncounterSeeder', () => {
     it('should insert boss encounters from bundled data', async () => {
       const result = await seeder.seed();
 
-      expect(result).toEqual({ bossesInserted: 1, lootInserted: 1 });
-      expect(mockDb.insert).toHaveBeenCalled();
+      expect(result.bossesInserted).toBeGreaterThan(0);
+      expect(result.lootInserted).toBeGreaterThan(0);
+      // insert() called twice: once for bosses, once for loot
+      expect(mockDb.insert).toHaveBeenCalledTimes(2);
     });
 
     it('should resolve boss FKs for loot insertion', async () => {
       await seeder.seed();
 
-      // select() is called to build the boss lookup map
-      expect(mockDb.select).toHaveBeenCalled();
+      // select() called once to build the boss lookup map
+      expect(mockDb.select).toHaveBeenCalledTimes(1);
     });
   });
 
