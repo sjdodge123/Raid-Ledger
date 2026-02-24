@@ -145,7 +145,7 @@ export class BindCommand
 
     // Create/update the binding
     try {
-      await this.channelBindingsService.bind(
+      const { replacedChannelIds } = await this.channelBindingsService.bind(
         guildId,
         channelId,
         bindingChannelType,
@@ -164,6 +164,9 @@ export class BindCommand
         `**#${channelName}** bound for **${behaviorLabel}**`,
         resolvedSeriesTitle ? `Series: **${resolvedSeriesTitle}**` : null,
         resolvedGameName ? `Game: **${resolvedGameName}**` : null,
+        replacedChannelIds.length > 0
+          ? `\n⚠️ Replaced previous binding from ${replacedChannelIds.map((id) => `<#${id}>`).join(', ')}`
+          : null,
         '',
         'Use the web admin panel for fine-tuning settings.',
       ]

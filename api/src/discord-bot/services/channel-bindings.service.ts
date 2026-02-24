@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -44,7 +44,29 @@ export class ChannelBindingsService {
     gameId: number | null,
     config?: ChannelBindingConfig,
     recurrenceGroupId?: string | null,
-  ): Promise<BindingRecord> {
+  ): Promise<{ binding: BindingRecord; replacedChannelIds: string[] }> {
+    // ROK-435: If binding a series, remove any existing binding for the same
+    // series in this guild (regardless of channel) so a series has at most one
+    // channel binding. Return old channel IDs so the caller can warn the user.
+    let replacedChannelIds: string[] = [];
+    if (recurrenceGroupId) {
+      const deleted = await this.db
+        .delete(schema.channelBindings)
+        .where(
+          and(
+            eq(schema.channelBindings.guildId, guildId),
+            eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+            isNotNull(schema.channelBindings.recurrenceGroupId),
+          ),
+        )
+        .returning({ channelId: schema.channelBindings.channelId });
+
+      // Only flag channels that differ from the new target
+      replacedChannelIds = deleted
+        .map((d) => d.channelId)
+        .filter((id) => id !== channelId);
+    }
+
     const [result] = await this.db
       .insert(schema.channelBindings)
       .values({
@@ -77,7 +99,7 @@ export class ChannelBindingsService {
         (recurrenceGroupId ? ` (series: ${recurrenceGroupId})` : ''),
     );
 
-    return result as BindingRecord;
+    return { binding: result as BindingRecord, replacedChannelIds };
   }
 
   /**

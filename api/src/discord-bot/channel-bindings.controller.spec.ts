@@ -217,7 +217,7 @@ describe('ChannelBindingsController', () => {
         gameId: null,
         config: {},
       });
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({ binding: created, replacedChannelIds: [] });
 
       const result = await controller.createBinding({
         channelId: 'ch-1',
@@ -236,7 +236,7 @@ describe('ChannelBindingsController', () => {
     it('should call bind with correct arguments including gameId', async () => {
       const gameId = 42;
       const created = makeBinding({ gameId });
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({ binding: created, replacedChannelIds: [] });
 
       await controller.createBinding({
         channelId: 'ch-1',
@@ -257,7 +257,7 @@ describe('ChannelBindingsController', () => {
 
     it('should pass null gameId when not provided', async () => {
       const created = makeBinding();
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({ binding: created, replacedChannelIds: [] });
 
       await controller.createBinding({
         channelId: 'ch-1',

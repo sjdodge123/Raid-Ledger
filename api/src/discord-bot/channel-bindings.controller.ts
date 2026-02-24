@@ -90,7 +90,7 @@ export class ChannelBindingsController {
     try {
       const dto = CreateChannelBindingSchema.parse(body);
 
-      const result = await this.channelBindingsService.bind(
+      const { binding: result } = await this.channelBindingsService.bind(
         guildId,
         dto.channelId,
         dto.channelType,
