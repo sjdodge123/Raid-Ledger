@@ -1,8 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { GameInfo } from '../stores/game-filter-store';
 
 // ---------------------------------------------------------------------------
 // Module mocks — must be declared before the component import
@@ -17,8 +17,9 @@ vi.mock('../hooks/use-game-time', () => ({
 }));
 
 // Stub out the heavy CalendarView; expose onGamesAvailable so tests can call it
-let capturedOnGamesAvailable: ((games: any[]) => void) | null = null;
+let capturedOnGamesAvailable: ((games: GameInfo[]) => void) | null = null;
 vi.mock('../components/calendar', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     CalendarView: (props: any) => {
         capturedOnGamesAvailable = props.onGamesAvailable ?? null;
         return <div data-testid="calendar-view" />;
@@ -35,6 +36,7 @@ vi.mock('../components/calendar/calendar-mobile-nav', () => ({
 }));
 
 vi.mock('../components/ui/fab', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     FAB: (props: any) => (
         <button data-testid="fab" onClick={props.onClick} aria-label={props.label}>
             FAB
@@ -45,6 +47,7 @@ vi.mock('../components/ui/fab', () => ({
 // BottomSheet mock — using data-testid="bottom-sheet" (NOT role="dialog") to avoid
 // conflicts with the real Modal which uses role="dialog"
 vi.mock('../components/ui/bottom-sheet', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     BottomSheet: (props: any) => (
         <div data-testid="bottom-sheet" data-open={props.isOpen ? 'true' : 'false'}>
             <button data-testid="bottom-sheet-close" onClick={props.onClose}>Close Sheet</button>
