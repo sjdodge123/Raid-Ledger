@@ -195,6 +195,11 @@ export class EventsService {
     // Build where conditions array (ROK-174: Date Range Filtering)
     const conditions: ReturnType<typeof gte>[] = [];
 
+    // ROK-469: Always exclude cancelled events unless explicitly requested
+    if (query.includeCancelled !== 'true') {
+      conditions.push(sql`${schema.events.cancelledAt} IS NULL`);
+    }
+
     // Existing: upcoming filter (events that haven't ended yet)
     if (query.upcoming === 'true') {
       conditions.push(
@@ -203,8 +208,6 @@ export class EventsService {
           sql`${new Date().toISOString()}::timestamp`,
         ),
       );
-      // ROK-374: Exclude cancelled events from upcoming queries by default
-      conditions.push(sql`${schema.events.cancelledAt} IS NULL`);
     }
 
     // ROK-174: startAfter filter - events starting after this date
