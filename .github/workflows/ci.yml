@@ -79,11 +79,12 @@ jobs:
       - name: Lint
         run: npm run lint --workspaces
 
-      - name: Test API
-        run: npm run test -w api -- --passWithNoTests
+      - name: Test API (with coverage)
+        run: npm run test:cov -w api -- --passWithNoTests
 
-      - name: Test web
-        run: npm run test -w web
+      - name: Test web (with coverage)
+        run: npx vitest run --coverage
+        working-directory: web
 
   smoke-tests:
     runs-on: ubuntu-latest
