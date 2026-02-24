@@ -1,4 +1,6 @@
-import { getWowheadTalentCalcUrl } from '../lib/wowhead-urls';
+import { useState } from 'react';
+import { getWowheadTalentCalcUrl, getWowheadTalentCalcEmbedUrl } from '../lib/wowhead-urls';
+import { buildWowheadTalentString } from '../lib/classic-talent-positions';
 
 /** Retail talent data shape from Blizzard API */
 interface RetailTalents {
@@ -43,7 +45,43 @@ function isTalentData(value: unknown): value is TalentData {
     return obj.format === 'retail' || obj.format === 'classic';
 }
 
-function ClassicTalentDisplay({ talents, wowheadUrl }: { talents: ClassicTalents; wowheadUrl: string | null }) {
+/** Wowhead talent calculator iframe embed for Classic builds */
+function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
+    const [loaded, setLoaded] = useState(false);
+    const [error, setError] = useState(false);
+
+    if (error) return null;
+
+    return (
+        <div className="relative w-full rounded-lg overflow-hidden border border-edge bg-overlay/30">
+            {!loaded && (
+                <div className="absolute inset-0 flex items-center justify-center text-muted text-sm">
+                    Loading talent calculator...
+                </div>
+            )}
+            <iframe
+                src={embedUrl}
+                title="Wowhead Talent Calculator"
+                className="w-full border-0"
+                style={{ height: 540, minHeight: 400 }}
+                loading="lazy"
+                sandbox="allow-scripts allow-same-origin allow-popups"
+                onLoad={() => setLoaded(true)}
+                onError={() => setError(true)}
+            />
+        </div>
+    );
+}
+
+function ClassicTalentDisplay({
+    talents,
+    wowheadUrl,
+    embedUrl,
+}: {
+    talents: ClassicTalents;
+    wowheadUrl: string | null;
+    embedUrl: string | null;
+}) {
     const totalPoints = talents.trees.reduce((sum, t) => sum + t.spentPoints, 0);
     const maxPoints = Math.max(...talents.trees.map((t) => t.spentPoints), 0);
 
@@ -71,6 +109,9 @@ function ClassicTalentDisplay({ talents, wowheadUrl }: { talents: ClassicTalents
                     </a>
                 )}
             </div>
+
+            {/* Wowhead talent calculator embed */}
+            {embedUrl && <WowheadTalentEmbed embedUrl={embedUrl} />}
 
             {/* Tree breakdown with talent pills */}
             <div className="space-y-3">
@@ -205,7 +246,25 @@ export function TalentDisplay({ talents, isArmoryImported, characterClass, gameV
     }
 
     if (isClassicTalents(talents)) {
-        return <ClassicTalentDisplay talents={talents} wowheadUrl={wowheadUrl} />;
+        // Build the Wowhead embed URL with the character's actual talent build
+        let embedUrl: string | null = null;
+        if (characterClass) {
+            const talentString = buildWowheadTalentString(characterClass, talents.trees);
+            if (talentString) {
+                embedUrl = getWowheadTalentCalcEmbedUrl(characterClass, talentString, gameVariant);
+            }
+        }
+
+        // Update the link-out URL to include talent build if we have a talent string
+        let talentCalcUrl = wowheadUrl;
+        if (characterClass) {
+            const talentString = buildWowheadTalentString(characterClass, talents.trees);
+            if (talentString && wowheadUrl) {
+                talentCalcUrl = `${wowheadUrl}/${talentString}`;
+            }
+        }
+
+        return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
     }
 
     return (

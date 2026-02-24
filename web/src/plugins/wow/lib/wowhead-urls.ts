@@ -71,6 +71,25 @@ export function getWowheadTalentCalcUrl(
     return `https://${urlBase}/talent-calc/${slug}`;
 }
 
+/**
+ * Build a Wowhead talent calculator embed URL for a specific Classic talent build.
+ * The embed URL includes the talent string so Wowhead displays the exact build.
+ *
+ * Format: https://www.wowhead.com/classic/talent-calc/embed/{class}/{talent-string}
+ *
+ * Returns null if the class name cannot be mapped.
+ */
+export function getWowheadTalentCalcEmbedUrl(
+    className: string,
+    talentString: string,
+    variant?: string | null,
+): string | null {
+    const slug = wowClassToSlug(className);
+    if (!slug) return null;
+    const { urlBase } = getWowheadDomain(variant);
+    return `https://${urlBase}/talent-calc/embed/${slug}/${talentString}`;
+}
+
 /** Map a WoW class display name (from Blizzard API) to a Wowhead URL slug. */
 function wowClassToSlug(className: string): string | null {
     const map: Record<string, string> = {
