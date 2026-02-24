@@ -163,7 +163,7 @@ export function InvitePage() {
     } | null>(null);
 
     const gameInfo = resolveData?.event?.game;
-    const registryId = gameInfo?.gameId;
+    const gameId = gameInfo?.gameId;
     const isBlizzardGame = gameInfo?.isBlizzardGame === true;
     const hasRoles = gameInfo?.hasRoles === true;
     const communityName = resolveData?.communityName;
@@ -175,8 +175,8 @@ export function InvitePage() {
 
     // Fetch user's characters for this game
     const { data: charactersData, refetch: refetchCharacters } = useMyCharacters(
-        registryId,
-        isAuthenticated && !!registryId,
+        gameId,
+        isAuthenticated && !!gameId,
     );
     const characters = charactersData?.data ?? [];
     const hasCharacterForGame = characters.length > 0;
