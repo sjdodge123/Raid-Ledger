@@ -12,7 +12,7 @@ import { Link } from 'react-router-dom';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
 import { toAvatarUser } from '../../lib/avatar';
 import type { AvatarUser } from '../../lib/avatar';
-import { ROLE_BADGE_CLASSES, formatRole } from '../../lib/role-colors';
+import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
 
@@ -60,7 +60,6 @@ function buildAvatarUser(player: RosterAssignmentResponse): {
 export function PlayerCard({
     player,
     size = 'default',
-    showRole = false,
     onClick,
     onRemove,
     matchAccent,

@@ -34,13 +34,6 @@ const ROLE_COLORS: Record<CharacterRole, string> = {
     dps: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-/** @deprecated - use <RoleIcon> component instead. Kept for non-MMO fallback */
-const ROLE_ICONS: Record<CharacterRole, string> = {
-    tank: '🛡️',
-    healer: '💚',
-    dps: '⚔️',
-};
-
 const ROLES: CharacterRole[] = ['tank', 'healer', 'dps'];
 
 /**

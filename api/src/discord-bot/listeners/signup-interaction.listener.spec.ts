@@ -10,6 +10,7 @@ import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { IntentTokenService } from '../../auth/intent-token.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
+import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
@@ -189,6 +190,30 @@ describe('SignupInteractionListener', () => {
         { provide: CharactersService, useValue: mockCharactersService },
         { provide: IntentTokenService, useValue: mockIntentTokenService },
         { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
+        {
+          provide: DiscordEmojiService,
+          useValue: {
+            getRoleEmoji: jest.fn(
+              (r: string) =>
+                ({
+                  tank: '\uD83D\uDEE1\uFE0F',
+                  healer: '\uD83D\uDC9A',
+                  dps: '\u2694\uFE0F',
+                })[r] ?? '',
+            ),
+            getClassEmoji: jest.fn(() => ''),
+            getRoleEmojiComponent: jest.fn((r: string) => {
+              const fallback: Record<string, string> = {
+                tank: '\uD83D\uDEE1\uFE0F',
+                healer: '\uD83D\uDC9A',
+                dps: '\u2694\uFE0F',
+              };
+              return fallback[r] ? { name: fallback[r] } : undefined;
+            }),
+            getClassEmojiComponent: jest.fn(() => undefined),
+            isUsingCustomEmojis: jest.fn(() => false),
+          },
+        },
         { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();

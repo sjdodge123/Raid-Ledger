@@ -9,8 +9,14 @@ import {
 } from './discord-embed.factory';
 import { DiscordEmojiService } from './discord-emoji.service';
 
+const UNICODE_FALLBACK: Record<string, string> = {
+  tank: '🛡️',
+  healer: '💚',
+  dps: '⚔️',
+};
+
 const mockEmojiService = {
-  getRoleEmoji: () => '',
+  getRoleEmoji: (role: string) => UNICODE_FALLBACK[role] ?? '',
   getClassEmoji: () => '',
 } as unknown as DiscordEmojiService;
 
@@ -107,7 +113,9 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
     });
 
     it('should list all mentions when count is 10', () => {
-      const mentions = Array.from({ length: 10 }, (_, i) => makeMention(i, 'dps'));
+      const mentions = Array.from({ length: 10 }, (_, i) =>
+        makeMention(i, 'dps'),
+      );
       const description = buildEventWithMentions(mentions, 'dps');
       for (let i = 0; i < 10; i++) {
         expect(description).toContain(`<@discord-user-${i}>`);
@@ -116,7 +124,9 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
     });
 
     it('should list all mentions when count is 24', () => {
-      const mentions = Array.from({ length: 24 }, (_, i) => makeMention(i, 'dps'));
+      const mentions = Array.from({ length: 24 }, (_, i) =>
+        makeMention(i, 'dps'),
+      );
       const description = buildEventWithMentions(mentions, 'dps');
       for (let i = 0; i < 24; i++) {
         expect(description).toContain(`<@discord-user-${i}>`);
@@ -127,7 +137,9 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
 
   describe('exactly 25 mentions — boundary at cap', () => {
     it('should list all 25 mentions with no overflow suffix at exactly 25', () => {
-      const mentions = Array.from({ length: 25 }, (_, i) => makeMention(i, 'dps'));
+      const mentions = Array.from({ length: 25 }, (_, i) =>
+        makeMention(i, 'dps'),
+      );
       const description = buildEventWithMentions(mentions, 'dps');
       for (let i = 0; i < 25; i++) {
         expect(description).toContain(`<@discord-user-${i}>`);
@@ -139,7 +151,9 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
 
   describe('more than 25 mentions — truncation with suffix', () => {
     it('should cap at 25 and append "+ 1 more" when 26 mentions', () => {
-      const mentions = Array.from({ length: 26 }, (_, i) => makeMention(i, 'dps'));
+      const mentions = Array.from({ length: 26 }, (_, i) =>
+        makeMention(i, 'dps'),
+      );
       const description = buildEventWithMentions(mentions, 'dps');
       // First 25 should appear
       for (let i = 0; i < 25; i++) {
@@ -152,7 +166,9 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
     });
 
     it('should cap at 25 and append "+ 5 more" when 30 mentions', () => {
-      const mentions = Array.from({ length: 30 }, (_, i) => makeMention(i, 'dps'));
+      const mentions = Array.from({ length: 30 }, (_, i) =>
+        makeMention(i, 'dps'),
+      );
       const description = buildEventWithMentions(mentions, 'dps');
       for (let i = 0; i < 25; i++) {
         expect(description).toContain(`<@discord-user-${i}>`);
@@ -165,14 +181,18 @@ describe('DiscordEmbedFactory — getMentionsForRole mention list cap (ROK-373)'
     });
 
     it('should cap at 25 and append "+ 75 more" when 100 mentions', () => {
-      const mentions = Array.from({ length: 100 }, (_, i) => makeMention(i, 'tank'));
+      const mentions = Array.from({ length: 100 }, (_, i) =>
+        makeMention(i, 'tank'),
+      );
       const description = buildEventWithMentions(mentions, 'tank');
       // Overflow = 100 - 25 = 75
       expect(description).toContain('+ 75 more');
     });
 
     it('suffix format is exactly "+ N more" (space before and after N)', () => {
-      const mentions = Array.from({ length: 27 }, (_, i) => makeMention(i, 'healer'));
+      const mentions = Array.from({ length: 27 }, (_, i) =>
+        makeMention(i, 'healer'),
+      );
       const description = buildEventWithMentions(mentions, 'healer');
       // Overflow = 2
       expect(description).toMatch(/\+ 2 more/);

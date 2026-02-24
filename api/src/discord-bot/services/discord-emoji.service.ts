@@ -140,9 +140,6 @@ const CLASS_EMOJI_DEFS: EmojiDef[] = [
   },
 ];
 
-/** All emoji definitions combined */
-const ALL_EMOJI_DEFS: EmojiDef[] = [...ROLE_EMOJI_DEFS, ...CLASS_EMOJI_DEFS];
-
 /** Unicode fallbacks when custom emojis are unavailable. */
 const UNICODE_FALLBACK: Record<string, string> = {
   tank: '\uD83D\uDEE1\uFE0F',
@@ -223,7 +220,9 @@ export class DiscordEmojiService {
    * Get emoji component data for a role, suitable for select menu options.
    * Returns `{ id, name }` for custom emojis or `{ name }` for Unicode fallback.
    */
-  getRoleEmojiComponent(role: string): { id?: string; name: string } | undefined {
+  getRoleEmojiComponent(
+    role: string,
+  ): { id?: string; name: string } | undefined {
     if (this.roleEmojisAvailable) {
       const parsed = this.parseEmojiString(this.emojiCache.get(role));
       if (parsed) return parsed;
@@ -236,7 +235,9 @@ export class DiscordEmojiService {
    * Get emoji component data for a WoW class, suitable for select menu options.
    * Returns `{ id, name }` for custom emojis, or undefined if unavailable.
    */
-  getClassEmojiComponent(className: string): { id?: string; name: string } | undefined {
+  getClassEmojiComponent(
+    className: string,
+  ): { id?: string; name: string } | undefined {
     if (this.classEmojisAvailable) {
       return this.parseEmojiString(this.emojiCache.get(className));
     }
@@ -251,7 +252,9 @@ export class DiscordEmojiService {
   }
 
   /** Parse a `<:name:id>` formatted emoji string into component data. */
-  private parseEmojiString(str: string | undefined): { id: string; name: string } | undefined {
+  private parseEmojiString(
+    str: string | undefined,
+  ): { id: string; name: string } | undefined {
     if (!str) return undefined;
     const match = str.match(/^<:(\w+):(\d+)>$/);
     return match ? { name: match[1], id: match[2] } : undefined;
@@ -282,7 +285,6 @@ export class DiscordEmojiService {
             ? 150
             : 250;
     const currentCount = guild.emojis.cache.filter((e) => !e.animated).size;
-    const totalNeeded = ALL_EMOJI_DEFS.length;
     const roleNeeded = ROLE_EMOJI_DEFS.length;
 
     if (currentCount + roleNeeded > emojiLimit) {
@@ -428,7 +430,10 @@ export class DiscordEmojiService {
         try {
           await existing.delete('Raid Ledger icon asset updated');
         } catch {
-          this.logger.warn('Could not delete stale emoji %s, continuing', emojiName);
+          this.logger.warn(
+            'Could not delete stale emoji %s, continuing',
+            emojiName,
+          );
         }
       }
     }

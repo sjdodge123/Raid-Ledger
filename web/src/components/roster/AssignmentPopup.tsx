@@ -11,19 +11,6 @@ import './AssignmentPopup.css';
 /** PUG-eligible roles (only MMO combat roles map to PugRole) */
 const PUG_ELIGIBLE_ROLES = new Set<RosterRole>(['tank', 'healer', 'dps']);
 
-/** MMO combat roles */
-const MMO_ROLES = ['tank', 'healer', 'dps'] as const;
-type CombatRole = (typeof MMO_ROLES)[number];
-
-/** Role display colors */
-const ROLE_COLORS: Record<CombatRole, string> = {
-    tank: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-    healer: 'bg-green-500/20 text-green-400 border-green-500/30',
-    dps: 'bg-red-500/20 text-red-400 border-red-500/30',
-};
-
-// Role icons now rendered via <RoleIcon> component (ROK-465)
-
 /** A single slot for the slot picker (may be empty or occupied) */
 export interface AvailableSlot {
     role: RosterRole;
@@ -105,7 +92,6 @@ export function AssignmentPopup({
     onRemoveFromEvent,
     onReassignToSlot,
     gameId,
-    isMMO = false,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
@@ -389,34 +375,6 @@ export function AssignmentPopup({
                                                 }}
                                             />
                                         ))}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ROK-465: Role picker removed — the slot determines the role at assignment time */}
-                            {false && isMMO && !slotRole && (
-                                <div className="assignment-popup__section">
-                                    <h4 className="assignment-popup__section-title">
-                                        Role
-                                    </h4>
-                                    <div className="flex gap-2">
-                                        {MMO_ROLES.map((role) => {
-                                            const isSelected = selectedRole === role;
-                                            return (
-                                                <button
-                                                    key={role}
-                                                    onClick={() => setSelectedRole(role)}
-                                                    className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
-                                                        isSelected
-                                                            ? `${ROLE_COLORS[role]} border-current`
-                                                            : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
-                                                    }`}
-                                                >
-                                                    <RoleIcon role={role} size="w-5 h-5" />
-                                                    <span>{formatRole(role)}</span>
-                                                </button>
-                                            );
-                                        })}
                                     </div>
                                 </div>
                             )}
@@ -811,8 +769,6 @@ function SelectableCharacterCard({
     onSelect: () => void;
     isMain?: boolean;
 }) {
-    const role = character.effectiveRole as CombatRole | null;
-
     return (
         <button
             onClick={onSelect}

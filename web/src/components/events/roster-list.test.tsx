@@ -79,8 +79,12 @@ describe('RosterList', () => {
         const avatars = screen.getAllByRole('img');
         // Player1 has no avatar -> shows initials (div), not img
         // Player2 has avatar hash -> shows Discord CDN img via resolveAvatar(toAvatarUser())
-        expect(avatars).toHaveLength(1);
-        expect(avatars[0]).toHaveAttribute('src', expect.stringContaining('987654321'));
+        // ROK-465: class icons + role icons also render as <img>, so filter to Discord CDN avatar
+        const discordAvatars = avatars.filter((img) =>
+            img.getAttribute('src')?.includes('cdn.discordapp.com'),
+        );
+        expect(discordAvatars).toHaveLength(1);
+        expect(discordAvatars[0]).toHaveAttribute('src', expect.stringContaining('987654321'));
         // Verify Player1 shows initials fallback
         expect(screen.getByText('P')).toBeInTheDocument();
     });
@@ -91,10 +95,11 @@ describe('RosterList', () => {
         expect(screen.getByText('485')).toBeInTheDocument();
     });
 
-    it('renders role emoji for confirmed characters', () => {
+    it('renders role icon for confirmed characters', () => {
         const confirmedSignups = [mockSignups[1]];
         render(<RosterList signups={confirmedSignups} />);
-        expect(screen.getByText('⚔️')).toBeInTheDocument(); // DPS role icon
+        // ROK-465: Role is now rendered as <RoleIcon> (an <img> with alt={role})
+        expect(screen.getByAltText('dps')).toBeInTheDocument();
     });
 
     it('sorts signups alphabetically by username (case-insensitive)', () => {
