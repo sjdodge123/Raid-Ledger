@@ -255,7 +255,8 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         });
     }, [form.startDate, form.startTime, form.durationMinutes, resolved]);
 
-    // Compute recurrence count preview
+    // Compute recurrence count preview (capped at 52 to match backend)
+    const MAX_RECURRENCE_INSTANCES = 52;
     const recurrenceCount = useMemo(() => {
         if (!form.recurrenceFrequency || !form.startDate || !form.recurrenceUntil) return 0;
         const start = new Date(form.startDate);
@@ -263,7 +264,7 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
         if (until <= start) return 0;
         let count = 1;
         let current = new Date(start);
-        while (true) {
+        while (count < MAX_RECURRENCE_INSTANCES) {
             const next = new Date(current);
             if (form.recurrenceFrequency === 'weekly') next.setDate(next.getDate() + 7);
             else if (form.recurrenceFrequency === 'biweekly') next.setDate(next.getDate() + 14);
