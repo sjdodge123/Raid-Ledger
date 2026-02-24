@@ -18,6 +18,7 @@ describe('BindingsCommand', () => {
     channelType: 'text',
     bindingPurpose: 'game-announcements',
     gameId: null,
+    recurrenceGroupId: null,
     config: null,
     createdAt: new Date(),
     updatedAt: new Date(),

@@ -463,6 +463,20 @@
       "when": 1771900800000,
       "tag": "0065_tan_harrier",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1771900900000,
+      "tag": "0066_abandoned_moondragon",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1771901000000,
+      "tag": "0067_zippy_red_ghost",
+      "breakpoints": true
     }
   ]
 }

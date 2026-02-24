@@ -59,10 +59,8 @@ function makeChain(result: unknown[] = []) {
   chain.limit = jest.fn().mockResolvedValue(result);
   chain.leftJoin = jest.fn().mockReturnValue(chain);
   chain.groupBy = jest.fn().mockResolvedValue(result);
-  chain.then = (
-    resolve: (v: unknown) => void,
-    reject: (e: unknown) => void,
-  ) => Promise.resolve(result).then(resolve, reject);
+  chain.then = (resolve: (v: unknown) => void, reject: (e: unknown) => void) =>
+    Promise.resolve(result).then(resolve, reject);
   return chain;
 }
 
@@ -242,7 +240,9 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
               where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([{ id: eventId, title: 'E' }]),
+                limit: jest
+                  .fn()
+                  .mockResolvedValue([{ id: eventId, title: 'E' }]),
               }),
             }),
           });
@@ -259,9 +259,7 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
       // Second interaction — cleanup should NOT re-run (within 60s window)
       // We verify this by checking the interaction still proceeds normally
       const i2 = setupInteraction('user-freq-2', 4002);
-      await expect(
-        listener.handleButtonInteraction(i2),
-      ).resolves.not.toThrow();
+      await expect(listener.handleButtonInteraction(i2)).resolves.not.toThrow();
     });
 
     it('should run cleanup again after 60+ seconds have elapsed', async () => {
@@ -281,7 +279,9 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
               where: jest.fn().mockReturnValue({
-                limit: jest.fn().mockResolvedValue([{ id: eventId, title: 'E' }]),
+                limit: jest
+                  .fn()
+                  .mockResolvedValue([{ id: eventId, title: 'E' }]),
               }),
             }),
           });
@@ -297,9 +297,7 @@ describe('SignupInteractionListener — cooldown map lazy cleanup (ROK-373)', ()
 
       // Second interaction — cleanup should re-run (no error means it ran fine)
       const i2 = setupInteraction('user-interval-2', 5002);
-      await expect(
-        listener.handleButtonInteraction(i2),
-      ).resolves.not.toThrow();
+      await expect(listener.handleButtonInteraction(i2)).resolves.not.toThrow();
     });
   });
 

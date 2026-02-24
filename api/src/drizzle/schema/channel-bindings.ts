@@ -14,6 +14,7 @@ import { games } from './games';
  * Channel Bindings - Maps Discord channels to games/behaviors.
  * Used for smart routing of event announcements and voice monitoring.
  * ROK-348: Channel Binding System.
+ * ROK-435: Added recurrence_group_id for series-specific channel bindings.
  *
  * No community_id column - the app is single-tenant.
  * guild_id serves as the scope identifier.
@@ -29,6 +30,8 @@ export const channelBindings = pgTable(
     gameId: integer('game_id').references(() => games.id, {
       onDelete: 'set null',
     }),
+    /** ROK-435: Optional recurrence group ID to bind a specific event series to this channel. */
+    recurrenceGroupId: uuid('recurrence_group_id'),
     config: jsonb('config').default({}).$type<{
       minPlayers?: number;
       autoClose?: boolean;
@@ -38,11 +41,13 @@ export const channelBindings = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
-    guildChannelUnique: uniqueIndex('channel_bindings_guild_channel_unique').on(
-      table.guildId,
-      table.channelId,
-    ),
+    guildChannelSeriesUnique: uniqueIndex(
+      'channel_bindings_guild_channel_series_unique',
+    ).on(table.guildId, table.channelId, table.recurrenceGroupId),
     guildIdx: index('idx_channel_bindings_guild').on(table.guildId),
     gameIdx: index('idx_channel_bindings_game').on(table.gameId),
+    recurrenceGroupIdx: index('idx_channel_bindings_recurrence_group').on(
+      table.recurrenceGroupId,
+    ),
   }),
 );

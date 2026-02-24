@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -12,6 +12,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 import {
   shouldPostEmbed,
@@ -32,6 +33,8 @@ export interface EventPayload {
   recurrenceRule?: {
     frequency: 'weekly' | 'biweekly' | 'monthly';
   } | null;
+  recurrenceGroupId?: string | null;
+  creatorId?: number;
 }
 
 /**
@@ -49,6 +52,9 @@ export class DiscordEventListener {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly embedPoster: EmbedPosterService,
     private readonly settingsService: SettingsService,
+    @Optional()
+    @Inject(GameAffinityNotificationService)
+    private readonly gameAffinityNotificationService: GameAffinityNotificationService | null,
   ) {}
 
   @OnEvent(APP_EVENT_EVENTS.CREATED)
@@ -77,7 +83,33 @@ export class DiscordEventListener {
       payload.eventId,
       payload.event,
       payload.gameId,
+      payload.recurrenceGroupId,
     );
+
+    // ROK-440: Notify users with game affinity AFTER embed is successfully posted
+    if (
+      this.gameAffinityNotificationService &&
+      payload.gameId &&
+      payload.event.game?.name &&
+      payload.creatorId
+    ) {
+      const context = await this.buildContext();
+      this.gameAffinityNotificationService
+        .notifyGameAffinity({
+          eventId: payload.eventId,
+          eventTitle: payload.event.title,
+          gameName: payload.event.game.name,
+          gameId: payload.gameId,
+          startTime: payload.event.startTime,
+          creatorId: payload.creatorId,
+          clientUrl: context.clientUrl,
+        })
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to send game affinity notifications for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
+    }
   }
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
@@ -115,6 +147,7 @@ export class DiscordEventListener {
           payload.eventId,
           payload.event,
           payload.gameId,
+          payload.recurrenceGroupId,
         );
       } else {
         this.logger.debug(

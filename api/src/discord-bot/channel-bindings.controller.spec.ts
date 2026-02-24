@@ -14,6 +14,7 @@ const makeBinding = (overrides: Partial<BindingRecord> = {}): BindingRecord =>
     channelType: 'text',
     bindingPurpose: 'game-announcements',
     gameId: null,
+    recurrenceGroupId: null,
     config: null,
     createdAt: new Date('2025-01-01T00:00:00Z'),
     updatedAt: new Date('2025-01-01T00:00:00Z'),
@@ -216,7 +217,10 @@ describe('ChannelBindingsController', () => {
         gameId: null,
         config: {},
       });
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({
+        binding: created,
+        replacedChannelIds: [],
+      });
 
       const result = await controller.createBinding({
         channelId: 'ch-1',
@@ -235,7 +239,10 @@ describe('ChannelBindingsController', () => {
     it('should call bind with correct arguments including gameId', async () => {
       const gameId = 42;
       const created = makeBinding({ gameId });
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({
+        binding: created,
+        replacedChannelIds: [],
+      });
 
       await controller.createBinding({
         channelId: 'ch-1',
@@ -256,7 +263,10 @@ describe('ChannelBindingsController', () => {
 
     it('should pass null gameId when not provided', async () => {
       const created = makeBinding();
-      bindingsService.bind.mockResolvedValue(created);
+      bindingsService.bind.mockResolvedValue({
+        binding: created,
+        replacedChannelIds: [],
+      });
 
       await controller.createBinding({
         channelId: 'ch-1',
@@ -378,6 +388,7 @@ describe('ChannelBindingsController', () => {
       expect(bindingsService.unbind).toHaveBeenCalledWith(
         'guild-123',
         'channel-456',
+        null,
       );
     });
 

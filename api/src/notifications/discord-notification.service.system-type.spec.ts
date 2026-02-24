@@ -158,7 +158,9 @@ describe('DiscordNotificationService — system type & failure TTL (ROK-373)', (
 
       await service.recordFailure(42);
 
-      expect(mockEmbedService.buildUnreachableNotificationMessage).toHaveBeenCalled();
+      expect(
+        mockEmbedService.buildUnreachableNotificationMessage,
+      ).toHaveBeenCalled();
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
           title: 'Discord DMs Unreachable',
