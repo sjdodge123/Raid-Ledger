@@ -424,6 +424,15 @@ body {
 [data-scheme="light"] .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
 [data-scheme="light"] .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
 
+/* --- Solid-color button text: force white on colored backgrounds --- */
+[data-scheme="light"] :is(
+    .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
+    .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
+    .bg-\[\#5865F2\]
+).text-foreground {
+    --color-foreground: #ffffff;
+}
+
 /* --- Panel/card shadow for light mode panel-on-surface distinction --- */
 [data-scheme="light"] .bg-panel,
 [data-scheme="light"] .bg-panel\/50,
