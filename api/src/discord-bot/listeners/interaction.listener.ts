@@ -15,6 +15,7 @@ import { BindCommand } from '../commands/bind.command';
 import { UnbindCommand } from '../commands/unbind.command';
 import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
+import { HelpCommand } from '../commands/help.command';
 
 /**
  * Describes a command that can handle slash command interactions.
@@ -43,6 +44,7 @@ export class InteractionListener {
     private readonly unbindCommand: UnbindCommand,
     private readonly bindingsCommand: BindingsCommand,
     private readonly inviteCommand: InviteCommand,
+    private readonly helpCommand: HelpCommand,
   ) {}
 
   private getHandlers(): CommandInteractionHandler[] {
@@ -54,6 +56,7 @@ export class InteractionListener {
       this.unbindCommand,
       this.bindingsCommand,
       this.inviteCommand,
+      this.helpCommand,
     ];
   }
 

@@ -158,6 +158,8 @@ export class SetupWizardService {
             '',
             '1. Pick a default announcement channel',
             '2. Confirm your community name',
+            '',
+            '**Tip:** Use `/help` in any channel to see all available bot commands.',
           ].join('\n'),
         )
         .setFooter({ text: 'Raid Ledger Setup' })

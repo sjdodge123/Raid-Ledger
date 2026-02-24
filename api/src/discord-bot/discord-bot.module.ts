@@ -37,6 +37,7 @@ import { BindCommand } from './commands/bind.command';
 import { UnbindCommand } from './commands/unbind.command';
 import { BindingsCommand } from './commands/bindings.command';
 import { InviteCommand } from './commands/invite.command';
+import { HelpCommand } from './commands/help.command';
 import { EventLinkListener } from './listeners/event-link.listener';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
@@ -85,6 +86,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     UnbindCommand,
     BindingsCommand,
     InviteCommand,
+    HelpCommand,
   ],
   exports: [
     DiscordBotService,
