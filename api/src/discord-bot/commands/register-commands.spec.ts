@@ -10,6 +10,7 @@ import { BindCommand } from './bind.command';
 import { UnbindCommand } from './unbind.command';
 import { BindingsCommand } from './bindings.command';
 import { InviteCommand } from './invite.command';
+import { HelpCommand } from './help.command';
 import { REST, Routes } from 'discord.js';
 
 // Mock discord.js REST
@@ -143,6 +144,16 @@ describe('RegisterCommandsService', () => {
             }),
           },
         },
+        {
+          provide: HelpCommand,
+          useValue: {
+            commandName: 'help',
+            getDefinition: jest.fn().mockReturnValue({
+              name: 'help',
+              description: 'List all available bot commands',
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -173,6 +184,7 @@ describe('RegisterCommandsService', () => {
           { name: 'unbind', description: 'Unbind channel' },
           { name: 'bindings', description: 'List bindings' },
           { name: 'invite', description: 'Invite user to event' },
+          { name: 'help', description: 'List all available bot commands' },
         ],
       });
     });
@@ -193,6 +205,7 @@ describe('RegisterCommandsService', () => {
           { name: 'unbind', description: 'Unbind channel' },
           { name: 'bindings', description: 'List bindings' },
           { name: 'invite', description: 'Invite user to event' },
+          { name: 'help', description: 'List all available bot commands' },
         ],
       });
       // Guild cleanup is skipped
