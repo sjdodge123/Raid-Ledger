@@ -218,6 +218,7 @@ interface CharacterDetailSectionsProps {
     gameVariant: string | null;
     renderUrl: string | null;
     isArmoryImported: boolean;
+    characterClass: string | null;
 }
 
 export function CharacterDetailSections({
@@ -226,6 +227,7 @@ export function CharacterDetailSections({
     gameVariant,
     renderUrl,
     isArmoryImported,
+    characterClass,
 }: CharacterDetailSectionsProps) {
     const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
 
@@ -248,7 +250,7 @@ export function CharacterDetailSections({
                 </div>
                 <div className="bg-panel border border-edge rounded-lg p-6">
                     <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
-                    <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} />
+                    <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} characterClass={characterClass} gameVariant={gameVariant} />
                 </div>
             </>
         );
@@ -296,7 +298,7 @@ export function CharacterDetailSections({
             {/* Talents Section */}
             <div className="bg-panel border border-edge rounded-lg p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Talents</h2>
-                <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} />
+                <TalentDisplay talents={talents} isArmoryImported={isArmoryImported} characterClass={characterClass} gameVariant={gameVariant} />
             </div>
         </>
     );

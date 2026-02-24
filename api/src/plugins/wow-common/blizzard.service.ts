@@ -1007,6 +1007,8 @@ export class BlizzardService {
             id?: number;
             spellId?: number;
             rank?: number;
+            tierIndex?: number;
+            columnIndex?: number;
           }>;
         }>;
         summary: string;
@@ -1034,6 +1036,8 @@ export class BlizzardService {
                 id: t.talent?.id,
                 spellId: t.spell_tooltip?.spell?.id,
                 rank: t.talent_rank,
+                tierIndex: t.tier_index,
+                columnIndex: t.column_index,
               })),
           });
         }

@@ -228,6 +228,7 @@ export function CharacterDetailPage() {
                     gameVariant: character.gameVariant,
                     renderUrl: character.renderUrl,
                     isArmoryImported,
+                    characterClass: character.class ?? null,
                 }}
                 fallback={
                     character.equipment && character.equipment.items.length > 0 ? null : (
