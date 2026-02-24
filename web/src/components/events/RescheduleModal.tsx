@@ -149,9 +149,11 @@ export function RescheduleModal({
     }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
 
     // Smart hour range — zoom into hours with meaningful availability (yellow/green).
-    // Only considers cells where > 50% of players are available, plus the current event
-    // and any grid selection. Falls back to current event ± 3h if no strong matches.
+    // Only considers cells where > 25% of players are available, plus the current event
+    // and any grid selection. Enforces a minimum 12-hour window centered on the event
+    // so users can always browse a meaningful range of time slots (ROK-475).
     const hourRange: [number, number] = useMemo(() => {
+        const MIN_WINDOW = 12;
         const eventEndHour = currentHour + durationHours;
         let minHour = currentHour;
         let maxHour = eventEndHour;
@@ -162,7 +164,7 @@ export function RescheduleModal({
         }
 
         if (gameTimeData?.cells.length) {
-            // Only consider cells where at least half of players are available
+            // Only consider cells where at least a quarter of players are available
             const strongCells = gameTimeData.cells.filter(
                 c => c.totalCount > 0 && c.availableCount / c.totalCount > 0.25,
             );
@@ -171,6 +173,14 @@ export function RescheduleModal({
                 minHour = Math.min(minHour, Math.min(...hours));
                 maxHour = Math.max(maxHour, Math.max(...hours) + 1);
             }
+        }
+
+        // Enforce minimum 12-hour window, expanding symmetrically from the center
+        const span = maxHour - minHour;
+        if (span < MIN_WINDOW) {
+            const midpoint = (minHour + maxHour) / 2;
+            minHour = Math.round(midpoint - MIN_WINDOW / 2);
+            maxHour = minHour + MIN_WINDOW;
         }
 
         // 1-hour padding, clamped to [0, 24]

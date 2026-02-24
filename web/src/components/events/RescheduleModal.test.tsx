@@ -151,6 +151,20 @@ describe('RescheduleModal', () => {
             expect(within(grid).getByTestId('cell-0-19')).toBeInTheDocument();
             expect(within(grid).getByTestId('cell-3-20')).toBeInTheDocument();
         });
+
+        it('grid range spans at least 12 hours (ROK-475)', () => {
+            renderModal();
+            const grid = screen.getByTestId('game-time-grid');
+            // Collect all visible hour cells for Sunday (day 0)
+            const visibleHours: number[] = [];
+            for (let h = 0; h < 24; h++) {
+                if (within(grid).queryByTestId(`cell-0-${h}`)) {
+                    visibleHours.push(h);
+                }
+            }
+            // Must span at least 12 hours (minimum window) + 2 padding = 14, but clamped to [0,24]
+            expect(visibleHours.length).toBeGreaterThanOrEqual(12);
+        });
     });
 
     describe('cell click interaction', () => {
