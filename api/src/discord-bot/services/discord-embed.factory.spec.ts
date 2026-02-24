@@ -3,11 +3,20 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from './discord-embed.factory';
+import { DiscordEmojiService } from './discord-emoji.service';
 import { EMBED_COLORS, EMBED_STATES } from '../discord-bot.constants';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
+/** Unicode fallback map — mirrors DiscordEmojiService behavior when no custom emojis. */
+const UNICODE_FALLBACK: Record<string, string> = {
+  tank: '\uD83D\uDEE1\uFE0F',
+  healer: '\uD83D\uDC9A',
+  dps: '\u2694\uFE0F',
+};
+
 describe('DiscordEmbedFactory', () => {
   let factory: DiscordEmbedFactory;
+  let emojiService: DiscordEmojiService;
 
   const baseEvent: EmbedEventData = {
     id: 42,
@@ -35,7 +44,11 @@ describe('DiscordEmbedFactory', () => {
   };
 
   beforeEach(() => {
-    factory = new DiscordEmbedFactory();
+    emojiService = {
+      getRoleEmoji: jest.fn((role: string) => UNICODE_FALLBACK[role] ?? ''),
+      isUsingCustomEmojis: jest.fn(() => false),
+    } as unknown as DiscordEmojiService;
+    factory = new DiscordEmbedFactory(emojiService);
   });
 
   describe('buildEventEmbed', () => {

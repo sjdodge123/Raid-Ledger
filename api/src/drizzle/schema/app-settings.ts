@@ -47,6 +47,9 @@ export const SETTING_KEYS = {
   DISCORD_BOT_COMMUNITY_NAME: 'discord_bot_community_name',
   DISCORD_BOT_TIMEZONE: 'discord_bot_timezone',
   CLIENT_URL: 'client_url',
+  DISCORD_EMOJI_TANK: 'discord_emoji_tank',
+  DISCORD_EMOJI_HEALER: 'discord_emoji_healer',
+  DISCORD_EMOJI_DPS: 'discord_emoji_dps',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

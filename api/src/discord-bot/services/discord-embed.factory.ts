@@ -11,6 +11,7 @@ import {
   type EmbedState,
   SIGNUP_BUTTON_IDS,
 } from '../discord-bot.constants';
+import { DiscordEmojiService } from './discord-emoji.service';
 
 /**
  * Minimal event data needed to build an embed.
@@ -81,6 +82,8 @@ export interface BuildEventEmbedOptions {
  */
 @Injectable()
 export class DiscordEmbedFactory {
+  constructor(private readonly emojiService: DiscordEmojiService) {}
+
   /**
    * Build a standard event embed with consistent layout.
    * The embed body is always the same: title, game, date/time, full roster breakdown.
@@ -328,17 +331,20 @@ export class DiscordEmbedFactory {
 
       if (tankMax > 0) {
         const playerLines = this.getMentionsForRole(mentions, 'tank');
-        lines.push(`🛡️ **Tanks** (${rc['tank'] ?? 0}/${tankMax}):`);
+        const tankEmoji = this.emojiService.getRoleEmoji('tank');
+        lines.push(`${tankEmoji} **Tanks** (${rc['tank'] ?? 0}/${tankMax}):`);
         lines.push(playerLines || '  —');
       }
       if (healerMax > 0) {
         const playerLines = this.getMentionsForRole(mentions, 'healer');
-        lines.push(`💚 **Healers** (${rc['healer'] ?? 0}/${healerMax}):`);
+        const healerEmoji = this.emojiService.getRoleEmoji('healer');
+        lines.push(`${healerEmoji} **Healers** (${rc['healer'] ?? 0}/${healerMax}):`);
         lines.push(playerLines || '  —');
       }
       if (dpsMax > 0) {
         const playerLines = this.getMentionsForRole(mentions, 'dps');
-        lines.push(`⚔️ **DPS** (${rc['dps'] ?? 0}/${dpsMax}):`);
+        const dpsEmoji = this.emojiService.getRoleEmoji('dps');
+        lines.push(`${dpsEmoji} **DPS** (${rc['dps'] ?? 0}/${dpsMax}):`);
         lines.push(playerLines || '  —');
       }
 
@@ -363,12 +369,6 @@ export class DiscordEmbedFactory {
 
     return null;
   }
-
-  private static readonly ROLE_EMOJI: Record<string, string> = {
-    tank: '🛡️',
-    healer: '💚',
-    dps: '⚔️',
-  };
 
   /** Max number of individual mentions to display before truncating with "+ N more" */
   private static readonly MAX_MENTIONS = 25;
@@ -406,7 +406,7 @@ export class DiscordEmbedFactory {
               : [];
         // Role emoji before the name for at-a-glance scanning
         const allEmojis = prefs
-          .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
+          .map((r) => this.emojiService.getRoleEmoji(r))
           .filter(Boolean)
           .join('');
         return allEmojis

@@ -45,6 +45,10 @@ const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
     flag: PermissionsBitField.Flags.ReadMessageHistory,
   },
   { label: 'Send Polls', flag: PermissionsBitField.Flags.SendPolls },
+  {
+    label: 'Manage Guild Expressions',
+    flag: PermissionsBitField.Flags.ManageGuildExpressions,
+  },
 ];
 
 @Injectable()

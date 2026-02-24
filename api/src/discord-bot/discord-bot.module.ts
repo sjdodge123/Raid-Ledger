@@ -39,6 +39,7 @@ import { BindingsCommand } from './commands/bindings.command';
 import { InviteCommand } from './commands/invite.command';
 import { HelpCommand } from './commands/help.command';
 import { EventLinkListener } from './listeners/event-link.listener';
+import { DiscordEmojiService } from './services/discord-emoji.service';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
 
@@ -63,6 +64,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     DiscordBotService,
     DiscordBotClientService,
     DiscordEmbedFactory,
+    DiscordEmojiService,
     ChannelResolverService,
     SetupWizardService,
     ChannelBindingsService,
@@ -92,6 +94,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     DiscordBotService,
     DiscordBotClientService,
     DiscordEmbedFactory,
+    DiscordEmojiService,
     DiscordEventListener,
     SetupWizardService,
     ChannelBindingsService,
