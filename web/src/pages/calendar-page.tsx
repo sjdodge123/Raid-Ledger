@@ -38,6 +38,8 @@ export function CalendarPage() {
 
     // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
     const hasInitialized = useRef(false);
+    // Track all slugs ever seen so we only auto-select truly new games
+    const seenSlugs = useRef(new Set<string>());
 
     // Sidebar ref for dynamic filter cap calculation
     const sidebarRef = useRef<HTMLElement>(null);
@@ -71,15 +73,23 @@ export function CalendarPage() {
             return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
         });
 
+        // Determine which slugs are truly new (never seen before)
+        const newSlugs: string[] = [];
+        for (const g of games) {
+            if (!seenSlugs.current.has(g.slug)) {
+                newSlugs.push(g.slug);
+                seenSlugs.current.add(g.slug);
+            }
+        }
+
         if (!hasInitialized.current && games.length > 0) {
             hasInitialized.current = true;
             setSelectedGames(new Set(games.map(g => g.slug)));
-        } else {
+        } else if (newSlugs.length > 0) {
+            // Only auto-select games we've never seen before
             setSelectedGames(prev => {
                 const next = new Set(prev);
-                for (const g of games) {
-                    if (!prev.has(g.slug)) next.add(g.slug);
-                }
+                for (const slug of newSlugs) next.add(slug);
                 return next;
             });
         }
