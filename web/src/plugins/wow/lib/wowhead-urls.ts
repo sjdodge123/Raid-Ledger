@@ -11,7 +11,7 @@
 function getWowheadDomain(variant: string | null | undefined): { urlBase: string; tooltipDomain: string } {
     switch (variant) {
         case 'classic_anniversary':
-            return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
+            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         case 'classic':
         case 'classic_era':
             return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };

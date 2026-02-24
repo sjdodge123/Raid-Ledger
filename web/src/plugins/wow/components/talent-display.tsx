@@ -65,8 +65,9 @@ function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
                 src={embedUrl}
                 title="Wowhead Talent Calculator"
                 className="w-full border-0"
-                style={{ height: 514 }}
+                style={{ height: 520 }}
                 loading="lazy"
+                scrolling="no"
                 sandbox="allow-scripts allow-same-origin allow-popups"
                 onLoad={() => setLoaded(true)}
                 onError={() => setError(true)}
