@@ -49,6 +49,8 @@ const PUG_JOIN_PREFIX = 'pug_join';
 export class PugInviteListener {
   private readonly logger = new Logger(PugInviteListener.name);
   private guildMemberAddRegistered = false;
+  private boundGuildMemberAddHandler: ((member: GuildMember) => void) | null =
+    null;
   private boundInteractionHandler:
     | ((interaction: import('discord.js').Interaction) => void)
     | null = null;
@@ -115,8 +117,9 @@ export class PugInviteListener {
     if (!client) return;
 
     // Register guildMemberAdd for new member matching
+    // ROK-382: track handler reference so cleanup on disconnect prevents stale closures
     if (!this.guildMemberAddRegistered) {
-      client.on(Events.GuildMemberAdd, (member: GuildMember) => {
+      this.boundGuildMemberAddHandler = (member: GuildMember) => {
         this.handleGuildMemberAdd(member).catch((err: unknown) => {
           this.logger.error(
             'Error handling guildMemberAdd for %s:',
@@ -124,7 +127,8 @@ export class PugInviteListener {
             err,
           );
         });
-      });
+      };
+      client.on(Events.GuildMemberAdd, this.boundGuildMemberAddHandler);
       this.guildMemberAddRegistered = true;
       this.logger.log('Registered guildMemberAdd listener for PUG invite flow');
     }
@@ -156,6 +160,7 @@ export class PugInviteListener {
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   handleBotDisconnected(): void {
     this.guildMemberAddRegistered = false;
+    this.boundGuildMemberAddHandler = null;
     this.boundInteractionHandler = null;
   }
 

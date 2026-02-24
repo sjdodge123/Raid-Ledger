@@ -124,33 +124,45 @@ export class PugInviteService {
 
   /**
    * Called when a new member joins the guild.
-   * Checks for pending PUG slots matching their username and processes them.
+   * Atomically claims pending PUG slots matching their username, then sends DMs.
+   *
+   * Uses UPDATE ... WHERE status = 'pending' RETURNING to prevent duplicate
+   * invite DMs when concurrent guildMemberAdd events fire (ROK-382).
    */
   async handleNewGuildMember(
     discordUserId: string,
     discordUsername: string,
     avatarHash: string | null,
   ): Promise<void> {
-    // Find pending PUG slots matching this Discord username
-    const pendingSlots = await this.db
-      .select()
-      .from(schema.pugSlots)
+    // Atomically claim all pending slots for this username.
+    // Only one concurrent handler can claim each slot — prevents TOCTOU race.
+    const claimedSlots = await this.db
+      .update(schema.pugSlots)
+      .set({
+        discordUserId,
+        discordAvatarHash: avatarHash,
+        status: 'invited',
+        invitedAt: new Date(),
+        serverInviteUrl: null, // Clear invite URL since they joined
+        updatedAt: new Date(),
+      })
       .where(
         and(
           eq(schema.pugSlots.discordUsername, discordUsername),
           eq(schema.pugSlots.status, 'pending'),
         ),
-      );
+      )
+      .returning();
 
-    if (pendingSlots.length === 0) return;
+    if (claimedSlots.length === 0) return;
 
     this.logger.log(
-      'New guild member %s matches %d pending PUG slot(s)',
+      'New guild member %s — atomically claimed %d pending PUG slot(s)',
       discordUsername,
-      pendingSlots.length,
+      claimedSlots.length,
     );
 
-    for (const slot of pendingSlots) {
+    for (const slot of claimedSlots) {
       // Verify event is not cancelled
       const [event] = await this.db
         .select()
@@ -161,19 +173,6 @@ export class PugInviteService {
       if (!event || event.cancelledAt) continue;
 
       try {
-        // Update slot with Discord user info
-        await this.db
-          .update(schema.pugSlots)
-          .set({
-            discordUserId,
-            discordAvatarHash: avatarHash,
-            status: 'invited',
-            invitedAt: new Date(),
-            serverInviteUrl: null, // Clear invite URL since they joined
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.pugSlots.id, slot.id));
-
         // Send DM
         await this.sendPugInviteDm(
           slot.id,

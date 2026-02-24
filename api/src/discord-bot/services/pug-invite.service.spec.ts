@@ -47,16 +47,6 @@ describe('PugInviteService', () => {
     return chain;
   };
 
-  /**
-   * For queries where .where() is the terminal (multi-row: handleNewGuildMember).
-   */
-  const createSelectTerminalWhereChain = (resolvedValue: unknown[] = []) => {
-    const chain: Record<string, jest.Mock> = {};
-    chain.from = jest.fn().mockReturnValue(chain);
-    chain.where = jest.fn().mockResolvedValue(resolvedValue);
-    return chain;
-  };
-
   const createUpdateChain = (resolvedValue: unknown[] = []) => {
     const chain: Record<string, jest.Mock> = {};
     chain.set = jest.fn().mockReturnValue(chain);
@@ -364,34 +354,37 @@ describe('PugInviteService', () => {
 
   describe('handleNewGuildMember', () => {
     it('should do nothing when no pending slots match', async () => {
-      // .where() is the terminal for this query
-      mockDb.select.mockReturnValue(createSelectTerminalWhereChain([]));
+      // Atomic UPDATE returns empty array — no pending slots matched
+      const updateChain = createUpdateChain([]);
+      mockDb.update.mockReturnValue(updateChain);
 
       await service.handleNewGuildMember('user-id', 'newplayer', 'avatar-hash');
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(updateChain.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          discordUserId: 'user-id',
+          status: 'invited',
+        }),
+      );
+      // No DMs sent since no slots were claimed
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should update matching pending slots and send DM', async () => {
-      const pendingSlot = {
+    it('should atomically claim matching pending slots and send DM', async () => {
+      const claimedSlot = {
         ...mockPugSlot,
         discordUsername: 'newplayer',
-        status: 'pending',
+        discordUserId: 'new-user-id',
+        discordAvatarHash: 'new-avatar',
+        status: 'invited',
       };
 
-      let selectCallCount = 0;
-      mockDb.select.mockImplementation(() => {
-        selectCallCount++;
-        if (selectCallCount === 1) {
-          // Pending slots query — .where() is terminal
-          return createSelectTerminalWhereChain([pendingSlot]);
-        }
-        // Event verification query — .limit() is terminal
-        return createSelectChain([mockEvent]);
-      });
-
-      const updateChain = createUpdateChain();
+      // Atomic UPDATE returns claimed slots
+      const updateChain = createUpdateChain([claimedSlot]);
       mockDb.update.mockReturnValue(updateChain);
+
+      // Event verification query
+      mockDb.select.mockReturnValue(createSelectChain([mockEvent]));
 
       await service.handleNewGuildMember(
         'new-user-id',
@@ -408,47 +401,63 @@ describe('PugInviteService', () => {
           serverInviteUrl: null,
         }),
       );
+
+      // Should have sent DM for the claimed slot
+      expect(clientService.sendEmbedDM).toHaveBeenCalledWith(
+        'new-user-id',
+        expect.anything(),
+        expect.anything(),
+      );
     });
 
-    it('should skip cancelled events for matching slots', async () => {
-      const pendingSlot = {
+    it('should not send DM for already invited/accepted/claimed slots (atomic guard)', async () => {
+      // Atomic UPDATE only matches status = 'pending', so already-processed
+      // slots are never returned. Simulate a rejoin where all previous slots
+      // have already been processed — UPDATE returns empty.
+      const updateChain = createUpdateChain([]);
+      mockDb.update.mockReturnValue(updateChain);
+
+      await service.handleNewGuildMember(
+        'user-id',
+        'returning-player',
+        'avatar',
+      );
+
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('should skip cancelled events for claimed slots', async () => {
+      const claimedSlot = {
         ...mockPugSlot,
         discordUsername: 'newplayer',
-        status: 'pending',
+        status: 'invited',
       };
 
-      let selectCallCount = 0;
-      mockDb.select.mockImplementation(() => {
-        selectCallCount++;
-        if (selectCallCount === 1) {
-          return createSelectTerminalWhereChain([pendingSlot]);
-        }
-        return createSelectChain([{ ...mockEvent, cancelledAt: new Date() }]);
-      });
+      // Atomic UPDATE returns one claimed slot
+      const updateChain = createUpdateChain([claimedSlot]);
+      mockDb.update.mockReturnValue(updateChain);
+
+      // Event is cancelled
+      mockDb.select.mockReturnValue(
+        createSelectChain([{ ...mockEvent, cancelledAt: new Date() }]),
+      );
 
       await service.handleNewGuildMember('user-id', 'newplayer', 'avatar');
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      // Slot was claimed but DM should not be sent for cancelled event
+      expect(clientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
-    it('should handle errors gracefully per slot', async () => {
-      const pendingSlot = {
+    it('should handle DM errors gracefully per slot', async () => {
+      const claimedSlot = {
         ...mockPugSlot,
         discordUsername: 'newplayer',
-        status: 'pending',
+        status: 'invited',
       };
 
-      let selectCallCount = 0;
-      mockDb.select.mockImplementation(() => {
-        selectCallCount++;
-        if (selectCallCount === 1) {
-          return createSelectTerminalWhereChain([pendingSlot]);
-        }
-        return createSelectChain([mockEvent]);
-      });
-
-      const updateChain = createUpdateChain();
+      const updateChain = createUpdateChain([claimedSlot]);
       mockDb.update.mockReturnValue(updateChain);
+      mockDb.select.mockReturnValue(createSelectChain([mockEvent]));
 
       clientService.sendEmbedDM.mockRejectedValue(
         new Error('Cannot send DM to user'),
@@ -457,6 +466,35 @@ describe('PugInviteService', () => {
       await expect(
         service.handleNewGuildMember('user-id', 'newplayer', 'avatar'),
       ).resolves.not.toThrow();
+    });
+
+    it('should only send DMs for new pending slots on rejoin, not previously processed ones', async () => {
+      // Simulate rejoin scenario: player had 3 slots total
+      // - 1 still pending (new event added while they were away)
+      // - 2 already invited/accepted (from before they left)
+      // The atomic UPDATE only matches pending, so only the new slot is returned
+      const newPendingSlot = {
+        ...mockPugSlot,
+        id: 'new-pending-slot',
+        discordUsername: 'returning-player',
+        eventId: 99,
+        status: 'invited', // status after atomic claim
+      };
+
+      const updateChain = createUpdateChain([newPendingSlot]);
+      mockDb.update.mockReturnValue(updateChain);
+
+      const newEvent = { ...mockEvent, id: 99, title: 'New Raid' };
+      mockDb.select.mockReturnValue(createSelectChain([newEvent]));
+
+      await service.handleNewGuildMember(
+        'user-id',
+        'returning-player',
+        'avatar',
+      );
+
+      // Only 1 DM for the new pending slot, not the 2 already processed
+      expect(clientService.sendEmbedDM).toHaveBeenCalledTimes(1);
     });
   });
 
