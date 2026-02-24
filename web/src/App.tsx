@@ -18,7 +18,7 @@ import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 
-const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
+export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
 
 function isChunkLoadError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;

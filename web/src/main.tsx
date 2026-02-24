@@ -8,7 +8,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './lib/query-client';
 import { initPerformanceMonitoring } from './lib/performance';
 import './index.css';
-import App from './App.tsx';
+import App, { CHUNK_RELOAD_KEY } from './App.tsx';
 
 const root = createRoot(document.getElementById('root')!, {
   // React 19 error hooks — forward uncaught/caught/recoverable errors to Sentry.
@@ -42,7 +42,7 @@ root.render(
             </p>
             <button
               onClick={() => {
-                sessionStorage.removeItem('chunk-reload-attempted');
+                sessionStorage.removeItem(CHUNK_RELOAD_KEY);
                 window.location.reload();
               }}
               style={{
