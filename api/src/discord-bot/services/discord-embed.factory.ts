@@ -327,22 +327,19 @@ export class DiscordEmbedFactory {
       lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
 
       if (tankMax > 0) {
-        const roleMentions = this.getMentionsForRole(mentions, 'tank');
-        lines.push(
-          `🛡️ Tanks (${rc['tank'] ?? 0}/${tankMax}): ${roleMentions || '—'}`,
-        );
+        const playerLines = this.getMentionsForRole(mentions, 'tank');
+        lines.push(`🛡️ **Tanks** (${rc['tank'] ?? 0}/${tankMax}):`);
+        lines.push(playerLines || '  —');
       }
       if (healerMax > 0) {
-        const roleMentions = this.getMentionsForRole(mentions, 'healer');
-        lines.push(
-          `💚 Healers (${rc['healer'] ?? 0}/${healerMax}): ${roleMentions || '—'}`,
-        );
+        const playerLines = this.getMentionsForRole(mentions, 'healer');
+        lines.push(`💚 **Healers** (${rc['healer'] ?? 0}/${healerMax}):`);
+        lines.push(playerLines || '  —');
       }
       if (dpsMax > 0) {
-        const roleMentions = this.getMentionsForRole(mentions, 'dps');
-        lines.push(
-          `⚔️ DPS (${rc['dps'] ?? 0}/${dpsMax}): ${roleMentions || '—'}`,
-        );
+        const playerLines = this.getMentionsForRole(mentions, 'dps');
+        lines.push(`⚔️ **DPS** (${rc['dps'] ?? 0}/${dpsMax}):`);
+        lines.push(playerLines || '  —');
       }
 
       return lines.join('\n');
@@ -378,8 +375,8 @@ export class DiscordEmbedFactory {
 
   /**
    * Format Discord mentions for a specific role (or all if role is null).
-   * Players with multiple preferred roles get emoji indicators showing
-   * their other available roles (flexibility visible to other signups).
+   * Each player gets their own line with role preference emoji before the
+   * name (Raid Helper style) for mobile-friendly readability.
    */
   private getMentionsForRole(
     mentions: Array<{
@@ -399,7 +396,7 @@ export class DiscordEmbedFactory {
       .map((m) => {
         const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
         // ROK-459: ⏳ prefix for tentative players
-        const tentativePrefix = m.status === 'tentative' ? '⏳' : '';
+        const tentativePrefix = m.status === 'tentative' ? '⏳ ' : '';
         // Fall back to assigned role if no explicit preferences stored
         const prefs =
           m.preferredRoles && m.preferredRoles.length > 0
@@ -407,17 +404,17 @@ export class DiscordEmbedFactory {
             : m.role
               ? [m.role]
               : [];
-        // Show emojis for ALL preferred roles so flexibility is fully visible
+        // Role emoji before the name for at-a-glance scanning
         const allEmojis = prefs
           .map((r) => DiscordEmbedFactory.ROLE_EMOJI[r] ?? '')
           .filter(Boolean)
           .join('');
         return allEmojis
-          ? `${tentativePrefix}${label} (${allEmojis})`
-          : `${tentativePrefix}${label}`;
+          ? `  ${tentativePrefix}${allEmojis} ${label}`
+          : `  ${tentativePrefix}${label}`;
       })
-      .join(', ');
-    return overflow > 0 ? `${result}, + ${overflow} more` : result;
+      .join('\n');
+    return overflow > 0 ? `${result}\n  + ${overflow} more` : result;
   }
 
   /**

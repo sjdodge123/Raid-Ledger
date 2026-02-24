@@ -89,9 +89,9 @@ describe('DiscordEmbedFactory', () => {
       const json = embed.toJSON();
 
       expect(json.description).toContain('ROSTER:');
-      expect(json.description).toContain('Tanks (');
-      expect(json.description).toContain('Healers (');
-      expect(json.description).toContain('DPS (');
+      expect(json.description).toContain('**Tanks** (');
+      expect(json.description).toContain('**Healers** (');
+      expect(json.description).toContain('**DPS** (');
     });
 
     it('should set game art as thumbnail', () => {
@@ -611,12 +611,12 @@ describe('DiscordEmbedFactory', () => {
       const { embed } = factory.buildEventEmbed(eventWithMentions, baseContext);
       const desc = embed.toJSON().description!;
 
-      // Tank player assigned to tank slot, shows tank + dps preferred role badges
-      expect(desc).toContain('<@111> (\u{1F6E1}\uFE0F\u2694\uFE0F)');
-      // Healer player shows healer badge
-      expect(desc).toContain('<@222> (\u{1F49A})');
-      // DPS player shows all three role badges
-      expect(desc).toContain('<@333> (\u{1F6E1}\uFE0F\u{1F49A}\u2694\uFE0F)');
+      // Tank player: role emoji before name on own line
+      expect(desc).toContain('  \u{1F6E1}\uFE0F\u2694\uFE0F <@111>');
+      // Healer player: healer emoji before name
+      expect(desc).toContain('  \u{1F49A} <@222>');
+      // DPS player: all three role emoji before name
+      expect(desc).toContain('  \u{1F6E1}\uFE0F\u{1F49A}\u2694\uFE0F <@333>');
     });
 
     it('should show just @mention when player has no preferred roles and no assigned role', () => {
@@ -667,8 +667,8 @@ describe('DiscordEmbedFactory', () => {
       );
       const desc = embed.toJSON().description!;
 
-      // Should fall back to showing assigned role emoji (tank shield)
-      expect(desc).toContain('<@555> (\u{1F6E1}\uFE0F)');
+      // Should fall back to showing assigned role emoji before name
+      expect(desc).toContain('  \u{1F6E1}\uFE0F <@555>');
     });
 
     it('should combine tentative prefix with role badges', () => {
@@ -693,8 +693,8 @@ describe('DiscordEmbedFactory', () => {
       );
       const desc = embed.toJSON().description!;
 
-      // Should show tentative prefix (⏳ U+23F3) + mention + role badges in parens
-      expect(desc).toContain('\u23F3<@666> (\u{1F49A}\u2694\uFE0F)');
+      // Should show tentative prefix (⏳) then role emoji then mention
+      expect(desc).toContain('  \u23F3 \u{1F49A}\u2694\uFE0F <@666>');
     });
 
     it('should show username with role badges when no discordId', () => {
@@ -716,8 +716,8 @@ describe('DiscordEmbedFactory', () => {
       const { embed } = factory.buildEventEmbed(eventWithUsername, baseContext);
       const desc = embed.toJSON().description!;
 
-      // Should use username instead of @mention, with DPS badge
-      expect(desc).toContain('WebOnlyUser (\u2694\uFE0F)');
+      // Should use username instead of @mention, role emoji before name
+      expect(desc).toContain('  \u2694\uFE0F WebOnlyUser');
     });
 
     it('should show role badges in non-MMO roster with maxAttendees', () => {
@@ -750,8 +750,8 @@ describe('DiscordEmbedFactory', () => {
       );
       const desc = embed.toJSON().description!;
 
-      // Player with role prefs should show badges
-      expect(desc).toContain('<@777> (\u{1F6E1}\uFE0F\u{1F49A})');
+      // Player with role prefs should show emoji before name
+      expect(desc).toContain('  \u{1F6E1}\uFE0F\u{1F49A} <@777>');
       // Player without prefs should show just mention
       expect(desc).toContain('<@888>');
       expect(desc).not.toMatch(/<@888>[\u{1F6E1}\u{1F49A}\u2694]/u);
