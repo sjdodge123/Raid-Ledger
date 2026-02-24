@@ -469,7 +469,7 @@ export class GameActivityService
       .update(schema.gameActivitySessions)
       .set({
         endedAt: now,
-        durationSeconds: sql`EXTRACT(EPOCH FROM ${now}::timestamp - ${schema.gameActivitySessions.startedAt})::integer`,
+        durationSeconds: sql`EXTRACT(EPOCH FROM ${now.toISOString()}::timestamp - ${schema.gameActivitySessions.startedAt})::integer`,
       })
       .where(
         and(
