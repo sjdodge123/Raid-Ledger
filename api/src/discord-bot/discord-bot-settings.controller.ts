@@ -26,6 +26,7 @@ import * as schema from '../drizzle/schema';
 import {
   DiscordBotConfigSchema,
   DiscordBotTestConnectionSchema,
+  DiscordMemberCharactersQuerySchema,
   type DiscordBotStatusResponse,
   type DiscordBotTestResult,
   type CharacterDto,
@@ -226,29 +227,30 @@ export class DiscordBotSettingsController {
    */
   @Get('members/characters')
   async getMemberCharacters(
-    @Query('discordId') discordId: string,
-    @Query('gameId') gameId: string,
+    @Query() query: Record<string, string>,
   ): Promise<CharacterDto[]> {
-    if (!discordId || !gameId) {
-      return [];
+    try {
+      const { discordId, gameId } =
+        DiscordMemberCharactersQuerySchema.parse(query);
+
+      // Look up the Raid Ledger user linked to this Discord ID
+      const [linkedUser] = await this.db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(eq(schema.users.discordId, discordId))
+        .limit(1);
+
+      if (!linkedUser) {
+        return [];
+      }
+
+      const result = await this.charactersService.findAllForUser(
+        linkedUser.id,
+        gameId,
+      );
+      return result.data;
+    } catch (error) {
+      handleValidationError(error);
     }
-
-    // Look up the Raid Ledger user linked to this Discord ID
-    const [linkedUser] = await this.db
-      .select({ id: schema.users.id })
-      .from(schema.users)
-      .where(eq(schema.users.discordId, discordId))
-      .limit(1);
-
-    if (!linkedUser) {
-      return [];
-    }
-
-    const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
-    const result = await this.charactersService.findAllForUser(
-      linkedUser.id,
-      parsedGameId || undefined,
-    );
-    return result.data;
   }
 }

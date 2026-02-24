@@ -19,6 +19,7 @@ import {
   UpdateCharacterSchema,
   ImportWowCharacterSchema,
   RefreshCharacterSchema,
+  CharacterListQuerySchema,
   CharacterDto,
   CharacterListResponseDto,
 } from '@raid-ledger/contract';
@@ -69,13 +70,14 @@ export class CharactersController {
   @Get()
   async findAll(
     @Request() req: AuthenticatedRequest,
-    @Query('gameId') gameId?: string,
+    @Query() query: Record<string, string>,
   ): Promise<CharacterListResponseDto> {
-    const parsedGameId = gameId ? parseInt(gameId, 10) : undefined;
-    return this.charactersService.findAllForUser(
-      req.user.id,
-      parsedGameId || undefined,
-    );
+    try {
+      const { gameId } = CharacterListQuerySchema.parse(query);
+      return this.charactersService.findAllForUser(req.user.id, gameId);
+    } catch (error) {
+      handleValidationError(error);
+    }
   }
 
   /**
