@@ -23,6 +23,7 @@ import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
+import type { GameInfo } from '../../stores/game-filter-store';
 import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
@@ -53,12 +54,8 @@ export interface CalendarEvent {
     resource: EventResponseDto;
 }
 
-/** Game info for filter sidebar */
-export interface GameInfo {
-    slug: string;
-    name: string;
-    coverUrl: string | null;
-}
+/** Game info for filter sidebar — canonical definition lives in game-filter-store */
+export type { GameInfo } from '../../stores/game-filter-store';
 
 interface CalendarViewProps {
     className?: string;

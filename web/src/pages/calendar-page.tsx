@@ -1,15 +1,17 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
-import { CalendarView, MiniCalendar, type GameInfo } from '../components/calendar';
+import { CalendarView, MiniCalendar } from '../components/calendar';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { FAB } from '../components/ui/fab';
 import { BottomSheet } from '../components/ui/bottom-sheet';
+import { Modal } from '../components/ui/modal';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
+import { useGameFilterStore } from '../stores/game-filter-store';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -26,15 +28,24 @@ export function CalendarPage() {
         }
         return new Date();
     });
-    const [availableGames, setAvailableGames] = useState<GameInfo[]>([]);
-    const [selectedGames, setSelectedGames] = useState<Set<string>>(new Set());
     const [calendarView, setCalendarView] = useState<CalendarViewMode>(
         () => typeof window !== 'undefined' && window.innerWidth < 768 ? 'schedule' : 'month'
     );
     const [gameFilterOpen, setGameFilterOpen] = useState(false);
+    const [filterModalOpen, setFilterModalOpen] = useState(false);
+    const [filterSearch, setFilterSearch] = useState('');
 
-    // Track if we've done the initial auto-select (so "None" doesn't re-trigger it)
-    const hasInitialized = useRef(false);
+    // Game filter state lives in a Zustand store so it survives component remounts
+    // (React StrictMode, HMR, Suspense boundaries, etc.)
+    const allKnownGames = useGameFilterStore((s) => s.allKnownGames);
+    const selectedGames = useGameFilterStore((s) => s.selectedGames);
+    const reportGames = useGameFilterStore((s) => s.reportGames);
+    const toggleGame = useGameFilterStore((s) => s.toggleGame);
+    const selectAllGames = useGameFilterStore((s) => s.selectAll);
+    const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
+
+    // Hard cap — show at most 5 games inline, overflow to modal
+    const maxVisible = 5;
 
     // Game time overlay for calendar indicator
     const { isAuthenticated } = useAuth();
@@ -55,53 +66,18 @@ export function CalendarPage() {
         setCurrentDate(date);
     };
 
-    // Handler for when calendar reports available games
-    // Show only games from current view, but persist selections
-    const handleGamesAvailable = useCallback((games: GameInfo[]) => {
-        // Update available games to show only current view
-        setAvailableGames(games);
+    // Games to show inline in sidebar (capped)
+    const inlineGames = allKnownGames.length > maxVisible
+        ? allKnownGames.slice(0, maxVisible)
+        : allKnownGames;
+    const hasOverflow = allKnownGames.length > maxVisible;
 
-        // Auto-select all games on first load
-        if (!hasInitialized.current && games.length > 0) {
-            hasInitialized.current = true;
-            setSelectedGames(new Set(games.map(g => g.slug)));
-        } else {
-            // For subsequent loads, auto-select any NEW games that weren't previously selected
-            setSelectedGames(prev => {
-                const next = new Set(prev);
-                games.forEach(g => {
-                    // Add games that are new (not already in selection)
-                    if (!prev.has(g.slug)) {
-                        next.add(g.slug);
-                    }
-                });
-                return next;
-            });
-        }
-    }, []);
-
-    // Toggle a single game filter
-    const toggleGame = (slug: string) => {
-        setSelectedGames(prev => {
-            const next = new Set(prev);
-            if (next.has(slug)) {
-                next.delete(slug);
-            } else {
-                next.add(slug);
-            }
-            return next;
-        });
-    };
-
-    // Select all games
-    const selectAllGames = () => {
-        setSelectedGames(new Set(availableGames.map(g => g.slug)));
-    };
-
-    // Deselect all games
-    const deselectAllGames = () => {
-        setSelectedGames(new Set());
-    };
+    // Games filtered by search term (for modal)
+    const filteredModalGames = useMemo(() => {
+        if (!filterSearch.trim()) return allKnownGames;
+        const q = filterSearch.toLowerCase();
+        return allKnownGames.filter((g) => g.name.toLowerCase().includes(q));
+    }, [allKnownGames, filterSearch]);
 
     // Mobile date navigation handlers
     const handleMobileNavPrev = useCallback(() => {
@@ -145,7 +121,7 @@ export function CalendarPage() {
                         />
 
                         {/* Game Filter Section */}
-                        {availableGames.length > 0 && (
+                        {allKnownGames.length > 0 && (
                             <div className="sidebar-section">
                                 <div className="game-filter-header">
                                     <h3 className="sidebar-section-title">Filter by Game</h3>
@@ -169,7 +145,7 @@ export function CalendarPage() {
                                     </div>
                                 </div>
                                 <div className="game-filter-list">
-                                    {availableGames.map((game) => {
+                                    {inlineGames.map((game) => {
                                         const isSelected = selectedGames.has(game.slug);
                                         const colors = getGameColors(game.slug);
                                         return (
@@ -205,6 +181,15 @@ export function CalendarPage() {
                                         );
                                     })}
                                 </div>
+                                {hasOverflow && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setFilterModalOpen(true)}
+                                        className="game-filter-show-all"
+                                    >
+                                        Show all {allKnownGames.length} games...
+                                    </button>
+                                )}
                             </div>
                         )}
 
@@ -234,7 +219,7 @@ export function CalendarPage() {
                             currentDate={currentDate}
                             onDateChange={setCurrentDate}
                             selectedGames={selectedGames}
-                            onGamesAvailable={handleGamesAvailable}
+                            onGamesAvailable={reportGames}
                             gameTimeSlots={gameTimeSlots}
                             calendarView={calendarView}
                             onCalendarViewChange={setCalendarView}
@@ -243,7 +228,7 @@ export function CalendarPage() {
                 </div>
             </div>
 
-            {availableGames.length > 0 && (
+            {allKnownGames.length > 0 && (
                 <FAB
                     onClick={() => setGameFilterOpen(true)}
                     icon={FunnelIcon}
@@ -258,7 +243,7 @@ export function CalendarPage() {
             >
                 <div className="flex items-center justify-between mb-4">
                     <span className="text-sm text-muted">
-                        {selectedGames.size} of {availableGames.length} selected
+                        {selectedGames.size} of {allKnownGames.length} selected
                     </span>
                     <div className="flex gap-2">
                         <button
@@ -278,7 +263,7 @@ export function CalendarPage() {
                     </div>
                 </div>
                 <div className="space-y-1">
-                    {availableGames.map((game) => {
+                    {allKnownGames.map((game) => {
                         const isSelected = selectedGames.has(game.slug);
                         const colors = getGameColors(game.slug);
                         return (
@@ -323,7 +308,81 @@ export function CalendarPage() {
                     })}
                 </div>
             </BottomSheet>
+
+            {/* Desktop overflow modal for game filters */}
+            <Modal
+                isOpen={filterModalOpen}
+                onClose={() => { setFilterModalOpen(false); setFilterSearch(''); }}
+                title="Filter by Game"
+                maxWidth="max-w-sm"
+            >
+                <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm text-muted">
+                        {selectedGames.size} of {allKnownGames.length} selected
+                    </span>
+                    <div className="flex gap-2">
+                        <button
+                            type="button"
+                            onClick={selectAllGames}
+                            className="filter-action-btn"
+                        >
+                            All
+                        </button>
+                        <button
+                            type="button"
+                            onClick={deselectAllGames}
+                            className="filter-action-btn"
+                        >
+                            None
+                        </button>
+                    </div>
+                </div>
+                <input
+                    type="text"
+                    value={filterSearch}
+                    onChange={(e) => setFilterSearch(e.target.value)}
+                    placeholder="Search games..."
+                    className="w-full px-3 py-2 mb-3 rounded-lg bg-base border border-edge text-sm text-foreground placeholder:text-muted focus:outline-none focus:border-emerald-500 transition-colors"
+                    ref={(el) => el?.focus()}
+                />
+                <div className="game-filter-list" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                    {filteredModalGames.map((game) => {
+                        const isSelected = selectedGames.has(game.slug);
+                        const colors = getGameColors(game.slug);
+                        return (
+                            <label
+                                key={game.slug}
+                                className={`game-filter-item ${isSelected ? 'selected' : ''}`}
+                                style={{
+                                    '--game-color': colors.bg,
+                                    '--game-border': colors.border,
+                                } as React.CSSProperties}
+                            >
+                                <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={() => toggleGame(game.slug)}
+                                    className="game-filter-checkbox"
+                                />
+                                <div className="game-filter-icon">
+                                    {game.coverUrl ? (
+                                        <img
+                                            src={game.coverUrl}
+                                            alt={game.name}
+                                            className="game-filter-cover"
+                                        />
+                                    ) : (
+                                        <span className="game-filter-emoji">
+                                            {colors.icon}
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="game-filter-name">{game.name}</span>
+                            </label>
+                        );
+                    })}
+                </div>
+            </Modal>
         </div>
     );
 }
-
