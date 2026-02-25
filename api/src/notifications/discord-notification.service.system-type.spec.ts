@@ -14,10 +14,7 @@ import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import { DISCORD_NOTIFICATION_QUEUE } from './discord-notification.constants';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 describe('DiscordNotificationService — system type & failure TTL (ROK-373)', () => {
   let service: DiscordNotificationService;

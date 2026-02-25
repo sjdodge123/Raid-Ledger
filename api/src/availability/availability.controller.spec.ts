@@ -45,7 +45,6 @@ describe('AvailabilityController', () => {
     controller = module.get<AvailabilityController>(AvailabilityController);
   });
 
-
   describe('findAll', () => {
     it('should return user availability list', async () => {
       const result = await controller.findAll(mockRequest as never, {});

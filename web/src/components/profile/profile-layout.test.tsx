@@ -26,6 +26,10 @@ vi.mock('../../hooks/use-auth', () => ({
     useAuth: vi.fn(),
 }));
 
+vi.mock('../../hooks/use-game-time', () => ({
+    useGameTime: () => ({ data: { slots: [] } }),
+}));
+
 import { useAuth } from '../../hooks/use-auth';
 
 const mockUseAuth = useAuth as unknown as ReturnType<typeof vi.fn>;
@@ -59,8 +63,10 @@ function renderProfileRoutes(initialPath: string) {
                     <Route path="/profile" element={<ProfileLayout />}>
                         <Route path="identity" element={<div data-testid="identity-panel">Identity Content</div>} />
                         <Route path="preferences" element={<div data-testid="preferences-panel">Preferences Content</div>} />
-                        <Route path="gaming" element={<div data-testid="gaming-panel">Gaming Content</div>} />
                         <Route path="notifications" element={<div data-testid="notifications-panel">Notifications Content</div>} />
+                        <Route path="gaming/game-time" element={<div data-testid="game-time-panel">Game Time Content</div>} />
+                        <Route path="gaming/characters" element={<div data-testid="characters-panel">Characters Content</div>} />
+                        <Route path="gaming/watched-games" element={<div data-testid="watched-games-panel">Watched Games Content</div>} />
 
                         {/* ROK-359: Redirects for old bookmarked profile paths */}
                         <Route path="identity/discord" element={<Navigate to="/profile/identity" replace />} />
@@ -68,9 +74,7 @@ function renderProfileRoutes(initialPath: string) {
                         <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
                         <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
                         <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
-                        <Route path="gaming/game-time" element={<Navigate to="/profile/gaming" replace />} />
-                        <Route path="gaming/characters" element={<Navigate to="/profile/gaming" replace />} />
-                        <Route path="gaming/watched-games" element={<Navigate to="/profile/gaming" replace />} />
+                        <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
                         <Route path="account" element={<Navigate to="/profile/identity" replace />} />
                         <Route path="danger/delete-account" element={<Navigate to="/profile/identity" replace />} />
                     </Route>
@@ -110,19 +114,24 @@ describe('AC7: old profile paths redirect to consolidated paths (ROK-359)', () =
         expect(screen.getByTestId('notifications-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/gaming/game-time to /profile/gaming', () => {
+    it('redirects /profile/gaming to /profile/gaming/game-time', () => {
+        renderProfileRoutes('/profile/gaming');
+        expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
+    });
+
+    it('renders /profile/gaming/game-time directly', () => {
         renderProfileRoutes('/profile/gaming/game-time');
-        expect(screen.getByTestId('gaming-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/gaming/characters to /profile/gaming', () => {
+    it('renders /profile/gaming/characters directly', () => {
         renderProfileRoutes('/profile/gaming/characters');
-        expect(screen.getByTestId('gaming-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('characters-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/gaming/watched-games to /profile/gaming', () => {
+    it('renders /profile/gaming/watched-games directly', () => {
         renderProfileRoutes('/profile/gaming/watched-games');
-        expect(screen.getByTestId('gaming-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('watched-games-panel')).toBeInTheDocument();
     });
 
     it('redirects /profile/account to /profile/identity', () => {
@@ -139,9 +148,9 @@ describe('AC7: old profile paths redirect to consolidated paths (ROK-359)', () =
 // ─── AC6: Panels render inline via Outlet ───────────────────────────────────
 
 describe('AC6: profile panels render inline via Outlet, no sub-navigation (ROK-359)', () => {
-    it('navigating to /profile/gaming renders GamingPanel content inline in the layout', () => {
-        renderProfileRoutes('/profile/gaming');
-        expect(screen.getByTestId('gaming-panel')).toBeInTheDocument();
+    it('navigating to /profile/gaming/game-time renders Game Time content inline', () => {
+        renderProfileRoutes('/profile/gaming/game-time');
+        expect(screen.getByTestId('game-time-panel')).toBeInTheDocument();
     });
 
     it('navigating to /profile/preferences renders PreferencesPanel content inline in the layout', () => {

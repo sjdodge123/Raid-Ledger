@@ -46,7 +46,6 @@ describe('RelayService', () => {
     mockFetch.mockReset();
   });
 
-
   describe('isConnected', () => {
     it('should return false when relay is disabled', async () => {
       (mockSettingsService.get as jest.Mock).mockResolvedValue(null);

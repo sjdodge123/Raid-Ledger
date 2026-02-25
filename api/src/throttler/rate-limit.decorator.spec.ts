@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { RATE_LIMIT_TIERS, RateLimit } from './rate-limit.decorator';
 
 describe('RATE_LIMIT_TIERS', () => {

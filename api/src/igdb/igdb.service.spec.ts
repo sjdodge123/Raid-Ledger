@@ -162,7 +162,6 @@ describe('IgdbService', () => {
     jest.clearAllMocks();
   });
 
-
   describe('searchGames', () => {
     it('should return Redis-cached games when available', async () => {
       // Mock Redis cache hit

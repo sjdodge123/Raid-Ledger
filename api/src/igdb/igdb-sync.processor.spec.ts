@@ -48,7 +48,6 @@ describe('IgdbSyncProcessor', () => {
     processor = module.get<IgdbSyncProcessor>(IgdbSyncProcessor);
   });
 
-
   it('should register queue with health service on init', () => {
     processor.onModuleInit();
     expect(mockQueueHealth.register).toHaveBeenCalledWith(mockQueue);

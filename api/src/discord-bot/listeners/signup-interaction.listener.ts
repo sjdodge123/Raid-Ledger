@@ -715,10 +715,26 @@ export class SignupInteractionListener {
 
     // ROK-452: Allow multi-role selection (1-3 roles)
     // ROK-465: Use custom WoW role emojis when available
-    const roleOptions: Array<{ label: string; value: string; emoji?: import('discord.js').ComponentEmojiResolvable }> = [
-      { label: 'Tank', value: 'tank', emoji: this.emojiService.getRoleEmojiComponent('tank') },
-      { label: 'Healer', value: 'healer', emoji: this.emojiService.getRoleEmojiComponent('healer') },
-      { label: 'DPS', value: 'dps', emoji: this.emojiService.getRoleEmojiComponent('dps') },
+    const roleOptions: Array<{
+      label: string;
+      value: string;
+      emoji?: import('discord.js').ComponentEmojiResolvable;
+    }> = [
+      {
+        label: 'Tank',
+        value: 'tank',
+        emoji: this.emojiService.getRoleEmojiComponent('tank'),
+      },
+      {
+        label: 'Healer',
+        value: 'healer',
+        emoji: this.emojiService.getRoleEmojiComponent('healer'),
+      },
+      {
+        label: 'DPS',
+        value: 'dps',
+        emoji: this.emojiService.getRoleEmojiComponent('dps'),
+      },
     ];
 
     const selectMenu = new StringSelectMenuBuilder()

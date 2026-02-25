@@ -6,10 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { EventsService } from './events.service';
@@ -232,7 +229,6 @@ describe('EventPlansService', () => {
     db.returning.mockResolvedValue([makePlan()]);
   });
 
-
   // ─── create ─────────────────────────────────────────────────────────────────
 
   describe('create', () => {
@@ -396,9 +392,7 @@ describe('EventPlansService', () => {
 
     it('should delete Discord poll message on cancel', async () => {
       db.limit.mockResolvedValue([makePlan()]);
-      db.returning.mockResolvedValue([
-        makePlan({ status: 'cancelled' }),
-      ]);
+      db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
 
       await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -410,9 +404,7 @@ describe('EventPlansService', () => {
 
     it('should remove queued BullMQ job on cancel', async () => {
       db.limit.mockResolvedValue([makePlan()]);
-      db.returning.mockResolvedValue([
-        makePlan({ status: 'cancelled' }),
-      ]);
+      db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
 
       await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -422,9 +414,7 @@ describe('EventPlansService', () => {
 
     it('should update plan status to cancelled', async () => {
       db.limit.mockResolvedValue([makePlan()]);
-      db.returning.mockResolvedValue([
-        makePlan({ status: 'cancelled' }),
-      ]);
+      db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
 
       const result = await service.cancel(PLAN_ID, CREATOR_ID);
 
@@ -434,9 +424,7 @@ describe('EventPlansService', () => {
 
     it('should proceed even if Discord message deletion fails', async () => {
       db.limit.mockResolvedValue([makePlan()]);
-      db.returning.mockResolvedValue([
-        makePlan({ status: 'cancelled' }),
-      ]);
+      db.returning.mockResolvedValue([makePlan({ status: 'cancelled' })]);
       discordClient.deleteMessage.mockRejectedValue(new Error('Message gone'));
 
       // Should not throw
