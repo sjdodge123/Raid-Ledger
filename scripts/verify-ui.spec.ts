@@ -19,8 +19,9 @@ test.describe('Authentication', () => {
     test('login page loads and renders form', async ({ page }) => {
         await page.goto('/login', { waitUntil: 'networkidle' });
         await expect(page).toHaveTitle(/Raid Ledger|Login/i);
-        // Page should not crash (error boundary)
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+        // Should render at least one interactive element (button or link)
+        const loginAction = page.locator('button, a[href*="discord"], a[href*="auth"]').first();
+        await expect(loginAction).toBeVisible({ timeout: 10_000 });
     });
 
     test('demo admin can log in (DEMO_MODE)', async ({ page }) => {
