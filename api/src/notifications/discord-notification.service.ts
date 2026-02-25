@@ -103,7 +103,9 @@ export class DiscordNotificationService {
     }
 
     // Rate limiting (AC-5): check if we already sent this type recently
-    const rateLimitKey = `discord-notif:rate:${input.userId}:${input.type}`;
+    // ROK-489: include reminderWindow in key so each window gets its own rate limit slot
+    const subType = (input.payload?.reminderWindow as string | undefined) ?? '';
+    const rateLimitKey = `discord-notif:rate:${input.userId}:${input.type}${subType ? `:${subType}` : ''}`;
     const recentCount = await this.redis.get(rateLimitKey);
 
     if (recentCount && parseInt(recentCount, 10) > 0) {

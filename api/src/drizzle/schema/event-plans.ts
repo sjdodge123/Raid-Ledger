@@ -63,8 +63,8 @@ export const eventPlans = pgTable(
     contentInstances: jsonb('content_instances'),
     /** Reminder settings for the auto-created event. */
     reminder15min: boolean('reminder_15min').default(true).notNull(),
-    reminder1hour: boolean('reminder_1hour').default(false).notNull(),
-    reminder24hour: boolean('reminder_24hour').default(false).notNull(),
+    reminder1hour: boolean('reminder_1hour').default(true).notNull(),
+    reminder24hour: boolean('reminder_24hour').default(true).notNull(),
     pollStartedAt: timestamp('poll_started_at'),
     pollEndsAt: timestamp('poll_ends_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),

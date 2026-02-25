@@ -203,7 +203,7 @@ export class EventReminderService {
 
       for (const userId of userIds) {
         const user = userMap.get(userId);
-        if (!user?.discordId) continue; // No Discord linked — skip
+        if (!user) continue; // User not found — skip
 
         // Find user's character for this event's game
         const userChars = charsByUser.get(userId) ?? [];

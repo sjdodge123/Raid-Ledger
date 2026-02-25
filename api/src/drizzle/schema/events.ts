@@ -69,10 +69,10 @@ export const events = pgTable(
     contentInstances: jsonb('content_instances'),
     /** Send DM reminder 15 minutes before event. Default true (ROK-126). */
     reminder15min: boolean('reminder_15min').default(true).notNull(),
-    /** Send DM reminder 1 hour before event. Default false (ROK-126). */
-    reminder1hour: boolean('reminder_1hour').default(false).notNull(),
-    /** Send DM reminder 24 hours before event. Default false (ROK-126). */
-    reminder24hour: boolean('reminder_24hour').default(false).notNull(),
+    /** Send DM reminder 1 hour before event. Default true (ROK-126, ROK-489). */
+    reminder1hour: boolean('reminder_1hour').default(true).notNull(),
+    /** Send DM reminder 24 hours before event. Default true (ROK-126, ROK-489). */
+    reminder24hour: boolean('reminder_24hour').default(true).notNull(),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */
