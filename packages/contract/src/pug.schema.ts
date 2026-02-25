@@ -13,8 +13,8 @@ export const PugSlotStatusSchema = z.enum([
 ]);
 export type PugSlotStatus = z.infer<typeof PugSlotStatusSchema>;
 
-/** Valid PUG role values (same as MMO roles) */
-export const PugRoleSchema = z.enum(['tank', 'healer', 'dps']);
+/** Valid PUG role values (MMO roles + generic roster 'player') */
+export const PugRoleSchema = z.enum(['tank', 'healer', 'dps', 'player']);
 export type PugRole = z.infer<typeof PugRoleSchema>;
 
 /** Schema for creating a PUG slot */

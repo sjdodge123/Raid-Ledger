@@ -36,7 +36,7 @@ export const pugSlots = pgTable(
     discordUserId: varchar('discord_user_id', { length: 50 }),
     /** Discord avatar hash (populated by bot in Phase B) */
     discordAvatarHash: varchar('discord_avatar_hash', { length: 100 }),
-    /** Role assignment: tank, healer, or dps */
+    /** Role assignment: tank, healer, dps, or player (generic rosters) */
     role: varchar('role', { length: 20 }).notNull(),
     /** Optional character class (e.g., Warrior, Paladin) */
     class: varchar('class', { length: 50 }),
