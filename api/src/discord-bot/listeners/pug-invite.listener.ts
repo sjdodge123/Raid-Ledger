@@ -32,6 +32,7 @@ import {
   PugsService,
   type PugSlotCreatedPayload,
 } from '../../events/pugs.service';
+import type { PugRole } from '@raid-ledger/contract';
 
 /** Button ID prefix for the "Join Event" button on invite unfurls (ROK-263) */
 const PUG_JOIN_PREFIX = 'pug_join';
@@ -643,7 +644,7 @@ export class PugInviteListener {
   ): Promise<void> {
     if (!(await this.safeDeferUpdate(interaction))) return;
 
-    const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
+    const selectedRole = interaction.values[0] as PugRole;
 
     try {
       const [slot] = await this.db
@@ -1037,7 +1038,7 @@ export class PugInviteListener {
       // Create normal signup (not PUG) — use the slot's role
       try {
         await this.signupsService.signup(slot.eventId, linkedUser.id, {
-          slotRole: slot.role as 'tank' | 'healer' | 'dps',
+          slotRole: slot.role as PugRole,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Failed to sign up';
@@ -1463,7 +1464,7 @@ export class PugInviteListener {
   ): Promise<void> {
     if (!(await this.safeDeferUpdate(interaction))) return;
 
-    const selectedRole = interaction.values[0] as 'tank' | 'healer' | 'dps';
+    const selectedRole = interaction.values[0] as PugRole;
     const discordUserId = interaction.user.id;
     const eventId = parseInt(eventIdStr, 10);
 

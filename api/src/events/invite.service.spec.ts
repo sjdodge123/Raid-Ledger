@@ -294,7 +294,7 @@ describe('InviteService', () => {
       );
     });
 
-    it('rethrows when signupsService.signup() fails (signup failure propagates)', async () => {
+    it('rethrows when signupsService.signup() fails and does NOT update the slot (ROK-494)', async () => {
       const svc = await buildService();
       mockSignupsService.signup.mockRejectedValueOnce(
         new ConflictException('already signed up'),
@@ -303,6 +303,25 @@ describe('InviteService', () => {
       await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(
         ConflictException,
       );
+      // Slot must not be marked "claimed" when signup fails
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('calls signup before updating the PUG slot (ROK-494 ordering)', async () => {
+      const svc = await buildService();
+      const callOrder: string[] = [];
+      mockSignupsService.signup.mockImplementation(() => {
+        callOrder.push('signup');
+        return Promise.resolve({ id: 1 });
+      });
+      mockDb.update.mockImplementation(() => {
+        callOrder.push('update');
+        return makeChain();
+      });
+
+      await svc.claimInvite('abc12345', 1);
+
+      expect(callOrder).toEqual(['signup', 'update']);
     });
   });
 

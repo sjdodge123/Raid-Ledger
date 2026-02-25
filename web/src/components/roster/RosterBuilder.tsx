@@ -38,6 +38,8 @@ interface RosterBuilderProps {
     onSlotClick?: (role: RosterRole, position: number) => void;
     /** ROK-183: Whether current user can click to join (authenticated + not signed up) */
     canJoin?: boolean;
+    /** ROK-467: Whether the signup mutation just succeeded (drives pending-state cleanup) */
+    signupSucceeded?: boolean;
     /** ROK-184: Current user ID for highlighting their slot */
     currentUserId?: number;
     /** ROK-226: Called when current user self-unassigns from their roster slot */
@@ -94,6 +96,7 @@ export const RosterBuilder = memo(function RosterBuilder({
     canEdit,
     onSlotClick,
     canJoin = false,
+    signupSucceeded = false,
     currentUserId,
     onSelfRemove,
     stickyExtra,
@@ -132,16 +135,13 @@ export const RosterBuilder = memo(function RosterBuilder({
         }
     }, [pendingSlotKey]);
 
-    // ROK-466: Clear pending "Join?" state when user can no longer join
-    // (e.g., they signed up via a different path while pending was showing).
-    // Debounce with 150ms to survive brief React Query refetch races where
-    // canJoin momentarily flips to false from stale data.
+    // ROK-467: Clear pending "Join?" state immediately when the signup mutation
+    // succeeds. Replaces the fragile 150ms debounce on canJoin refetch races.
     React.useEffect(() => {
-        if (!canJoin && pendingSlotKey) {
-            const timeout = setTimeout(() => setPendingSlotKey(null), 150);
-            return () => clearTimeout(timeout);
+        if (signupSucceeded && pendingSlotKey) {
+            setPendingSlotKey(null);
         }
-    }, [canJoin, pendingSlotKey]);
+    }, [signupSucceeded, pendingSlotKey]);
 
     // ROK-209: Auto-fill and clear-all state
     const [autoFillPreview, setAutoFillPreview] = React.useState<AutoFillResult | null>(null);

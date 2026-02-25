@@ -13,6 +13,11 @@ const mockPreferences = {
         achievement_unlocked: { inApp: false, push: true, discord: true },
         level_up: { inApp: true, push: true, discord: true },
         missed_event_nudge: { inApp: false, push: false, discord: true },
+        event_cancelled: { inApp: true, push: true, discord: true },
+        event_rescheduled: { inApp: true, push: true, discord: true },
+        bench_promoted: { inApp: true, push: true, discord: false },
+        roster_reassigned: { inApp: true, push: false, discord: true },
+        tentative_displaced: { inApp: false, push: true, discord: true },
     },
 };
 
@@ -85,14 +90,26 @@ describe('NotificationPreferencesSection', () => {
     });
 
     describe('Notification type rows', () => {
-        it('renders visible notification type labels (Achievements and Level Up hidden)', () => {
+        it('renders all visible notification type labels', () => {
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
             expect(screen.getByText('Event Reminders')).toBeInTheDocument();
             expect(screen.getByText('New Events')).toBeInTheDocument();
             expect(screen.getByText('Subscribed Games')).toBeInTheDocument();
-            expect(screen.getByText('Missed Event Nudge')).toBeInTheDocument();
-            // Achievements and Level Up are hidden until those features are implemented
+            expect(screen.getByText('Event Cancelled')).toBeInTheDocument();
+            expect(screen.getByText('Event Rescheduled')).toBeInTheDocument();
+            expect(screen.getByText('Bench Promoted')).toBeInTheDocument();
+            expect(screen.getByText('Roster Reassignment')).toBeInTheDocument();
+            expect(screen.getByText('Tentative Displaced')).toBeInTheDocument();
+        });
+
+        it('does not render missed_event_nudge label (ghost row removed)', () => {
+            render(<NotificationPreferencesSection />);
+            expect(screen.queryByText('Missed Event Nudge')).not.toBeInTheDocument();
+        });
+
+        it('does not render Achievements or Level Up (not yet implemented)', () => {
+            render(<NotificationPreferencesSection />);
             expect(screen.queryByText('Achievements')).not.toBeInTheDocument();
             expect(screen.queryByText('Level Up')).not.toBeInTheDocument();
         });
@@ -102,6 +119,11 @@ describe('NotificationPreferencesSection', () => {
             expect(screen.getByText('When someone leaves a roster slot')).toBeInTheDocument();
             expect(screen.getByText('Reminders for upcoming events')).toBeInTheDocument();
             expect(screen.getByText('When new events are created')).toBeInTheDocument();
+            expect(screen.getByText('When an event you signed up for is cancelled')).toBeInTheDocument();
+            expect(screen.getByText('When an event you signed up for is rescheduled')).toBeInTheDocument();
+            expect(screen.getByText('When you are moved from bench to the active roster')).toBeInTheDocument();
+            expect(screen.getByText('When your roster slot or role is changed')).toBeInTheDocument();
+            expect(screen.getByText('When a confirmed player takes your tentative slot')).toBeInTheDocument();
         });
     });
 

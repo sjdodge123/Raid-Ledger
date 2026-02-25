@@ -80,7 +80,7 @@ function PugFormBody({
     const [discordUsername, setDiscordUsername] = useState(
         editingPug?.discordUsername ?? '',
     );
-    const [role, setRole] = useState<PugRole>(editingPug?.role ?? 'dps');
+    const [role, setRole] = useState<PugRole>(editingPug?.role ?? (isMMOGame ? 'dps' : 'player'));
     const [charClass, setCharClass] = useState(editingPug?.class ?? '');
     const [spec, setSpec] = useState(editingPug?.spec ?? '');
     const [notes, setNotes] = useState(editingPug?.notes ?? '');

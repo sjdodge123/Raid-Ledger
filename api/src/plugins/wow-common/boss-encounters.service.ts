@@ -1,6 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
+import type { BossEncounterDto, BossLootDto } from '@raid-ledger/contract';
 
 import * as schema from '../../drizzle/schema';
 import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
@@ -13,6 +14,7 @@ import { BossEncounterSeeder } from './boss-encounter-seeder';
  */
 const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_era: ['classic'],
+  classic_era_sod: ['classic', 'sod'],
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
@@ -43,30 +45,6 @@ const SUB_INSTANCE_BOSSES: Record<string, Set<string>> = {
   '232:2': new Set(['Celebras the Cursed', 'Landslide']), // Orange
   '232:3': new Set(['Tinkerer Gizlock', 'Rotgrip', 'Princess Theradras']), // Inner
 };
-
-export interface BossEncounterDto {
-  id: number;
-  instanceId: number;
-  name: string;
-  order: number;
-  expansion: string;
-  sodModified: boolean;
-}
-
-export interface BossLootDto {
-  id: number;
-  bossId: number;
-  itemId: number;
-  itemName: string;
-  slot: string | null;
-  quality: string;
-  itemLevel: number | null;
-  dropRate: string | null;
-  expansion: string;
-  classRestrictions: string[] | null;
-  iconUrl: string | null;
-  itemSubclass: string | null;
-}
 
 /**
  * Service for querying boss encounter and loot data with variant-aware filtering.
@@ -189,7 +167,7 @@ export class BossEncountersService {
       instanceId: row.instanceId,
       name: row.name,
       order: row.order,
-      expansion: row.expansion,
+      expansion: row.expansion as BossEncounterDto['expansion'],
       sodModified: row.sodModified,
     };
   }
@@ -201,10 +179,10 @@ export class BossEncountersService {
       itemId: row.itemId,
       itemName: row.itemName,
       slot: row.slot,
-      quality: row.quality,
+      quality: row.quality as BossLootDto['quality'],
       itemLevel: row.itemLevel,
       dropRate: row.dropRate,
-      expansion: row.expansion,
+      expansion: row.expansion as BossLootDto['expansion'],
       classRestrictions: row.classRestrictions,
       iconUrl: row.iconUrl,
       itemSubclass: row.itemSubclass,
