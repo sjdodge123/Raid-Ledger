@@ -28,6 +28,7 @@ export class BossEncountersController {
 
   private static readonly VALID_VARIANTS = new Set([
     'classic_era',
+    'classic_era_sod',
     'classic_anniversary',
     'classic',
     'retail',

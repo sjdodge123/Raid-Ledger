@@ -28,6 +28,7 @@ export class DungeonQuestsController {
 
   private static readonly VALID_VARIANTS = new Set([
     'classic_era',
+    'classic_era_sod',
     'classic_anniversary',
     'classic',
     'retail',
@@ -39,6 +40,7 @@ export class DungeonQuestsController {
    * Returns dungeon quests for a specific instance, filtered by variant.
    * Variant determines which expansion's quests are included:
    *   - classic_era: ['classic']
+   *   - classic_era_sod: ['classic', 'sod']
    *   - classic_anniversary: ['classic', 'tbc']
    *   - classic (Cata): ['classic', 'tbc', 'wotlk', 'cata']
    */

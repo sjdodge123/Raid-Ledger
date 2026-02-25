@@ -182,6 +182,23 @@ export function QuestPrepPanel({
     // Filter to only quests usable by the character's race/class
     const usableQuests = quests.filter(isQuestUsable);
 
+    // Empty state: all quests filtered out by class/race
+    if (usableQuests.length === 0 && quests.length > 0) {
+        return (
+            <div className="quest-prep-panel">
+                <div className="quest-prep-panel__header">
+                    <h2 className="quest-prep-panel__title">
+                        <span className="quest-prep-panel__title-icon">📋</span>
+                        Quest Prep
+                    </h2>
+                </div>
+                <div className="quest-prep-empty">
+                    <p>No quests match your character's class and race.</p>
+                </div>
+            </div>
+        );
+    }
+
     // Group quests: outside vs inside dungeon
     const outsideQuests = usableQuests.filter((q) => !q.startsInsideDungeon);
     const insideQuests = usableQuests.filter((q) => q.startsInsideDungeon);
