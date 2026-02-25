@@ -298,17 +298,9 @@ export class InviteService {
       };
     }
 
-    // No Discord ID — claim the PUG slot and create signup so user appears in roster
-    await this.db
-      .update(schema.pugSlots)
-      .set({
-        claimedByUserId: userId,
-        status: 'claimed',
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.pugSlots.id, slot.id));
-
-    // ROK-488: Create event signup so the player appears in the roster UI
+    // No Discord ID — create signup first, then mark PUG slot as claimed.
+    // Signup-first ordering ensures a failed signup doesn't leave an orphaned
+    // "claimed" slot with no roster entry (ROK-494).
     try {
       await this.signupsService.signup(slot.eventId, userId, {
         slotRole: effectiveRole,
@@ -320,6 +312,15 @@ export class InviteService {
       );
       throw err;
     }
+
+    await this.db
+      .update(schema.pugSlots)
+      .set({
+        claimedByUserId: userId,
+        status: 'claimed',
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.pugSlots.id, slot.id));
 
     this.logger.log(
       'Invite %s claimed by user %d (PUG slot + signup) for event %d',

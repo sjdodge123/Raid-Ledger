@@ -24,7 +24,11 @@ export type NotificationType =
     | 'level_up'
     | 'missed_event_nudge'
     | 'event_rescheduled'
-    | 'bench_promoted';
+    | 'bench_promoted'
+    | 'event_cancelled'
+    | 'roster_reassigned'
+    | 'tentative_displaced'
+    | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';
 

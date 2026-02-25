@@ -3,6 +3,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
+import type { EnrichedQuestReward } from '@raid-ledger/contract';
 
 import * as schema from '../../drizzle/schema';
 import {
@@ -18,6 +19,7 @@ import { DungeonQuestSeeder } from './dungeon-quest-seeder';
  */
 const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_era: ['classic'],
+  classic_era_sod: ['classic', 'sod'],
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
@@ -43,16 +45,6 @@ export interface DungeonQuestDto {
   rewardXp: number | null;
   rewardGold: number | null;
   rewardType: string | null;
-}
-
-export interface EnrichedQuestReward {
-  itemId: number;
-  itemName: string;
-  quality: string;
-  slot: string | null;
-  itemLevel: number | null;
-  iconUrl: string | null;
-  itemSubclass: string | null;
 }
 
 export interface EnrichedDungeonQuestDto extends DungeonQuestDto {

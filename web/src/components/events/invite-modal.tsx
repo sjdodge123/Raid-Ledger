@@ -32,6 +32,8 @@ interface InviteModalProps {
     existingPugUsernames?: Set<string>;
     /** Discord IDs of users already signed up for this event */
     signedUpDiscordIds?: Set<string>;
+    /** Whether the event's game is an MMO (affects default PUG role) */
+    isMMOGame?: boolean;
 }
 
 export function InviteModal({
@@ -40,8 +42,10 @@ export function InviteModal({
     eventId,
     existingPugUsernames,
     signedUpDiscordIds,
+    isMMOGame = false,
 }: InviteModalProps) {
     const createPug = useCreatePug(eventId);
+    const defaultPugRole = isMMOGame ? 'dps' : 'player';
 
     // Member list state
     const [members, setMembers] = useState<DiscordMemberSearchResult[]>([]);
@@ -130,7 +134,7 @@ export function InviteModal({
     const handlePugInvite = async (discordUsername: string, isOnServer = false) => {
         setIsSubmitting(true);
         try {
-            await createPug.mutateAsync({ discordUsername, role: 'dps' });
+            await createPug.mutateAsync({ discordUsername, role: defaultPugRole });
             toast.success(
                 isOnServer
                     ? `Invite sent to "${discordUsername}"`
@@ -235,7 +239,7 @@ export function InviteModal({
     const handleGenerateInviteLink = async () => {
         setIsSubmitting(true);
         try {
-            const pugSlot = await createPug.mutateAsync({ role: 'dps' });
+            const pugSlot = await createPug.mutateAsync({ role: defaultPugRole });
             if (!pugSlot.inviteCode) {
                 toast.error('Failed to generate invite link', {
                     description: 'No invite code returned. Please try again.',

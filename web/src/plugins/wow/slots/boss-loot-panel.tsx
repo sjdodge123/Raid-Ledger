@@ -354,7 +354,7 @@ function BossLootBody({
                         className={`boss-loot-filter__toggle ${filterUsable ? 'boss-loot-filter__toggle--active' : ''}`}
                         onClick={() => setFilterUsable((v) => !v)}
                     >
-                        {filterUsable ? 'My class only' : 'All classes'}
+                        {filterUsable ? 'Show all classes' : 'Show my class only'}
                     </button>
                 </div>
             )}

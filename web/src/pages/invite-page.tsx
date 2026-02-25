@@ -3,14 +3,12 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useMyCharacters } from '../hooks/use-characters';
 import { resolveInviteCode, claimInviteCode } from '../lib/api-client';
-import type { InviteCodeResolveResponseDto, CharacterDto } from '@raid-ledger/contract';
+import type { InviteCodeResolveResponseDto, CharacterDto, PugRole } from '@raid-ledger/contract';
 import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
 import { formatRole } from '../lib/role-colors';
 import { WowArmoryImportForm } from '../plugins/wow/components/wow-armory-import-form';
-
-type RoleChoice = 'tank' | 'healer' | 'dps';
 
 const DISCORD_ICON = (
     <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
@@ -144,7 +142,7 @@ export function InvitePage() {
     const [isResolving, setIsResolving] = useState(true);
     const [isClaiming, setIsClaiming] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedRole, setSelectedRole] = useState<RoleChoice | null>(null);
+    const [selectedRole, setSelectedRole] = useState<PugRole | null>(null);
     const [showManualRoleSelector, setShowManualRoleSelector] = useState(false);
     /** Selected character ID for Blizzard games with existing characters */
     const [selectedCharacterId, setSelectedCharacterId] = useState<string | null>(null);
@@ -197,7 +195,7 @@ export function InvitePage() {
         ? characters.find((c) => c.id === selectedCharacterId) ?? null
         : null;
     const characterRole = selectedCharacter
-        ? (selectedCharacter.effectiveRole ?? selectedCharacter.roleOverride ?? selectedCharacter.role) as RoleChoice | null
+        ? (selectedCharacter.effectiveRole ?? selectedCharacter.roleOverride ?? selectedCharacter.role) as PugRole | null
         : null;
 
     // Resolve the invite code on mount
@@ -244,7 +242,7 @@ export function InvitePage() {
         }
     }, [authLoading, isAuthenticated, resolveData, step]);
 
-    const handleClaim = useCallback(async (roleOverride?: RoleChoice) => {
+    const handleClaim = useCallback(async (roleOverride?: PugRole) => {
         if (!code) return;
         setIsClaiming(true);
         try {
@@ -287,7 +285,7 @@ export function InvitePage() {
             const newest = [...chars].sort((a, b) =>
                 new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
             )[0];
-            const importedRole = (newest.roleOverride ?? newest.role) as RoleChoice | null;
+            const importedRole = (newest.roleOverride ?? newest.role) as PugRole | null;
             if (importedRole) {
                 toast.success('Character imported! Joining event...', {
                     description: `${newest.name} (${formatRole(importedRole)})`,
@@ -560,7 +558,7 @@ export function InvitePage() {
                                             isSelected={selectedCharacterId === char.id}
                                             onSelect={() => {
                                                 setSelectedCharacterId(char.id);
-                                                const role = (char.effectiveRole ?? char.roleOverride ?? char.role) as RoleChoice | null;
+                                                const role = (char.effectiveRole ?? char.roleOverride ?? char.role) as PugRole | null;
                                                 if (role) setSelectedRole(role);
                                             }}
                                         />

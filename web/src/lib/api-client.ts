@@ -827,6 +827,7 @@ import type {
     EventPlanResponseDto,
     TimeSuggestionsResponse,
     PollResultsResponse,
+    PugRole,
 } from '@raid-ledger/contract';
 
 /**
@@ -993,7 +994,7 @@ export async function resolveInviteCode(
  */
 export async function claimInviteCode(
     code: string,
-    role?: 'tank' | 'healer' | 'dps',
+    role?: PugRole,
 ): Promise<{
     type: 'signup' | 'claimed';
     eventId: number;
