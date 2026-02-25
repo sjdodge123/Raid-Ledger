@@ -17,23 +17,16 @@ const allOfflineStatuses = {
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 4 items (Discord OAuth, Discord Bot, IGDB, Channel Bindings)', () => {
+    it('returns 2 items (Discord, IGDB)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(4);
+        expect(items).toHaveLength(2);
     });
 
-    it('includes Discord OAuth with correct path', () => {
+    it('includes consolidated Discord with correct path', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const discord = items.find((i) => i.label === 'Discord OAuth');
+        const discord = items.find((i) => i.label === 'Discord');
         expect(discord).toBeDefined();
-        expect(discord!.to).toBe('/admin/settings/integrations');
-    });
-
-    it('includes Discord Bot with correct path', () => {
-        const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const bot = items.find((i) => i.label === 'Discord Bot');
-        expect(bot).toBeDefined();
-        expect(bot!.to).toBe('/admin/settings/integrations/discord-bot');
+        expect(discord!.to).toBe('/admin/settings/integrations/discord');
     });
 
     it('includes IGDB with correct path', () => {
@@ -43,56 +36,53 @@ describe('buildCoreIntegrationItems', () => {
         expect(igdb!.to).toBe('/admin/settings/integrations/igdb');
     });
 
-    it('includes Channel Bindings with correct path', () => {
+    it('sets Discord status to offline when nothing configured', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const bindings = items.find((i) => i.label === 'Channel Bindings');
-        expect(bindings).toBeDefined();
-        expect(bindings!.to).toBe('/admin/settings/integrations/channel-bindings');
-    });
-
-    it('sets Discord OAuth status to offline when not configured', () => {
-        const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const discord = items.find((i) => i.label === 'Discord OAuth');
+        const discord = items.find((i) => i.label === 'Discord');
         expect(discord!.status).toBe('offline');
     });
 
-    it('sets Discord OAuth status to online when configured', () => {
+    it('sets Discord status to offline when only OAuth configured (bot not connected)', () => {
         const items = buildCoreIntegrationItems({
             ...allOfflineStatuses,
             discord: { configured: true, loading: false },
         });
-        const discord = items.find((i) => i.label === 'Discord OAuth');
+        const discord = items.find((i) => i.label === 'Discord');
+        expect(discord!.status).toBe('offline');
+    });
+
+    it('sets Discord status to online when OAuth configured AND bot connected', () => {
+        const items = buildCoreIntegrationItems({
+            ...allOfflineStatuses,
+            discord: { configured: true, loading: false },
+            discordBot: { connected: true, configured: true, loading: false },
+        });
+        const discord = items.find((i) => i.label === 'Discord');
         expect(discord!.status).toBe('online');
     });
 
-    it('sets Discord OAuth status to loading when loading', () => {
+    it('sets Discord status to loading when OAuth is loading', () => {
         const items = buildCoreIntegrationItems({
             ...allOfflineStatuses,
             discord: { configured: true, loading: true },
         });
-        const discord = items.find((i) => i.label === 'Discord OAuth');
+        const discord = items.find((i) => i.label === 'Discord');
         expect(discord!.status).toBe('loading');
     });
 
-    it('sets Discord Bot status to online when connected', () => {
+    it('sets Discord status to loading when bot is loading', () => {
         const items = buildCoreIntegrationItems({
             ...allOfflineStatuses,
-            discordBot: { connected: true, configured: true, loading: false },
+            discordBot: { connected: false, configured: false, loading: true },
         });
-        const bot = items.find((i) => i.label === 'Discord Bot');
-        expect(bot!.status).toBe('online');
+        const discord = items.find((i) => i.label === 'Discord');
+        expect(discord!.status).toBe('loading');
     });
 
     it('sets IGDB status to offline when not configured', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
         const igdb = items.find((i) => i.label === 'IGDB / Twitch');
         expect(igdb!.status).toBe('offline');
-    });
-
-    it('Channel Bindings has no status field', () => {
-        const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const bindings = items.find((i) => i.label === 'Channel Bindings');
-        expect(bindings!.status).toBeUndefined();
     });
 });
 
@@ -251,10 +241,8 @@ describe('buildNavSections', () => {
         const sections = buildNavSections(coreItems, []);
         const integrations = sections.find((s) => s.id === 'integrations')!;
         const labels = integrations.children.map((c) => c.label);
-        expect(labels).toContain('Discord OAuth');
-        expect(labels).toContain('Discord Bot');
+        expect(labels).toContain('Discord');
         expect(labels).toContain('IGDB / Twitch');
-        expect(labels).toContain('Channel Bindings');
     });
 
     it('Integrations section includes plugin items before Manage Plugins', () => {
@@ -277,7 +265,7 @@ describe('buildNavSections', () => {
     });
 
     it('General section has ≤7 core nav items (excluding dynamic plugins and demo)', () => {
-        // Core = General (4 without demoMode) + core integrations (4) + Manage Plugins (1) = 9 total
+        // Core = General (4 without demoMode) + core integrations (2) + Manage Plugins (1) = 7 total
         // General section alone should have exactly 4 items without demoMode
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), [], { demoMode: false });
         const general = sections.find((s) => s.id === 'general')!;
