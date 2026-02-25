@@ -73,7 +73,7 @@ describe('NewMembersSection', () => {
             isLoading: true,
         } as ReturnType<typeof usePlayersModule.useRecentPlayers>);
 
-        const { container } = renderWithRouter(<NewMembersSection />);
+        renderWithRouter(<NewMembersSection />);
 
         expect(screen.getByText('New Members')).toBeInTheDocument();
     });

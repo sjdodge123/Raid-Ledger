@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MobileEventCard, MobileEventCardSkeleton } from './mobile-event-card';
+import { MobileEventCard } from './mobile-event-card';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 const MOCK_NOW = new Date('2026-02-10T19:00:00Z');

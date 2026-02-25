@@ -8,8 +8,6 @@ vi.mock('../../hooks/use-scroll-direction', () => ({
     useScrollDirection: vi.fn(() => null),
 }));
 
-import { useScrollDirection } from '../../hooks/use-scroll-direction';
-
 describe('FAB', () => {
     it('renders with default plus icon', () => {
         render(<FAB onClick={() => {}} />);

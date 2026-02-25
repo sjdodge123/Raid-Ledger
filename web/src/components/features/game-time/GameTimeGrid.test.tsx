@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { GameTimeGrid } from './GameTimeGrid';
-import type { GameTimeSlot, GameTimePreviewBlock, HeatmapCell } from './GameTimeGrid';
+import type { GameTimeSlot, HeatmapCell } from './GameTimeGrid';
 
 describe('GameTimeGrid', () => {
     it('renders 7 day headers (Sunday first)', () => {
