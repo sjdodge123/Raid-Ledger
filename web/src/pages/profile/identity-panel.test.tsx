@@ -11,6 +11,7 @@ import { IdentityPanel } from './identity-panel';
 import * as useAuthHook from '../../hooks/use-auth';
 import * as useCharactersHook from '../../hooks/use-characters';
 import * as useAvatarUploadHook from '../../hooks/use-avatar-upload';
+import * as useSystemStatusHook from '../../hooks/use-system-status';
 import * as apiClient from '../../lib/api-client';
 import * as toast from '../../lib/toast';
 
@@ -145,6 +146,11 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             isUploading: false,
             uploadProgress: 0,
         } as any);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as any);
     });
 
     // ── Null user ────────────────────────────────────────────────────────────
@@ -172,7 +178,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
         it('shows username in user card', () => {
             render(<IdentityPanel />, { wrapper: createWrapper() });
-            expect(screen.getByText('TestUser')).toBeInTheDocument();
+            expect(screen.getAllByText('TestUser').length).toBeGreaterThanOrEqual(1);
         });
 
         it('shows "Discord linked" label for linked discord account', () => {

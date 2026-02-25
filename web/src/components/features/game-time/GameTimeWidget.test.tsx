@@ -170,6 +170,6 @@ describe('GameTimeWidget', () => {
 
         const link = screen.getByText(/Edit my game time/);
         expect(link).toBeInTheDocument();
-        expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming/game-time');
+        expect(link.closest('a')).toHaveAttribute('href', '/profile/gaming');
     });
 });

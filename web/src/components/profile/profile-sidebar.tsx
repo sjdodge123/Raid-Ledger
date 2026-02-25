@@ -1,7 +1,5 @@
-import { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
-import { useSystemStatus } from '../../hooks/use-system-status';
 import { SECTIONS } from './profile-nav-data';
 
 interface ProfileSidebarProps {
@@ -12,16 +10,10 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
-    const { data: systemStatus } = useSystemStatus();
 
-    // Hide Discord nav item when Discord OAuth is not configured
-    const sections = useMemo(() => {
-        if (systemStatus?.discordConfigured) return SECTIONS;
-        return SECTIONS.map((section) => ({
-            ...section,
-            children: section.children.filter((child) => child.to !== '/profile/identity/discord'),
-        }));
-    }, [systemStatus?.discordConfigured]);
+    // With ROK-359 consolidation, Discord is now inline in the Identity panel
+    // (conditionally rendered by the panel itself), so no nav filtering needed.
+    const sections = SECTIONS;
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
