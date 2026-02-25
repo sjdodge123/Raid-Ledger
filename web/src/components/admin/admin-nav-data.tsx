@@ -28,20 +28,9 @@ const IntegrationsIcon = (<svg className="w-5 h-5" fill="none" stroke="currentCo
 
 /** Build core integration nav items with live status from hooks */
 export function buildCoreIntegrationItems(statuses: {
-    discord: { configured: boolean; loading: boolean };
-    discordBot: { connected: boolean; configured: boolean; loading: boolean };
     igdb: { configured: boolean; loading: boolean };
 }): NavItem[] {
-    const discordLoading = statuses.discord.loading || statuses.discordBot.loading;
-    const discordOnline = statuses.discord.configured && statuses.discordBot.connected;
-
     return [
-        {
-            to: '/admin/settings/integrations/discord',
-            label: 'Discord',
-            status: discordLoading ? 'loading'
-                : discordOnline ? 'online' : 'offline',
-        },
         {
             to: '/admin/settings/integrations/igdb',
             label: 'IGDB / Twitch',

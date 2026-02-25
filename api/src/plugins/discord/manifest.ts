@@ -16,8 +16,8 @@ export const DISCORD_MANIFEST: PluginManifest = {
   integrations: [
     {
       key: 'discord-oauth',
-      name: 'Discord OAuth',
-      description: 'OAuth2 credentials for Discord login.',
+      name: 'Discord',
+      description: 'Discord OAuth, bot configuration, and channel bindings.',
       credentialKeys: ['discord_client_id', 'discord_client_secret'],
       credentialLabels: ['Client ID', 'Client Secret'],
       settingsEvent: 'settings.oauth.discord.updated',

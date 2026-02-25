@@ -6,7 +6,8 @@ import { useNewBadge } from '../../../hooks/use-new-badge';
 import { NewBadge } from '../../../components/ui/new-badge';
 import { getPluginBadge } from '../../plugin-registry';
 
-export function BlizzardIntegrationSlot() {
+export function BlizzardIntegrationSlot({ pluginSlug }: { pluginSlug?: string }) {
+    if (pluginSlug && pluginSlug !== 'blizzard') return null;
     const { blizzardStatus, updateBlizzard, testBlizzard, clearBlizzard } = useAdminSettings();
     const { isNew, markSeen } = useNewBadge('integration-seen:blizzard-api');
 

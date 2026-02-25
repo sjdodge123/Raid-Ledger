@@ -1,6 +1,7 @@
 /**
- * Unit tests for admin navigation data builder functions (ROK-359).
- * Tests consolidation: ≤7 core items, demo data conditional, plugin integration items.
+ * Unit tests for admin navigation data builder functions (ROK-359, ROK-267).
+ * Tests consolidation: core items, demo data conditional, plugin integration items.
+ * Discord integration is now plugin-managed (ROK-267), not a core integration.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -11,22 +12,13 @@ import {
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
 const allOfflineStatuses = {
-    discord: { configured: false, loading: false },
-    discordBot: { connected: false, configured: false, loading: false },
     igdb: { configured: false, loading: false },
 };
 
 describe('buildCoreIntegrationItems', () => {
-    it('returns 2 items (Discord, IGDB)', () => {
+    it('returns 1 item (IGDB)', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
-        expect(items).toHaveLength(2);
-    });
-
-    it('includes consolidated Discord with correct path', () => {
-        const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord).toBeDefined();
-        expect(discord!.to).toBe('/admin/settings/integrations/discord');
+        expect(items).toHaveLength(1);
     });
 
     it('includes IGDB with correct path', () => {
@@ -36,53 +28,26 @@ describe('buildCoreIntegrationItems', () => {
         expect(igdb!.to).toBe('/admin/settings/integrations/igdb');
     });
 
-    it('sets Discord status to offline when nothing configured', () => {
-        const items = buildCoreIntegrationItems(allOfflineStatuses);
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord!.status).toBe('offline');
-    });
-
-    it('sets Discord status to offline when only OAuth configured (bot not connected)', () => {
-        const items = buildCoreIntegrationItems({
-            ...allOfflineStatuses,
-            discord: { configured: true, loading: false },
-        });
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord!.status).toBe('offline');
-    });
-
-    it('sets Discord status to online when OAuth configured AND bot connected', () => {
-        const items = buildCoreIntegrationItems({
-            ...allOfflineStatuses,
-            discord: { configured: true, loading: false },
-            discordBot: { connected: true, configured: true, loading: false },
-        });
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord!.status).toBe('online');
-    });
-
-    it('sets Discord status to loading when OAuth is loading', () => {
-        const items = buildCoreIntegrationItems({
-            ...allOfflineStatuses,
-            discord: { configured: true, loading: true },
-        });
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord!.status).toBe('loading');
-    });
-
-    it('sets Discord status to loading when bot is loading', () => {
-        const items = buildCoreIntegrationItems({
-            ...allOfflineStatuses,
-            discordBot: { connected: false, configured: false, loading: true },
-        });
-        const discord = items.find((i) => i.label === 'Discord');
-        expect(discord!.status).toBe('loading');
-    });
-
     it('sets IGDB status to offline when not configured', () => {
         const items = buildCoreIntegrationItems(allOfflineStatuses);
         const igdb = items.find((i) => i.label === 'IGDB / Twitch');
         expect(igdb!.status).toBe('offline');
+    });
+
+    it('sets IGDB status to online when configured', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: true, loading: false },
+        });
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb!.status).toBe('online');
+    });
+
+    it('sets IGDB status to loading when loading', () => {
+        const items = buildCoreIntegrationItems({
+            igdb: { configured: false, loading: true },
+        });
+        const igdb = items.find((i) => i.label === 'IGDB / Twitch');
+        expect(igdb!.status).toBe('loading');
     });
 });
 
@@ -132,6 +97,22 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].status).toBe('online');
         expect(items[0].pluginSource).toBe('World of Warcraft');
         expect(items[0].pluginSlug).toBe('wow');
+    });
+
+    it('returns items for Discord plugin integration', () => {
+        const plugins: PluginInfoDto[] = [
+            makePlugin({
+                slug: 'discord',
+                name: 'Discord Authentication',
+                status: 'active',
+                integrations: [{ key: 'discord-oauth', name: 'Discord', configured: true, description: '', credentialLabels: [] }],
+            }),
+        ];
+        const items = buildPluginIntegrationItems(plugins);
+        expect(items).toHaveLength(1);
+        expect(items[0].label).toBe('Discord');
+        expect(items[0].to).toBe('/admin/settings/integrations/plugin/discord/discord-oauth');
+        expect(items[0].status).toBe('online');
     });
 
     it('sets newBadgeKey for plugin integration items', () => {
@@ -241,7 +222,6 @@ describe('buildNavSections', () => {
         const sections = buildNavSections(coreItems, []);
         const integrations = sections.find((s) => s.id === 'integrations')!;
         const labels = integrations.children.map((c) => c.label);
-        expect(labels).toContain('Discord');
         expect(labels).toContain('IGDB / Twitch');
     });
 
@@ -265,11 +245,8 @@ describe('buildNavSections', () => {
     });
 
     it('General section has ≤7 core nav items (excluding dynamic plugins and demo)', () => {
-        // Core = General (4 without demoMode) + core integrations (2) + Manage Plugins (1) = 7 total
-        // General section alone should have exactly 4 items without demoMode
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), [], { demoMode: false });
         const general = sections.find((s) => s.id === 'general')!;
-        // General section: Site Settings, User Management, Scheduled Jobs, Backups = 4 items ≤ 7
         expect(general.children.length).toBeLessThanOrEqual(7);
         expect(general.children.length).toBe(4);
     });
