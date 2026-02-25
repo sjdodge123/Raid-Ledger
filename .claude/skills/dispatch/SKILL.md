@@ -56,6 +56,51 @@ PRs are NEVER created until AFTER all applicable gates pass (Step 8).
 Creating a PR with auto-merge before review causes unreviewed code to ship to main.
 "In Review" = Playwright passed, branch pushed, awaiting operator — it does NOT mean a PR exists.
 
+**Auto-merge is the LAST action in the pipeline.** NEVER enable `gh pr merge --auto --squash` at PR creation. Create the PR first (no auto-merge) → complete all remaining gates → enable auto-merge as the final step only after everything passes. Auto-merge is a one-way door — once CI passes, it merges automatically and cannot be recalled.
+
+---
+
+## STOP Protocol
+
+If the operator sends **STOP**, **PAUSE**, or **halt**: immediately cease ALL tool calls. Do not finish the current action chain. Do not run "one more" command. Send one acknowledgment message ("Stopped.") and wait for further instructions. No exceptions.
+
+---
+
+## Post-Compaction Startup Checklist
+
+After any context compaction event, the lead MUST execute this checklist before taking ANY pipeline action:
+
+1. **Verify Sprint Planner alive** — `SendMessage` ping, confirm it can read/write Linear
+2. **Verify Orchestrator alive** — `SendMessage` ping, confirm it has pipeline state (reads `planning-artifacts/pipeline-state.yaml`)
+3. **Verify Scrum Master alive** — `SendMessage` ping, send brief status update
+4. **Read sprint-status.yaml** — get current story states from local cache (do NOT call Linear directly)
+5. **Ask Orchestrator for STATUS** — get pipeline state for all stories
+6. **Scrum Master validates** — Scrum Master confirms Orchestrator's state matches SKILL.md gate order before lead proceeds
+
+If any advisory agent is dead, re-spawn it BEFORE proceeding. If the Orchestrator's `pipeline-state.yaml` is missing, re-establish state by sending current story statuses to the Orchestrator before requesting any WHATS_NEXT directions.
+
+**The lead NEVER calls `mcp__linear__*` tools directly.** All Linear I/O routes through the Sprint Planner. If the Sprint Planner is unreachable, re-spawn it. If it cannot be re-spawned, ask the operator — do not self-route.
+
+---
+
+## Destructive Operations
+
+The following operations require a **pre-execution checkpoint with the Scrum Master AND operator approval** before running:
+
+- `deploy_dev.sh --fresh` (wipes DB volume)
+- `git push --force` / `git reset --hard`
+- `rm -rf` on any project directory
+- DB volume deletes, table drops
+- Any operation the lead is unsure about
+
+Rule: If in doubt whether an operation is destructive, it is. Ask first.
+
+---
+
+## Three-Way Validation
+
+For all pipeline decisions: **Orchestrator decides → Scrum Master validates against SKILL.md gate order → Lead executes.** When the Orchestrator's direction conflicts with the mandatory gate order above, SKILL.md is the law. The Scrum Master flags discrepancies before the lead acts.
+
 ---
 
 ## Team Hierarchy
