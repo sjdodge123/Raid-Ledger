@@ -7,7 +7,6 @@ import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
     buildNavSections,
-    type IntegrationStatus,
 } from './admin-nav-data';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 
