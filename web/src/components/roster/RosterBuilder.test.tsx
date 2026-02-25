@@ -640,6 +640,7 @@ describe('RosterBuilder', () => {
                     onRosterChange={mockOnRosterChange}
                     canEdit={false}
                     canJoin={true}
+                    signupSucceeded={false}
                     onSlotClick={mockSlotClick}
                 />
             );
@@ -662,6 +663,7 @@ describe('RosterBuilder', () => {
                             onRosterChange={mockOnRosterChange}
                             canEdit={false}
                             canJoin={true}
+                            signupSucceeded={false}
                             onSlotClick={mockSlotClick}
                         />
                     </MemoryRouter>
@@ -684,6 +686,7 @@ describe('RosterBuilder', () => {
                     onRosterChange={mockOnRosterChange}
                     canEdit={false}
                     canJoin={true}
+                    signupSucceeded={false}
                     onSlotClick={mockSlotClick}
                 />
             );
@@ -707,6 +710,7 @@ describe('RosterBuilder', () => {
                             onRosterChange={mockOnRosterChange}
                             canEdit={false}
                             canJoin={false}
+                    signupSucceeded={false}
                             onSlotClick={mockSlotClick}
                         />
                     </MemoryRouter>
@@ -722,6 +726,96 @@ describe('RosterBuilder', () => {
             expect(mockSlotClick).toHaveBeenCalledTimes(1);
         });
 
+        it('pending state clears when signupSucceeded becomes true (ROK-467)', () => {
+            const { rerender } = renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    signupSucceeded={false}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Rerender with signupSucceeded=true — pending state should clear immediately
+            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+            rerender(
+                <QueryClientProvider client={qc}>
+                    <MemoryRouter>
+                        <RosterBuilder
+                            pool={[]}
+                            assignments={[]}
+                            onRosterChange={mockOnRosterChange}
+                            canEdit={false}
+                            canJoin={false}
+                            signupSucceeded={true}
+                            onSlotClick={mockSlotClick}
+                        />
+                    </MemoryRouter>
+                </QueryClientProvider>
+            );
+
+            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
+        });
+
+        it('canJoin=false alone does NOT clear pending state (ROK-467)', () => {
+            vi.useFakeTimers();
+
+            const { rerender } = renderWithRouter(
+                <RosterBuilder
+                    pool={[]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={false}
+                    canJoin={true}
+                    signupSucceeded={false}
+                    onSlotClick={mockSlotClick}
+                />
+            );
+
+            // Click to enter pending state
+            const joinLabels = screen.getAllByText('Join');
+            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
+            fireEvent.click(firstSlot);
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            // Rerender with canJoin=false but signupSucceeded still false
+            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+            rerender(
+                <QueryClientProvider client={qc}>
+                    <MemoryRouter>
+                        <RosterBuilder
+                            pool={[]}
+                            assignments={[]}
+                            onRosterChange={mockOnRosterChange}
+                            canEdit={false}
+                            canJoin={false}
+                    signupSucceeded={false}
+                            onSlotClick={mockSlotClick}
+                        />
+                    </MemoryRouter>
+                </QueryClientProvider>
+            );
+
+            // Advance timers well past 200ms — pending state should NOT clear
+            act(() => {
+                vi.advanceTimersByTime(200);
+            });
+
+            // "Join?" should still be showing — canJoin alone no longer clears it
+            expect(screen.getByText('Join?')).toBeInTheDocument();
+
+            vi.useRealTimers();
+        });
+
         it('AC-5: admin assignment popup is unaffected by join confirmation', () => {
             renderWithRouter(
                 <RosterBuilder
@@ -730,6 +824,7 @@ describe('RosterBuilder', () => {
                     onRosterChange={mockOnRosterChange}
                     canEdit={true}
                     canJoin={false}
+                    signupSucceeded={false}
                 />
             );
 
@@ -754,6 +849,7 @@ describe('RosterBuilder', () => {
                     onRosterChange={mockOnRosterChange}
                     canEdit={false}
                     canJoin={true}
+                    signupSucceeded={false}
                     onSlotClick={mockSlotClick}
                 />
             );

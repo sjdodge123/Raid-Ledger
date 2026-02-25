@@ -40,7 +40,7 @@ export const RosterSlot = React.memo(function RosterSlot({ role, position, item,
     // confirmation click from firing.
     const savedJoinClickRef = useRef(onJoinClick);
 
-    // Keep the ref in sync when the prop is defined;
+    // ROK-467: Keep the ref in sync when the prop is defined;
     // clear it when both onJoinClick and isPending are gone
     // (i.e., parent genuinely revoked join ability, not just a brief refetch blip).
     useEffect(() => {

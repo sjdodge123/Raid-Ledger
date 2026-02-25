@@ -629,6 +629,7 @@ export function EventDetailPage() {
                         canEdit={canManageRoster}
                         onSlotClick={handleSlotClick}
                         canJoin={canJoinSlot}
+                        signupSucceeded={signup.isSuccess}
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
                         onGenerateInviteLink={canManageRoster && isMMOGame ? handleGenerateInviteLink : undefined}
