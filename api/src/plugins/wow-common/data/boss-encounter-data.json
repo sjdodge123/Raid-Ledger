@@ -1048,5 +1048,124 @@
         "order": 6,
         "expansion": "sod",
         "sodModified": true
+    },
+    {
+        "instanceId": 48,
+        "name": "Ghamoo-Ra",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 48,
+        "name": "Lady Sarevess",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 48,
+        "name": "Gelihast",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 48,
+        "name": "Twilight Lord Kelris",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 48,
+        "name": "Aku'mai",
+        "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 90,
+        "name": "Grubbis",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 90,
+        "name": "Viscous Fallout",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 90,
+        "name": "Electrocutioner 6000",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 90,
+        "name": "Crowd Pummeler 9-60",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 90,
+        "name": "Mekgineer Thermaplugg",
+        "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Jammal'an the Prophet",
+        "order": 1,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Shade of Eranikus",
+        "order": 2,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Avatar of Hakkar",
+        "order": 3,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Morphaz",
+        "order": 4,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Hazzas",
+        "order": 5,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Dreamscythe",
+        "order": 6,
+        "expansion": "classic",
+        "sodModified": false
+    },
+    {
+        "instanceId": 109,
+        "name": "Weaver",
+        "order": 7,
+        "expansion": "classic",
+        "sodModified": false
     }
 ]
