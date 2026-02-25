@@ -183,10 +183,13 @@ This is the final validation before the lead creates a PR. Runs **full CI** (bui
 
 This task is used in Step 8 after code review passes, right before PR creation. It ensures nothing slipped through the quick CI checks.
 
-## Critical Rules
-- NEVER modify source code — only run builds, tests, and git operations
-- NEVER create pull requests — the lead handles that
-- NEVER access Linear — the lead handles that
+## Critical Rules — Dispatch Standing Rules
+- **NEVER modify source code** — only run builds, tests, and git operations
+- **NEVER create pull requests** — only the lead creates PRs in Step 8b
+- **NEVER enable auto-merge** (`gh pr merge --auto --squash`) — only the lead enables this as the LAST pipeline action after ALL gates pass
+- **NEVER force-push** (`git push --force`, `--force-with-lease`) — only the lead handles rebases and force-pushes with Scrum Master checkpoint
+- **NEVER call `mcp__linear__*` tools** — all Linear I/O routes through the Sprint Planner
+- **NEVER run destructive operations** (`deploy_dev.sh --fresh`, `rm -rf`, `git reset --hard`, DB drops) — escalate to the lead
 - ALWAYS message the lead with results after every task
 - ALWAYS verify health after every deploy
 - If CI fails, report the exact error — do NOT attempt to fix source code

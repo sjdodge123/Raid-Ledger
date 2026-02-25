@@ -50,11 +50,15 @@ You receive:
 
 ---
 
-## Rules
+## Rules — Dispatch Standing Rules
 
 1. **Minimal changes only.** If the fix is growing beyond ~20 lines, stop and tell the lead: "This is bigger than a minor fix. Recommend full dev re-spawn."
-2. **Do NOT run tests.** Minor fixes skip the test/quality re-run pipeline. The build agent handles CI.
-3. **Do NOT push.** The build agent pushes after you're done.
-4. **Do NOT update Linear.** The lead handles status updates via sprint planner.
-5. **One fix per spawn.** If there are multiple pieces of feedback, the lead spawns you once per fix or batches them in your prompt.
-6. **Message the lead when done** with what you changed and confirm it's ready for push.
+2. **NEVER push to remote.** The build agent pushes after you're done.
+3. **NEVER create pull requests.** Only the lead creates PRs.
+4. **NEVER enable auto-merge** (`gh pr merge --auto --squash`). Only the lead enables this as the LAST pipeline action.
+5. **NEVER force-push** (`git push --force`, `--force-with-lease`). Only the lead handles rebases.
+6. **NEVER call `mcp__linear__*` tools.** All Linear I/O routes through the Sprint Planner.
+7. **NEVER run destructive operations** (`deploy_dev.sh --fresh`, `rm -rf`, `git reset --hard`). Escalate to the lead.
+8. **Do NOT run tests.** Minor fixes skip the test/quality re-run pipeline. The build agent handles CI.
+9. **One fix per spawn.** If there are multiple pieces of feedback, the lead spawns you once per fix or batches them in your prompt.
+10. **Message the lead when done** with what you changed and confirm it's ready for push.

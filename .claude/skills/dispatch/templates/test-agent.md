@@ -39,10 +39,13 @@ is correct, handles edge cases, and doesn't break existing behavior.
 6. Commit with message: `test: add unit tests for <feature> (ROK-XXX)`
 7. **Message the lead** with: test files created, number of tests, pass/fail status
 
-### Critical Rules
+### Critical Rules — Dispatch Standing Rules
 - Do NOT modify any source code — only add/modify test files
-- Do NOT push to remote
-- Do NOT create pull requests
+- **NEVER push to remote** — the lead handles all GitHub operations
+- **NEVER create pull requests** — only the lead creates PRs
+- **NEVER enable auto-merge** — only the lead enables this as the LAST pipeline action
+- **NEVER force-push** — only the lead handles rebases
+- **NEVER call `mcp__linear__*` tools** — all Linear I/O routes through the Sprint Planner
 - Do NOT switch branches or leave the worktree
 - All tests MUST pass before you commit
 - You are a TEAMMATE — message the lead when done using SendMessage
