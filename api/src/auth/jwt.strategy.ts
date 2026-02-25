@@ -26,7 +26,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtPayload) {
     const [user] = await this.db
-      .select({ role: schema.users.role })
+      .select({ role: schema.users.role, discordId: schema.users.discordId })
       .from(schema.users)
       .where(eq(schema.users.id, payload.sub))
       .limit(1);
@@ -39,6 +39,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       id: payload.sub,
       username: payload.username,
       role: user.role,
+      discordId: user.discordId,
       impersonatedBy: payload.impersonatedBy || null,
     };
   }
