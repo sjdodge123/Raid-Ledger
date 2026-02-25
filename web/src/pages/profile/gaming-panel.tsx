@@ -3,17 +3,13 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
+import { useGameTime } from '../../hooks/use-game-time';
+import { useUserHeartedGames } from '../../hooks/use-user-profile';
 import { GameTimePanel } from '../../components/features/game-time';
 import { CharacterList, AddCharacterModal } from '../../components/profile';
 import { MyWatchedGamesSection } from '../../components/profile/my-watched-games-section';
 
 type GamingTab = 'game-time' | 'characters' | 'watched-games';
-
-const TABS: { id: GamingTab; label: string }[] = [
-    { id: 'game-time', label: 'Game Time' },
-    { id: 'characters', label: 'Characters' },
-    { id: 'watched-games', label: 'Watched Games' },
-];
 
 /**
  * Consolidated Gaming panel (ROK-359).
@@ -21,12 +17,28 @@ const TABS: { id: GamingTab; label: string }[] = [
  */
 export function GamingPanel() {
     const [activeTab, setActiveTab] = useState<GamingTab>('game-time');
+    const { user, isAuthenticated } = useAuth();
+
+    // Lift queries for tab badge counts
+    const { data: gameTimeData } = useGameTime({ enabled: isAuthenticated });
+    const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
+    const { data: heartedData } = useUserHeartedGames(user?.id);
+
+    const gameTimeSet = (gameTimeData?.slots?.length ?? 0) > 0;
+    const characterCount = charactersData?.data?.length ?? 0;
+    const watchedCount = heartedData?.data?.length ?? 0;
+
+    const tabs: { id: GamingTab; label: string }[] = [
+        { id: 'game-time', label: gameTimeSet ? 'Game Time (Set)' : 'Game Time (Unset)' },
+        { id: 'characters', label: `Characters (${characterCount})` },
+        { id: 'watched-games', label: `Watched Games (${watchedCount})` },
+    ];
 
     return (
         <div className="space-y-6">
             {/* Tab bar */}
             <div className="flex gap-1 bg-panel/50 rounded-lg p-1 border border-edge/50">
-                {TABS.map((tab) => (
+                {tabs.map((tab) => (
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
