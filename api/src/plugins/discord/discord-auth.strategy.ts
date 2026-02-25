@@ -3,9 +3,12 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import type { Request } from 'express';
-import { AuthService } from './auth.service';
-import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
-import type { DiscordOAuthConfig } from '../settings/settings.service';
+import { AuthService } from '../../auth/auth.service';
+import {
+  SettingsService,
+  SETTINGS_EVENTS,
+} from '../../settings/settings.service';
+import type { DiscordOAuthConfig } from '../../settings/settings.service';
 
 /**
  * Dynamic Discord OAuth strategy that supports hot-reload.
@@ -13,12 +16,12 @@ import type { DiscordOAuthConfig } from '../settings/settings.service';
  * allowing admins to update OAuth credentials without container restarts.
  */
 @Injectable()
-export class DynamicDiscordStrategy
+export class DiscordAuthStrategy
   extends PassportStrategy(Strategy, 'discord')
   implements OnModuleInit
 {
-  private readonly logger = new Logger(DynamicDiscordStrategy.name);
-  private isConfigured = false;
+  private readonly logger = new Logger(DiscordAuthStrategy.name);
+  private isStrategyConfigured = false;
 
   constructor(
     private authService: AuthService,
@@ -47,18 +50,18 @@ export class DynamicDiscordStrategy
 
       if (!config) {
         this.logger.warn('Discord OAuth not configured - strategy disabled');
-        this.isConfigured = false;
+        this.isStrategyConfigured = false;
         return false;
       }
 
       // Update the passport strategy options
       this.updateStrategyOptions(config);
-      this.isConfigured = true;
+      this.isStrategyConfigured = true;
       this.logger.log('Discord OAuth strategy reloaded with new configuration');
       return true;
     } catch (error) {
       this.logger.error('Failed to reload Discord OAuth config:', error);
-      this.isConfigured = false;
+      this.isStrategyConfigured = false;
       return false;
     }
   }
@@ -100,7 +103,7 @@ export class DynamicDiscordStrategy
    * Check if the strategy is currently configured and usable.
    */
   isEnabled(): boolean {
-    return this.isConfigured;
+    return this.isStrategyConfigured;
   }
 
   /**
@@ -109,7 +112,7 @@ export class DynamicDiscordStrategy
    */
   authenticate(req: Request, options?: object): void {
     // Ensure callback URL is current before authenticating
-    if (this.isConfigured) {
+    if (this.isStrategyConfigured) {
       const strategy = this as unknown as { _callbackURL: string };
       // The callbackURL stored in the strategy should already be up to date
       // via reloadConfig, but we log for debugging
@@ -125,7 +128,7 @@ export class DynamicDiscordStrategy
     refreshToken: string,
     profile: Profile,
   ): Promise<any> {
-    if (!this.isConfigured) {
+    if (!this.isStrategyConfigured) {
       throw new Error('Discord OAuth is not configured');
     }
 

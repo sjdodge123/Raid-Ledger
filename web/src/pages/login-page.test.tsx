@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { LoginPage } from './login-page';
 import * as useSystemStatusModule from '../hooks/use-system-status';
+import type { SystemStatusDto } from '@raid-ledger/contract';
 
 // Mock the hooks
 vi.mock('../hooks/use-auth', () => ({
@@ -14,9 +15,16 @@ vi.mock('../hooks/use-auth', () => ({
 vi.mock('../hooks/use-system-status');
 
 // Type-safe mock helper
-function mockSystemStatus(data: { isFirstRun: boolean; discordConfigured: boolean }) {
+function mockSystemStatus(data: Partial<SystemStatusDto>) {
+    const defaults: SystemStatusDto = {
+        isFirstRun: false,
+        discordConfigured: false,
+        blizzardConfigured: false,
+        activePlugins: [],
+        authProviders: [],
+    };
     vi.spyOn(useSystemStatusModule, 'useSystemStatus').mockReturnValue({
-        data,
+        data: { ...defaults, ...data },
         isLoading: false,
         error: null,
         isError: false,
@@ -25,6 +33,13 @@ function mockSystemStatus(data: { isFirstRun: boolean; discordConfigured: boolea
         refetch: vi.fn(),
     } as unknown as ReturnType<typeof useSystemStatusModule.useSystemStatus>);
 }
+
+const discordProvider = {
+    key: 'discord',
+    label: 'Continue with Discord',
+    icon: 'discord',
+    loginPath: '/auth/discord',
+};
 
 // Wrapper for router context
 const renderWithRouter = (ui: React.ReactElement) => {
@@ -36,8 +51,8 @@ describe('LoginPage', () => {
         vi.clearAllMocks();
     });
 
-    it('renders login form with username field when Discord not configured', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
+    it('renders login form with username field when no auth providers configured', () => {
+        mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
@@ -46,24 +61,32 @@ describe('LoginPage', () => {
         expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
     });
 
-    it('hides Discord button when discordConfigured is false', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
+    it('hides Discord button when no auth providers configured', () => {
+        mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
         expect(screen.queryByText(/continue with discord/i)).not.toBeInTheDocument();
     });
 
-    it('shows Discord button when discordConfigured is true', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
+    it('shows Discord button when Discord auth provider is configured', () => {
+        mockSystemStatus({
+            isFirstRun: false,
+            discordConfigured: true,
+            authProviders: [discordProvider],
+        });
 
         renderWithRouter(<LoginPage />);
 
         expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
     });
 
-    it('hides local login form by default when Discord is configured', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
+    it('hides local login form by default when auth providers are configured', () => {
+        mockSystemStatus({
+            isFirstRun: false,
+            discordConfigured: true,
+            authProviders: [discordProvider],
+        });
 
         renderWithRouter(<LoginPage />);
 
@@ -73,7 +96,11 @@ describe('LoginPage', () => {
     });
 
     it('shows local login form when toggle is clicked', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: true });
+        mockSystemStatus({
+            isFirstRun: false,
+            discordConfigured: true,
+            authProviders: [discordProvider],
+        });
 
         renderWithRouter(<LoginPage />);
 
@@ -86,19 +113,23 @@ describe('LoginPage', () => {
         expect(screen.getByText(/hide username login/i)).toBeInTheDocument();
     });
 
-    it('auto-expands local login on first run with Discord configured', () => {
-        mockSystemStatus({ isFirstRun: true, discordConfigured: true });
+    it('auto-expands local login on first run with auth providers configured', () => {
+        mockSystemStatus({
+            isFirstRun: true,
+            discordConfigured: true,
+            authProviders: [discordProvider],
+        });
 
         renderWithRouter(<LoginPage />);
 
-        // Both Discord and local login should be visible
+        // Both auth provider and local login should be visible
         expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
         expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
         expect(screen.getByLabelText('Password')).toBeInTheDocument();
     });
 
     it('displays community name from env variable', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
+        mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
@@ -107,7 +138,7 @@ describe('LoginPage', () => {
     });
 
     it('shows first-run hint when isFirstRun is true', () => {
-        mockSystemStatus({ isFirstRun: true, discordConfigured: false });
+        mockSystemStatus({ isFirstRun: true, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
@@ -116,7 +147,7 @@ describe('LoginPage', () => {
     });
 
     it('hides first-run hint when isFirstRun is false', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
+        mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
@@ -124,10 +155,28 @@ describe('LoginPage', () => {
     });
 
     it('displays tagline below login card', () => {
-        mockSystemStatus({ isFirstRun: false, discordConfigured: false });
+        mockSystemStatus({ isFirstRun: false, authProviders: [] });
 
         renderWithRouter(<LoginPage />);
 
         expect(screen.getByText(/coordinate raids\. track attendance\. conquer together\./i)).toBeInTheDocument();
+    });
+
+    it('renders multiple auth providers when configured (ROK-267)', () => {
+        const secondProvider = {
+            key: 'github',
+            label: 'Continue with GitHub',
+            icon: 'github',
+            loginPath: '/auth/github',
+        };
+        mockSystemStatus({
+            isFirstRun: false,
+            authProviders: [discordProvider, secondProvider],
+        });
+
+        renderWithRouter(<LoginPage />);
+
+        expect(screen.getByText(/continue with discord/i)).toBeInTheDocument();
+        expect(screen.getByText(/continue with github/i)).toBeInTheDocument();
     });
 });

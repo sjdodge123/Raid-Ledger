@@ -72,6 +72,21 @@ export interface CronRegistrar {
   getCronJobs(): CronJobDefinition[];
 }
 
+/** Describes a login method surfaced to the frontend */
+export interface LoginMethod {
+  key: string;
+  label: string;
+  icon?: string;
+  loginPath: string;
+}
+
+/** Pluggable authentication strategy provided by a plugin */
+export interface AuthProvider {
+  readonly providerKey: string;
+  getLoginMethod(): LoginMethod;
+  isConfigured(): boolean | Promise<boolean>;
+}
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -79,4 +94,5 @@ export const EXTENSION_POINTS = {
   EVENT_ENRICHER: 'event-enricher',
   SETTINGS_PROVIDER: 'settings-provider',
   CRON_REGISTRAR: 'cron-registrar',
+  AUTH_PROVIDER: 'auth-provider',
 } as const;

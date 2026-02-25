@@ -4,11 +4,15 @@ import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
-import type { SystemStatusDto } from '@raid-ledger/contract';
+import {
+  EXTENSION_POINTS,
+  type AuthProvider,
+} from '../plugins/plugin-host/extension-points';
+import type { SystemStatusDto, LoginMethodDto } from '@raid-ledger/contract';
 
 /**
- * System status controller (ROK-175, ROK-146, ROK-238, ROK-271).
- * Public endpoint for first-run detection, Discord configuration status,
+ * System status controller (ROK-175, ROK-146, ROK-238, ROK-267, ROK-271).
+ * Public endpoint for first-run detection, auth provider discovery,
  * active plugin list, and community branding.
  */
 @Controller('system')
@@ -39,6 +43,18 @@ export class SystemController {
       this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
     ]);
 
+    // Query all registered auth providers for configured login methods (ROK-267)
+    const authAdapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<AuthProvider>(
+        EXTENSION_POINTS.AUTH_PROVIDER,
+      );
+    const authProviders: LoginMethodDto[] = [];
+    for (const [, provider] of authAdapters) {
+      if (await provider.isConfigured()) {
+        authProviders.push(provider.getLoginMethod());
+      }
+    }
+
     return {
       isFirstRun: userCount === 0,
       discordConfigured,
@@ -51,6 +67,7 @@ export class SystemController {
         : undefined,
       communityAccentColor: branding.communityAccentColor ?? undefined,
       onboardingCompleted: onboardingCompletedRaw === 'true',
+      authProviders,
     };
   }
 }

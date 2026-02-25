@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+/** Describes a login method surfaced to the frontend (ROK-267) */
+export const LoginMethodSchema = z.object({
+    key: z.string(),
+    label: z.string(),
+    icon: z.string().optional(),
+    loginPath: z.string(),
+});
+
+export type LoginMethodDto = z.infer<typeof LoginMethodSchema>;
+
 /**
  * System status response (ROK-175 AC-4)
  * Used for first-run detection and conditional UI rendering
@@ -23,6 +33,8 @@ export const SystemStatusSchema = z.object({
     communityAccentColor: z.string().optional(),
     /** True when admin onboarding wizard has been completed (ROK-204) */
     onboardingCompleted: z.boolean().optional(),
+    /** Available authentication providers (ROK-267) */
+    authProviders: z.array(LoginMethodSchema).optional().default([]),
 });
 
 export type SystemStatusDto = z.infer<typeof SystemStatusSchema>;
