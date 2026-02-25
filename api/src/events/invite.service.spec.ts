@@ -107,7 +107,11 @@ describe('InviteService', () => {
       update: jest.fn().mockReturnValue(makeChain()),
       delete: jest.fn().mockReturnValue(makeChain()),
       insert: jest.fn().mockReturnValue(makeChain()),
-      transaction: jest.fn().mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => fn(mockDb)),
+      transaction: jest
+        .fn()
+        .mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+          fn(mockDb),
+        ),
     };
 
     return mockDb;
@@ -118,9 +122,9 @@ describe('InviteService', () => {
   beforeEach(async () => {
     // Default select sequence: slot → event → user (discordId path)
     selectSequence = [
-      [mockSlot],       // slot lookup
-      [mockEvent],      // event lookup
-      [],               // existing signup check (none)
+      [mockSlot], // slot lookup
+      [mockEvent], // event lookup
+      [], // existing signup check (none)
       [mockUserWithDiscord], // user lookup
     ];
 
@@ -219,12 +223,7 @@ describe('InviteService', () => {
 
   describe('claimInvite — Path 2 (user has no discordId)', () => {
     beforeEach(() => {
-      selectSequence = [
-        [mockSlot],
-        [mockEvent],
-        [],
-        [mockUserWithoutDiscord],
-      ];
+      selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
       mockDb = buildMockDb();
     });
 
@@ -256,7 +255,10 @@ describe('InviteService', () => {
 
       expect(mockDb.update).toHaveBeenCalled();
       // The set() call on the chain should include status: 'claimed'
-      const updateChain = mockDb.update.mock.results[0].value as Record<string, jest.Mock>;
+      const updateChain = mockDb.update.mock.results[0].value as Record<
+        string,
+        jest.Mock
+      >;
       expect(updateChain.set).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'claimed', claimedByUserId: 1 }),
       );
