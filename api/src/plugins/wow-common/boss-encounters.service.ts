@@ -38,10 +38,10 @@ const SUB_INSTANCE_BOSSES: Record<string, Set<string>> = {
     'Scarlet Commander Mograine',
     'High Inquisitor Whitemane',
   ]), // SM: Cathedral
-  // Maraudon (parent 239)
-  '239:1': new Set(['Noxxion', 'Razorlash', 'Lord Vyletongue']), // Purple
-  '239:2': new Set(['Celebras the Cursed', 'Landslide']), // Orange
-  '239:3': new Set(['Tinkerer Gizlock', 'Rotgrip', 'Princess Theradras']), // Inner
+  // Maraudon (journal parent 232)
+  '232:1': new Set(['Noxxion', 'Razorlash', 'Lord Vyletongue']), // Purple
+  '232:2': new Set(['Celebras the Cursed', 'Landslide']), // Orange
+  '232:3': new Set(['Tinkerer Gizlock', 'Rotgrip', 'Princess Theradras']), // Inner
 };
 
 export interface BossEncounterDto {
