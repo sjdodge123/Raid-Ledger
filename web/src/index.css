@@ -472,6 +472,27 @@ body {
 [data-scheme="light"] .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
 [data-scheme="light"] .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
 
+/* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
+   Badges overlaid on dark game-cover images must keep light text/bg regardless
+   of the active color scheme. The .badge-overlay class can be placed on a
+   parent container (desktop cards) or directly on the badge element (mobile
+   cards). The :is(.badge-overlay, .badge-overlay *) pattern matches both
+   cases with enough specificity to beat the light-mode overrides above,
+   so no !important is needed. */
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+
 /* --- Solid-color button text: force white on colored backgrounds --- */
 [data-scheme="light"] :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
