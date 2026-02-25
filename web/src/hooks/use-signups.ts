@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { signupForEvent, cancelSignup, confirmSignup, updateSignupStatus } from '../lib/api-client';
-import type { SignupStatus } from '@raid-ledger/contract';
+import type { UpdateSignupStatusDto } from '@raid-ledger/contract';
 
 /**
  * Hook for signing up to an event
@@ -63,7 +63,7 @@ export function useUpdateSignupStatus(eventId: number) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: (status: SignupStatus) =>
+        mutationFn: (status: UpdateSignupStatusDto['status']) =>
             updateSignupStatus(eventId, status),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'] });

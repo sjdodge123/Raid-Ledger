@@ -111,6 +111,9 @@ export type ConfirmSignupDto = z.infer<typeof ConfirmSignupSchema>;
 // Discord Signup Schemas (ROK-137)
 // ============================================================
 
+/** User-selectable signup statuses (excludes internal roached_out) */
+export const UserSignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined']);
+
 /** Create anonymous Discord signup */
 export const CreateDiscordSignupSchema = z.object({
     discordUserId: z.string(),
@@ -118,7 +121,7 @@ export const CreateDiscordSignupSchema = z.object({
     discordAvatarHash: z.string().nullable().optional(),
     /** Optional role for games that require roles */
     role: z.enum(['tank', 'healer', 'dps', 'flex', 'player']).optional(),
-    status: SignupStatusSchema.optional(),
+    status: UserSignupStatusSchema.optional(),
     /** ROK-452: Preferred roles the player is willing to play (multi-role signup) */
     preferredRoles: z.array(z.enum(['tank', 'healer', 'dps'])).min(1).max(3).optional(),
 });
@@ -127,7 +130,7 @@ export type CreateDiscordSignupDto = z.infer<typeof CreateDiscordSignupSchema>;
 
 /** Update signup status (tentative/declined/signed_up) */
 export const UpdateSignupStatusSchema = z.object({
-    status: SignupStatusSchema,
+    status: UserSignupStatusSchema,
 });
 
 export type UpdateSignupStatusDto = z.infer<typeof UpdateSignupStatusSchema>;
