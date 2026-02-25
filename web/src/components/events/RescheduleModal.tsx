@@ -148,37 +148,6 @@ export function RescheduleModal({
         return blocks;
     }, [gridSelection, durationHours, eventTitle, gameName, gameSlug, coverUrl]);
 
-    // Smart hour range — zoom into hours with meaningful availability (yellow/green).
-    // Only considers cells where > 50% of players are available, plus the current event
-    // and any grid selection. Falls back to current event ± 3h if no strong matches.
-    const hourRange: [number, number] = useMemo(() => {
-        const eventEndHour = currentHour + durationHours;
-        let minHour = currentHour;
-        let maxHour = eventEndHour;
-
-        if (gridSelection) {
-            minHour = Math.min(minHour, gridSelection.hour);
-            maxHour = Math.max(maxHour, gridSelection.hour + durationHours);
-        }
-
-        if (gameTimeData?.cells.length) {
-            // Only consider cells where at least half of players are available
-            const strongCells = gameTimeData.cells.filter(
-                c => c.totalCount > 0 && c.availableCount / c.totalCount > 0.25,
-            );
-            if (strongCells.length > 0) {
-                const hours = strongCells.map(c => c.hour);
-                minHour = Math.min(minHour, Math.min(...hours));
-                maxHour = Math.max(maxHour, Math.max(...hours) + 1);
-            }
-        }
-
-        // 1-hour padding, clamped to [0, 24]
-        const rangeStart = Math.max(0, minHour - 1);
-        const rangeEnd = Math.min(24, maxHour + 1);
-        return [rangeStart, rangeEnd];
-    }, [currentHour, durationHours, gridSelection, gameTimeData]);
-
     // Grid cell click → set grid selection and start time input
     const handleCellClick = (dayOfWeek: number, hour: number) => {
         if (dayOfWeek === currentDayOfWeek && hour === currentHour) return;
@@ -255,9 +224,9 @@ export function RescheduleModal({
         : null;
 
     const content = (
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3 min-h-0 h-full">
             {/* Poll for Best Time callout */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
+            <div className="shrink-0 flex flex-col sm:flex-row items-start sm:items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2.5">
                 <p className="text-sm text-foreground flex-1">
                     Let your community decide — post a Discord poll for the best time
                 </p>
@@ -271,10 +240,10 @@ export function RescheduleModal({
             </div>
 
             {/* Legend */}
-            <div className="flex items-center gap-4 text-xs text-muted">
+            <div className="shrink-0 flex items-center gap-4 text-xs text-muted">
                 {gridSelection && (
                     <div className="flex items-center gap-1.5">
-                        <div className="w-3 h-3 rounded-sm border-2 border-solid border-amber-400/80" />
+                        <div className="w-3 h-3 rounded-sm border-2 border-solid" style={{ borderColor: 'rgba(6, 182, 212, 0.95)' }} />
                         <span>New time</span>
                     </div>
                 )}
@@ -302,26 +271,27 @@ export function RescheduleModal({
                 </div>
             ) : (
                 <>
-                    <p className="text-sm text-muted">
+                    <p className="shrink-0 text-sm text-muted">
                         Click a cell to select a new time, or enter it manually below.
                         Green intensity shows player availability ({signupCount} signed up).
                     </p>
-                    <GameTimeGrid
-                        slots={[]}
-                        readOnly
-                        compact
-                        noStickyOffset
-                        hourRange={hourRange}
-                        events={currentEventBlocks}
-                        previewBlocks={previewBlocks}
-                        heatmapOverlay={gameTimeData?.cells}
-                        onCellClick={handleCellClick}
-                    />
+                    <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-edge">
+                        <GameTimeGrid
+                            slots={[]}
+                            readOnly
+                            compact
+                            noStickyOffset
+                            events={currentEventBlocks}
+                            previewBlocks={previewBlocks}
+                            heatmapOverlay={gameTimeData?.cells}
+                            onCellClick={handleCellClick}
+                        />
+                    </div>
                 </>
             )}
 
             {/* Manual time inputs + confirmation */}
-            <div className="pt-2 border-t border-border space-y-3">
+            <div className="shrink-0 pt-2 border-t border-border space-y-3">
                 <div className="flex flex-col md:flex-row items-stretch md:items-end gap-3">
                     <div className="flex-1">
                         <label htmlFor="reschedule-start" className="block text-xs text-muted mb-1">
@@ -451,7 +421,7 @@ export function RescheduleModal({
             onClose={handleClose}
             title="Reschedule Event"
             maxWidth="max-w-4xl"
-            bodyClassName="p-4 overflow-y-auto max-h-[calc(90vh-4rem)]"
+            bodyClassName="p-4 flex flex-col max-h-[calc(90vh-4rem)]"
         >
             {content}
         </Modal>
