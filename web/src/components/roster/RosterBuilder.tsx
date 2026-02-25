@@ -218,7 +218,10 @@ export const RosterBuilder = memo(function RosterBuilder({
             : undefined;
 
         onRosterChange(newPool, newAssignments, charMap);
-        const msg = `${sourceItem.username} assigned to ${assignmentTarget.role} ${assignmentTarget.position}`;
+        const slotLabel = assignmentTarget.role === 'player'
+            ? `slot ${assignmentTarget.position}`
+            : `${assignmentTarget.role} ${assignmentTarget.position}`;
+        const msg = `${sourceItem.username} assigned to ${slotLabel}`;
         toast.success(msg);
         announce(msg);
         setAssignmentTarget(null);
@@ -382,8 +385,10 @@ export const RosterBuilder = memo(function RosterBuilder({
                 }
                 return a;
             });
-            const roleLabel = toRole.charAt(0).toUpperCase() + toRole.slice(1);
-            const msg = `${sourcePlayer.username} moved to ${roleLabel} ${toPosition}`;
+            const roleLabel = toRole === 'player'
+                ? `slot ${toPosition}`
+                : `${toRole.charAt(0).toUpperCase() + toRole.slice(1)} ${toPosition}`;
+            const msg = `${sourcePlayer.username} moved to ${roleLabel}`;
             toast.success(msg);
             announce(msg);
         }
@@ -412,7 +417,8 @@ export const RosterBuilder = memo(function RosterBuilder({
             : undefined;
 
         onRosterChange(newPool, newAssignments, charMap);
-        const msg = `${sourceItem.username} assigned to ${role} ${position}`;
+        const slotLabel = role === 'player' ? `slot ${position}` : `${role} ${position}`;
+        const msg = `${sourceItem.username} assigned to ${slotLabel}`;
         toast.success(msg);
         announce(msg);
         setBrowseAll(false);
