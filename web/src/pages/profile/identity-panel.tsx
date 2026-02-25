@@ -116,7 +116,6 @@ export function IdentityPanel() {
     const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
 
     const hasDiscordLinked = isDiscordLinked(user.discordId);
-    const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
     const showDiscord = systemStatus?.discordConfigured;
 
     const handleLinkDiscord = () => {
@@ -156,48 +155,30 @@ export function IdentityPanel() {
                             </svg>
                         </div>
                     </button>
-                    <div>
+                    <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <span className="text-lg font-bold text-foreground">{user.username}</span>
                             <RoleBadge role={user.role} />
                         </div>
-                        <p className="text-sm text-muted mt-0.5">{hasDiscordLinked ? 'Discord linked' : 'Local account'}</p>
+                        {hasDiscordLinked ? (
+                            <div className="flex items-center gap-2 mt-0.5">
+                                <span className="inline-flex items-center gap-1 text-sm text-emerald-400">
+                                    <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                                    </svg>
+                                    Discord linked
+                                </span>
+                            </div>
+                        ) : (
+                            <p className="text-sm text-muted mt-0.5">Local account</p>
+                        )}
                     </div>
                 </div>
-            </div>
 
-            {/* Discord Connection (conditionally shown when Discord OAuth is configured) */}
-            {showDiscord && (
-                <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-                    <h2 className="text-xl font-semibold text-foreground mb-1">Discord Connection</h2>
-                    <p className="text-sm text-muted mb-5">
-                        {hasDiscordLinked
-                            ? 'Your Discord account is linked. This enables rich notifications and authentication.'
-                            : 'Link your Discord account for authentication and notifications.'}
-                    </p>
-
-                    {hasDiscordLinked ? (
-                        <div className="flex items-center gap-4 p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
-                            {discordAvatarUrl && (
-                                <img
-                                    src={discordAvatarUrl}
-                                    alt="Discord avatar"
-                                    className="w-12 h-12 rounded-full border-2 border-emerald-500/50"
-                                    onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
-                                />
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-foreground">{user.username}</p>
-                                <p className="text-xs text-muted truncate">Discord ID: {user.discordId}</p>
-                            </div>
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                                    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                                </svg>
-                                Connected
-                            </span>
-                        </div>
-                    ) : (
+                {/* Discord link CTA — only shown when Discord OAuth is configured but not yet linked */}
+                {showDiscord && !hasDiscordLinked && (
+                    <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
+                        <p className="text-sm text-muted mb-3">Link your Discord account for authentication and notifications.</p>
                         <button
                             onClick={handleLinkDiscord}
                             className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#5865F2] hover:bg-[#4752C4] text-white font-medium rounded-lg transition-colors"
@@ -207,9 +188,9 @@ export function IdentityPanel() {
                             </svg>
                             Link Discord Account
                         </button>
-                    )}
-                </div>
-            )}
+                    </div>
+                )}
+            </div>
 
             {/* Danger Zone — account deletion (consolidated from Account panel) */}
             {showDangerZone && (
