@@ -1199,10 +1199,7 @@ describe('SignupsService', () => {
      * Helper: set up mocks for updateRoster with NO prior assignment for the user
      * so that notifyNewAssignments fires (oldRole === null).
      */
-    function setupNewAssignmentMocks(
-      eventTitle: string,
-      newSlot: string,
-    ) {
+    function setupNewAssignmentMocks(eventTitle: string, newSlot: string) {
       jest
         .spyOn(service, 'getRosterWithAssignments')
         .mockResolvedValueOnce(emptyRoster);
@@ -1267,9 +1264,9 @@ describe('SignupsService', () => {
       await setupNewAssignmentMocks('Phasmophobia Night', 'player');
       await new Promise((r) => setTimeout(r, 50));
 
-      const call = mockNotificationService.create.mock.calls[0][0] as {
-        message: string;
-      };
+      const call = (
+        mockNotificationService.create.mock.calls[0] as [{ message: string }]
+      )[0];
       expect(call.message).not.toContain('Player role');
       expect(call.message).not.toContain('the Player');
     });
@@ -1382,9 +1379,13 @@ describe('SignupsService', () => {
       // notifyRoleChanges sends a notification for the role change,
       // but notifyNewAssignments should NOT fire because oldRole is non-null.
       // Neither call should contain 'roster for' (the generic new-assignment phrase).
-      const calls = mockNotificationService.create.mock.calls;
+      const calls = mockNotificationService.create.mock.calls as Array<
+        [{ message?: string }]
+      >;
       const genericAssignmentCall = calls.find(
-        (c) => typeof c[0].message === 'string' && c[0].message.includes('assigned to the roster for'),
+        (c) =>
+          typeof c[0].message === 'string' &&
+          c[0].message.includes('assigned to the roster for'),
       );
       expect(genericAssignmentCall).toBeUndefined();
     });

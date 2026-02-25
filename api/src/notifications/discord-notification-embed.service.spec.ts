@@ -631,7 +631,9 @@ describe('DiscordNotificationEmbedService', () => {
       const json = embed.toJSON() as {
         fields: Array<{ name: string; value: string }>;
       };
-      const prevRoleField = json.fields?.find((f) => f.name === 'Previous Role');
+      const prevRoleField = json.fields?.find(
+        (f) => f.name === 'Previous Role',
+      );
       expect(prevRoleField).toBeDefined();
       expect(prevRoleField?.value).toBe('healer');
     });
@@ -651,7 +653,9 @@ describe('DiscordNotificationEmbedService', () => {
       const json = embed.toJSON() as {
         fields?: Array<{ name: string; value: string }>;
       };
-      const prevRoleField = json.fields?.find((f) => f.name === 'Previous Role');
+      const prevRoleField = json.fields?.find(
+        (f) => f.name === 'Previous Role',
+      );
       expect(prevRoleField).toBeUndefined();
     });
   });
