@@ -335,54 +335,6 @@ body {
 }
 
 /* ============================================
-   Light Mode — Badge Overlay Contrast (ROK-473)
-   Badges overlaid on cover images need opaque
-   backgrounds in light mode so text remains
-   readable regardless of the underlying image.
-   WCAG AA ≥ 4.5:1 for normal text.
-   ============================================ */
-
-[data-scheme="light"] .badge-overlay {
-    backdrop-filter: blur(4px);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-}
-
-/* Emerald status badges (Upcoming) on cover images */
-[data-scheme="light"] .badge-overlay.bg-emerald-500\/20 {
-    background-color: rgba(209, 250, 229, 0.92);  /* emerald-100 near-opaque */
-    border-color: rgba(16, 185, 129, 0.5);
-    color: #047857 !important;  /* emerald-700: 6.0:1 on emerald-100 */
-}
-
-/* Yellow status badges (Live) on cover images */
-[data-scheme="light"] .badge-overlay.bg-yellow-500\/20 {
-    background-color: rgba(254, 249, 195, 0.92);  /* yellow-100 near-opaque */
-    border-color: rgba(202, 138, 4, 0.5);
-    color: #a16207 !important;  /* yellow-700: 5.2:1 on yellow-100 */
-}
-
-/* Neutral status badges (Ended) on cover images */
-[data-scheme="light"] .badge-overlay.bg-dim\/20 {
-    background-color: rgba(241, 245, 249, 0.92);  /* slate-100 near-opaque */
-    border-color: rgba(100, 116, 139, 0.5);
-    color: #475569 !important;  /* slate-600: 4.6:1 on slate-100 */
-}
-
-/* Red status badges (Cancelled) on cover images */
-[data-scheme="light"] .badge-overlay.bg-red-500\/20 {
-    background-color: rgba(254, 226, 226, 0.92);  /* red-100 near-opaque */
-    border-color: rgba(220, 38, 38, 0.5);
-    color: #b91c1c !important;  /* red-700: 5.8:1 on red-100 */
-}
-
-/* Cyan badges (Inside Game Time) on cover images */
-[data-scheme="light"] .badge-overlay.bg-cyan-500\/20 {
-    background-color: rgba(207, 250, 254, 0.92);  /* cyan-100 near-opaque */
-    border-color: rgba(8, 145, 178, 0.5);
-    color: #0e7490 !important;  /* cyan-700: 4.6:1 on cyan-100 */
-}
-
-/* ============================================
    Light Mode — Status Color Contrast Fixes (ROK-464)
    Tailwind -400 shades (~3:1 on white) bumped to
    -600/-700 shades (>4.5:1) for WCAG AA compliance.
@@ -471,6 +423,27 @@ body {
 [data-scheme="light"] .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
 [data-scheme="light"] .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
 [data-scheme="light"] .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
+
+/* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
+   Badges overlaid on dark game-cover images must keep light text/bg regardless
+   of the active color scheme. The .badge-overlay class can be placed on a
+   parent container (desktop cards) or directly on the badge element (mobile
+   cards). The :is(.badge-overlay, .badge-overlay *) pattern matches both
+   cases with enough specificity to beat the light-mode overrides above,
+   so no !important is needed. */
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
+[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
 /* --- Solid-color button text: force white on colored backgrounds --- */
 [data-scheme="light"] :is(
