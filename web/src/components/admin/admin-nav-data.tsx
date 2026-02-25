@@ -32,28 +32,21 @@ export function buildCoreIntegrationItems(statuses: {
     discordBot: { connected: boolean; configured: boolean; loading: boolean };
     igdb: { configured: boolean; loading: boolean };
 }): NavItem[] {
+    const discordLoading = statuses.discord.loading || statuses.discordBot.loading;
+    const discordOnline = statuses.discord.configured && statuses.discordBot.connected;
+
     return [
         {
-            to: '/admin/settings/integrations',
-            label: 'Discord OAuth',
-            status: statuses.discord.loading ? 'loading'
-                : statuses.discord.configured ? 'online' : 'offline',
-        },
-        {
-            to: '/admin/settings/integrations/discord-bot',
-            label: 'Discord Bot',
-            status: statuses.discordBot.loading ? 'loading'
-                : statuses.discordBot.connected ? 'online' : 'offline',
+            to: '/admin/settings/integrations/discord',
+            label: 'Discord',
+            status: discordLoading ? 'loading'
+                : discordOnline ? 'online' : 'offline',
         },
         {
             to: '/admin/settings/integrations/igdb',
             label: 'IGDB / Twitch',
             status: statuses.igdb.loading ? 'loading'
                 : statuses.igdb.configured ? 'online' : 'offline',
-        },
-        {
-            to: '/admin/settings/integrations/channel-bindings',
-            label: 'Channel Bindings',
         },
     ];
 }

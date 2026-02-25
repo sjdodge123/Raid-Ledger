@@ -90,12 +90,11 @@ const RolesPanel = lazyWithRetry(() => import('./pages/admin/roles-panel').then(
 const DemoDataPanel = lazyWithRetry(() => import('./pages/admin/demo-data-panel').then(m => ({ default: m.DemoDataPanel })));
 const DiscordPanel = lazyWithRetry(() => import('./pages/admin/discord-panel').then(m => ({ default: m.DiscordPanel })));
 const IgdbPanel = lazyWithRetry(() => import('./pages/admin/igdb-panel').then(m => ({ default: m.IgdbPanel })));
-const DiscordBotPanel = lazyWithRetry(() => import('./pages/admin/discord-bot-panel').then(m => ({ default: m.DiscordBotPanel })));
 const PluginsPanel = lazyWithRetry(() => import('./pages/admin/plugins-panel').then(m => ({ default: m.PluginsPanel })));
 const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
 const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
 const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
-const DiscordBindingsPanel = lazyWithRetry(() => import('./pages/admin/discord-bindings-panel').then(m => ({ default: m.DiscordBindingsPanel })));
+
 
 import './plugins/wow/register';
 import './App.css';
@@ -207,10 +206,13 @@ function App() {
                   <Route path="general/data" element={<DemoDataPanel />} />
                   <Route path="general/cron-jobs" element={<CronJobsPanel />} />
                   <Route path="general/backups" element={<BackupsPanel />} />
-                  <Route path="integrations" element={<DiscordPanel />} />
+                  <Route path="integrations/discord" element={<DiscordPanel />} />
                   <Route path="integrations/igdb" element={<IgdbPanel />} />
-                  <Route path="integrations/discord-bot" element={<DiscordBotPanel />} />
-                  <Route path="integrations/channel-bindings" element={<DiscordBindingsPanel />} />
+
+                  {/* Redirects for old Discord sub-routes → consolidated panel */}
+                  <Route path="integrations" element={<Navigate to="/admin/settings/integrations/discord" replace />} />
+                  <Route path="integrations/discord-bot" element={<Navigate to="/admin/settings/integrations/discord" replace />} />
+                  <Route path="integrations/channel-bindings" element={<Navigate to="/admin/settings/integrations/discord" replace />} />
                   <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
                   <Route path="plugins" element={<PluginsPanel />} />
 
