@@ -103,6 +103,24 @@ For all pipeline decisions: **Orchestrator decides → Scrum Master validates ag
 
 ---
 
+## Team Agent Communication
+
+Team agents (spawned via `Task` with `team_name`) communicate via the **mailbox system** (`SendMessage`). They are NOT background shell tasks.
+
+**Rules:**
+- **NEVER use `TaskOutput` to check on team agents.** `TaskOutput` is for background shell tasks (`run_in_background: true`). It will always return "No task found" for team agents.
+- **NEVER poll with `sleep + stat`** to check if an agent has written a file. Team agents send a message when they're done — the system delivers it automatically.
+- **Agent bootstrap takes 5-10+ turns.** Agents need to: load ToolSearch → find MCP tools → execute initial task → write files → send message. Don't expect instant results.
+- **While waiting for agents to bootstrap, do useful parallel work:** read the next step file, check git worktree state, verify CI status on existing branches, review sprint-status.yaml cache. Do NOT wait idle.
+
+---
+
+## Git Pull Strategy
+
+Always use `git pull --rebase origin/main` or `git rebase origin/main` instead of `git pull origin main`. After a squash-merge PR, local and remote have different commit hashes for the same changes, causing divergent branch errors with regular pull.
+
+---
+
 ## Team Hierarchy
 
 ```
