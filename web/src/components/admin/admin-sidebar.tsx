@@ -83,7 +83,7 @@ function SidebarSection({
                     {section.icon}{section.label}
                 </span>
                 {hasNewChild && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" aria-label="New items" />
+                    <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" aria-label="New items" />
                 )}
             </div>
             <div className="mt-1 space-y-0.5">

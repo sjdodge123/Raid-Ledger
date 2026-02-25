@@ -24,12 +24,12 @@ export function GamingPanel() {
     const { data: charactersData } = useMyCharacters(undefined, isAuthenticated);
     const { data: heartedData } = useUserHeartedGames(user?.id);
 
-    const gameTimeSet = (gameTimeData?.slots?.length ?? 0) > 0;
+    const gameTimeSet = gameTimeData?.slots?.some(s => s.fromTemplate) ?? false;
     const characterCount = charactersData?.data?.length ?? 0;
     const watchedCount = heartedData?.data?.length ?? 0;
 
-    const tabs: { id: GamingTab; label: string }[] = [
-        { id: 'game-time', label: gameTimeSet ? 'Game Time (Set)' : 'Game Time (Unset)' },
+    const tabs: { id: GamingTab; label: string; statusDot?: 'green' | 'red' }[] = [
+        { id: 'game-time', label: 'Game Time', statusDot: gameTimeSet ? 'green' : 'red' },
         { id: 'characters', label: `Characters (${characterCount})` },
         { id: 'watched-games', label: `Watched Games (${watchedCount})` },
     ];
@@ -42,12 +42,15 @@ export function GamingPanel() {
                     <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id)}
-                        className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
                             activeTab === tab.id
                                 ? 'bg-surface text-foreground shadow-sm'
                                 : 'text-muted hover:text-foreground hover:bg-overlay/20'
                         }`}
                     >
+                        {tab.statusDot && (
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${tab.statusDot === 'green' ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                        )}
                         {tab.label}
                     </button>
                 ))}

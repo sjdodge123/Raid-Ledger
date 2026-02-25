@@ -9,7 +9,7 @@ import { GamingPanel } from './gaming-panel';
 
 // Mock all sub-components to isolate tab rendering
 vi.mock('../../hooks/use-auth', () => ({
-    useAuth: () => ({ isAuthenticated: true }),
+    useAuth: () => ({ user: { id: 1 }, isAuthenticated: true }),
 }));
 
 vi.mock('../../hooks/use-characters', () => ({
@@ -18,6 +18,14 @@ vi.mock('../../hooks/use-characters', () => ({
 
 vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: [] }),
+}));
+
+vi.mock('../../hooks/use-game-time', () => ({
+    useGameTime: () => ({ data: { slots: [] } }),
+}));
+
+vi.mock('../../hooks/use-user-profile', () => ({
+    useUserHeartedGames: () => ({ data: { data: [] } }),
 }));
 
 vi.mock('../../components/features/game-time', () => ({

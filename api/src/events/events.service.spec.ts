@@ -5,10 +5,7 @@ import { EventsService } from './events.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { AvailabilityService } from '../availability/availability.service';
 import { NotificationService } from '../notifications/notification.service';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 describe('EventsService', () => {
   let service: EventsService;

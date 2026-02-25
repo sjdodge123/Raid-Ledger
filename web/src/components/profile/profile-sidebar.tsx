@@ -1,5 +1,7 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
+import { useAuth } from '../../hooks/use-auth';
+import { useGameTime } from '../../hooks/use-game-time';
 import { SECTIONS } from './profile-nav-data';
 
 interface ProfileSidebarProps {
@@ -10,9 +12,10 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
+    const { isAuthenticated } = useAuth();
+    const { data: gameTimeData } = useGameTime({ enabled: isAuthenticated });
+    const gameTimeSet = gameTimeData?.slots?.some(s => s.fromTemplate) ?? false;
 
-    // With ROK-359 consolidation, Discord is now inline in the Identity panel
-    // (conditionally rendered by the panel itself), so no nav filtering needed.
     const sections = SECTIONS;
 
     const handleRerunWizard = () => {
@@ -46,6 +49,9 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
                                         : 'text-muted hover:text-foreground hover:bg-overlay/20'
                                         }`}
                                 >
+                                    {child.to === '/profile/gaming/game-time' && (
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${gameTimeSet ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                    )}
                                     <span className="truncate min-w-0 flex-1">{child.label}</span>
                                 </Link>
                             ))}

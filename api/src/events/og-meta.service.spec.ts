@@ -60,7 +60,6 @@ describe('OgMetaService', () => {
     service = module.get<OgMetaService>(OgMetaService);
   });
 
-
   describe('renderInviteOgHtml', () => {
     it('should render OG tags for a valid invite', async () => {
       inviteService.resolveInvite.mockResolvedValue({

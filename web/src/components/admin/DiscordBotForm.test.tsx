@@ -455,50 +455,5 @@ describe('DiscordBotForm', () => {
         expect(screen.queryByLabelText('Default Notification Channel')).not.toBeInTheDocument();
     });
 
-    it('shows channel selector when connected and channels are available', () => {
-        mockDiscordBotStatus.data = { configured: true, connected: true };
-        mockDiscordChannels.data = [
-            { id: '111', name: 'general' },
-            { id: '222', name: 'raids' },
-        ];
-        mockDiscordDefaultChannel.data = { channelId: null };
-        render(<DiscordBotForm />);
-        expect(screen.getByLabelText('Default Notification Channel')).toBeInTheDocument();
-    });
-
-    it('renders all channels as options in the selector', () => {
-        mockDiscordBotStatus.data = { configured: true, connected: true };
-        mockDiscordChannels.data = [
-            { id: '111', name: 'general' },
-            { id: '222', name: 'raids' },
-            { id: '333', name: 'announcements' },
-        ];
-        mockDiscordDefaultChannel.data = { channelId: null };
-        render(<DiscordBotForm />);
-
-        expect(screen.getByText('#general')).toBeInTheDocument();
-        expect(screen.getByText('#raids')).toBeInTheDocument();
-        expect(screen.getByText('#announcements')).toBeInTheDocument();
-    });
-
-    it('calls setDiscordChannel.mutateAsync when channel changes', async () => {
-        mockDiscordBotStatus.data = { configured: true, connected: true };
-        mockDiscordChannels.data = [
-            { id: '111', name: 'general' },
-            { id: '222', name: 'raids' },
-        ];
-        mockDiscordDefaultChannel.data = { channelId: null };
-        mockSetDiscordChannel.mutateAsync.mockResolvedValueOnce({
-            success: true,
-            message: 'Updated.',
-        });
-
-        render(<DiscordBotForm />);
-        const select = screen.getByLabelText('Default Notification Channel');
-        fireEvent.change(select, { target: { value: '222' } });
-
-        await waitFor(() => {
-            expect(mockSetDiscordChannel.mutateAsync).toHaveBeenCalledWith('222');
-        });
-    });
+    // Channel selector tests moved to discord-panel (ROK-359: channel selector relocated to Channel Bindings tab)
 });

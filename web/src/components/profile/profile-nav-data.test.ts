@@ -39,11 +39,14 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(notifications!.children[0].label).toBe('Notifications');
     });
 
-    it('includes gaming section pointing to /profile/gaming', () => {
+    it('includes gaming section with 3 children', () => {
         const gaming = SECTIONS.find((s) => s.id === 'gaming');
         expect(gaming).toBeDefined();
-        expect(gaming!.children[0].to).toBe('/profile/gaming');
-        expect(gaming!.children[0].label).toBe('Gaming');
+        expect(gaming!.children).toHaveLength(3);
+        expect(gaming!.children[0].to).toBe('/profile/gaming/game-time');
+        expect(gaming!.children[0].label).toBe('Game Time');
+        expect(gaming!.children[1].to).toBe('/profile/gaming/characters');
+        expect(gaming!.children[2].to).toBe('/profile/gaming/watched-games');
     });
 
     it('does not include a separate account section (consolidated into identity)', () => {
@@ -79,8 +82,6 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(allPaths).not.toContain('/profile/identity/avatar');
         expect(allPaths).not.toContain('/profile/preferences/appearance');
         expect(allPaths).not.toContain('/profile/preferences/timezone');
-        expect(allPaths).not.toContain('/profile/gaming/game-time');
-        expect(allPaths).not.toContain('/profile/gaming/characters');
         expect(allPaths).not.toContain('/profile/danger/delete-account');
         expect(allPaths).not.toContain('/profile/account');
     });

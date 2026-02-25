@@ -5,10 +5,7 @@ import {
   RECENT_MEMBER_LIMIT,
 } from './users.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 describe('UsersService', () => {
   let service: UsersService;

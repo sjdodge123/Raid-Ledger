@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /**
  * ROK-231: Unit tests for AdminSettingsController — hide/unhide games and adult filter endpoints.
  */

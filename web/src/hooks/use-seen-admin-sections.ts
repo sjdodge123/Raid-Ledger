@@ -29,9 +29,9 @@ export function useSeenAdminSections() {
 
   const mutation = useMutation({
     mutationFn: async (key: string) => {
-      const current = queryClient.getQueryData<string[]>(['preferences', PREF_KEY]) ?? [];
-      if (current.includes(key)) return;
-      const updated = [...current, key];
+      // onMutate already added `key` to the cache optimistically.
+      // Read the cache (which now contains the updated array) and persist it.
+      const updated = queryClient.getQueryData<string[]>(['preferences', PREF_KEY]) ?? [key];
       await updatePreference(PREF_KEY, updated);
     },
     onMutate: async (key: string) => {

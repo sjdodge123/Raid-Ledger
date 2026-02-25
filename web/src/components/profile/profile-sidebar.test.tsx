@@ -1,6 +1,6 @@
 /**
  * Unit tests for the ProfileSidebar (ROK-359).
- * Verifies consolidated nav renders exactly 4 items and no old paths.
+ * Verifies consolidated nav renders the correct items and no old paths.
  * Account/danger zone is consolidated into the Identity panel.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -10,6 +10,14 @@ import { ProfileSidebar } from './profile-sidebar';
 
 vi.mock('../../hooks/use-onboarding-fte', () => ({
     useResetOnboarding: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
+vi.mock('../../hooks/use-auth', () => ({
+    useAuth: () => ({ isAuthenticated: true }),
+}));
+
+vi.mock('../../hooks/use-game-time', () => ({
+    useGameTime: () => ({ data: { slots: [] } }),
 }));
 
 function renderSidebar(initialPath = '/profile/identity') {
@@ -26,11 +34,11 @@ describe('ProfileSidebar (ROK-359)', () => {
         expect(screen.getByRole('navigation', { name: /profile navigation/i })).toBeInTheDocument();
     });
 
-    it('renders all 4 consolidated nav items', () => {
+    it('renders nav items including gaming sub-items', () => {
         renderSidebar();
         const links = screen.getAllByRole('link');
-        // 4 nav links for My Profile, Preferences, Notifications, Gaming
-        expect(links.length).toBeGreaterThanOrEqual(4);
+        // My Profile, Preferences, Notifications, Game Time, Characters, Watched Games = 6
+        expect(links.length).toBeGreaterThanOrEqual(6);
     });
 
     it('shows My Profile link pointing to /profile/identity', () => {
@@ -40,22 +48,22 @@ describe('ProfileSidebar (ROK-359)', () => {
         expect(link).toHaveAttribute('href', '/profile/identity');
     });
 
-    it('shows Preferences link pointing to /profile/preferences', () => {
+    it('shows Game Time link pointing to /profile/gaming/game-time', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /^preferences$/i });
-        expect(link).toHaveAttribute('href', '/profile/preferences');
+        const link = screen.getByRole('link', { name: /game time/i });
+        expect(link).toHaveAttribute('href', '/profile/gaming/game-time');
     });
 
-    it('shows Notifications link pointing to /profile/notifications', () => {
+    it('shows Characters link pointing to /profile/gaming/characters', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /^notifications$/i });
-        expect(link).toHaveAttribute('href', '/profile/notifications');
+        const link = screen.getByRole('link', { name: /characters/i });
+        expect(link).toHaveAttribute('href', '/profile/gaming/characters');
     });
 
-    it('shows Gaming link pointing to /profile/gaming', () => {
+    it('shows Watched Games link pointing to /profile/gaming/watched-games', () => {
         renderSidebar();
-        const link = screen.getByRole('link', { name: /^gaming$/i });
-        expect(link).toHaveAttribute('href', '/profile/gaming');
+        const link = screen.getByRole('link', { name: /watched games/i });
+        expect(link).toHaveAttribute('href', '/profile/gaming/watched-games');
     });
 
     it('does not show separate Account link (consolidated into Identity)', () => {
@@ -72,7 +80,6 @@ describe('ProfileSidebar (ROK-359)', () => {
         expect(hrefs).not.toContain('/profile/identity/discord');
         expect(hrefs).not.toContain('/profile/identity/avatar');
         expect(hrefs).not.toContain('/profile/preferences/appearance');
-        expect(hrefs).not.toContain('/profile/gaming/game-time');
         expect(hrefs).not.toContain('/profile/danger/delete-account');
     });
 

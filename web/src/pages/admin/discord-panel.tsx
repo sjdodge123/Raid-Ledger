@@ -33,7 +33,7 @@ interface TabDef {
  */
 export function DiscordPanel() {
     const [activeTab, setActiveTab] = useState<DiscordTab>('auth');
-    const { oauthStatus, discordBotStatus } = useAdminSettings();
+    const { oauthStatus, discordBotStatus, discordChannels, discordDefaultChannel, setDiscordChannel } = useAdminSettings();
     const { user } = useAuth();
     const { bindings, updateBinding, deleteBinding } = useChannelBindings();
 
@@ -183,6 +183,37 @@ export function DiscordPanel() {
                             <p className="text-sm text-amber-400">
                                 The Discord bot is not connected. Configure it in the Bot tab to manage channel bindings.
                             </p>
+                        </div>
+                    )}
+
+                    {/* Default Notification Channel (fallback) */}
+                    {isBotConnected && discordChannels.data && discordChannels.data.length > 0 && (
+                        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
+                            <label htmlFor="discordChannel" className="block text-sm font-medium text-secondary mb-1.5">
+                                Default Notification Channel
+                            </label>
+                            <select
+                                id="discordChannel"
+                                value={discordDefaultChannel.data?.channelId ?? ''}
+                                onChange={async (e) => {
+                                    if (e.target.value) {
+                                        try {
+                                            await setDiscordChannel.mutateAsync(e.target.value);
+                                            toast.success('Default channel updated');
+                                        } catch {
+                                            toast.error('Failed to update default channel');
+                                        }
+                                    }
+                                }}
+                                disabled={setDiscordChannel.isPending}
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                                <option value="" disabled>Select a channel...</option>
+                                {discordChannels.data.map((ch: { id: string; name: string }) => (
+                                    <option key={ch.id} value={ch.id}>#{ch.name}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-secondary mt-1.5">Fallback channel for event embeds when no game-specific binding is set</p>
                         </div>
                     )}
 

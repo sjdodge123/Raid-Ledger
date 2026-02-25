@@ -35,7 +35,6 @@ describe('IgdbController', () => {
     controller = module.get<IgdbController>(IgdbController);
   });
 
-
   describe('searchGames', () => {
     it('should return search results for valid query', async () => {
       const result = await controller.searchGames('valheim');

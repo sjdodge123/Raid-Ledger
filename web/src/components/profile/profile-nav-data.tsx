@@ -71,7 +71,9 @@ export const SECTIONS: NavSection[] = [
         label: 'Gaming',
         icon: GamingIcon,
         children: [
-            { to: '/profile/gaming', label: 'Gaming' },
+            { to: '/profile/gaming/game-time', label: 'Game Time' },
+            { to: '/profile/gaming/characters', label: 'Characters' },
+            { to: '/profile/gaming/watched-games', label: 'Watched Games' },
         ],
     },
 ];
