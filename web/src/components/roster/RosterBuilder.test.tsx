@@ -25,6 +25,8 @@ vi.mock('sonner', () => ({
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
+import { toast } from 'sonner';
+
 describe('RosterBuilder', () => {
     const mockPool = [
         {
@@ -770,6 +772,106 @@ describe('RosterBuilder', () => {
             // Should still have exactly one "Join?" (the new slot)
             const joinQuestions = screen.getAllByText('Join?');
             expect(joinQuestions.length).toBe(1);
+        });
+    });
+
+    // ROK-487: Toast message language for generic vs MMO rosters
+    describe('toast message language (ROK-487)', () => {
+        const makeGenericPlayer = (id: number, name: string): RosterAssignmentResponse => ({
+            id: 0,
+            signupId: id,
+            userId: id + 100,
+            discordId: `${id}${id}${id}`,
+            username: name,
+            avatar: null,
+            slot: null,
+            position: 0,
+            isOverride: false,
+            character: null,
+        });
+
+        it('says "slot N" when assigning a player to a generic player slot', () => {
+            const playerPool = [makeGenericPlayer(1, 'Alice')];
+
+            renderWithRouter(
+                <RosterBuilder
+                    pool={playerPool}
+                    assignments={[]}
+                    slots={{ player: 4 }}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={true}
+                />
+            );
+
+            // Open assignment popup: click on an empty player slot
+            const assignSlots = screen.getAllByText('Assign');
+            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
+
+            // In-modal Assign button is inside the dialog
+            const modal = document.querySelector('[role="dialog"]');
+            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
+            expect(modalAssignBtn).toBeTruthy();
+            fireEvent.click(modalAssignBtn!);
+
+            expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
+                expect.stringMatching(/slot\s+1/i),
+            );
+        });
+
+        it('does NOT say "player N" when assigning to a generic player slot', () => {
+            const playerPool = [makeGenericPlayer(2, 'Bob')];
+
+            renderWithRouter(
+                <RosterBuilder
+                    pool={playerPool}
+                    assignments={[]}
+                    slots={{ player: 4 }}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={true}
+                />
+            );
+
+            const assignSlots = screen.getAllByText('Assign');
+            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
+
+            const modal = document.querySelector('[role="dialog"]');
+            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
+            expect(modalAssignBtn).toBeTruthy();
+            fireEvent.click(modalAssignBtn!);
+
+            const calls = vi.mocked(toast.success).mock.calls;
+            const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Bob'));
+            expect(assignCall).toBeDefined();
+            expect(assignCall![0]).not.toMatch(/player\s+\d/i);
+        });
+
+        it('says "role N" when assigning to an MMO tank slot', () => {
+            const tankPlayer = makeGenericPlayer(3, 'Charlie');
+
+            renderWithRouter(
+                <RosterBuilder
+                    pool={[tankPlayer]}
+                    assignments={[]}
+                    onRosterChange={mockOnRosterChange}
+                    canEdit={true}
+                />
+            );
+
+            const assignSlots = screen.getAllByText('Assign');
+            // First slot rendered is Tank 1
+            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
+
+            const modal = document.querySelector('[role="dialog"]');
+            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
+            expect(modalAssignBtn).toBeTruthy();
+            fireEvent.click(modalAssignBtn!);
+
+            // For MMO slots, message should say "role position" (e.g. "tank 1")
+            // and should NOT say "slot N"
+            const calls = vi.mocked(toast.success).mock.calls;
+            const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Charlie'));
+            expect(assignCall).toBeDefined();
+            expect(assignCall![0]).not.toMatch(/slot\s+\d/i);
         });
     });
 
