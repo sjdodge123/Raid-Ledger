@@ -47,6 +47,10 @@ export function useSeenAdminSections() {
         queryClient.setQueryData(['preferences', PREF_KEY], context.previous);
       }
     },
+    onSettled: () => {
+      // Refetch from server to ensure cache matches DB state
+      queryClient.invalidateQueries({ queryKey: ['preferences', PREF_KEY] });
+    },
   });
 
   const markSeen = useCallback(
