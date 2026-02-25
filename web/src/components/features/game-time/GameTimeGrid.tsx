@@ -12,7 +12,7 @@ export interface GameTimePreviewBlock {
     startHour: number;
     endHour: number;
     label?: string;
-    /** 'current' = dashed amber (default), 'selected' = solid emerald (ROK-223) */
+    /** 'current' = dashed cyan (default), 'selected' = solid cyan (ROK-223, ROK-475) */
     variant?: 'current' | 'selected';
     // Rich fields (optional, for calendar-parity rendering inside the block)
     title?: string;
@@ -952,7 +952,7 @@ export function GameTimeGrid({
                         (ev) => ev.dayOfWeek === block.dayOfWeek && ev.startHour < block.endHour && ev.endHour > block.startHour,
                     );
 
-                    // ROK-223: variant styling — both use amber/gold border
+                    // ROK-223/ROK-475: variant styling — both use cyan border
                     const isSelected = block.variant === 'selected';
                     const borderStyle = isSelected
                         ? '3px solid rgba(6, 182, 212, 0.95)'
