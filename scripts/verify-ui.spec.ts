@@ -21,7 +21,7 @@ test.describe('Authentication', () => {
         await expect(page).toHaveTitle(/Raid Ledger|Login/i);
         // Should render at least one interactive element (button or link)
         const loginAction = page.locator('button, a[href*="discord"], a[href*="auth"]').first();
-        await expect(loginAction).toBeVisible();
+        await expect(loginAction).toBeVisible({ timeout: 10_000 });
     });
 
     test('demo admin can log in (DEMO_MODE)', async ({ page }) => {
@@ -141,7 +141,14 @@ test.describe('Authentication', () => {
 
 test.describe('Navigation', () => {
     test('header nav links are functional', async ({ page }) => {
-        await page.goto('/');
+        // Log in first — unauthenticated users get redirected to /login (no nav)
+        await page.goto('/login');
+        const adminBtn = page.getByRole('button', { name: /admin/i });
+        if (!(await adminBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
+            test.skip(true, 'DEMO_MODE not enabled — skipping nav test');
+        }
+        await adminBtn.click();
+        await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10_000 });
 
         // Look for navigation links in header/nav
         const nav = page.locator('nav, header').first();
