@@ -4,8 +4,8 @@ export type EventStatus = 'upcoming' | 'live' | 'ended';
 export type EventDisplayStatus = EventStatus | 'cancelled';
 
 export const STATUS_STYLES: Record<EventDisplayStatus, string> = {
-    upcoming: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-    live: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    upcoming: 'bg-emerald-500/20 text-emerald-500 border-emerald-500/30',
+    live: 'bg-yellow-500/20 text-yellow-500 border-yellow-500/30',
     ended: 'bg-dim/20 text-muted border-dim/30',
     cancelled: 'bg-red-500/20 text-red-400 border-red-500/30',
 };

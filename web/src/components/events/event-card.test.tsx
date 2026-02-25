@@ -149,3 +149,121 @@ describe('EventCardSkeleton', () => {
     });
 });
 
+describe('EventCard badge-overlay class (ROK-473)', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.setSystemTime(MOCK_NOW);
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('status badge has badge-overlay class for upcoming events', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for live events', () => {
+        const liveEvent = createMockEvent({
+            startTime: '2026-02-10T18:00:00Z',
+            endTime: '2026-02-10T22:00:00Z',
+        });
+        render(<EventCard event={liveEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for ended events', () => {
+        const endedEvent = createMockEvent({
+            startTime: '2026-02-10T15:00:00Z',
+            endTime: '2026-02-10T17:00:00Z',
+        });
+        render(<EventCard event={endedEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('status badge has badge-overlay class for cancelled events', () => {
+        const cancelledEvent = createMockEvent({
+            cancelledAt: '2026-02-05T00:00:00Z',
+        });
+        render(<EventCard event={cancelledEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge).toHaveClass('badge-overlay');
+    });
+
+    it('upcoming status badge has emerald color classes', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-emerald-500/20');
+    });
+
+    it('live status badge has yellow color classes', () => {
+        const liveEvent = createMockEvent({
+            startTime: '2026-02-10T18:00:00Z',
+            endTime: '2026-02-10T22:00:00Z',
+        });
+        render(<EventCard event={liveEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-yellow-500/20');
+    });
+
+    it('ended status badge has dim color classes', () => {
+        const endedEvent = createMockEvent({
+            startTime: '2026-02-10T15:00:00Z',
+            endTime: '2026-02-10T17:00:00Z',
+        });
+        render(<EventCard event={endedEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-dim/20');
+    });
+
+    it('cancelled status badge has red color classes', () => {
+        const cancelledEvent = createMockEvent({
+            cancelledAt: '2026-02-05T00:00:00Z',
+        });
+        render(<EventCard event={cancelledEvent} signupCount={0} />);
+        const badge = screen.getByTestId('event-status-badge');
+        expect(badge.className).toContain('bg-red-500/20');
+    });
+
+    it('game time badge has badge-overlay class when matchesGameTime is true', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        expect(gameTimeBadge).not.toBeNull();
+        expect(gameTimeBadge).toHaveClass('badge-overlay');
+    });
+
+    it('game time badge has cyan color classes', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        expect(gameTimeBadge).toHaveClass('badge-overlay');
+        expect(gameTimeBadge?.textContent).toContain('Inside Game Time');
+    });
+
+    it('game time badge is not rendered when matchesGameTime is false', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={false} />);
+        expect(screen.queryByText('Inside Game Time')).not.toBeInTheDocument();
+    });
+
+    it('game time badge is not rendered when matchesGameTime is undefined', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        expect(screen.queryByText('Inside Game Time')).not.toBeInTheDocument();
+    });
+
+    it('status badge is positioned absolutely at top-right of cover image', () => {
+        render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const badgeWrapper = screen.getByTestId('event-status-badge').closest('.absolute');
+        expect(badgeWrapper).toHaveClass('top-2', 'right-2');
+    });
+
+    it('game time badge is positioned absolutely at top-left of cover image when shown', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} matchesGameTime={true} />);
+        const gameTimeBadge = container.querySelector('.bg-cyan-500\\/20');
+        const badgeWrapper = gameTimeBadge?.closest('.absolute');
+        expect(badgeWrapper).toHaveClass('top-2', 'left-2');
+    });
+});
+
