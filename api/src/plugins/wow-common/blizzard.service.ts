@@ -1420,6 +1420,25 @@ export class BlizzardService {
    * Get OAuth2 access token from Blizzard.
    * Uses single-flight pattern (same as IGDB service).
    */
+  /**
+   * Fetch JSON from a Blizzard API URL with automatic auth.
+   * Used by BossDataRefreshService for journal API calls.
+   */
+  async fetchBlizzardApi<T = unknown>(
+    url: string,
+    region: string = 'us',
+  ): Promise<T | null> {
+    const token = await this.getAccessToken(region);
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) {
+      this.logger.warn(`Blizzard API ${res.status}: ${url}`);
+      return null;
+    }
+    return res.json() as Promise<T>;
+  }
+
   private async getAccessToken(region: string): Promise<string> {
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry) {
       return this.accessToken;
