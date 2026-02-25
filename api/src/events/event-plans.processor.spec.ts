@@ -34,7 +34,6 @@ describe('EventPlansProcessor', () => {
     processor = module.get<EventPlansProcessor>(EventPlansProcessor);
   });
 
-
   describe('process', () => {
     it('should delegate to EventPlansService.processPollClose with the planId', async () => {
       const job = makeJob(PLAN_ID);

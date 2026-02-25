@@ -48,9 +48,11 @@ export function createDrizzleMock() {
   }
 
   // Transaction support — executes the callback with the mock as the tx arg
-  mock.transaction = jest.fn().mockImplementation(
-    async (cb: (tx: typeof mock) => Promise<unknown>) => cb(mock),
-  );
+  mock.transaction = jest
+    .fn()
+    .mockImplementation(async (cb: (tx: typeof mock) => Promise<unknown>) =>
+      cb(mock),
+    );
 
   // Relational query API (used by some services)
   mock.query = {

@@ -7,10 +7,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import { IdentityPanel } from './identity-panel';
 import * as useAuthHook from '../../hooks/use-auth';
 import * as useCharactersHook from '../../hooks/use-characters';
 import * as useAvatarUploadHook from '../../hooks/use-avatar-upload';
+import * as useSystemStatusHook from '../../hooks/use-system-status';
 import * as apiClient from '../../lib/api-client';
 import * as toast from '../../lib/toast';
 
@@ -61,6 +63,7 @@ vi.mock('../../lib/avatar', () => ({
 
 vi.mock('../../lib/api-client', () => ({
     updatePreference: vi.fn(() => Promise.resolve()),
+    deleteMyAccount: vi.fn(() => Promise.resolve()),
 }));
 
 // Mock AvatarSelectorModal — render a simplified version to expose interactions
@@ -95,6 +98,12 @@ vi.mock('../../components/ui/role-badge', () => ({
     RoleBadge: () => null,
 }));
 
+// Mock Modal (used for delete account confirmation)
+vi.mock('../../components/ui/modal', () => ({
+    Modal: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
+        isOpen ? <div data-testid="modal">{children}</div> : null,
+}));
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const mockUser = {
@@ -114,7 +123,9 @@ const createWrapper = () => {
         defaultOptions: { queries: { retry: false } },
     });
     return ({ children }: { children: React.ReactNode }) => (
-        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        <QueryClientProvider client={queryClient}>
+            <MemoryRouter>{children}</MemoryRouter>
+        </QueryClientProvider>
     );
 };
 
@@ -145,6 +156,11 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
             isUploading: false,
             uploadProgress: 0,
         } as any);
+
+        vi.spyOn(useSystemStatusHook, 'useSystemStatus').mockReturnValue({
+            data: { isFirstRun: false, discordConfigured: true, blizzardConfigured: false },
+            isLoading: false,
+        } as any);
     });
 
     // ── Null user ────────────────────────────────────────────────────────────
@@ -172,7 +188,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
         it('shows username in user card', () => {
             render(<IdentityPanel />, { wrapper: createWrapper() });
-            expect(screen.getByText('TestUser')).toBeInTheDocument();
+            expect(screen.getAllByText('TestUser').length).toBeGreaterThanOrEqual(1);
         });
 
         it('shows "Discord linked" label for linked discord account', () => {
@@ -235,7 +251,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
             render(
                 <QueryClientProvider client={queryClient}>
-                    <IdentityPanel />
+                    <MemoryRouter><IdentityPanel /></MemoryRouter>
                 </QueryClientProvider>,
             );
 
@@ -282,7 +298,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
             render(
                 <QueryClientProvider client={queryClient}>
-                    <IdentityPanel />
+                    <MemoryRouter><IdentityPanel /></MemoryRouter>
                 </QueryClientProvider>,
             );
 
@@ -338,7 +354,7 @@ describe('IdentityPanel — adversarial tests (ROK-352)', () => {
 
             render(
                 <QueryClientProvider client={queryClient}>
-                    <IdentityPanel />
+                    <MemoryRouter><IdentityPanel /></MemoryRouter>
                 </QueryClientProvider>,
             );
 

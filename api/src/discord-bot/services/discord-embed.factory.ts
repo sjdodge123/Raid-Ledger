@@ -331,14 +331,43 @@ export class DiscordEmbedFactory {
       const lines: string[] = [];
       lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
 
-      const roleSections: Array<{ emoji: string; label: string; count: number; max: number; role: string }> = [];
-      if (tankMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('tank'), label: 'Tanks', count: rc['tank'] ?? 0, max: tankMax, role: 'tank' });
-      if (healerMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('healer'), label: 'Healers', count: rc['healer'] ?? 0, max: healerMax, role: 'healer' });
-      if (dpsMax > 0) roleSections.push({ emoji: this.emojiService.getRoleEmoji('dps'), label: 'DPS', count: rc['dps'] ?? 0, max: dpsMax, role: 'dps' });
+      const roleSections: Array<{
+        emoji: string;
+        label: string;
+        count: number;
+        max: number;
+        role: string;
+      }> = [];
+      if (tankMax > 0)
+        roleSections.push({
+          emoji: this.emojiService.getRoleEmoji('tank'),
+          label: 'Tanks',
+          count: rc['tank'] ?? 0,
+          max: tankMax,
+          role: 'tank',
+        });
+      if (healerMax > 0)
+        roleSections.push({
+          emoji: this.emojiService.getRoleEmoji('healer'),
+          label: 'Healers',
+          count: rc['healer'] ?? 0,
+          max: healerMax,
+          role: 'healer',
+        });
+      if (dpsMax > 0)
+        roleSections.push({
+          emoji: this.emojiService.getRoleEmoji('dps'),
+          label: 'DPS',
+          count: rc['dps'] ?? 0,
+          max: dpsMax,
+          role: 'dps',
+        });
 
       roleSections.forEach((section, idx) => {
         if (idx > 0) lines.push('');
-        lines.push(`${section.emoji} **${section.label}** (${section.count}/${section.max}):`);
+        lines.push(
+          `${section.emoji} **${section.label}** (${section.count}/${section.max}):`,
+        );
         const playerLines = this.getMentionsForRole(mentions, section.role);
         lines.push(playerLines || '\u2003—');
       });

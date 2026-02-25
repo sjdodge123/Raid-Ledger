@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, isAdmin, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useThemeStore } from '../../stores/theme-store';
@@ -402,16 +402,10 @@ export function MoreDrawer({ isOpen, onClose, onFeedbackClick }: MoreDrawerProps
 function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
-    const { data: systemStatus } = useSystemStatus();
 
-    // Hide Discord nav item when Discord OAuth is not configured
-    const sections = useMemo(() => {
-        if (systemStatus?.discordConfigured) return PROFILE_SECTIONS;
-        return PROFILE_SECTIONS.map((section) => ({
-            ...section,
-            children: section.children.filter((child) => child.to !== '/profile/identity/discord'),
-        }));
-    }, [systemStatus?.discordConfigured]);
+    // With ROK-359 consolidation, Discord is now inline in the Identity panel
+    // (conditionally rendered by the panel itself), so no nav filtering needed.
+    const sections = PROFILE_SECTIONS;
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
@@ -476,6 +470,7 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
 function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const { plugins } = usePluginAdmin();
     const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
+    const { data: systemStatus } = useSystemStatus();
 
     const coreIntegrations = buildCoreIntegrationItems({
         discord: {
@@ -493,7 +488,9 @@ function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose:
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations, {
+        demoMode: systemStatus?.demoMode ?? false,
+    });
 
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="admin-submenu">

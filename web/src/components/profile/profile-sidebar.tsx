@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
-import { useSystemStatus } from '../../hooks/use-system-status';
+import { useAuth } from '../../hooks/use-auth';
+import { useGameTime } from '../../hooks/use-game-time';
 import { SECTIONS } from './profile-nav-data';
 
 interface ProfileSidebarProps {
@@ -12,16 +12,11 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     const location = useLocation();
     const navigate = useNavigate();
     const resetOnboarding = useResetOnboarding();
-    const { data: systemStatus } = useSystemStatus();
+    const { isAuthenticated } = useAuth();
+    const { data: gameTimeData } = useGameTime({ enabled: isAuthenticated });
+    const gameTimeSet = gameTimeData?.slots?.some(s => s.fromTemplate) ?? false;
 
-    // Hide Discord nav item when Discord OAuth is not configured
-    const sections = useMemo(() => {
-        if (systemStatus?.discordConfigured) return SECTIONS;
-        return SECTIONS.map((section) => ({
-            ...section,
-            children: section.children.filter((child) => child.to !== '/profile/identity/discord'),
-        }));
-    }, [systemStatus?.discordConfigured]);
+    const sections = SECTIONS;
 
     const handleRerunWizard = () => {
         resetOnboarding.mutate(undefined, {
@@ -33,7 +28,7 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     };
 
     return (
-        <nav className="w-full h-full overflow-y-auto py-4 pr-2" aria-label="Profile navigation">
+        <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Profile navigation">
             <div className="space-y-4">
                 {sections.map((section) => (
                     <div key={section.id}>
@@ -54,6 +49,9 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
                                         : 'text-muted hover:text-foreground hover:bg-overlay/20'
                                         }`}
                                 >
+                                    {child.to === '/profile/gaming/game-time' && (
+                                        <span className={`w-2 h-2 rounded-full shrink-0 ${gameTimeSet ? 'bg-emerald-400' : 'bg-red-400'}`} />
+                                    )}
                                     <span className="truncate min-w-0 flex-1">{child.label}</span>
                                 </Link>
                             ))}

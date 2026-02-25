@@ -1,10 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { GameTimeService } from './game-time.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
 describe('GameTimeService', () => {
   let service: GameTimeService;
@@ -44,7 +41,6 @@ describe('GameTimeService', () => {
 
     service = module.get<GameTimeService>(GameTimeService);
   });
-
 
   describe('getTemplate', () => {
     it('should return empty slots for new user', async () => {

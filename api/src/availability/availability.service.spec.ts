@@ -85,7 +85,6 @@ describe('AvailabilityService', () => {
     service = module.get<AvailabilityService>(AvailabilityService);
   });
 
-
   describe('findAllForUser', () => {
     it('should return all availability windows for a user', async () => {
       const result = await service.findAllForUser(1);

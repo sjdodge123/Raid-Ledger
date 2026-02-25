@@ -41,7 +41,6 @@ describe('SystemController', () => {
     controller = module.get<SystemController>(SystemController);
   });
 
-
   describe('getStatus', () => {
     it('should return isFirstRun: true when no users exist (AC-4)', async () => {
       (mockUsersService.count as jest.Mock).mockResolvedValue(0);

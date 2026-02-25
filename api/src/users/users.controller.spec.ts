@@ -133,7 +133,6 @@ describe('UsersController', () => {
     eventsService = module.get<EventsService>(EventsService);
   });
 
-
   describe('listRecentPlayers', () => {
     it('should return 200 with correct shape', async () => {
       const mockRows = [

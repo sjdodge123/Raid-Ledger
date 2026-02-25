@@ -15,7 +15,7 @@ const EyeIcon = (
 );
 
 export function DiscordBotForm() {
-    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions, discordChannels, discordDefaultChannel, setDiscordChannel, resendSetupWizard } = useAdminSettings();
+    const { discordBotStatus, updateDiscordBot, testDiscordBot, clearDiscordBot, checkDiscordBotPermissions, resendSetupWizard } = useAdminSettings();
 
     const [botToken, setBotToken] = useState('');
     const [enabledOverride, setEnabledOverride] = useState<boolean | null>(null);
@@ -310,36 +310,6 @@ export function DiscordBotForm() {
                         </div>
                     )}
 
-                    {/* Channel Selector (ROK-118) */}
-                    {discordBotStatus.data?.connected && discordChannels.data && discordChannels.data.length > 0 && (
-                        <div className="mt-4">
-                            <label htmlFor="discordChannel" className="block text-sm font-medium text-secondary mb-1.5">
-                                Default Notification Channel
-                            </label>
-                            <select
-                                id="discordChannel"
-                                value={discordDefaultChannel.data?.channelId ?? ''}
-                                onChange={async (e) => {
-                                    if (e.target.value) {
-                                        try {
-                                            await setDiscordChannel.mutateAsync(e.target.value);
-                                            toast.success('Default channel updated');
-                                        } catch {
-                                            toast.error('Failed to update default channel');
-                                        }
-                                    }
-                                }}
-                                disabled={setDiscordChannel.isPending}
-                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                            >
-                                <option value="" disabled>Select a channel...</option>
-                                {discordChannels.data.map((ch) => (
-                                    <option key={ch.id} value={ch.id}>#{ch.name}</option>
-                                ))}
-                            </select>
-                            <p className="text-xs text-secondary mt-1.5">Fallback channel for event embeds when no game-specific binding is set</p>
-                        </div>
-                    )}
                 </div>
             )}
         </>

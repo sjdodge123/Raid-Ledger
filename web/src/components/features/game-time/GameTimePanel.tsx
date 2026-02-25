@@ -226,6 +226,7 @@ export function GameTimePanel({
                     tzLabel={editor.tzLabel}
                     hourRange={hourRange}
                     fullDayNames={mode === 'profile'}
+                    noStickyOffset={mode === 'profile'}
                     {...(mode !== 'profile' ? {
                         events: editor.events,
                         onEventClick: handleEventClick,

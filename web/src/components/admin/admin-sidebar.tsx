@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { useSeenAdminSections } from '../../hooks/use-seen-admin-sections';
 import { NewBadge } from '../ui/new-badge';
@@ -22,6 +23,7 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
     const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
+    const { data: systemStatus } = useSystemStatus();
 
     const coreIntegrations = buildCoreIntegrationItems({
         discord: {
@@ -39,7 +41,9 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations, {
+        demoMode: systemStatus?.demoMode ?? false,
+    });
 
     if (!isOpen) return null;
 
@@ -79,7 +83,7 @@ function SidebarSection({
                     {section.icon}{section.label}
                 </span>
                 {hasNewChild && (
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" aria-label="New items" />
+                    <span className="w-2 h-2 rounded-full bg-sky-400 shrink-0" aria-label="New items" />
                 )}
             </div>
             <div className="mt-1 space-y-0.5">
@@ -124,14 +128,13 @@ export function SidebarNavItem({
     isActive: boolean;
     onNavigate?: () => void;
 }) {
-    const { isNew, markSeen } = useNewBadge(item.newBadgeKey ?? '');
+    const { isNew } = useNewBadge(item.newBadgeKey ?? '', isActive);
     const badge = item.pluginSlug ? getPluginBadge(item.pluginSlug) : undefined;
 
     return (
         <Link
             to={item.to}
             onClick={onNavigate}
-            onMouseEnter={item.newBadgeKey ? markSeen : undefined}
             title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
             className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'

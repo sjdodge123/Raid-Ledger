@@ -92,7 +92,6 @@ describe('EventsController', () => {
     controller = module.get<EventsController>(EventsController);
   });
 
-
   describe('create', () => {
     it('should create event with valid data', async () => {
       const body = {

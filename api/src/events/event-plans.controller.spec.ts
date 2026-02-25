@@ -74,7 +74,6 @@ describe('EventPlansController', () => {
     controller = module.get<EventPlansController>(EventPlansController);
   });
 
-
   // ─── getTimeSuggestions ──────────────────────────────────────────────────────
 
   describe('getTimeSuggestions', () => {
