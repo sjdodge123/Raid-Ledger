@@ -1,10 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { CharactersService } from '../../characters/characters.service';
+import { BossDataRefreshService } from './boss-data-refresh.service';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 
 /**
- * Registers cron jobs for WoW character auto-sync.
+ * Registers cron jobs for WoW character auto-sync and boss data refresh.
  * Only active when the wow-common plugin is enabled.
  */
 @Injectable()
@@ -12,7 +13,10 @@ export class WowCronRegistrar implements CronRegistrar {
   private readonly logger = new Logger(WowCronRegistrar.name);
   private isSyncing = false;
 
-  constructor(private readonly charactersService: CharactersService) {}
+  constructor(
+    private readonly charactersService: CharactersService,
+    private readonly bossDataRefresh: BossDataRefreshService,
+  ) {}
 
   getCronJobs(): CronJobDefinition[] {
     return [
@@ -20,6 +24,12 @@ export class WowCronRegistrar implements CronRegistrar {
         name: 'character-auto-sync',
         cronExpression: '0 0 3,15 * * *',
         handler: () => this.handleAutoSync(),
+      },
+      {
+        name: 'boss-data-refresh',
+        // Every Sunday at 4:00 AM
+        cronExpression: '0 0 4 * * 0',
+        handler: () => this.handleBossDataRefresh(),
       },
     ];
   }
@@ -42,6 +52,18 @@ export class WowCronRegistrar implements CronRegistrar {
       this.logger.error(`Auto-sync failed: ${err}`);
     } finally {
       this.isSyncing = false;
+    }
+  }
+
+  private async handleBossDataRefresh(): Promise<void> {
+    this.logger.log('Starting weekly boss data refresh...');
+    try {
+      const result = await this.bossDataRefresh.refresh();
+      this.logger.log(
+        `Boss data refresh complete: ${result.bosses} bosses, ${result.loot} loot items`,
+      );
+    } catch (err) {
+      this.logger.error(`Boss data refresh failed: ${err}`);
     }
   }
 }

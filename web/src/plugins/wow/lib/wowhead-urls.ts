@@ -48,6 +48,42 @@ export function getWowheadQuestData(questId: number, variant?: string | null): s
     return `quest=${questId}&${getWowheadDataSuffix(variant)}`;
 }
 
+/**
+ * Resolve a loot item expansion key to the correct Wowhead domain segments.
+ * Used by boss loot panels where each item may come from a different expansion.
+ *
+ * Note: Classic dungeon items use the retail Wowhead database because the
+ * Blizzard Journal API (static-us namespace) returns MoP-revamp item IDs
+ * for Classic dungeons, which don't exist in any Classic-era Wowhead DB.
+ */
+function getWowheadDomainForExpansion(expansion: string): { urlBase: string; tooltipDomain: string } {
+    switch (expansion) {
+        case 'tbc':
+            return { urlBase: 'www.wowhead.com/tbc', tooltipDomain: 'tbc' };
+        case 'wotlk':
+            return { urlBase: 'www.wowhead.com/wotlk', tooltipDomain: 'wotlk' };
+        case 'cata':
+            return { urlBase: 'www.wowhead.com/cata', tooltipDomain: 'cata' };
+        case 'sod':
+            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
+        case 'classic':
+        default:
+            return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
+    }
+}
+
+/** Build a full Wowhead item URL using the item's expansion for correct domain. */
+export function getWowheadItemUrlForExpansion(itemId: number, expansion: string): string {
+    const { urlBase } = getWowheadDomainForExpansion(expansion);
+    return `https://${urlBase}/item=${itemId}`;
+}
+
+/** Build the data-wowhead tooltip suffix using the item's expansion for correct domain. */
+export function getWowheadDataSuffixForExpansion(expansion: string): string {
+    const { tooltipDomain } = getWowheadDomainForExpansion(expansion);
+    return `domain=${tooltipDomain}`;
+}
+
 /** Build a Wowhead NPC search URL for a boss name. */
 export function getWowheadNpcSearchUrl(bossName: string, variant?: string | null): string {
     const { urlBase } = getWowheadDomain(variant);
