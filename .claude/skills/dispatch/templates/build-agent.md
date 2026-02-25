@@ -59,6 +59,34 @@ npm run test -w web
 
 The lead will message you with one of these task types:
 
+### 0. "Setup worktree ROK-XXX on branch <branch-name>" — Create and initialize a worktree
+
+Create a new git worktree for a story branch and prepare it for development:
+
+```bash
+# 1. Create worktree from main
+cd /Users/sdodge/Documents/Projects/Raid-Ledger
+git worktree add ../Raid-Ledger--rok-<num> -b <branch-name>
+
+# 2. Install dependencies
+cd ../Raid-Ledger--rok-<num>
+npm install --legacy-peer-deps
+
+# 3. Build contract (required before API/web can build)
+npm run build -w packages/contract
+
+# 4. Copy .env (worktrees don't get .gitignored files)
+cp /Users/sdodge/Documents/Projects/Raid-Ledger/.env .env
+
+# 5. Viability check — verify builds succeed
+npm run build -w api
+npm run build -w web
+```
+
+**If any step fails:** Message the lead with exact errors. Do NOT attempt to fix — the lead will handle it.
+
+**If all steps pass:** Message the lead confirming the worktree is ready for dev at `../Raid-Ledger--rok-<num>`.
+
 ### 1. "Validate ROK-XXX" — Run CI in the worktree
 
 Run **quick CI** in the specified worktree (unless the lead says "full validate").
@@ -122,6 +150,13 @@ curl -sf http://localhost:3000/health && echo "HEALTHY" || echo "UNHEALTHY"
 ```
 
 The operator's app settings (Discord OAuth, Blizzard keys, etc.) are in the shared PostgreSQL database, not the filesystem — all worktrees share the same DB.
+
+**Migration conflicts:** If the API crashes with migration errors (e.g., "table already exists", "hash mismatch in migration journal"), do NOT use `deploy_dev.sh --fresh`. That wipes the DB and requires operator approval. Instead:
+
+1. **First try:** Use the main project's DB (all worktrees share it via Docker on port 5432). The migration may already be applied from main. Check if the new columns/tables exist: `docker exec raid-ledger-db psql -U postgres -d raidledger -c "\d <table_name>"`
+2. **If columns are missing:** Apply them manually with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. This is additive and safe.
+3. **If the migration journal has a hash mismatch:** The worktree branch has a different hash for the same migration file. Check `_drizzle_migrations` table. If the migration content is functionally identical (same columns, just different hash), skip it.
+4. **Only escalate to the lead** if none of the above work. The lead will consult the Scrum Master and operator before any destructive action.
 
 Message lead with deploy + health result. If health check fails, check `/tmp/rok-<num>-api.log` for errors.
 
