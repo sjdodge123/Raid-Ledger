@@ -9,7 +9,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, or, sql, isNull } from 'drizzle-orm';
+import { eq, and, or, sql, isNull, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -31,6 +31,7 @@ import type {
   RosterRole,
   CreateDiscordSignupDto,
   UpdateSignupStatusDto,
+  AttendanceStatus,
 } from '@raid-ledger/contract';
 
 /**
@@ -159,8 +160,32 @@ export class SignupsService {
           )
           .limit(1);
 
+        // ROK-421: Reactivate roached_out signup (re-signup after cancel)
+        if (existing.status === 'roached_out') {
+          const reactivated = hasCharacter ? 'confirmed' : 'pending';
+          await tx
+            .update(schema.eventSignups)
+            .set({
+              status: 'signed_up',
+              confirmationStatus: reactivated,
+              note: dto?.note ?? existing.note,
+              characterId: dto?.characterId ?? null,
+              preferredRoles: dto?.preferredRoles ?? null,
+              attendanceStatus: null,
+              attendanceRecordedAt: null,
+            })
+            .where(eq(schema.eventSignups.id, existing.id));
+          existing.status = 'signed_up';
+          existing.confirmationStatus = reactivated;
+          existing.note = dto?.note ?? existing.note;
+          existing.characterId = dto?.characterId ?? null;
+          existing.preferredRoles = dto?.preferredRoles ?? null;
+          existing.attendanceStatus = null;
+          existing.attendanceRecordedAt = null;
+        }
+
         // ROK-452: Update preferred roles on existing signup if provided
-        if (dto?.preferredRoles && dto.preferredRoles.length > 0) {
+        if (existing.status !== 'roached_out' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
           await tx
             .update(schema.eventSignups)
             .set({ preferredRoles: dto.preferredRoles })
@@ -647,7 +672,7 @@ export class SignupsService {
       return this.cancel(eventId, linkedUser.id);
     }
 
-    // Cancel anonymous signup
+    // Cancel anonymous signup (ROK-421: soft-delete)
     const [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -655,6 +680,7 @@ export class SignupsService {
         and(
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.discordUserId, discordUserId),
+          ne(schema.eventSignups.status, 'roached_out'),
         ),
       )
       .limit(1);
@@ -665,12 +691,18 @@ export class SignupsService {
       );
     }
 
+    // Remove roster assignment if any
     await this.db
-      .delete(schema.eventSignups)
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, signup.id));
+
+    await this.db
+      .update(schema.eventSignups)
+      .set({ status: 'roached_out', roachedOutAt: new Date() })
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(
-      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId}`,
+      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId} (roached_out)`,
     );
 
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
@@ -807,7 +839,7 @@ export class SignupsService {
    * @throws NotFoundException if signup doesn't exist
    */
   async cancel(eventId: number, userId: number): Promise<void> {
-    // Find the signup first to get its ID
+    // Find the signup first to get its ID (ROK-421: exclude already roached_out)
     let [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -815,6 +847,7 @@ export class SignupsService {
         and(
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.userId, userId),
+          ne(schema.eventSignups.status, 'roached_out'),
         ),
       )
       .limit(1);
@@ -836,6 +869,7 @@ export class SignupsService {
             and(
               eq(schema.eventSignups.eventId, eventId),
               eq(schema.eventSignups.discordUserId, user.discordId),
+              ne(schema.eventSignups.status, 'roached_out'),
             ),
           )
           .limit(1);
@@ -886,12 +920,19 @@ export class SignupsService {
       };
     }
 
-    // Delete the signup (cascade removes the roster assignment)
+    // ROK-421: Soft-delete — set status to 'roached_out' instead of hard DELETE.
+    // Also remove roster assignment explicitly since cascade won't fire on UPDATE.
+    if (assignment) {
+      await this.db
+        .delete(schema.rosterAssignments)
+        .where(eq(schema.rosterAssignments.signupId, signup.id));
+    }
     await this.db
-      .delete(schema.eventSignups)
+      .update(schema.eventSignups)
+      .set({ status: 'roached_out', roachedOutAt: new Date() })
       .where(eq(schema.eventSignups.id, signup.id));
 
-    this.logger.log(`User ${userId} canceled signup for event ${eventId}`);
+    this.logger.log(`User ${userId} canceled signup for event ${eventId} (roached_out)`);
 
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
       eventId,
@@ -959,7 +1000,7 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get signups with user and character info (single query with joins)
+    // Get signups with user and character info (single query with joins, ROK-421: exclude roached_out)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -968,7 +1009,12 @@ export class SignupsService {
         schema.characters,
         eq(schema.eventSignups.characterId, schema.characters.id),
       )
-      .where(eq(schema.eventSignups.eventId, eventId))
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          ne(schema.eventSignups.status, 'roached_out'),
+        ),
+      )
       .orderBy(schema.eventSignups.signedUpAt);
 
     const signupResponses: SignupResponseDto[] = signups.map((row) => {
@@ -995,6 +1041,8 @@ export class SignupsService {
           .confirmationStatus as ConfirmationStatus,
         status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
         preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+        attendanceStatus: (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
+        attendanceRecordedAt: row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
       };
     });
 
@@ -1072,6 +1120,8 @@ export class SignupsService {
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
       status: (signup.status as SignupStatus) ?? 'signed_up',
       preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+      attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
+      attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
   }
 
@@ -1101,6 +1151,8 @@ export class SignupsService {
       discordUsername: signup.discordUsername,
       discordAvatarHash: signup.discordAvatarHash,
       preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
+      attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
+      attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
   }
 

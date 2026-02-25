@@ -181,7 +181,9 @@ export class EmbedSyncProcessor extends WorkerHost {
       )
       .where(eq(schema.eventSignups.eventId, event.id));
 
-    const activeSignups = signupRows.filter((r) => r.status !== 'declined');
+    const activeSignups = signupRows.filter(
+      (r) => r.status !== 'declined' && r.status !== 'roached_out',
+    );
     const signupCount = activeSignups.length;
 
     // Build role counts from roster assignments (exclude declined signups)

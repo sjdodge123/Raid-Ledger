@@ -33,6 +33,8 @@ import type {
     RescheduleEventDto,
     UserHeartedGamesResponseDto,
     UserEventSignupsResponseDto,
+    AttendanceSummaryDto,
+    AttendanceStatus,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -613,6 +615,33 @@ export async function adminRemoveUserFromEvent(
     return fetchApi(`/events/${eventId}/signups/${signupId}`, {
         method: 'DELETE',
     });
+}
+
+// ============================================================
+// Attendance Tracking API (ROK-421)
+// ============================================================
+
+/**
+ * Record attendance for a signup on a past event
+ */
+export async function recordAttendance(
+    eventId: number,
+    signupId: number,
+    attendanceStatus: AttendanceStatus,
+): Promise<SignupResponseDto> {
+    return fetchApi(`/events/${eventId}/attendance`, {
+        method: 'PATCH',
+        body: JSON.stringify({ signupId, attendanceStatus }),
+    });
+}
+
+/**
+ * Get attendance summary for an event
+ */
+export async function getAttendanceSummary(
+    eventId: number,
+): Promise<AttendanceSummaryDto> {
+    return fetchApi(`/events/${eventId}/attendance`);
 }
 
 // ============================================================

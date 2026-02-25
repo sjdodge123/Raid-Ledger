@@ -88,6 +88,12 @@ export const eventSignups = pgTable(
      * Null or empty means no role preference expressed.
      */
     preferredRoles: text('preferred_roles').array(),
+    /** Post-event attendance status recorded by organizer (ROK-421) */
+    attendanceStatus: varchar('attendance_status', { length: 20 }),
+    /** Timestamp when attendance was last recorded (ROK-421) */
+    attendanceRecordedAt: timestamp('attendance_recorded_at'),
+    /** Timestamp when signup was cancelled/roached out (ROK-421 AC#8/#9) */
+    roachedOutAt: timestamp('roached_out_at'),
     signedUpAt: timestamp('signed_up_at').defaultNow().notNull(),
   },
   (table) => [

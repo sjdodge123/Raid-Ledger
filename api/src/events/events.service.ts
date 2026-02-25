@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, gte, lte, asc, sql, and, inArray } from 'drizzle-orm';
+import { eq, gte, lte, asc, sql, and, inArray, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -222,7 +222,12 @@ export class EventsService {
       const signedUpEventIds = this.db
         .select({ eventId: schema.eventSignups.eventId })
         .from(schema.eventSignups)
-        .where(eq(schema.eventSignups.userId, authenticatedUserId));
+        .where(
+          and(
+            eq(schema.eventSignups.userId, authenticatedUserId),
+            ne(schema.eventSignups.status, 'roached_out'),
+          ),
+        );
       conditions.push(inArray(schema.events.id, signedUpEventIds));
     }
 
@@ -241,13 +246,14 @@ export class EventsService {
 
     const total = Number(countResult[0].count);
 
-    // Subquery to count signups per event
+    // Subquery to count signups per event (ROK-421: exclude roached_out)
     const signupCountSubquery = this.db
       .select({
         eventId: schema.eventSignups.eventId,
         count: sql<number>`count(*)`.as('signup_count'),
       })
       .from(schema.eventSignups)
+      .where(ne(schema.eventSignups.status, 'roached_out'))
       .groupBy(schema.eventSignups.eventId)
       .as('signup_counts');
 
@@ -325,7 +331,7 @@ export class EventsService {
         users: schema.users,
         games: schema.games,
         signupCount: sql<number>`coalesce((
-          SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id}
+          SELECT count(*) FROM event_signups WHERE event_id = ${schema.events.id} AND status != 'roached_out'
         ), 0)`,
       })
       .from(schema.events)
@@ -356,7 +362,12 @@ export class EventsService {
         count: sql<number>`count(*)`.as('signup_count'),
       })
       .from(schema.eventSignups)
-      .where(inArray(schema.eventSignups.eventId, ids))
+      .where(
+        and(
+          inArray(schema.eventSignups.eventId, ids),
+          ne(schema.eventSignups.status, 'roached_out'),
+        ),
+      )
       .groupBy(schema.eventSignups.eventId)
       .as('signup_counts');
 
@@ -402,13 +413,14 @@ export class EventsService {
     }
     const whereCondition = and(...conditions);
 
-    // 2. Get events with signup counts (reuse findAll pattern)
+    // 2. Get events with signup counts (reuse findAll pattern, ROK-421: exclude roached_out)
     const signupCountSubquery = this.db
       .select({
         eventId: schema.eventSignups.eventId,
         count: sql<number>`count(*)`.as('signup_count'),
       })
       .from(schema.eventSignups)
+      .where(ne(schema.eventSignups.status, 'roached_out'))
       .groupBy(schema.eventSignups.eventId)
       .as('signup_counts');
 
@@ -558,6 +570,53 @@ export class EventsService {
       };
     });
 
+    // ROK-421: Compute attendance metrics from past events
+    const attendanceConditions: ReturnType<typeof gte>[] = [
+      lte(sql`upper(${schema.events.duration})`, sql`${now}::timestamp`),
+      sql`${schema.events.cancelledAt} IS NULL`,
+    ];
+    if (!isAdmin) {
+      attendanceConditions.push(eq(schema.events.creatorId, userId));
+    }
+
+    const attendanceRows = await this.db
+      .select({
+        attendanceStatus: schema.eventSignups.attendanceStatus,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(schema.eventSignups)
+      .innerJoin(
+        schema.events,
+        eq(schema.eventSignups.eventId, schema.events.id),
+      )
+      .where(
+        and(
+          ...attendanceConditions,
+          sql`${schema.eventSignups.attendanceStatus} IS NOT NULL`,
+          ne(schema.eventSignups.status, 'roached_out'),
+        ),
+      )
+      .groupBy(schema.eventSignups.attendanceStatus);
+
+    let totalAttended = 0;
+    let totalNoShow = 0;
+    let totalMarked = 0;
+    for (const row of attendanceRows) {
+      const count = Number(row.count);
+      totalMarked += count;
+      if (row.attendanceStatus === 'attended') totalAttended = count;
+      if (row.attendanceStatus === 'no_show') totalNoShow = count;
+    }
+
+    const attendanceRate =
+      totalMarked > 0
+        ? Math.round((totalAttended / totalMarked) * 100) / 100
+        : undefined;
+    const noShowRate =
+      totalMarked > 0
+        ? Math.round((totalNoShow / totalMarked) * 100) / 100
+        : undefined;
+
     return {
       stats: {
         totalUpcomingEvents: events.length,
@@ -567,6 +626,8 @@ export class EventsService {
             ? Math.round(totalFillRateSum / eventsWithSlots)
             : 0,
         eventsWithRosterGaps: eventsWithGaps,
+        attendanceRate,
+        noShowRate,
       },
       events: dashboardEvents,
     };
@@ -585,11 +646,16 @@ export class EventsService {
   ): Promise<UserEventSignupsResponseDto> {
     const now = new Date().toISOString();
 
-    // Get event IDs the user is signed up for where start_time > now
+    // Get event IDs the user is signed up for where start_time > now (ROK-421: exclude roached_out)
     const signedUpEventIds = this.db
       .select({ eventId: schema.eventSignups.eventId })
       .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.userId, userId));
+      .where(
+        and(
+          eq(schema.eventSignups.userId, userId),
+          ne(schema.eventSignups.status, 'roached_out'),
+        ),
+      );
 
     const conditions = [
       inArray(schema.events.id, signedUpEventIds),
@@ -606,13 +672,14 @@ export class EventsService {
 
     const total = Number(countResult[0].count);
 
-    // Subquery for signup counts
+    // Subquery for signup counts (ROK-421: exclude roached_out)
     const signupCountSubquery = this.db
       .select({
         eventId: schema.eventSignups.eventId,
         count: sql<number>`count(*)`.as('signup_count'),
       })
       .from(schema.eventSignups)
+      .where(ne(schema.eventSignups.status, 'roached_out'))
       .groupBy(schema.eventSignups.eventId)
       .as('signup_counts');
 
@@ -1408,8 +1475,10 @@ export class EventsService {
       )
       .where(eq(schema.eventSignups.eventId, eventId));
 
-    // Exclude declined signups for both count and mentions
-    const activeRows = signupRows.filter((r) => r.status !== 'declined');
+    // Exclude declined and roached_out signups for both count and mentions (ROK-421)
+    const activeRows = signupRows.filter(
+      (r) => r.status !== 'declined' && r.status !== 'roached_out',
+    );
     const signupMentions = activeRows
       .filter((r) => r.discordId || r.username)
       .map((r) => ({

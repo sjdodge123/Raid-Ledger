@@ -579,7 +579,8 @@ describe('SignupsService', () => {
 
       await service.cancel(1, 1);
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      // ROK-421: cancel now soft-deletes by setting status to 'roached_out'
+      expect(mockDb.update).toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -643,7 +644,9 @@ describe('SignupsService', () => {
 
       await service.cancel(1, 1);
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      // ROK-421: cancel now deletes roster assignment + soft-deletes signup
+      expect(mockDb.delete).toHaveBeenCalled(); // roster assignment delete
+      expect(mockDb.update).toHaveBeenCalled(); // soft-delete signup
       expect(mockNotificationService.create).toHaveBeenCalledWith({
         userId: 5,
         type: 'slot_vacated',

@@ -3,6 +3,7 @@ import { BadRequestException } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 
@@ -77,6 +78,23 @@ describe('EventsController', () => {
       providers: [
         { provide: EventsService, useValue: mockEventsService },
         { provide: SignupsService, useValue: mockSignupsService },
+        {
+          provide: AttendanceService,
+          useValue: {
+            recordAttendance: jest.fn().mockResolvedValue({}),
+            getAttendanceSummary: jest.fn().mockResolvedValue({
+              eventId: 1,
+              totalSignups: 0,
+              attended: 0,
+              noShow: 0,
+              excused: 0,
+              unmarked: 0,
+              attendanceRate: 0,
+              noShowRate: 0,
+              signups: [],
+            }),
+          },
+        },
         { provide: PugsService, useValue: mockPugsService },
         {
           provide: ShareService,

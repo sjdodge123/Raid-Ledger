@@ -6,6 +6,7 @@ import { PugsService } from './pugs.service';
 import { InviteService } from './invite.service';
 import { OgMetaService } from './og-meta.service';
 import { ShareService } from './share.service';
+import { AttendanceService } from './attendance.service';
 import { TemplatesService } from './templates.service';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
 import { EventPlansProcessor } from './event-plans.processor';
@@ -41,6 +42,7 @@ import {
   providers: [
     EventsService,
     SignupsService,
+    AttendanceService,
     PugsService,
     InviteService,
     OgMetaService,
@@ -51,6 +53,12 @@ import {
     EventPlansService,
     EventPlansProcessor,
   ],
-  exports: [EventsService, SignupsService, PugsService, InviteService],
+  exports: [
+    EventsService,
+    SignupsService,
+    AttendanceService,
+    PugsService,
+    InviteService,
+  ],
 })
 export class EventsModule {}
