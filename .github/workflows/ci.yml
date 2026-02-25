@@ -157,7 +157,7 @@ jobs:
         run: npm run db:migrate -w api
 
       - name: Start API server
-        run: node api/dist/main.js &
+        run: node api/dist/src/main.js &
         env:
           PORT: '3000'
 
