@@ -52,13 +52,16 @@ export class DiscordNotificationEmbedService {
   ): Promise<EmbedResult> {
     const color = this.getColorForType(input.type);
     const emoji = this.getEmojiForType(input.type);
+    const categoryLabel = this.getTypeLabel(input.type);
 
     const embed = new EmbedBuilder()
       .setAuthor({ name: communityName || 'Raid Ledger' })
       .setTitle(`${emoji} ${input.title}`)
       .setDescription(input.message)
       .setColor(color)
-      .setFooter({ text: communityName || 'Raid Ledger' })
+      .setFooter({
+        text: `${communityName || 'Raid Ledger'} \u00B7 ${categoryLabel}`,
+      })
       .setTimestamp();
 
     // Add type-specific fields
@@ -224,6 +227,8 @@ export class DiscordNotificationEmbedService {
         return EMBED_COLORS.ROSTER_UPDATE;
       case 'event_rescheduled':
         return EMBED_COLORS.REMINDER;
+      case 'event_cancelled':
+        return EMBED_COLORS.ERROR;
       case 'achievement_unlocked':
       case 'level_up':
         return EMBED_COLORS.SIGNUP_CONFIRMATION;
@@ -252,6 +257,8 @@ export class DiscordNotificationEmbedService {
         return '⏳';
       case 'event_rescheduled':
         return '📆';
+      case 'event_cancelled':
+        return '❌';
       case 'achievement_unlocked':
         return '🏆';
       case 'level_up':
@@ -281,6 +288,8 @@ export class DiscordNotificationEmbedService {
         return 'Tentative Displaced';
       case 'event_rescheduled':
         return 'Event Rescheduled';
+      case 'event_cancelled':
+        return 'Event Cancelled';
       case 'achievement_unlocked':
         return 'Achievement';
       case 'level_up':
@@ -323,6 +332,15 @@ export class DiscordNotificationEmbedService {
           embed.addFields({
             name: 'Slot',
             value: toStr(payload.slotName),
+            inline: true,
+          });
+        }
+        break;
+      case 'event_cancelled':
+        if (payload.eventTitle) {
+          embed.addFields({
+            name: 'Event',
+            value: toStr(payload.eventTitle),
             inline: true,
           });
         }
@@ -389,6 +407,7 @@ export class DiscordNotificationEmbedService {
       case 'event_reminder':
       case 'new_event':
       case 'event_rescheduled':
+      case 'event_cancelled':
         if (eventId) {
           return new ButtonBuilder()
             .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')

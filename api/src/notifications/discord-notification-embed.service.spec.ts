@@ -206,7 +206,71 @@ describe('DiscordNotificationEmbedService', () => {
       expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
     });
 
-    it('should set community name as author and footer', async () => {
+    it('should use ERROR color for event_cancelled type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-cancel-1',
+          type: 'event_cancelled',
+          title: 'Event Cancelled',
+          message: 'The event has been cancelled',
+        },
+        'Test Community',
+      );
+
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.ERROR);
+    });
+
+    it('should use cancel emoji for event_cancelled type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-cancel-2',
+          type: 'event_cancelled',
+          title: 'Cancelled',
+          message: 'Event cancelled',
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as { title: string };
+      expect(json.title).toContain('\u274C');
+    });
+
+    it('should add eventTitle field for event_cancelled when payload has eventTitle', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-cancel-3',
+          type: 'event_cancelled',
+          title: 'Event Cancelled',
+          message: 'The raid was cancelled',
+          payload: { eventTitle: 'Thursday Raid Night' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const eventField = json.fields?.find((f) => f.name === 'Event');
+      expect(eventField).toBeDefined();
+      expect(eventField?.value).toBe('Thursday Raid Night');
+    });
+
+    it('should include category label in footer for each notification type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-footer-1',
+          type: 'new_event',
+          title: 'New Event',
+          message: 'A new event was created',
+        },
+        'My Guild',
+      );
+
+      const json = embed.toJSON() as { footer: { text: string } };
+      expect(json.footer.text).toBe('My Guild \u00B7 New Event');
+    });
+
+    it('should set community name as author and category footer', async () => {
       const communityName = 'My Raid Guild';
       const { embed } = await service.buildNotificationEmbed(
         {
@@ -223,7 +287,7 @@ describe('DiscordNotificationEmbedService', () => {
         footer: { text: string };
       };
       expect(json.author.name).toBe(communityName);
-      expect(json.footer.text).toBe(communityName);
+      expect(json.footer.text).toBe('My Raid Guild \u00B7 Event Reminder');
     });
 
     it('should include emoji in title', async () => {
@@ -415,7 +479,7 @@ describe('DiscordNotificationEmbedService', () => {
         footer: { text: string };
       };
       expect(json.author.name).toBe('Raid Ledger');
-      expect(json.footer.text).toBe('Raid Ledger');
+      expect(json.footer.text).toBe('Raid Ledger \u00B7 Event Reminder');
     });
   });
 

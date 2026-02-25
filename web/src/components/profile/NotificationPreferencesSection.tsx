@@ -32,9 +32,29 @@ const NOTIFICATION_TYPE_META: {
         description: 'Activity for games you follow',
     },
     {
-        type: 'missed_event_nudge',
-        label: 'Missed Event Nudge',
-        description: 'Suggestions to update your game time',
+        type: 'event_cancelled',
+        label: 'Event Cancelled',
+        description: 'When an event you signed up for is cancelled',
+    },
+    {
+        type: 'event_rescheduled',
+        label: 'Event Rescheduled',
+        description: 'When an event you signed up for is rescheduled',
+    },
+    {
+        type: 'bench_promoted',
+        label: 'Bench Promoted',
+        description: 'When you are moved from bench to the active roster',
+    },
+    {
+        type: 'roster_reassigned',
+        label: 'Roster Reassignment',
+        description: 'When your roster slot or role is changed',
+    },
+    {
+        type: 'tentative_displaced',
+        label: 'Tentative Displaced',
+        description: 'When a confirmed player takes your tentative slot',
     },
 ];
 
