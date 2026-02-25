@@ -14,6 +14,23 @@ Process stories in the confirmed batch order. For each batch:
    cd ../Raid-Ledger--rok-<num> && npm install --legacy-peer-deps && npm run build -w packages/contract
    ```
 
+## 5a.5. Viability Check (before spawning dev agents)
+
+**For each story, verify the target components/modules actually exist in the codebase before spawning a dev agent.** This prevents wasted agent turns on stories that reference nonexistent code.
+
+```bash
+# Example checks — adapt to the story's targets:
+ls ../Raid-Ledger--rok-<num>/web/src/components/<target-component>/
+ls ../Raid-Ledger--rok-<num>/api/src/<target-module>/
+```
+
+If a story's target doesn't exist:
+- **New feature:** Verify the parent directory and any consuming components exist
+- **Bug fix / refactor:** Verify the file/component being fixed actually exists
+- **If the target is completely absent (wrong path, renamed, deleted):** Flag to operator before spawning dev. Don't waste tokens on an impossible task.
+
+---
+
 ## 5b. Create Agent Team
 
 ```
