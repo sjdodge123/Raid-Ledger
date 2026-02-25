@@ -11,6 +11,7 @@ import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { BossEncountersController } from './boss-encounters.controller';
 import { BossEncountersService } from './boss-encounters.service';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
+import { BossDataRefreshService } from './boss-data-refresh.service';
 import { QuestProgressController } from './quest-progress.controller';
 import { QuestProgressService } from './quest-progress.service';
 import { SettingsModule } from '../../settings/settings.module';
@@ -37,6 +38,7 @@ import { WOW_COMMON_MANIFEST } from './manifest';
     DungeonQuestSeeder,
     BossEncountersService,
     BossEncounterSeeder,
+    BossDataRefreshService,
     QuestProgressService,
   ],
   exports: [

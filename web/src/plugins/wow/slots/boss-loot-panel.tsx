@@ -5,7 +5,7 @@ import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { WowItemCard } from '../components/wow-item-card';
 import { ItemComparison } from '../components/item-comparison';
-import { getWowheadItemUrl, getWowheadDataSuffix, getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
+import { getWowheadItemUrlForExpansion, getWowheadDataSuffixForExpansion, getWowheadNpcSearchUrl } from '../lib/wowhead-urls';
 import './boss-loot-panel.css';
 import './quest-prep-panel.css';
 
@@ -39,7 +39,8 @@ const LOOT_TO_EQUIP_SLOT: Record<string, string> = {
 function slugToVariant(gameSlug?: string): string {
     switch (gameSlug) {
         case 'wow-classic-anniversary':
-            return 'classic_anniversary';
+        case 'world-of-warcraft-classic':
+            return 'classic';
         case 'wow-classic':
         case 'wow-cata':
             return 'classic';
@@ -308,7 +309,6 @@ function BossLootBody({
     hasCharacter: boolean;
 }) {
     const [filterUsable, setFilterUsable] = useState(false);
-    const wowheadSuffix = getWowheadDataSuffix(wowheadVariant);
 
     if (isLoading) {
         return (
@@ -379,8 +379,8 @@ function BossLootBody({
                                 slot={item.slot}
                                 itemLevel={item.itemLevel}
                                 iconUrl={item.iconUrl}
-                                wowheadUrl={getWowheadItemUrl(item.itemId, wowheadVariant)}
-                                wowheadData={`item=${item.itemId}&${wowheadSuffix}`}
+                                wowheadUrl={getWowheadItemUrlForExpansion(item.itemId, item.expansion)}
+                                wowheadData={`item=${item.itemId}&${getWowheadDataSuffixForExpansion(item.expansion)}`}
                             />
 
                             {/* Item comparison with equipped item -- same pattern as quest prep */}
