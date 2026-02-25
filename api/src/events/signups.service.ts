@@ -697,7 +697,7 @@ export class SignupsService {
 
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'roached_out' })
+      .set({ status: 'roached_out', roachedOutAt: new Date() })
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(
@@ -928,7 +928,7 @@ export class SignupsService {
     }
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'roached_out' })
+      .set({ status: 'roached_out', roachedOutAt: new Date() })
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(`User ${userId} canceled signup for event ${eventId} (roached_out)`);

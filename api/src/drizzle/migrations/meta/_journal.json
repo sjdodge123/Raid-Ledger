@@ -484,6 +484,13 @@
       "when": 1772053483941,
       "tag": "0068_third_rawhide_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1772054740917,
+      "tag": "0069_magical_meltdown",
+      "breakpoints": true
     }
   ]
 }

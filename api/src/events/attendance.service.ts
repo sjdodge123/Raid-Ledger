@@ -121,8 +121,13 @@ export class AttendanceService {
 
   /**
    * Get attendance summary for a past event (ROK-421).
+   * Only the event creator or an admin/operator can view attendance.
    */
-  async getAttendanceSummary(eventId: number): Promise<AttendanceSummaryDto> {
+  async getAttendanceSummary(
+    eventId: number,
+    actorId: number,
+    isAdmin: boolean,
+  ): Promise<AttendanceSummaryDto> {
     // Verify event exists
     const [event] = await this.db
       .select()
@@ -134,7 +139,14 @@ export class AttendanceService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get all non-roached signups with user and character data
+    // Only event creator or admin/operator can view attendance
+    if (event.creatorId !== actorId && !isAdmin) {
+      throw new ForbiddenException(
+        'Only the event creator or an admin can view attendance',
+      );
+    }
+
+    // Get all signups (including roached_out — they appear as excused by default)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -143,16 +155,32 @@ export class AttendanceService {
         schema.characters,
         eq(schema.eventSignups.characterId, schema.characters.id),
       )
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          ne(schema.eventSignups.status, 'roached_out'),
-        ),
-      )
+      .where(eq(schema.eventSignups.eventId, eventId))
       .orderBy(schema.eventSignups.signedUpAt);
+
+    const eventStartTime = event.duration[0];
 
     const signupResponses: SignupResponseDto[] = signups.map((row) => {
       const isAnonymous = !row.event_signups.userId;
+      const isRoachedOut = row.event_signups.status === 'roached_out';
+
+      // Roached-out signups: auto-classify based on timing if not manually overridden
+      // AC#8: <24h before event → no_show | AC#9: ≥24h before event → excused
+      let resolvedAttendance: AttendanceStatus | null =
+        (row.event_signups.attendanceStatus as AttendanceStatus) ?? null;
+
+      if (isRoachedOut && !resolvedAttendance) {
+        const roachedAt = row.event_signups.roachedOutAt;
+        if (roachedAt && eventStartTime) {
+          const hoursBeforeEvent =
+            (eventStartTime.getTime() - roachedAt.getTime()) / (1000 * 60 * 60);
+          resolvedAttendance = hoursBeforeEvent >= 24 ? 'excused' : 'no_show';
+        } else {
+          // No timestamp available (legacy data) — default to excused
+          resolvedAttendance = 'excused';
+        }
+      }
+
       if (isAnonymous) {
         return {
           id: row.event_signups.id,
@@ -178,8 +206,7 @@ export class AttendanceService {
             (row.event_signups.preferredRoles as
               | ('tank' | 'healer' | 'dps')[]
               | null) ?? null,
-          attendanceStatus:
-            (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
+          attendanceStatus: resolvedAttendance,
           attendanceRecordedAt:
             row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
         };
@@ -206,8 +233,7 @@ export class AttendanceService {
           (row.event_signups.preferredRoles as
             | ('tank' | 'healer' | 'dps')[]
             | null) ?? null,
-        attendanceStatus:
-          (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
+        attendanceStatus: resolvedAttendance,
         attendanceRecordedAt:
           row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
       };

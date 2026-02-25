@@ -480,6 +480,14 @@ export function EventDetailPage() {
                 />
             </div>
 
+            {/* ROK-421: Attendance tracker for past events (creator/admin/operator only) */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && canManageRoster && (
+                <AttendanceTracker
+                    eventId={eventId}
+                    isOrganizer={canManageRoster}
+                />
+            )}
+
             {/* ROK-335: Mobile Quick Info bar — key event info at a glance */}
             <div className="md:hidden event-detail-quick-info">
                 <div className="flex items-center justify-between gap-2">
@@ -834,14 +842,6 @@ export function EventDetailPage() {
                     </div>
                 )}
             </div>
-
-            {/* ROK-421: Attendance tracker for past events */}
-            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && (
-                <AttendanceTracker
-                    eventId={eventId}
-                    isOrganizer={canManageRoster}
-                />
-            )}
 
             {/* Plugin: content instance details (e.g. WoW dungeon quest prep) */}
             <PluginSlot

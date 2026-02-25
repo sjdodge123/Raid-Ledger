@@ -43,6 +43,7 @@ describe('AttendanceService', () => {
     preferredRoles: null,
     attendanceStatus: null,
     attendanceRecordedAt: null,
+    roachedOutAt: null,
     discordUserId: null,
     discordUsername: null,
     discordAvatarHash: null,
@@ -294,7 +295,7 @@ describe('AttendanceService', () => {
         }),
       });
 
-      await expect(service.getAttendanceSummary(999)).rejects.toThrow(
+      await expect(service.getAttendanceSummary(999, 10, true)).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -357,7 +358,7 @@ describe('AttendanceService', () => {
         }),
       });
 
-      const result = await service.getAttendanceSummary(1);
+      const result = await service.getAttendanceSummary(1, 10, true);
 
       expect(result).toMatchObject({
         eventId: 1,

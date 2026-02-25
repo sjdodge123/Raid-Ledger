@@ -538,13 +538,19 @@ export class EventsController {
 
   /**
    * Get attendance summary for an event.
-   * Public endpoint.
+   * Requires authentication. Only event creator or admin/operator.
    */
   @Get(':id/attendance')
+  @UseGuards(AuthGuard('jwt'))
   async getAttendanceSummary(
     @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
   ): Promise<AttendanceSummaryDto> {
-    return this.attendanceService.getAttendanceSummary(eventId);
+    return this.attendanceService.getAttendanceSummary(
+      eventId,
+      req.user.id,
+      isOperatorOrAdmin(req.user.role),
+    );
   }
 
   // ============================================================
