@@ -4,7 +4,8 @@
  * Previously "Danger Zone" — verifies delete account flow and guards.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AccountPanel } from './account-panel';
 import { renderWithProviders } from '../../test/render-helpers';
 import * as useAuthHook from '../../hooks/use-auth';
@@ -99,75 +100,84 @@ describe('AccountPanel (ROK-359)', () => {
         expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
     });
 
-    it('opens confirmation modal when Delete My Account is clicked', () => {
+    it('opens confirmation modal when Delete My Account is clicked', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         expect(screen.getByTestId('modal')).toBeInTheDocument();
     });
 
-    it('modal shows username in confirmation label', () => {
+    it('modal shows username in confirmation label', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         expect(screen.getByText('TestUser')).toBeInTheDocument();
     });
 
-    it('confirmation input is empty initially', () => {
+    it('confirmation input is empty initially', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         const input = screen.getByLabelText(/type.*to confirm/i);
         expect(input).toHaveValue('');
     });
 
-    it('delete button in modal is disabled when confirmation name does not match', () => {
+    it('delete button in modal is disabled when confirmation name does not match', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         // Find the submit button inside modal (last "Delete My Account" button)
         const deleteButtons = screen.getAllByRole('button', { name: /delete my account/i });
         const modalDeleteBtn = deleteButtons[deleteButtons.length - 1];
         expect(modalDeleteBtn).toBeDisabled();
     });
 
-    it('delete button in modal is enabled when confirmation name matches username', () => {
+    it('delete button in modal is enabled when confirmation name matches username', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         const input = screen.getByLabelText(/type.*to confirm/i);
-        fireEvent.change(input, { target: { value: 'TestUser' } });
+        await user.type(input, 'TestUser');
         const deleteButtons = screen.getAllByRole('button', { name: /delete my account/i });
         const modalDeleteBtn = deleteButtons[deleteButtons.length - 1];
         expect(modalDeleteBtn).not.toBeDisabled();
     });
 
-    it('closes modal when Cancel is clicked', () => {
+    it('closes modal when Cancel is clicked', async () => {
+        const user = userEvent.setup();
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         expect(screen.getByTestId('modal')).toBeInTheDocument();
-        fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+        await user.click(screen.getByRole('button', { name: /cancel/i }));
         expect(screen.queryByTestId('modal')).not.toBeInTheDocument();
     });
 
-    it('uses displayName for confirmation when available', () => {
+    it('uses displayName for confirmation when available', async () => {
+        const user = userEvent.setup();
         vi.mocked(useAuthHook.useAuth).mockReturnValue({
             user: { ...mockUser, displayName: 'My Display Name' },
             isAuthenticated: true,
             logout: mockLogout,
         } as any);
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         expect(screen.getByText('My Display Name')).toBeInTheDocument();
     });
 
-    it('enables delete button only when exact username is typed', () => {
+    it('enables delete button only when exact username is typed', async () => {
+        const user = userEvent.setup();
         vi.mocked(apiClient.deleteMyAccount).mockResolvedValue(undefined as any);
         renderWithProviders(<AccountPanel />);
-        fireEvent.click(screen.getByRole('button', { name: /delete my account/i }));
+        await user.click(screen.getByRole('button', { name: /delete my account/i }));
         const input = screen.getByLabelText(/type.*to confirm/i);
         // Wrong name → disabled
-        fireEvent.change(input, { target: { value: 'WrongName' } });
+        await user.type(input, 'WrongName');
         const deleteButtons = screen.getAllByRole('button', { name: /delete my account/i });
         const modalDeleteBtn = deleteButtons[deleteButtons.length - 1];
         expect(modalDeleteBtn).toBeDisabled();
-        // Correct name → enabled
-        fireEvent.change(input, { target: { value: 'TestUser' } });
+        // Clear and type correct name → enabled
+        await user.clear(input);
+        await user.type(input, 'TestUser');
         expect(modalDeleteBtn).not.toBeDisabled();
     });
 });
