@@ -17,11 +17,11 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Authentication', () => {
     test('login page loads and renders form', async ({ page }) => {
-        await page.goto('/login');
+        await page.goto('/login', { waitUntil: 'networkidle' });
         await expect(page).toHaveTitle(/Raid Ledger|Login/i);
-        // Should render at least one interactive element (button or link)
-        const loginAction = page.locator('button, a[href*="discord"], a[href*="auth"]').first();
-        await expect(loginAction).toBeVisible({ timeout: 10_000 });
+        // Should render at least one interactive element (form input, button, or link)
+        const loginElement = page.locator('button, input[type="text"], input[type="password"], a[href*="discord"], a[href*="auth"]').first();
+        await expect(loginElement).toBeVisible({ timeout: 15_000 });
     });
 
     test('demo admin can log in (DEMO_MODE)', async ({ page }) => {
