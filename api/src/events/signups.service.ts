@@ -31,6 +31,7 @@ import type {
   RosterRole,
   CreateDiscordSignupDto,
   UpdateSignupStatusDto,
+  AttendanceStatus,
 } from '@raid-ledger/contract';
 
 /**
@@ -1040,7 +1041,7 @@ export class SignupsService {
           .confirmationStatus as ConfirmationStatus,
         status: (row.event_signups.status as SignupStatus) ?? 'signed_up',
         preferredRoles: (row.event_signups.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
-        attendanceStatus: (row.event_signups.attendanceStatus as import('@raid-ledger/contract').AttendanceStatus) ?? null,
+        attendanceStatus: (row.event_signups.attendanceStatus as AttendanceStatus) ?? null,
         attendanceRecordedAt: row.event_signups.attendanceRecordedAt?.toISOString() ?? null,
       };
     });
@@ -1119,7 +1120,7 @@ export class SignupsService {
       confirmationStatus: signup.confirmationStatus as ConfirmationStatus,
       status: (signup.status as SignupStatus) ?? 'signed_up',
       preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
-      attendanceStatus: (signup.attendanceStatus as import('@raid-ledger/contract').AttendanceStatus) ?? null,
+      attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
       attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
   }
@@ -1150,7 +1151,7 @@ export class SignupsService {
       discordUsername: signup.discordUsername,
       discordAvatarHash: signup.discordAvatarHash,
       preferredRoles: (signup.preferredRoles as ('tank' | 'healer' | 'dps')[] | null) ?? null,
-      attendanceStatus: (signup.attendanceStatus as import('@raid-ledger/contract').AttendanceStatus) ?? null,
+      attendanceStatus: (signup.attendanceStatus as AttendanceStatus) ?? null,
       attendanceRecordedAt: signup.attendanceRecordedAt?.toISOString() ?? null,
     };
   }
