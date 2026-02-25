@@ -18,6 +18,7 @@ import type {
   UpdatePugSlotDto,
   PugSlotResponseDto,
   PugSlotListResponseDto,
+  PugRole,
 } from '@raid-ledger/contract';
 
 /** Characters for invite codes — no ambiguous chars (0/O, 1/l/I) */
@@ -396,7 +397,7 @@ export class PugsService {
       discordUsername: row.discordUsername ?? null,
       discordUserId: row.discordUserId ?? null,
       discordAvatarHash: row.discordAvatarHash ?? null,
-      role: row.role as 'tank' | 'healer' | 'dps',
+      role: row.role as PugRole,
       class: row.class ?? null,
       spec: row.spec ?? null,
       notes: row.notes ?? null,
