@@ -29,14 +29,9 @@ export function ProfileLayout() {
         }
     }, [searchParams, setSearchParams, refetch]);
 
+    // Redirect bare /profile to the default panel
     if (location.pathname === '/profile' || location.pathname === '/profile/') {
         return <Navigate to="/profile/identity" replace />;
-    }
-    if (location.pathname === '/profile/preferences' || location.pathname === '/profile/preferences/') {
-        return <Navigate to="/profile/preferences/appearance" replace />;
-    }
-    if (location.pathname === '/profile/gaming' || location.pathname === '/profile/gaming/') {
-        return <Navigate to="/profile/gaming/game-time" replace />;
     }
 
     if (authLoading) {

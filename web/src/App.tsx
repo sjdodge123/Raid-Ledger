@@ -74,18 +74,13 @@ const MyEventsPage = lazyWithRetry(() => import('./pages/my-events-page').then(m
 const UserProfilePage = lazyWithRetry(() => import('./pages/user-profile-page').then(m => ({ default: m.UserProfilePage })));
 const OnboardingWizardPage = lazyWithRetry(() => import('./pages/onboarding-wizard-page').then(m => ({ default: m.OnboardingWizardPage })));
 
-// -- Lazy loaded profile panels --
+// -- Lazy loaded profile panels (ROK-359 consolidated) --
 const ProfileLayout = lazyWithRetry(() => import('./components/profile/profile-layout').then(m => ({ default: m.ProfileLayout })));
 const IdentityPanel = lazyWithRetry(() => import('./pages/profile/identity-panel').then(m => ({ default: m.IdentityPanel })));
-const ProfileDiscordPanel = lazyWithRetry(() => import('./pages/profile/discord-panel').then(m => ({ default: m.ProfileDiscordPanel })));
-const AvatarPanel = lazyWithRetry(() => import('./pages/profile/avatar-panel').then(m => ({ default: m.AvatarPanel })));
-const AppearancePanel = lazyWithRetry(() => import('./pages/profile/appearance-panel').then(m => ({ default: m.AppearancePanel })));
-const TimezonePanel = lazyWithRetry(() => import('./pages/profile/timezone-panel').then(m => ({ default: m.TimezonePanel })));
+const PreferencesPanel = lazyWithRetry(() => import('./pages/profile/preferences-panel').then(m => ({ default: m.PreferencesPanel })));
 const NotificationsPanel = lazyWithRetry(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
-const ProfileGameTimePanel = lazyWithRetry(() => import('./pages/profile/game-time-panel').then(m => ({ default: m.ProfileGameTimePanel })));
-const CharactersPanel = lazyWithRetry(() => import('./pages/profile/characters-panel').then(m => ({ default: m.CharactersPanel })));
-const WatchedGamesPanel = lazyWithRetry(() => import('./pages/profile/watched-games-panel').then(m => ({ default: m.WatchedGamesPanel })));
-const DeleteAccountPanel = lazyWithRetry(() => import('./pages/profile/delete-account-panel').then(m => ({ default: m.DeleteAccountPanel })));
+const GamingPanel = lazyWithRetry(() => import('./pages/profile/gaming-panel').then(m => ({ default: m.GamingPanel })));
+const AccountPanel = lazyWithRetry(() => import('./pages/profile/account-panel').then(m => ({ default: m.AccountPanel })));
 
 // -- Lazy loaded admin panels --
 const AdminSettingsLayout = lazyWithRetry(() => import('./components/admin/admin-settings-layout').then(m => ({ default: m.AdminSettingsLayout })));
@@ -97,7 +92,6 @@ const DiscordPanel = lazyWithRetry(() => import('./pages/admin/discord-panel').t
 const IgdbPanel = lazyWithRetry(() => import('./pages/admin/igdb-panel').then(m => ({ default: m.IgdbPanel })));
 const DiscordBotPanel = lazyWithRetry(() => import('./pages/admin/discord-bot-panel').then(m => ({ default: m.DiscordBotPanel })));
 const PluginsPanel = lazyWithRetry(() => import('./pages/admin/plugins-panel').then(m => ({ default: m.PluginsPanel })));
-const BrandingPanel = lazyWithRetry(() => import('./pages/admin/branding-panel').then(m => ({ default: m.BrandingPanel })));
 const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
 const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
 const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
@@ -185,20 +179,28 @@ function App() {
                 <Route path="/events/:id/edit" element={<EditEventPage />} />
                 {/* ROK-181: Public user profiles */}
                 <Route path="/users/:userId" element={<UserProfilePage />} />
-                {/* ROK-290: Profile page with sidebar navigation */}
+
+                {/* ROK-359: Consolidated Profile pages */}
                 <Route path="/profile" element={<ProfileLayout />}>
                   <Route path="identity" element={<IdentityPanel />} />
-                  <Route path="identity/discord" element={<ProfileDiscordPanel />} />
-                  <Route path="identity/avatar" element={<AvatarPanel />} />
-                  <Route path="preferences/appearance" element={<AppearancePanel />} />
-                  <Route path="preferences/timezone" element={<TimezonePanel />} />
-                  <Route path="preferences/notifications" element={<NotificationsPanel />} />
-                  <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
-                  <Route path="gaming/characters" element={<CharactersPanel />} />
-                  <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
-                  <Route path="danger/delete-account" element={<DeleteAccountPanel />} />
+                  <Route path="preferences" element={<PreferencesPanel />} />
+                  <Route path="notifications" element={<NotificationsPanel />} />
+                  <Route path="gaming" element={<GamingPanel />} />
+                  <Route path="account" element={<AccountPanel />} />
+
+                  {/* ROK-359: Redirects for old bookmarked profile paths */}
+                  <Route path="identity/discord" element={<Navigate to="/profile/identity" replace />} />
+                  <Route path="identity/avatar" element={<Navigate to="/profile/identity" replace />} />
+                  <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
+                  <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
+                  <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
+                  <Route path="gaming/game-time" element={<Navigate to="/profile/gaming" replace />} />
+                  <Route path="gaming/characters" element={<Navigate to="/profile/gaming" replace />} />
+                  <Route path="gaming/watched-games" element={<Navigate to="/profile/gaming" replace />} />
+                  <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
                 </Route>
-                {/* ROK-281: Admin Settings with always-expanded sidebar navigation */}
+
+                {/* ROK-359: Consolidated Admin Settings */}
                 <Route path="/admin/settings" element={<AdminSettingsLayout />}>
                   <Route path="general" element={<GeneralPanel />} />
                   <Route path="general/roles" element={<RolesPanel />} />
@@ -211,7 +213,9 @@ function App() {
                   <Route path="integrations/channel-bindings" element={<DiscordBindingsPanel />} />
                   <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
                   <Route path="plugins" element={<PluginsPanel />} />
-                  <Route path="appearance" element={<BrandingPanel />} />
+
+                  {/* ROK-359: Redirects for old bookmarked admin paths */}
+                  <Route path="appearance" element={<Navigate to="/admin/settings/general" replace />} />
                 </Route>
               </Route>
             </Routes>

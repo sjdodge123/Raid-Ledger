@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { useSystemStatus } from '../../hooks/use-system-status';
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { useSeenAdminSections } from '../../hooks/use-seen-admin-sections';
 import { NewBadge } from '../ui/new-badge';
@@ -22,6 +23,7 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
     const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
+    const { data: systemStatus } = useSystemStatus();
 
     const coreIntegrations = buildCoreIntegrationItems({
         discord: {
@@ -39,7 +41,9 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations, {
+        demoMode: systemStatus?.demoMode ?? false,
+    });
 
     if (!isOpen) return null;
 
