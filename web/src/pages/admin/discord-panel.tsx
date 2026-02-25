@@ -24,7 +24,7 @@ type DiscordTab = 'auth' | 'bot' | 'bindings';
 interface TabDef {
     id: DiscordTab;
     label: string;
-    status: 'online' | 'offline' | 'loading';
+    status?: 'online' | 'offline' | 'loading';
 }
 
 /**
@@ -57,8 +57,6 @@ export function DiscordPanel() {
         {
             id: 'bindings',
             label: 'Channel Bindings',
-            status: discordBotStatus.isLoading ? 'loading'
-                : (isBotConnected && isBotConfigured) ? 'online' : 'offline',
         },
     ];
 
@@ -107,7 +105,7 @@ export function DiscordPanel() {
                                 : 'text-muted hover:text-foreground border-transparent'
                         }`}
                     >
-                        {tab.status !== 'loading' && (
+                        {tab.status && tab.status !== 'loading' && (
                             <span
                                 className={`w-2 h-2 rounded-full shrink-0 ${
                                     tab.status === 'online' ? 'bg-emerald-400' : 'bg-red-400'
