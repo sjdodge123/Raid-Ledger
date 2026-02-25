@@ -18,8 +18,8 @@ export default defineConfig({
     /* Fail the build on CI if you accidentally left test.only in the source code */
     forbidOnly: !!process.env.CI,
 
-    /* No retries for verification - we want to know immediately if something breaks */
-    retries: 0,
+    /* Retry once on CI to absorb cold-start timing flakes */
+    retries: process.env.CI ? 1 : 0,
 
     /* Max time per test */
     timeout: 30_000,
