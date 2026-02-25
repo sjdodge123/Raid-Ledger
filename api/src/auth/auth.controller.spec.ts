@@ -1,5 +1,7 @@
 /**
- * Unit tests for AuthController — focusing on POST /auth/redeem-intent (ROK-137).
+ * Unit tests for AuthController — focusing on POST /auth/redeem-intent (ROK-137)
+ * and GET /auth/me (ROK-352).
+ * Discord routes have been moved to DiscordAuthController (ROK-267).
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
@@ -8,12 +10,8 @@ import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
 import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
-import { ConfigService } from '@nestjs/config';
-import { JwtService } from '@nestjs/jwt';
-import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { UserRole } from '@raid-ledger/contract';
 
 interface AuthenticatedRequest {
@@ -44,12 +42,6 @@ describe('AuthController — redeemIntent', () => {
     relinkDiscord: jest.Mock;
   };
   let mockAuthService: { login: jest.Mock };
-  let mockConfigService: { get: jest.Mock };
-  let mockJwtService: { verify: jest.Mock; sign: jest.Mock };
-  let mockSettingsService: {
-    getDiscordOAuthConfig: jest.Mock;
-    getBranding: jest.Mock;
-  };
   let mockPreferencesService: {
     getUserPreference: jest.Mock;
     getUserPreferences: jest.Mock;
@@ -99,17 +91,6 @@ describe('AuthController — redeemIntent', () => {
     mockAuthService = {
       login: jest.fn().mockReturnValue({ access_token: 'mock.jwt.token' }),
     };
-    mockConfigService = {
-      get: jest.fn().mockReturnValue('http://localhost:3000'),
-    };
-    mockJwtService = {
-      verify: jest.fn().mockReturnValue({ sub: 1 }),
-      sign: jest.fn().mockReturnValue('mock.jwt.token'),
-    };
-    mockSettingsService = {
-      getDiscordOAuthConfig: jest.fn(),
-      getBranding: jest.fn(),
-    };
     mockPreferencesService = {
       getUserPreference: jest.fn().mockResolvedValue(null),
       getUserPreferences: jest.fn().mockResolvedValue([]),
@@ -128,11 +109,7 @@ describe('AuthController — redeemIntent', () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: PreferencesService, useValue: mockPreferencesService },
         { provide: SignupsService, useValue: mockSignupsService },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: JwtService, useValue: mockJwtService },
-        { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: REDIS_CLIENT,
           useValue: {
@@ -356,12 +333,6 @@ describe('AuthController — getProfile (ROK-352)', () => {
     updateStatus: jest.Mock;
     cancelByDiscordUser: jest.Mock;
   };
-  let mockConfigService: { get: jest.Mock };
-  let mockJwtService: { verify: jest.Mock; sign: jest.Mock };
-  let mockSettingsService: {
-    getDiscordOAuthConfig: jest.Mock;
-    getBranding: jest.Mock;
-  };
   let mockCharactersService: {
     findAllForUser: jest.Mock;
     getAvatarUrlByName: jest.Mock;
@@ -380,11 +351,7 @@ describe('AuthController — getProfile (ROK-352)', () => {
         { provide: UsersService, useValue: mockUsersService },
         { provide: PreferencesService, useValue: mockPreferencesService },
         { provide: SignupsService, useValue: mockSignupsService },
-        { provide: ConfigService, useValue: mockConfigService },
-        { provide: JwtService, useValue: mockJwtService },
-        { provide: SettingsService, useValue: mockSettingsService },
         { provide: CharactersService, useValue: mockCharactersService },
-        { provide: EventEmitter2, useValue: { emit: jest.fn() } },
         {
           provide: REDIS_CLIENT,
           useValue: {
@@ -434,17 +401,6 @@ describe('AuthController — getProfile (ROK-352)', () => {
       signupDiscord: jest.fn(),
       updateStatus: jest.fn(),
       cancelByDiscordUser: jest.fn(),
-    };
-    mockConfigService = {
-      get: jest.fn().mockReturnValue('http://localhost:3000'),
-    };
-    mockJwtService = {
-      verify: jest.fn().mockReturnValue({ sub: 1 }),
-      sign: jest.fn(),
-    };
-    mockSettingsService = {
-      getDiscordOAuthConfig: jest.fn(),
-      getBranding: jest.fn(),
     };
     mockCharactersService = {
       findAllForUser: jest.fn().mockResolvedValue({ data: [] }),

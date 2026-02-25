@@ -22,19 +22,10 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
+    const { igdbStatus } = useAdminSettings();
     const { data: systemStatus } = useSystemStatus();
 
     const coreIntegrations = buildCoreIntegrationItems({
-        discord: {
-            configured: oauthStatus.data?.configured ?? false,
-            loading: oauthStatus.isLoading,
-        },
-        discordBot: {
-            connected: discordBotStatus.data?.connected ?? false,
-            configured: discordBotStatus.data?.configured ?? false,
-            loading: discordBotStatus.isLoading,
-        },
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
             loading: igdbStatus.isLoading,
@@ -48,7 +39,7 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     if (!isOpen) return null;
 
     return (
-        <nav className="w-full h-full overflow-y-auto py-4 pr-2" aria-label="Admin settings navigation">
+        <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Admin settings navigation">
             <div className="space-y-4">
                 {sections.map((section) => (
                     <SidebarSection

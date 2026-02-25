@@ -469,19 +469,10 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
  */
 function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const { plugins } = usePluginAdmin();
-    const { oauthStatus, igdbStatus, discordBotStatus } = useAdminSettings();
+    const { igdbStatus } = useAdminSettings();
     const { data: systemStatus } = useSystemStatus();
 
     const coreIntegrations = buildCoreIntegrationItems({
-        discord: {
-            configured: oauthStatus.data?.configured ?? false,
-            loading: oauthStatus.isLoading,
-        },
-        discordBot: {
-            connected: discordBotStatus.data?.connected ?? false,
-            configured: discordBotStatus.data?.configured ?? false,
-            loading: discordBotStatus.isLoading,
-        },
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
             loading: igdbStatus.isLoading,

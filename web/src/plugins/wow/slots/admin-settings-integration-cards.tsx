@@ -6,7 +6,7 @@ import { useNewBadge } from '../../../hooks/use-new-badge';
 import { NewBadge } from '../../../components/ui/new-badge';
 import { getPluginBadge } from '../../plugin-registry';
 
-export function BlizzardIntegrationSlot() {
+export function BlizzardIntegrationSlot({ pluginSlug }: { pluginSlug?: string }) {
     const { blizzardStatus, updateBlizzard, testBlizzard, clearBlizzard } = useAdminSettings();
     const { isNew, markSeen } = useNewBadge('integration-seen:blizzard-api');
 
@@ -14,6 +14,8 @@ export function BlizzardIntegrationSlot() {
     const [blizzardClientSecret, setBlizzardClientSecret] = useState('');
     const [showBlizzardSecret, setShowBlizzardSecret] = useState(false);
     const [blizzardTestResult, setBlizzardTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    if (pluginSlug && pluginSlug !== 'blizzard') return null;
 
     const handleBlizzardSave = async (e: React.FormEvent) => {
         e.preventDefault();

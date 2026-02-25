@@ -8,7 +8,6 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService, ConfigModule } from '@nestjs/config';
 
-import { DynamicDiscordStrategy } from './dynamic-discord.strategy';
 import { JwtStrategy } from './jwt.strategy';
 import { AuthController } from './auth.controller';
 import { LocalAuthController } from './local-auth.controller';
@@ -21,9 +20,8 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { SessionCleanupService } from './session-cleanup.service';
 
 /**
- * Auth module with dynamic Discord OAuth support.
- * Discord strategy now loads config from database via SettingsService,
- * allowing hot-reload without container restarts.
+ * Auth module — core authentication logic (JWT, local auth, intent tokens).
+ * Discord OAuth strategy has been extracted to DiscordModule (ROK-267).
  */
 @Module({
   imports: [
@@ -51,7 +49,6 @@ import { SessionCleanupService } from './session-cleanup.service';
     LocalAuthService,
     MagicLinkService,
     IntentTokenService,
-    DynamicDiscordStrategy,
     JwtStrategy,
     SessionCleanupService,
   ],
@@ -60,7 +57,6 @@ import { SessionCleanupService } from './session-cleanup.service';
     LocalAuthService,
     MagicLinkService,
     IntentTokenService,
-    DynamicDiscordStrategy,
   ],
 })
 export class AuthModule {}

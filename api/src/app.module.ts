@@ -19,6 +19,7 @@ import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
+import { DiscordModule } from './plugins/discord';
 import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
 import { RelayModule } from './relay/relay.module';
@@ -54,6 +55,7 @@ import { BackupModule } from './backup/backup.module';
     SettingsModule,
     NotificationModule,
     WowCommonModule,
+    DiscordModule,
     RelayModule,
     FeedbackModule,
     VersionModule,

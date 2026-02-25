@@ -27,6 +27,7 @@ describe('SystemController', () => {
     };
     mockPluginRegistry = {
       getActiveSlugsSync: jest.fn().mockReturnValue(new Set<string>()),
+      getAdaptersForExtensionPoint: jest.fn().mockReturnValue(new Map()),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -124,6 +125,76 @@ describe('SystemController', () => {
       const result = await controller.getStatus();
 
       expect(result.activePlugins).toEqual([]);
+    });
+
+    it('should include authProviders from configured auth adapters (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        true,
+      );
+
+      const mockProvider = {
+        providerKey: 'discord',
+        getLoginMethod: () => ({
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+        }),
+        isConfigured: jest.fn().mockResolvedValue(true),
+      };
+
+      (
+        mockPluginRegistry.getAdaptersForExtensionPoint as jest.Mock
+      ).mockReturnValue(new Map([['discord', mockProvider]]));
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([
+        {
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+        },
+      ]);
+    });
+
+    it('should exclude unconfigured auth providers from authProviders (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const mockProvider = {
+        providerKey: 'discord',
+        getLoginMethod: () => ({
+          key: 'discord',
+          label: 'Continue with Discord',
+          icon: 'discord',
+          loginPath: '/auth/discord',
+        }),
+        isConfigured: jest.fn().mockResolvedValue(false),
+      };
+
+      (
+        mockPluginRegistry.getAdaptersForExtensionPoint as jest.Mock
+      ).mockReturnValue(new Map([['discord', mockProvider]]));
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([]);
+    });
+
+    it('should return empty authProviders when no auth adapters registered (ROK-267)', async () => {
+      (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+      (mockSettingsService.isDiscordConfigured as jest.Mock).mockResolvedValue(
+        false,
+      );
+
+      const result = await controller.getStatus();
+
+      expect(result.authProviders).toEqual([]);
     });
   });
 });

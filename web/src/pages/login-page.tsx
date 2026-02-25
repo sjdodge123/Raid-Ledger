@@ -6,12 +6,13 @@ import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
 import { consumeAuthRedirect } from '../components/auth';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
+import type { LoginMethodDto } from '@raid-ledger/contract';
 
 /**
- * Login page with Discord OAuth (primary) and local username/password options.
- * When Discord is configured, OAuth is shown prominently with local login
- * collapsed behind a toggle. For self-hosted deployments without Discord,
- * local auth is the primary option.
+ * Login page with pluggable auth providers and local username/password options.
+ * When auth providers are configured (e.g. Discord), OAuth is shown prominently
+ * with local login collapsed behind a toggle. For self-hosted deployments
+ * without providers, local auth is the primary option.
  */
 export function LoginPage() {
     const navigate = useNavigate();
@@ -26,6 +27,9 @@ export function LoginPage() {
     const [showLocalLogin, setShowLocalLogin] = useState(false);
 
     const isFirstRun = systemStatus?.isFirstRun ?? false;
+    const authProviders: LoginMethodDto[] = systemStatus?.authProviders ?? [];
+    const hasProviders = authProviders.length > 0;
+    // Backwards compat: also check discordConfigured for older API responses
     const discordConfigured = systemStatus?.discordConfigured ?? false;
     const communityName = systemStatus?.communityName || 'Raid Ledger';
     const communityLogoUrl = systemStatus?.communityLogoUrl
@@ -34,10 +38,10 @@ export function LoginPage() {
 
     // Auto-expand local login on first run so admin can see the credentials form
     useEffect(() => {
-        if (isFirstRun && discordConfigured) {
+        if (isFirstRun && (hasProviders || discordConfigured)) {
             setShowLocalLogin(true);
         }
-    }, [isFirstRun, discordConfigured]);
+    }, [isFirstRun, hasProviders, discordConfigured]);
 
     const handleLocalLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -100,13 +104,11 @@ export function LoginPage() {
         }
     };
 
-    const handleDiscordLogin = () => {
+    const handleProviderLogin = (provider: LoginMethodDto) => {
         // Show loading state during redirect
         setIsRedirecting(true);
-        // Save current redirect (if any was set before arriving at login)
-        // The ProtectedRoute would have already saved it, but we keep it intact
-        // Redirect to Discord OAuth
-        window.location.href = `${API_BASE_URL}/auth/discord`;
+        // Redirect to provider OAuth endpoint
+        window.location.href = `${API_BASE_URL}${provider.loginPath}`;
     };
 
     const localLoginForm = (
@@ -213,26 +215,31 @@ export function LoginPage() {
                         </p>
                     </div>
 
-                    {discordConfigured ? (
+                    {hasProviders ? (
                         <>
-                            {/* Primary Discord OAuth Button */}
-                            <button
-                                onClick={handleDiscordLogin}
-                                disabled={isRedirecting}
-                                className="w-full py-3.5 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#5865F2] focus:ring-offset-2 focus:ring-offset-slate-900"
-                            >
-                                {isRedirecting ? (
-                                    <>
-                                        <span className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
-                                        Redirecting to Discord...
-                                    </>
-                                ) : (
-                                    <>
-                                        <DiscordIcon className="w-5 h-5" />
-                                        Continue with Discord
-                                    </>
-                                )}
-                            </button>
+                            {/* Auth provider buttons (ROK-267) */}
+                            <div className="space-y-3">
+                                {authProviders.map((provider) => (
+                                    <button
+                                        key={provider.key}
+                                        onClick={() => handleProviderLogin(provider)}
+                                        disabled={isRedirecting}
+                                        className="w-full py-3.5 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#5865F2] focus:ring-offset-2 focus:ring-offset-slate-900"
+                                    >
+                                        {isRedirecting ? (
+                                            <>
+                                                <span className="w-5 h-5 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+                                                Redirecting...
+                                            </>
+                                        ) : (
+                                            <>
+                                                {provider.icon === 'discord' && <DiscordIcon className="w-5 h-5" />}
+                                                {provider.label}
+                                            </>
+                                        )}
+                                    </button>
+                                ))}
+                            </div>
 
                             {/* Toggle for local login */}
                             <div className="text-center mt-6">
@@ -258,7 +265,7 @@ export function LoginPage() {
                             )}
                         </>
                     ) : (
-                        /* Discord not configured: local form is primary */
+                        /* No providers configured: local form is primary */
                         localLoginForm
                     )}
 
