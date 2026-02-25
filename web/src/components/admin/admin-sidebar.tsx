@@ -128,14 +128,13 @@ export function SidebarNavItem({
     isActive: boolean;
     onNavigate?: () => void;
 }) {
-    const { isNew, markSeen } = useNewBadge(item.newBadgeKey ?? '');
+    const { isNew } = useNewBadge(item.newBadgeKey ?? '', isActive);
     const badge = item.pluginSlug ? getPluginBadge(item.pluginSlug) : undefined;
 
     return (
         <Link
             to={item.to}
             onClick={onNavigate}
-            onMouseEnter={item.newBadgeKey ? markSeen : undefined}
             title={item.pluginSource ? `Installed by ${item.pluginSource}` : undefined}
             className={`flex items-center gap-2 px-3 py-3 min-h-[44px] rounded-lg text-sm transition-colors ${isActive
                     ? 'text-emerald-400 bg-emerald-500/10 font-medium'
