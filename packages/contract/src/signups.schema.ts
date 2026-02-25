@@ -8,9 +8,13 @@ import { z } from 'zod';
 export const ConfirmationStatusSchema = z.enum(['pending', 'confirmed', 'changed']);
 export type ConfirmationStatus = z.infer<typeof ConfirmationStatusSchema>;
 
-/** Signup status for attendance intent (ROK-137) */
-export const SignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined']);
+/** Signup status for attendance intent (ROK-137, ROK-421) */
+export const SignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined', 'roached_out']);
 export type SignupStatus = z.infer<typeof SignupStatusSchema>;
+
+/** Post-event attendance status recorded by organizer (ROK-421) */
+export const AttendanceStatusSchema = z.enum(['attended', 'no_show', 'excused', 'unmarked']);
+export type AttendanceStatus = z.infer<typeof AttendanceStatusSchema>;
 
 /** Single signup user info with Discord avatar (ROK-194: includes characters for avatar resolution) */
 export const SignupUserSchema = z.object({
@@ -66,6 +70,9 @@ export const SignupResponseSchema = z.object({
     discordUserId: z.string().nullable().optional(),
     discordUsername: z.string().nullable().optional(),
     discordAvatarHash: z.string().nullable().optional(),
+    /** Post-event attendance tracking (ROK-421) */
+    attendanceStatus: AttendanceStatusSchema.nullable().optional(),
+    attendanceRecordedAt: z.string().datetime().nullable().optional(),
 });
 
 export type SignupResponseDto = z.infer<typeof SignupResponseSchema>;
@@ -155,3 +162,30 @@ export const RedeemIntentResponseSchema = z.object({
 });
 
 export type RedeemIntentResponseDto = z.infer<typeof RedeemIntentResponseSchema>;
+
+// ============================================================
+// Attendance Tracking Schemas (ROK-421)
+// ============================================================
+
+/** Request body for recording attendance on a single signup */
+export const RecordAttendanceSchema = z.object({
+    signupId: z.number(),
+    attendanceStatus: AttendanceStatusSchema,
+});
+
+export type RecordAttendanceDto = z.infer<typeof RecordAttendanceSchema>;
+
+/** Attendance summary for a past event */
+export const AttendanceSummarySchema = z.object({
+    eventId: z.number(),
+    totalSignups: z.number(),
+    attended: z.number(),
+    noShow: z.number(),
+    excused: z.number(),
+    unmarked: z.number(),
+    attendanceRate: z.number(),
+    noShowRate: z.number(),
+    signups: z.array(SignupResponseSchema),
+});
+
+export type AttendanceSummaryDto = z.infer<typeof AttendanceSummarySchema>;

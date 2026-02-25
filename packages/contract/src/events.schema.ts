@@ -198,6 +198,10 @@ export const DashboardStatsSchema = z.object({
     totalSignups: z.number(),
     averageFillRate: z.number(),
     eventsWithRosterGaps: z.number(),
+    /** ROK-421: Attendance rate across past events with recorded attendance */
+    attendanceRate: z.number().optional(),
+    /** ROK-421: No-show rate across past events with recorded attendance */
+    noShowRate: z.number().optional(),
 });
 
 export type DashboardStatsDto = z.infer<typeof DashboardStatsSchema>;

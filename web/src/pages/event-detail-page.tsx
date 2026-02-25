@@ -20,6 +20,7 @@ import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
+import { AttendanceTracker } from '../components/events/AttendanceTracker';
 import './event-detail-page.css';
 
 // ROK-343: Lazy load modals — only fetched when user triggers them
@@ -833,6 +834,14 @@ export function EventDetailPage() {
                     </div>
                 )}
             </div>
+
+            {/* ROK-421: Attendance tracker for past events */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && (
+                <AttendanceTracker
+                    eventId={eventId}
+                    isOrganizer={canManageRoster}
+                />
+            )}
 
             {/* Plugin: content instance details (e.g. WoW dungeon quest prep) */}
             <PluginSlot

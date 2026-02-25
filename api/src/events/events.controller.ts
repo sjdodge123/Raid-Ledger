@@ -17,6 +17,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import {
@@ -28,6 +29,7 @@ import {
   UpdateSignupStatusSchema,
   RescheduleEventSchema,
   CancelEventSchema,
+  RecordAttendanceSchema,
   CreatePugSlotSchema,
   UpdatePugSlotSchema,
   EventResponseDto,
@@ -43,6 +45,7 @@ import {
   PugSlotResponseDto,
   PugSlotListResponseDto,
   ShareEventResponseDto,
+  AttendanceSummaryDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -84,6 +87,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
+    private readonly attendanceService: AttendanceService,
     private readonly pugsService: PugsService,
     private readonly shareService: ShareService,
   ) {}
@@ -502,6 +506,45 @@ export class EventsController {
       );
     }
     return this.shareService.shareToDiscordChannels(eventId);
+  }
+
+  // ============================================================
+  // Attendance Tracking Endpoints (ROK-421)
+  // ============================================================
+
+  /**
+   * Record attendance for a signup on a past event.
+   * Requires authentication. Only event creator or admin.
+   */
+  @Patch(':id/attendance')
+  @UseGuards(AuthGuard('jwt'))
+  async recordAttendance(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<SignupResponseDto> {
+    try {
+      const dto = RecordAttendanceSchema.parse(body);
+      return this.attendanceService.recordAttendance(
+        eventId,
+        dto,
+        req.user.id,
+        isOperatorOrAdmin(req.user.role),
+      );
+    } catch (error) {
+      handleValidationError(error);
+    }
+  }
+
+  /**
+   * Get attendance summary for an event.
+   * Public endpoint.
+   */
+  @Get(':id/attendance')
+  async getAttendanceSummary(
+    @Param('id', ParseIntPipe) eventId: number,
+  ): Promise<AttendanceSummaryDto> {
+    return this.attendanceService.getAttendanceSummary(eventId);
   }
 
   // ============================================================
