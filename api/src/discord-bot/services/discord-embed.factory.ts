@@ -487,6 +487,134 @@ export class DiscordEmbedFactory {
     return row;
   }
 
+  // ================================================================
+  // Ad-Hoc Event Embeds (ROK-293)
+  // ================================================================
+
+  /**
+   * Build an embed for when an ad-hoc event spawns.
+   */
+  buildAdHocSpawnEmbed(
+    event: { id: number; title: string; gameName?: string },
+    participants: Array<{ discordUserId: string; discordUsername: string }>,
+    context: EmbedContext,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.LIVE_EVENT)
+      .setTitle(`🎮 ${event.title}`)
+      .setDescription(
+        `An ad-hoc session has started!` +
+          (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
+      )
+      .addFields({
+        name: '👥 Players',
+        value:
+          participants.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
+      })
+      .setTimestamp()
+      .setFooter({
+        text: context.communityName ?? 'Raid Ledger',
+      });
+
+    const row = this.buildViewButton(event.id, context.clientUrl);
+    return row ? { embed, row } : { embed };
+  }
+
+  /**
+   * Build an updated embed for an ad-hoc event (player join/leave batched updates).
+   */
+  buildAdHocUpdateEmbed(
+    event: { id: number; title: string; gameName?: string },
+    participants: Array<{
+      discordUserId: string;
+      discordUsername: string;
+      isActive: boolean;
+    }>,
+    context: EmbedContext,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const active = participants.filter((p) => p.isActive);
+    const left = participants.filter((p) => !p.isActive);
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.LIVE_EVENT)
+      .setTitle(`🎮 ${event.title}`)
+      .setDescription(
+        `**Status:** LIVE` +
+          (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
+      )
+      .addFields({
+        name: `👥 Active (${active.length})`,
+        value: active.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
+      });
+
+    if (left.length > 0) {
+      embed.addFields({
+        name: `📤 Left (${left.length})`,
+        value: left.map((p) => `~~<@${p.discordUserId}>~~`).join(', '),
+      });
+    }
+
+    embed.setTimestamp().setFooter({
+      text: context.communityName ?? 'Raid Ledger',
+    });
+
+    const row = this.buildViewButton(event.id, context.clientUrl);
+    return row ? { embed, row } : { embed };
+  }
+
+  /**
+   * Build a final summary embed when an ad-hoc event completes.
+   */
+  buildAdHocCompletedEmbed(
+    event: {
+      id: number;
+      title: string;
+      gameName?: string;
+      startTime: string;
+      endTime: string;
+    },
+    participants: Array<{
+      discordUserId: string;
+      discordUsername: string;
+      totalDurationSeconds: number | null;
+    }>,
+    context: EmbedContext,
+  ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
+    const start = new Date(event.startTime);
+    const end = new Date(event.endTime);
+    const durationMin = Math.round((end.getTime() - start.getTime()) / 60000);
+    const durationStr =
+      durationMin >= 60
+        ? `${Math.floor(durationMin / 60)}h ${durationMin % 60}m`
+        : `${durationMin}m`;
+
+    const rosterLines = participants.map((p) => {
+      const dur = p.totalDurationSeconds
+        ? ` (${Math.round(p.totalDurationSeconds / 60)}m)`
+        : '';
+      return `<@${p.discordUserId}>${dur}`;
+    });
+
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.SYSTEM)
+      .setTitle(`✅ ${event.title} — Completed`)
+      .setDescription(
+        `Session ended after **${durationStr}**` +
+          (event.gameName ? `\n**Game:** ${event.gameName}` : ''),
+      )
+      .addFields({
+        name: `👥 Participants (${participants.length})`,
+        value: rosterLines.join('\n') || 'None',
+      })
+      .setTimestamp()
+      .setFooter({
+        text: context.communityName ?? 'Raid Ledger',
+      });
+
+    const row = this.buildViewButton(event.id, context.clientUrl);
+    return row ? { embed, row } : { embed };
+  }
+
   /**
    * Build a standalone "View Event" link button.
    */

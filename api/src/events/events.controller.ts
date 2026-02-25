@@ -20,6 +20,7 @@ import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
+import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -46,6 +47,7 @@ import {
   PugSlotListResponseDto,
   ShareEventResponseDto,
   AttendanceSummaryDto,
+  AdHocRosterResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -90,6 +92,7 @@ export class EventsController {
     private readonly attendanceService: AttendanceService,
     private readonly pugsService: PugsService,
     private readonly shareService: ShareService,
+    private readonly adHocEventService: AdHocEventService,
   ) {}
 
   /**
@@ -164,6 +167,16 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<EventResponseDto> {
     return this.eventsService.findOne(id);
+  }
+
+  /**
+   * ROK-293: Get ad-hoc event roster (participant tracking).
+   */
+  @Get(':id/ad-hoc-roster')
+  async getAdHocRoster(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<AdHocRosterResponseDto> {
+    return this.adHocEventService.getAdHocRoster(id);
   }
 
   /**

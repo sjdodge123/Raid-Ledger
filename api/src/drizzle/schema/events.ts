@@ -8,10 +8,12 @@ import {
   uuid,
   jsonb,
   boolean,
+  varchar,
   index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { games } from './games';
+import { channelBindings } from './channel-bindings';
 
 // Define custom tsrange type
 export const tsrange = customType<{
@@ -73,6 +75,15 @@ export const events = pgTable(
     reminder1hour: boolean('reminder_1hour').default(true).notNull(),
     /** Send DM reminder 24 hours before event. Default true (ROK-126, ROK-489). */
     reminder24hour: boolean('reminder_24hour').default(true).notNull(),
+    /** ROK-293: Whether this event was auto-created from voice channel activity */
+    isAdHoc: boolean('is_ad_hoc').default(false).notNull(),
+    /** ROK-293: Ad-hoc event lifecycle status. Null for scheduled events. */
+    adHocStatus: varchar('ad_hoc_status', { length: 20 }),
+    /** ROK-293: Channel binding that spawned this ad-hoc event */
+    channelBindingId: uuid('channel_binding_id').references(
+      () => channelBindings.id,
+      { onDelete: 'set null' },
+    ),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */

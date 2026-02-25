@@ -13,6 +13,8 @@ export const DiscordBotStatusSchema = z.object({
     guildName: z.string().optional(),
     memberCount: z.number().optional(),
     setupCompleted: z.boolean().optional(),
+    /** ROK-293: Whether ad-hoc voice channel events are enabled */
+    adHocEventsEnabled: z.boolean().optional(),
 });
 
 export const DiscordBotTestConnectionSchema = z.object({

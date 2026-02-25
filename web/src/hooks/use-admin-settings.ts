@@ -630,6 +630,34 @@ export function useAdminSettings() {
         },
     });
 
+    // ROK-293: Ad-hoc events toggle
+    const adHocEventsStatus = useQuery<{ enabled: boolean }>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'ad-hoc'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/ad-hoc`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch ad-hoc events status');
+            return response.json();
+        },
+        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+    });
+
+    const updateAdHocEvents = useMutation<ApiResponse, Error, { enabled: boolean }>({
+        mutationFn: async (data) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/ad-hoc`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(data),
+            });
+            if (!response.ok) throw new Error('Failed to update ad-hoc events setting');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot', 'ad-hoc'] });
+        },
+    });
+
     return {
         oauthStatus,
         updateOAuth,
@@ -661,5 +689,7 @@ export function useAdminSettings() {
         discordDefaultChannel,
         setDiscordChannel,
         resendSetupWizard,
+        adHocEventsStatus,
+        updateAdHocEvents,
     };
 }

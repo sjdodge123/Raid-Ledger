@@ -4,6 +4,7 @@ import { getEventStatus, getRelativeTime, formatEventTime, STATUS_STYLES, STATUS
 import type { EventDisplayStatus } from '../../lib/event-utils';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
+import { LiveBadge } from './LiveBadge';
 
 interface EventCardProps {
     event: EventResponseDto;
@@ -118,7 +119,11 @@ export const EventCard = React.memo(function EventCard({ event, signupCount = 0,
                 )}
                 {/* Status Badge - top right */}
                 <div className="absolute top-2 right-2">
-                    <StatusBadge status={status} />
+                    {event.isAdHoc && event.adHocStatus === 'live' ? (
+                        <LiveBadge />
+                    ) : (
+                        <StatusBadge status={status} />
+                    )}
                 </div>
                 {event.game && (
                     <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">

@@ -253,4 +253,45 @@ export class DiscordBotSettingsController {
       handleValidationError(error);
     }
   }
+
+  /**
+   * ROK-293: Get ad-hoc events enabled status.
+   */
+  @Get('ad-hoc')
+  async getAdHocStatus(): Promise<{ enabled: boolean }> {
+    const enabled = await this.settingsService.getAdHocEventsEnabled();
+    return { enabled };
+  }
+
+  /**
+   * ROK-293: Enable or disable ad-hoc events.
+   */
+  @Put('ad-hoc')
+  @HttpCode(HttpStatus.OK)
+  async setAdHocStatus(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('enabled' in body) ||
+      typeof (body as Record<string, unknown>).enabled !== 'boolean'
+    ) {
+      throw new BadRequestException(
+        'enabled is required and must be a boolean',
+      );
+    }
+
+    const enabled = (body as Record<string, unknown>).enabled as boolean;
+    await this.settingsService.setAdHocEventsEnabled(enabled);
+
+    this.logger.log(
+      `Ad-hoc events ${enabled ? 'enabled' : 'disabled'} via admin UI`,
+    );
+
+    return {
+      success: true,
+      message: `Ad-hoc events ${enabled ? 'enabled' : 'disabled'}.`,
+    };
+  }
 }

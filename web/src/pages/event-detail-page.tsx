@@ -21,6 +21,9 @@ import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget'
 import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../hooks/use-pugs';
 import { PluginSlot } from '../plugins';
 import { AttendanceTracker } from '../components/events/AttendanceTracker';
+import { LiveBadge } from '../components/events/LiveBadge';
+import { AdHocRoster } from '../components/events/AdHocRoster';
+import { useAdHocSocket } from '../hooks/use-ad-hoc-socket';
 import './event-detail-page.css';
 
 // ROK-343: Lazy load modals — only fetched when user triggers them
@@ -62,6 +65,10 @@ export function EventDetailPage() {
     const { data: event, isLoading: eventLoading, error: eventError } = useEvent(eventId);
     const { data: roster } = useEventRoster(eventId);
     const { games } = useGameRegistry();
+
+    // ROK-293: Real-time ad-hoc event updates
+    const isAdHoc = event?.isAdHoc ?? false;
+    const adHocSocket = useAdHocSocket(isAdHoc ? eventId : null);
 
     // Look up game config entry for hasRoles/slug (ROK-234)
     // ROK-400: event.game.id is now the games table integer ID directly
@@ -703,6 +710,17 @@ export function EventDetailPage() {
                     }))}
                     attendeeCount={roster?.count}
                 />
+            )}
+
+            {/* ROK-293: Ad-Hoc Event Roster */}
+            {isAdHoc && (
+                <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
+                    {event.adHocStatus === 'live' && <LiveBadge className="mb-3" />}
+                    <AdHocRoster
+                        participants={adHocSocket.participants}
+                        activeCount={adHocSocket.activeCount}
+                    />
+                </div>
             )}
 
             {/* AC-8: Roster List - grouped by status */}

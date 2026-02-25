@@ -35,6 +35,8 @@ export interface EventPayload {
   } | null;
   recurrenceGroupId?: string | null;
   creatorId?: number;
+  /** ROK-293: Ad-hoc events skip Discord Scheduled Event creation */
+  isAdHoc?: boolean;
 }
 
 /**
@@ -59,6 +61,12 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.CREATED)
   async handleEventCreated(payload: EventPayload): Promise<void> {
+    // ROK-293: Ad-hoc events do NOT trigger Discord Scheduled Event / embed creation
+    if (payload.isAdHoc) {
+      this.logger.debug(`Skipping embed for ad-hoc event ${payload.eventId}`);
+      return;
+    }
+
     if (!this.clientService.isConnected()) {
       this.logger.debug('Bot not connected, skipping event.created embed');
       return;

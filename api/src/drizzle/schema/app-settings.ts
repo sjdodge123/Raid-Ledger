@@ -63,6 +63,8 @@ export const SETTING_KEYS = {
   DISCORD_EMOJI_CLASS_DRUID: 'discord_emoji_class_druid',
   DISCORD_EMOJI_CLASS_DEMONHUNTER: 'discord_emoji_class_demonhunter',
   DISCORD_EMOJI_CLASS_EVOKER: 'discord_emoji_class_evoker',
+  /** ROK-293: Whether ad-hoc voice channel events are enabled */
+  AD_HOC_EVENTS_ENABLED: 'ad_hoc_events_enabled',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
