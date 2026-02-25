@@ -115,8 +115,6 @@ stats:
 4. **Cache is the source of truth during dispatch.** Other agents read the YAML file — they do not call Linear.
 5. **Poll frequency during Step 7:** Every 5 minutes when actively waiting for operator. The lead will tell you when to start and stop polling.
 6. **Report stats on shutdown:** Total immediate updates, deferred updates flushed, polls executed, cache reads served.
-7. **Defensive field access on Linear responses.** Not all issues have all fields populated. Always use safe access patterns when extracting data — e.g., `issue.get('priority', {}).get('name', 'None')`. Fields that may be missing: `priority`, `assignee`, `dueDate`, `labels`, `estimate`. Never assume a field exists without checking.
-8. **Bootstrap ready signal.** On successful startup (after loading MCP tools and completing initial SYNC_DOWN), write a ready signal file: `echo "ready $(date -u +%Y-%m-%dT%H:%M:%SZ)" > planning-artifacts/sprint-planner-ready.txt`. This lets the lead detect bootstrap completion without polling.
 
 ---
 
