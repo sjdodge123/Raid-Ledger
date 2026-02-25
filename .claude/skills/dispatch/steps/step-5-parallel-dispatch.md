@@ -6,36 +6,7 @@ Process stories in the confirmed batch order. For each batch:
 
 ---
 
-## 5a. Setup Infrastructure
-
-1. **Create worktrees** for each story in the batch:
-   ```bash
-   git worktree add ../Raid-Ledger--rok-<num> -b rok-<num>-<short-name> main
-   ```
-
-2. **Install dependencies** in each worktree:
-   ```bash
-   cd ../Raid-Ledger--rok-<num> && npm install --legacy-peer-deps && npm run build -w packages/contract
-   ```
-
-## 5a.5. Viability Check (before spawning dev agents)
-
-**For each story, verify the target components/modules actually exist in the codebase before spawning a dev agent.** This prevents wasted agent turns on stories that reference nonexistent code.
-
-```bash
-# Example checks — adapt to the story's targets:
-ls ../Raid-Ledger--rok-<num>/web/src/components/<target-component>/
-ls ../Raid-Ledger--rok-<num>/api/src/<target-module>/
-```
-
-If a story's target doesn't exist:
-- **New feature:** Verify the parent directory and any consuming components exist
-- **Bug fix / refactor:** Verify the file/component being fixed actually exists
-- **If the target is completely absent (wrong path, renamed, deleted):** Flag to operator before spawning dev. Don't waste tokens on an impossible task.
-
----
-
-## 5b. Create Agent Team
+## 5a. Create Agent Team
 
 ```
 TeamCreate(team_name: "dispatch-batch-N")
@@ -45,16 +16,49 @@ Create tasks in the shared task list:
 - One **implementation task** per story (assigned to dev teammates)
 - One **review task** per story (blocked by implementation — review agents spawn per-story after operator approval)
 
-## 5c. Spawn Advisory Agents (per-batch)
+## 5b. Spawn Build Agent (FIRST — needed for worktree setup)
 
-Spawn Architect, Product Manager, and Test Engineer for this batch. Read their templates:
+Spawn one build/deploy teammate for the batch using `templates/build-agent.md`:
+```
+Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+     name: "build-agent", model: "sonnet", mode: "bypassPermissions",
+     prompt: <read and fill templates/build-agent.md>)
+```
+
+The build agent stays alive for the entire batch. It handles:
+- Worktree creation and setup (Task 0)
+- Local CI validation (build/lint/test) in feature worktrees
+- Pushing branches to remote
+- Deploying feature branches locally for operator testing
+- Health verification after deploys
+
+## 5c. Setup Worktrees (delegate to Build Agent)
+
+**The lead does NOT manually create worktrees, run `npm install`, or build contract.** Delegate to the build agent:
+
+For each story in the batch:
+```
+SendMessage(type: "message", recipient: "build-agent",
+  content: "Setup worktree ROK-<num> on branch rok-<num>-<short-name>",
+  summary: "Setup worktree ROK-<num>")
+```
+
+The build agent will: create worktree -> npm install -> build contract -> copy .env -> build API + web (viability check) -> message back with results.
+
+**If setup fails:** The build agent messages back with exact errors. The lead flags to the operator — do NOT waste tokens spawning a dev agent for a broken worktree.
+
+**If setup succeeds:** The worktree is ready for dev at `../Raid-Ledger--rok-<num>`.
+
+## 5d. Spawn Advisory Agents (per-batch)
+
+While waiting for worktree setup, spawn Architect, Product Manager, and Test Engineer. Read their templates:
 - `templates/architect.md`
 - `templates/pm.md`
 - `templates/test-engineer.md`
 
 These agents persist for the batch lifetime and are consulted at various gates.
 
-## 5d. Spawn Dev Teammates
+## 5e. Spawn Dev Teammates (after worktrees are ready)
 
 Spawn one dev teammate per story using the appropriate template from `templates/`:
 - **Rework stories** -> use `templates/dev-rework.md`
@@ -75,21 +79,6 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
      name: "dev-rok-<num>", mode: "bypassPermissions",
      prompt: <read and fill the appropriate template>)
 ```
-
-## 5e. Spawn Build Teammate
-
-Spawn one build/deploy teammate for the batch using `templates/build-agent.md`:
-```
-Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
-     name: "build-agent", model: "sonnet", mode: "bypassPermissions",
-     prompt: <read and fill templates/build-agent.md>)
-```
-
-The build agent stays alive for the entire batch. It handles:
-- Local CI validation (build/lint/test) in feature worktrees
-- Pushing branches to remote
-- Deploying feature branches locally for operator testing
-- Health verification after deploys
 
 ## 5f. Review Agents — DO NOT SPAWN YET
 

@@ -24,11 +24,36 @@ Dev completes -> Test agent -> Test Engineer review -> Quality Checker gate
 
 ---
 
+## Three-Way Validation (applies to ALL gate decisions in this step)
+
+**Before spawning any gate agent or making any skip/proceed decision, the lead MUST:**
+
+1. **Ask the Orchestrator** what the next step should be:
+   ```
+   SendMessage(type: "message", recipient: "orchestrator",
+     content: "WHATS_NEXT: { story: 'ROK-XXX', event: '<event>', current_state: '<state>' }",
+     summary: "What's next for ROK-XXX after <event>?")
+   ```
+
+2. **Validate with the Scrum Master** that the Orchestrator's direction matches the SKILL.md gate order:
+   ```
+   SendMessage(type: "message", recipient: "scrum-master",
+     content: "VALIDATE: Orchestrator says next step for ROK-XXX is <direction>. Does this match SKILL.md gate order?",
+     summary: "Validate pipeline direction for ROK-XXX")
+   ```
+
+3. **If Scrum Master flags a discrepancy** — SKILL.md wins. Do NOT follow the Orchestrator's direction. The Scrum Master will advise the correct next step.
+
+**The lead NEVER independently decides which gates to skip or which agents to spawn.** That's the Orchestrator's decision matrix, validated by the Scrum Master.
+
+---
+
 ## 6a. When a Dev Teammate Completes -> Spawn Test Agent
 
 When a dev teammate messages the lead that their story is complete:
 
-1. **Spawn a test agent as a teammate** (non-blocking — do NOT wait):
+1. **Consult Orchestrator + Scrum Master** (three-way validation) for next step after `dev_complete`.
+2. **Spawn a test agent as a teammate** (non-blocking — do NOT wait):
    ```
    Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
         name: "test-rok-<num>", model: "sonnet", mode: "bypassPermissions",
