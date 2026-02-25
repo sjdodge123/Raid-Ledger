@@ -4,7 +4,7 @@
  * Previously "Danger Zone" — verifies delete account flow and guards.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AccountPanel } from './account-panel';
 import { renderWithProviders } from '../../test/render-helpers';
