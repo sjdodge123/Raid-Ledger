@@ -25,7 +25,7 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
     };
 
     return (
-        <nav className="w-full h-full overflow-y-auto py-4 pr-2" aria-label="Profile navigation">
+        <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Profile navigation">
             <div className="space-y-4">
                 {sections.map((section) => (
                     <div key={section.id}>

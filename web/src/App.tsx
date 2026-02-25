@@ -80,7 +80,6 @@ const IdentityPanel = lazyWithRetry(() => import('./pages/profile/identity-panel
 const PreferencesPanel = lazyWithRetry(() => import('./pages/profile/preferences-panel').then(m => ({ default: m.PreferencesPanel })));
 const NotificationsPanel = lazyWithRetry(() => import('./pages/profile/notifications-panel').then(m => ({ default: m.NotificationsPanel })));
 const GamingPanel = lazyWithRetry(() => import('./pages/profile/gaming-panel').then(m => ({ default: m.GamingPanel })));
-const AccountPanel = lazyWithRetry(() => import('./pages/profile/account-panel').then(m => ({ default: m.AccountPanel })));
 
 // -- Lazy loaded admin panels --
 const AdminSettingsLayout = lazyWithRetry(() => import('./components/admin/admin-settings-layout').then(m => ({ default: m.AdminSettingsLayout })));
@@ -185,7 +184,6 @@ function App() {
                   <Route path="preferences" element={<PreferencesPanel />} />
                   <Route path="notifications" element={<NotificationsPanel />} />
                   <Route path="gaming" element={<GamingPanel />} />
-                  <Route path="account" element={<AccountPanel />} />
 
                   {/* ROK-359: Redirects for old bookmarked profile paths */}
                   <Route path="identity/discord" element={<Navigate to="/profile/identity" replace />} />
@@ -196,7 +194,8 @@ function App() {
                   <Route path="gaming/game-time" element={<Navigate to="/profile/gaming" replace />} />
                   <Route path="gaming/characters" element={<Navigate to="/profile/gaming" replace />} />
                   <Route path="gaming/watched-games" element={<Navigate to="/profile/gaming" replace />} />
-                  <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
+                  <Route path="account" element={<Navigate to="/profile/identity" replace />} />
+                  <Route path="danger/delete-account" element={<Navigate to="/profile/identity" replace />} />
                 </Route>
 
                 {/* ROK-359: Consolidated Admin Settings */}

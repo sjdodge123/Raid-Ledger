@@ -35,16 +35,11 @@ const GamingIcon = (
     </svg>
 );
 
-const AccountIcon = (
-    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-    </svg>
-);
-
 /**
  * Consolidated profile navigation (ROK-359).
- * Flat structure: 5 items instead of 4 sections with 9+ items.
+ * Flat structure: 4 items instead of 4 sections with 9+ items.
  * Each section has a single nav item pointing to the consolidated page.
+ * Account/danger zone is folded into the Identity panel.
  */
 export const SECTIONS: NavSection[] = [
     {
@@ -77,14 +72,6 @@ export const SECTIONS: NavSection[] = [
         icon: GamingIcon,
         children: [
             { to: '/profile/gaming', label: 'Gaming' },
-        ],
-    },
-    {
-        id: 'account',
-        label: 'Account',
-        icon: AccountIcon,
-        children: [
-            { to: '/profile/account', label: 'Account' },
         ],
     },
 ];

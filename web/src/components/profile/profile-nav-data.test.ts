@@ -1,14 +1,15 @@
 /**
  * Unit tests for profile navigation data (ROK-359).
- * Tests that the consolidated profile nav has exactly 5 sections,
+ * Tests that the consolidated profile nav has exactly 4 sections,
  * each with the correct structure and paths.
+ * Account/danger zone is consolidated into the Identity panel.
  */
 import { describe, it, expect } from 'vitest';
 import { SECTIONS } from './profile-nav-data';
 
 describe('profile-nav-data (ROK-359 consolidation)', () => {
-    it('has exactly 5 sections', () => {
-        expect(SECTIONS).toHaveLength(5);
+    it('has exactly 4 sections', () => {
+        expect(SECTIONS).toHaveLength(4);
     });
 
     it('section ids are unique', () => {
@@ -45,11 +46,9 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(gaming!.children[0].label).toBe('Gaming');
     });
 
-    it('includes account section pointing to /profile/account', () => {
+    it('does not include a separate account section (consolidated into identity)', () => {
         const account = SECTIONS.find((s) => s.id === 'account');
-        expect(account).toBeDefined();
-        expect(account!.children[0].to).toBe('/profile/account');
-        expect(account!.children[0].label).toBe('Account');
+        expect(account).toBeUndefined();
     });
 
     it('every section has a label string', () => {
@@ -74,7 +73,7 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         }
     });
 
-    it('does not include old separate paths like /profile/identity/discord or /profile/identity/avatar', () => {
+    it('does not include old separate paths like /profile/identity/discord or /profile/account', () => {
         const allPaths = SECTIONS.flatMap((s) => s.children.map((c) => c.to));
         expect(allPaths).not.toContain('/profile/identity/discord');
         expect(allPaths).not.toContain('/profile/identity/avatar');
@@ -83,5 +82,6 @@ describe('profile-nav-data (ROK-359 consolidation)', () => {
         expect(allPaths).not.toContain('/profile/gaming/game-time');
         expect(allPaths).not.toContain('/profile/gaming/characters');
         expect(allPaths).not.toContain('/profile/danger/delete-account');
+        expect(allPaths).not.toContain('/profile/account');
     });
 });

@@ -60,7 +60,6 @@ function renderProfileRoutes(initialPath: string) {
                         <Route path="identity" element={<div data-testid="identity-panel">Identity Content</div>} />
                         <Route path="preferences" element={<div data-testid="preferences-panel">Preferences Content</div>} />
                         <Route path="gaming" element={<div data-testid="gaming-panel">Gaming Content</div>} />
-                        <Route path="account" element={<div data-testid="account-panel">Account Content</div>} />
                         <Route path="notifications" element={<div data-testid="notifications-panel">Notifications Content</div>} />
 
                         {/* ROK-359: Redirects for old bookmarked profile paths */}
@@ -72,7 +71,8 @@ function renderProfileRoutes(initialPath: string) {
                         <Route path="gaming/game-time" element={<Navigate to="/profile/gaming" replace />} />
                         <Route path="gaming/characters" element={<Navigate to="/profile/gaming" replace />} />
                         <Route path="gaming/watched-games" element={<Navigate to="/profile/gaming" replace />} />
-                        <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
+                        <Route path="account" element={<Navigate to="/profile/identity" replace />} />
+                        <Route path="danger/delete-account" element={<Navigate to="/profile/identity" replace />} />
                     </Route>
                     <Route path="*" element={<LocationDisplay />} />
                 </Routes>
@@ -125,9 +125,14 @@ describe('AC7: old profile paths redirect to consolidated paths (ROK-359)', () =
         expect(screen.getByTestId('gaming-panel')).toBeInTheDocument();
     });
 
-    it('redirects /profile/danger/delete-account to /profile/account', () => {
+    it('redirects /profile/account to /profile/identity', () => {
+        renderProfileRoutes('/profile/account');
+        expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
+    });
+
+    it('redirects /profile/danger/delete-account to /profile/identity', () => {
         renderProfileRoutes('/profile/danger/delete-account');
-        expect(screen.getByTestId('account-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
 });
 
@@ -144,9 +149,9 @@ describe('AC6: profile panels render inline via Outlet, no sub-navigation (ROK-3
         expect(screen.getByTestId('preferences-panel')).toBeInTheDocument();
     });
 
-    it('navigating to /profile/account renders AccountPanel content inline in the layout', () => {
+    it('navigating to /profile/account redirects to identity (account consolidated)', () => {
         renderProfileRoutes('/profile/account');
-        expect(screen.getByTestId('account-panel')).toBeInTheDocument();
+        expect(screen.getByTestId('identity-panel')).toBeInTheDocument();
     });
 });
 
