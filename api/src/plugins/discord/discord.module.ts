@@ -3,6 +3,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from '../../auth/auth.module';
+import { UsersModule } from '../../users/users.module';
 import { SettingsModule } from '../../settings/settings.module';
 import { NotificationModule } from '../../notifications/notification.module';
 import { DiscordAuthStrategy } from './discord-auth.strategy';
@@ -15,6 +16,7 @@ import { DISCORD_MANIFEST } from './manifest';
 @Module({
   imports: [
     AuthModule,
+    UsersModule,
     PassportModule,
     ConfigModule,
     SettingsModule,
