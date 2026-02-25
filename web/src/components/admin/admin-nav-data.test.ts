@@ -207,7 +207,7 @@ describe('buildNavSections', () => {
         expect(general.children).toHaveLength(5);
     });
 
-    it('Demo Data item is at index 2 when demoMode is true (after Site Settings and Role Management)', () => {
+    it('Demo Data item is at index 2 when demoMode is true (after Site Settings and User Management)', () => {
         const sections = buildNavSections([], [], { demoMode: true });
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children[2].label).toBe('Demo Data');
@@ -228,12 +228,12 @@ describe('buildNavSections', () => {
         expect(demoData).toBeUndefined();
     });
 
-    it('General section includes Site Settings, Role Management, Scheduled Jobs, Backups', () => {
+    it('General section includes Site Settings, User Management, Scheduled Jobs, Backups', () => {
         const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         const labels = general.children.map((c) => c.label);
         expect(labels).toContain('Site Settings');
-        expect(labels).toContain('Role Management');
+        expect(labels).toContain('User Management');
         expect(labels).toContain('Scheduled Jobs');
         expect(labels).toContain('Backups');
     });
@@ -281,7 +281,7 @@ describe('buildNavSections', () => {
         // General section alone should have exactly 4 items without demoMode
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), [], { demoMode: false });
         const general = sections.find((s) => s.id === 'general')!;
-        // General section: Site Settings, Role Management, Scheduled Jobs, Backups = 4 items ≤ 7
+        // General section: Site Settings, User Management, Scheduled Jobs, Backups = 4 items ≤ 7
         expect(general.children.length).toBeLessThanOrEqual(7);
         expect(general.children.length).toBe(4);
     });

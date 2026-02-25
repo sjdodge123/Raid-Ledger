@@ -93,7 +93,7 @@ export function buildNavSections(
 ): NavSection[] {
     const generalChildren: NavItem[] = [
         { to: '/admin/settings/general', label: 'Site Settings' },
-        { to: '/admin/settings/general/roles', label: 'Role Management' },
+        { to: '/admin/settings/general/roles', label: 'User Management' },
         { to: '/admin/settings/general/cron-jobs', label: 'Scheduled Jobs' },
         { to: '/admin/settings/general/backups', label: 'Backups' },
     ];

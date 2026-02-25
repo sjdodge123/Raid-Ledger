@@ -50,7 +50,7 @@ export function RoleManagementCard() {
         <div className="bg-panel/50 rounded-xl border border-edge/50 p-5">
             <div className="flex items-center justify-between mb-4">
                 <div>
-                    <h3 className="text-lg font-semibold text-foreground">Role Management</h3>
+                    <h3 className="text-lg font-semibold text-foreground">User Management</h3>
                     <p className="text-sm text-muted mt-0.5">
                         Promote members to operator or demote operators back to member
                     </p>
