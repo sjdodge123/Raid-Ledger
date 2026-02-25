@@ -34,6 +34,7 @@ scripts/*
 !scripts/deploy_dev.sh
 !scripts/fix-migration-order.sh
 !scripts/setup-branch-protection.sh
+!scripts/verify-ui.spec.ts
 !/api/scripts/
 implementation_plan.md
 walkthrough.md

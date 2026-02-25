@@ -53,14 +53,6 @@ describe('LiveRegionProvider', () => {
         expect(assertiveRegion).toHaveAttribute('aria-atomic', 'true');
     });
 
-    it('both regions have sr-only class (visually hidden)', () => {
-        render(<LiveRegionProvider />);
-        const politeRegion = document.getElementById('aria-live-polite');
-        const assertiveRegion = document.getElementById('aria-live-assertive');
-        expect(politeRegion).toHaveClass('sr-only');
-        expect(assertiveRegion).toHaveClass('sr-only');
-    });
-
     it('regions are empty on initial render', () => {
         render(<LiveRegionProvider />);
         const politeRegion = document.getElementById('aria-live-polite');

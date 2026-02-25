@@ -72,9 +72,6 @@ describe('UserEventSignups', () => {
         renderWithProviders(<UserEventSignups userId={1} />);
 
         expect(screen.getByText('Upcoming Events')).toBeInTheDocument();
-        // Verify skeletons are rendered (they have animate-pulse class)
-        const skeletons = document.querySelectorAll('.animate-pulse');
-        expect(skeletons.length).toBeGreaterThan(0);
     });
 
     it('renders empty state when no events', () => {

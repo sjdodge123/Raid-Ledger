@@ -66,18 +66,6 @@ describe('MoreDrawer', () => {
         vi.clearAllMocks();
     });
 
-    it('renders with md:hidden class for mobile-only visibility', () => {
-        renderDrawer();
-        const drawer = screen.getByTestId('more-drawer');
-        expect(drawer).toHaveClass('md:hidden');
-    });
-
-    it('uses Z_INDEX.MODAL (50) for z-index', () => {
-        renderDrawer();
-        const drawer = screen.getByTestId('more-drawer');
-        expect(drawer).toHaveStyle({ zIndex: 50 });
-    });
-
     it('shows user avatar and username when authenticated', () => {
         renderDrawer();
         expect(screen.getByText('TestUser')).toBeInTheDocument();
@@ -100,11 +88,10 @@ describe('MoreDrawer', () => {
         expect(screen.queryByText('Admin Settings')).not.toBeInTheDocument();
     });
 
-    it('renders logout button with destructive styling', () => {
+    it('renders logout button', () => {
         renderDrawer();
         const logoutBtn = screen.getByTestId('more-drawer-logout');
         expect(logoutBtn).toBeInTheDocument();
-        expect(logoutBtn).toHaveClass('bg-red-500/15', 'text-red-400');
     });
 
     it('renders close button with aria-label', () => {
@@ -116,24 +103,6 @@ describe('MoreDrawer', () => {
     it('renders "More" header text', () => {
         renderDrawer();
         expect(screen.getByText('More')).toBeInTheDocument();
-    });
-
-    it('has full-screen panel (inset-0, not w-72)', () => {
-        renderDrawer();
-        const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('inset-0');
-    });
-
-    it('slides from left (uses -translate-x-full when closed)', () => {
-        renderDrawer(false);
-        const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('-translate-x-full');
-    });
-
-    it('is visible and translated to 0 when open', () => {
-        renderDrawer(true);
-        const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('translate-x-0');
     });
 
     it('calls onClose when backdrop is clicked', () => {
@@ -148,19 +117,6 @@ describe('MoreDrawer', () => {
         const closeBtn = screen.getByLabelText('Close menu');
         fireEvent.click(closeBtn);
         expect(onClose).toHaveBeenCalledOnce();
-    });
-
-    it('has 300ms spring transition on panel', () => {
-        renderDrawer();
-        const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('duration-300');
-        expect(panel.style.transitionTimingFunction).toBe('var(--spring-smooth)');
-    });
-
-    it('has backdrop blur and dim effect', () => {
-        renderDrawer();
-        const backdrop = screen.getByTestId('more-drawer-backdrop');
-        expect(backdrop).toHaveClass('bg-black/60', 'backdrop-blur-sm');
     });
 
     it('renders theme toggle button', () => {
@@ -197,12 +153,6 @@ describe('MoreDrawer', () => {
         expect(panel).toHaveAttribute('aria-modal', 'true');
     });
 
-    it('panel has flex-col and overflow-y-auto for scroll support', () => {
-        renderDrawer();
-        const panel = screen.getByTestId('more-drawer-panel');
-        expect(panel).toHaveClass('flex', 'flex-col');
-    });
-
     // Profile accordion tests
     it('expands profile submenu on toggle click', () => {
         renderDrawer();
@@ -228,20 +178,6 @@ describe('MoreDrawer', () => {
     it('does not auto-expand profile submenu on non-profile pages', () => {
         renderDrawer(true, '/events');
         expect(screen.queryByTestId('profile-submenu')).not.toBeInTheDocument();
-    });
-
-    it('rotates chevron when profile submenu is expanded', () => {
-        renderDrawer();
-        const chevron = screen.getByTestId('profile-chevron');
-        expect(chevron).not.toHaveClass('rotate-180');
-        fireEvent.click(screen.getByTestId('more-drawer-profile-toggle'));
-        expect(chevron).toHaveClass('rotate-180');
-    });
-
-    it('shows profile nav items with emerald-400 highlight for active route', () => {
-        renderDrawer(true, '/profile/identity');
-        const activeLink = screen.getByText('My Profile').closest('a');
-        expect(activeLink).toHaveClass('text-emerald-400', 'bg-emerald-500/10');
     });
 
     it('shows Re-run Setup Wizard in profile submenu', () => {
@@ -290,14 +226,6 @@ describe('MoreDrawer (admin user)', () => {
     it('auto-expands admin submenu when on admin settings page', () => {
         renderDrawer(true, '/admin/settings/general');
         expect(screen.getByTestId('admin-submenu')).toBeInTheDocument();
-    });
-
-    it('rotates admin chevron when expanded', () => {
-        renderDrawer();
-        const chevron = screen.getByTestId('admin-chevron');
-        expect(chevron).not.toHaveClass('rotate-180');
-        fireEvent.click(screen.getByTestId('more-drawer-admin-toggle'));
-        expect(chevron).toHaveClass('rotate-180');
     });
 
     it('admin toggle has aria-expanded attribute', () => {

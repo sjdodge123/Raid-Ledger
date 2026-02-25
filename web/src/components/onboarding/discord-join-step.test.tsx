@@ -88,12 +88,6 @@ describe('DiscordJoinStep', () => {
             expect(icons.length).toBeGreaterThan(0);
         });
 
-        it('Join Server link meets minimum 44px touch target height (min-h-[44px])', () => {
-            render(<DiscordJoinStep />);
-
-            const link = screen.getByRole('link', { name: /join server/i });
-            expect(link.className).toContain('min-h-[44px]');
-        });
     });
 
     describe('With no invite URL available (null)', () => {

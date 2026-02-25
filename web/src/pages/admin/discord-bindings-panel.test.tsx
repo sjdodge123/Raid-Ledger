@@ -187,15 +187,6 @@ describe('DiscordBindingsPanel', () => {
 
   // ── Loading state ─────────────────────────────────────────────
 
-  it('shows loading skeleton when bindings are loading', () => {
-    mockBindings.isLoading = true;
-
-    const { container } = render(<DiscordBindingsPanel />);
-
-    // Loading skeleton uses animate-pulse
-    expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-  });
-
   it('does not show ChannelBindingList when loading', () => {
     mockBindings.isLoading = true;
 

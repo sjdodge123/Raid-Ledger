@@ -23,7 +23,16 @@ module.exports = {
         // Handle .js extensions in ESM imports
         '^(\\.{1,2}/.*)\\.js$': '$1',
     },
-    collectCoverageFrom: ['**/*.(t|j)s'],
+    collectCoverageFrom: [
+        '**/*.ts',
+        '!**/*.spec.ts',
+        '!**/*.module.ts',
+        '!main.ts',
+        '!drizzle/migrations/**',
+    ],
     coverageDirectory: '../coverage',
+    coverageThreshold: {
+        global: { branches: 40, functions: 38, lines: 45, statements: 45 },
+    },
     testEnvironment: 'node',
 };

@@ -43,33 +43,12 @@ describe('PluginBadge', () => {
         expect(img?.getAttribute('src')).toBe('/plugins/blizzard/badge.jpg');
     });
 
-    it('renders sm size with 24x24 dimensions', () => {
-        const { container } = render(
-            <PluginBadge icon="/plugins/test/badge.png" label="Test" size="sm" />,
-        );
-        const wrapper = container.querySelector('img')?.parentElement;
-        expect(wrapper?.className).toContain('w-6');
-        expect(wrapper?.className).toContain('h-6');
-    });
-
-    it('renders md size with 32x32 dimensions', () => {
-        const { container } = render(
-            <PluginBadge icon="/plugins/test/badge.png" label="Test" size="md" />,
-        );
-        const wrapper = container.querySelector('img')?.parentElement;
-        expect(wrapper?.className).toContain('w-8');
-        expect(wrapper?.className).toContain('h-8');
-    });
-
-    it('has no background, border, or text label', () => {
+    it('has no text label', () => {
         const { container } = render(
             <PluginBadge icon="/plugins/test/badge.png" label="Test" />,
         );
         const img = container.querySelector('img');
         expect(img).toBeInTheDocument();
-        // No wrapping span with bg/border classes
-        expect(container.innerHTML).not.toContain('bg-');
-        expect(container.innerHTML).not.toContain('border-');
         // No text content besides the img
         expect(container.textContent).toBe('');
     });

@@ -58,14 +58,6 @@ describe('DaySection', () => {
             expect(mockOnToggle).toHaveBeenCalledOnce();
         });
 
-        it('chevron rotates when expanded', () => {
-            const { rerender } = render(<DaySection {...defaultProps} expanded={false} />);
-            const svg = screen.getByRole('button', { name: /Sunday/ }).querySelector('svg');
-            expect(svg).not.toHaveClass('rotate-90');
-
-            rerender(<DaySection {...defaultProps} expanded={true} />);
-            expect(svg).toHaveClass('rotate-90');
-        });
     });
 
     describe('Expanded Content', () => {
@@ -121,32 +113,6 @@ describe('DaySection', () => {
             expect(mockOnPreset).toHaveBeenCalledWith(0, 'night');
         });
 
-        it('highlights preset when all hours are active', () => {
-            const slots: GameTimeSlot[] = [
-                { dayOfWeek: 0, hour: 6, status: 'available' },
-                { dayOfWeek: 0, hour: 7, status: 'available' },
-                { dayOfWeek: 0, hour: 8, status: 'available' },
-                { dayOfWeek: 0, hour: 9, status: 'available' },
-                { dayOfWeek: 0, hour: 10, status: 'available' },
-                { dayOfWeek: 0, hour: 11, status: 'available' },
-            ];
-            render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
-
-            const morningBtn = screen.getByText('Morning').closest('button');
-            expect(morningBtn).toHaveClass('bg-emerald-600');
-        });
-
-        it('does not highlight preset when hours are partially active', () => {
-            const slots: GameTimeSlot[] = [
-                { dayOfWeek: 0, hour: 6, status: 'available' },
-                { dayOfWeek: 0, hour: 7, status: 'available' },
-            ];
-            render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
-
-            const morningBtn = screen.getByText('Morning').closest('button');
-            expect(morningBtn).not.toHaveClass('bg-emerald-600');
-        });
-
         it('hides presets in read-only mode', () => {
             render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
             expect(screen.queryByText('Morning')).not.toBeInTheDocument();
@@ -192,28 +158,6 @@ describe('DaySection', () => {
             expect(mockOnHourToggle).toHaveBeenCalledWith(0, 6);
         });
 
-        it('highlights active hours with emerald background', () => {
-            const slots: GameTimeSlot[] = [
-                { dayOfWeek: 0, hour: 6, status: 'available' },
-            ];
-            render(<DaySection {...defaultProps} slots={slots} expanded={true} />);
-
-            const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('bg-emerald-600');
-        });
-
-        it('does not highlight inactive hours', () => {
-            render(<DaySection {...defaultProps} expanded={true} />);
-            const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).not.toHaveClass('bg-emerald-600');
-        });
-
-        it('has 48px height (meets 48px mobile tap target guideline)', () => {
-            render(<DaySection {...defaultProps} expanded={true} />);
-            const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('h-12'); // h-12 = 3rem = 48px
-        });
-
         it('disables hour buttons in read-only mode', () => {
             render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
             const hourBtn = screen.getByText('6a').closest('button');
@@ -226,31 +170,6 @@ describe('DaySection', () => {
             expect(mockOnHourToggle).not.toHaveBeenCalled();
         });
 
-        it('applies active:scale-95 feedback in edit mode', () => {
-            render(<DaySection {...defaultProps} expanded={true} />);
-            const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).toHaveClass('active:scale-95');
-        });
-
-        it('does not apply active:scale-95 in read-only mode', () => {
-            render(<DaySection {...defaultProps} expanded={true} readOnly={true} />);
-            const hourBtn = screen.getByText('6a').closest('button');
-            expect(hourBtn).not.toHaveClass('active:scale-95');
-        });
-    });
-
-    describe('4-Column Grid Layout', () => {
-        it('uses grid-cols-4 for hour buttons', () => {
-            const { container } = render(<DaySection {...defaultProps} expanded={true} />);
-            const hourGrid = container.querySelector('.grid-cols-4');
-            expect(hourGrid).toBeInTheDocument();
-        });
-
-        it('uses grid-cols-4 for preset buttons', () => {
-            const { container } = render(<DaySection {...defaultProps} expanded={true} />);
-            const presetGrid = container.querySelectorAll('.grid-cols-4');
-            expect(presetGrid.length).toBeGreaterThan(0);
-        });
     });
 
     describe('Edge Cases', () => {

@@ -46,9 +46,6 @@ describe('RelayService', () => {
     mockFetch.mockReset();
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   describe('isConnected', () => {
     it('should return false when relay is disabled', async () => {

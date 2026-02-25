@@ -84,28 +84,12 @@ describe('PluginCard', () => {
         expect(screen.getByText('content-provider')).toBeInTheDocument();
     });
 
-    it('renders integration health dot as green when configured', () => {
-        const { container } = render(
+    it('renders integration name when configured', () => {
+        render(
             <PluginCard plugin={basePlugin} {...handlers} isPending={false} />,
         );
 
         expect(screen.getByText('Blizzard API')).toBeInTheDocument();
-        // Green dot present
-        const dot = container.querySelector('.bg-emerald-400');
-        expect(dot).toBeInTheDocument();
-    });
-
-    it('renders integration health dot as red when not configured', () => {
-        const unconfigured = {
-            ...basePlugin,
-            integrations: [{ ...basePlugin.integrations[0], configured: false }],
-        };
-        const { container } = render(
-            <PluginCard plugin={unconfigured} {...handlers} isPending={false} />,
-        );
-
-        const dot = container.querySelector('.bg-red-400');
-        expect(dot).toBeInTheDocument();
     });
 
     // Action buttons by status

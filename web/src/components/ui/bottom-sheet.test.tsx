@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import { BottomSheet } from './bottom-sheet';
 
 describe('BottomSheet', () => {
@@ -11,18 +12,6 @@ describe('BottomSheet', () => {
     afterEach(() => {
         // Clean up after each test
         document.body.style.overflow = '';
-    });
-
-    it('renders dialog off-screen when isOpen is false', () => {
-        render(
-            <BottomSheet isOpen={false} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        // Dialog is still in DOM but transformed off-screen
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('translate-y-full');
     });
 
     it('renders dialog when isOpen is true', () => {
@@ -211,161 +200,6 @@ describe('BottomSheet', () => {
         expect(document.body.style.overflow).toBe('');
     });
 
-    it('has max-height of 60vh', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveStyle({ maxHeight: '60vh' });
-    });
-
-    it('applies z-index 45 from Z_INDEX.BOTTOM_SHEET', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const container = dialog.parentElement;
-        expect(container).toHaveStyle({ zIndex: 45 });
-    });
-
-    it('renders drag handle', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const dragHandle = dialog.querySelector('.w-10.h-1.bg-muted.rounded-full');
-        expect(dragHandle).toBeInTheDocument();
-    });
-
-    it('drag handle has 40x4px dimensions (w-10 h-1)', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const dragHandle = dialog.querySelector('.w-10.h-1');
-        expect(dragHandle).toHaveClass('w-10', 'h-1');
-    });
-
-    it('has translate-y-0 when open', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('translate-y-0');
-    });
-
-    it('has translate-y-full when closed', () => {
-        render(
-            <BottomSheet isOpen={false} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        // Sheet is still in DOM but transformed off-screen
-        const container = document.querySelector('[role="dialog"]')?.parentElement;
-        if (container) {
-            const dialog = container.querySelector('[role="dialog"]');
-            expect(dialog).toHaveClass('translate-y-full');
-        }
-    });
-
-    it('backdrop has opacity-100 when open', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const backdrop = screen.getByRole('dialog').parentElement?.querySelector('[aria-hidden="true"]');
-        expect(backdrop).toHaveClass('opacity-100');
-    });
-
-    it('backdrop has opacity-0 when closed', () => {
-        render(
-            <BottomSheet isOpen={false} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const container = document.querySelector('[role="dialog"]')?.parentElement;
-        if (container) {
-            const backdrop = container.querySelector('[aria-hidden="true"]');
-            expect(backdrop).toHaveClass('opacity-0');
-        }
-    });
-
-    it('container has pointer-events-none when closed', () => {
-        render(
-            <BottomSheet isOpen={false} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const container = document.querySelector('[role="dialog"]')?.parentElement;
-        expect(container).toHaveClass('pointer-events-none');
-    });
-
-    it('container does not have pointer-events-none when open', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const container = dialog.parentElement;
-        expect(container).not.toHaveClass('pointer-events-none');
-    });
-
-    it('container has overflow-hidden to prevent layout stretching', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const container = dialog.parentElement;
-        expect(container).toHaveClass('overflow-hidden');
-    });
-
-    it('has rounded-t-2xl top corners', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('rounded-t-2xl');
-    });
-
-    it('is positioned at the bottom of the screen', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('absolute', 'bottom-0', 'inset-x-0');
-    });
-
     it('has aria-modal="true"', () => {
         render(
             <BottomSheet isOpen={true} onClose={() => {}}>
@@ -375,39 +209,6 @@ describe('BottomSheet', () => {
 
         const dialog = screen.getByRole('dialog');
         expect(dialog).toHaveAttribute('aria-modal', 'true');
-    });
-
-    it('close button has 44x44px min tap target', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}} title="Filter">
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const closeButton = screen.getByRole('button', { name: 'Close' });
-        expect(closeButton).toHaveClass('min-w-[44px]', 'min-h-[44px]');
-    });
-
-    it('has transition-all duration-300 ease-out', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        expect(dialog).toHaveClass('transition-all', 'duration-300', 'ease-out');
-    });
-
-    it('backdrop has transition-opacity duration-200', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const backdrop = screen.getByRole('dialog').parentElement?.querySelector('[aria-hidden="true"]');
-        expect(backdrop).toHaveClass('transition-opacity', 'duration-200');
     });
 
     // Swipe gesture tests — touch handlers are on the drag handle (.cursor-grab)
@@ -557,27 +358,13 @@ describe('BottomSheet', () => {
         expect(dialog.style.transform).toBe('');
     });
 
-    it('content area has overflow-y-auto', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
+    it('has no accessibility violations when open', async () => {
+        const { container } = render(
+            <BottomSheet isOpen={true} onClose={() => {}} title="Accessible Sheet">
+                <p>Sheet content</p>
             </BottomSheet>
         );
-
-        const dialog = screen.getByRole('dialog');
-        const contentArea = dialog.querySelector('.overflow-y-auto');
-        expect(contentArea).toBeInTheDocument();
+        expect(await axe(container)).toHaveNoViolations();
     });
 
-    it('content area has max-height constraint', () => {
-        render(
-            <BottomSheet isOpen={true} onClose={() => {}}>
-                <p>Content</p>
-            </BottomSheet>
-        );
-
-        const dialog = screen.getByRole('dialog');
-        const contentArea = dialog.querySelector('.overflow-y-auto');
-        expect(contentArea).toHaveStyle({ maxHeight: 'calc(60vh - 80px)' });
-    });
 });

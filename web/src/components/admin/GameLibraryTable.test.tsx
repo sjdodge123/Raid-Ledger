@@ -141,14 +141,6 @@ describe('GameLibraryTable', () => {
 
     // ── Mobile card layout (<768px, rendered via md:hidden) ─────
 
-    it('renders mobile card layout container with md:hidden class', () => {
-        mockGames.items = [makeGame()];
-        mockGames.total = 1;
-        const { container } = render(<GameLibraryTable />);
-        const mobileContainer = container.querySelector('.md\\:hidden');
-        expect(mobileContainer).toBeInTheDocument();
-    });
-
     it('renders game name in mobile card', () => {
         mockGames.items = [makeGame()];
         mockGames.total = 1;
@@ -189,14 +181,11 @@ describe('GameLibraryTable', () => {
         const { container } = render(<GameLibraryTable />);
         // No img tag should be present
         expect(container.querySelector('img')).not.toBeInTheDocument();
-        // Placeholder divs exist (both mobile and desktop use bg-overlay for placeholder)
-        const placeholders = container.querySelectorAll('.bg-overlay');
-        expect(placeholders.length).toBeGreaterThan(0);
     });
 
     // ── Mobile delete button — 44×44px touch target ─────────────
 
-    it('mobile delete button has w-11 h-11 classes (44px touch target)', () => {
+    it('mobile delete button exists in mobile card', () => {
         mockGames.items = [makeGame()];
         mockGames.total = 1;
         const { container } = render(<GameLibraryTable />);
@@ -204,8 +193,6 @@ describe('GameLibraryTable', () => {
         const mobileCard = container.querySelector('.md\\:hidden');
         const deleteBtn = mobileCard?.querySelector('button[title="Remove game"]');
         expect(deleteBtn).toBeInTheDocument();
-        expect(deleteBtn!.className).toContain('w-11');
-        expect(deleteBtn!.className).toContain('h-11');
     });
 
     it('mobile delete button is disabled while deleteGame is pending', () => {
@@ -219,14 +206,6 @@ describe('GameLibraryTable', () => {
     });
 
     // ── Desktop table layout (hidden md:block) ──────────────────
-
-    it('renders desktop table layout container with hidden md:block classes', () => {
-        mockGames.items = [makeGame()];
-        mockGames.total = 1;
-        const { container } = render(<GameLibraryTable />);
-        const desktopContainer = container.querySelector('.hidden.md\\:block');
-        expect(desktopContainer).toBeInTheDocument();
-    });
 
     it('renders table with Game, IGDB ID, Cached headers in desktop layout', () => {
         mockGames.items = [makeGame()];

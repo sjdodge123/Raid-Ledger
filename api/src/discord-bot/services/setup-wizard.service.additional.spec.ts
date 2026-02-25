@@ -10,20 +10,20 @@ import { SetupWizardService } from './setup-wizard.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 describe('SetupWizardService (additional edge cases)', () => {
   let service: SetupWizardService;
   let clientService: DiscordBotClientService;
   let settingsService: SettingsService;
-  let mockDb: Record<string, jest.Mock>;
+  let mockDb: MockDb;
 
   beforeEach(async () => {
-    mockDb = {
-      select: jest.fn().mockReturnThis(),
-      from: jest.fn().mockReturnThis(),
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockResolvedValue([]),
-    };
+    mockDb = createDrizzleMock();
+    mockDb.limit.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

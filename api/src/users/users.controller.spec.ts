@@ -133,9 +133,6 @@ describe('UsersController', () => {
     eventsService = module.get<EventsService>(EventsService);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   describe('listRecentPlayers', () => {
     it('should return 200 with correct shape', async () => {

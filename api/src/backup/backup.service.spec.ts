@@ -76,9 +76,6 @@ describe('BackupService', () => {
     service = module.get<BackupService>(BackupService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   describe('onModuleInit', () => {
     it('should create backup directories', () => {

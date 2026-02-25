@@ -231,9 +231,6 @@ describe('SignupInteractionListener', () => {
     }
   });
 
-  it('should be defined', () => {
-    expect(listener).toBeDefined();
-  });
 
   // ============================================================
   // onBotConnected

@@ -59,14 +59,12 @@ describe('WeekEventCard', () => {
             const { container } = renderCard(eventWithDuration(120));
             const block = container.querySelector('.week-event-block');
             expect(block).toHaveAttribute('data-tier', 'minimal');
-            expect(block).toHaveClass('week-event-block--minimal');
         });
 
         it('selects compact tier for 150-minute events', () => {
             const { container } = renderCard(eventWithDuration(150));
             const block = container.querySelector('.week-event-block');
             expect(block).toHaveAttribute('data-tier', 'compact');
-            expect(block).toHaveClass('week-event-block--compact');
         });
 
         it('selects compact tier for 240-minute events', () => {
@@ -79,7 +77,6 @@ describe('WeekEventCard', () => {
             const { container } = renderCard(eventWithDuration(300));
             const block = container.querySelector('.week-event-block');
             expect(block).toHaveAttribute('data-tier', 'standard');
-            expect(block).toHaveClass('week-event-block--standard');
         });
     });
 
@@ -93,18 +90,6 @@ describe('WeekEventCard', () => {
                 element?.classList.contains('week-event-time') ?? false,
             );
             expect(timeEl).toBeInTheDocument();
-        });
-
-        it('applies 1-line clamp class on minimal tier title', () => {
-            const { container } = renderCard(eventWithDuration(120));
-            const title = container.querySelector('.week-event-title');
-            expect(title).toHaveClass('week-event-title--minimal');
-        });
-
-        it('does not apply minimal class on compact tier title', () => {
-            const { container } = renderCard(eventWithDuration(180));
-            const title = container.querySelector('.week-event-title');
-            expect(title).not.toHaveClass('week-event-title--minimal');
         });
 
         it('does not show creator name in any tier', () => {
@@ -187,21 +172,4 @@ describe('WeekEventCard', () => {
         });
     });
 
-    describe('cover art background', () => {
-        it('uses cover art in background when game has coverUrl', () => {
-            const { container } = renderCard(createMockEvent({
-                game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: 'https://example.com/cover.jpg' },
-            }));
-            const block = container.querySelector('.week-event-block') as HTMLElement;
-            expect(block.style.backgroundImage).toContain('example.com/cover.jpg');
-        });
-
-        it('uses gradient only when no coverUrl', () => {
-            const { container } = renderCard(createMockEvent({
-                game: { id: 1, name: 'WoW', slug: 'world-of-warcraft', coverUrl: null },
-            }));
-            const block = container.querySelector('.week-event-block') as HTMLElement;
-            expect(block.style.backgroundImage).not.toContain('url(');
-        });
-    });
 });

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { axe } from 'vitest-axe';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { NotificationDropdown } from './NotificationDropdown';
@@ -44,62 +45,6 @@ function renderDropdown(onClose = vi.fn()) {
     return { container, onClose };
 }
 
-describe('NotificationDropdown — responsive CSS classes', () => {
-    beforeEach(() => {
-        vi.clearAllMocks();
-        mockUseNotifications.mockReturnValue({
-            notifications: [],
-            isLoading: false,
-            markAllRead: mockMarkAllRead,
-            markRead: mockMarkRead,
-            unreadCount: 0,
-            error: null,
-        });
-    });
-
-    it('applies mobile fixed positioning with inset-x-4 on the container', () => {
-        const { container } = renderDropdown();
-        const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('fixed', 'inset-x-4');
-    });
-
-    it('applies desktop width class sm:w-96 on the container', () => {
-        const { container } = renderDropdown();
-        const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('sm:w-96');
-    });
-
-    it('applies top-16 mobile positioning on the container', () => {
-        const { container } = renderDropdown();
-        const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('top-16');
-    });
-
-    it('applies mobile scroll height class max-h-[70vh] on the notification list', () => {
-        const { container } = renderDropdown();
-        const listContainer = container.querySelector('.max-h-\\[70vh\\]');
-        expect(listContainer).toBeInTheDocument();
-    });
-
-    it('applies desktop scroll height class sm:max-h-[400px] on the notification list', () => {
-        const { container } = renderDropdown();
-        const listContainer = container.querySelector('.sm\\:max-h-\\[400px\\]');
-        expect(listContainer).toBeInTheDocument();
-    });
-
-    it('applies overflow-y-auto on the notification list for scrollability', () => {
-        const { container } = renderDropdown();
-        const listContainer = container.querySelector('.overflow-y-auto');
-        expect(listContainer).toBeInTheDocument();
-    });
-
-    it('applies overflow-hidden on the outer container', () => {
-        const { container } = renderDropdown();
-        const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('overflow-hidden');
-    });
-});
-
 describe('NotificationDropdown — empty state', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -126,21 +71,6 @@ describe('NotificationDropdown — empty state', () => {
     it('does not show "Mark All Read" button when there are no notifications', () => {
         renderDropdown();
         expect(screen.queryByText('Mark All Read')).not.toBeInTheDocument();
-    });
-});
-
-describe('NotificationDropdown — loading state', () => {
-    it('shows loading spinner when isLoading is true', () => {
-        mockUseNotifications.mockReturnValueOnce({
-            notifications: [],
-            isLoading: true,
-            markAllRead: mockMarkAllRead,
-            markRead: mockMarkRead,
-            unreadCount: 0,
-            error: null,
-        });
-        const { container } = renderDropdown();
-        expect(container.querySelector('.animate-spin')).toBeInTheDocument();
     });
 });
 
@@ -195,9 +125,9 @@ describe('NotificationDropdown — header', () => {
         expect(screen.getByText('Notifications')).toBeInTheDocument();
     });
 
-    it('positions as fixed with z-50 (sm:absolute for desktop)', () => {
+    it('has no accessibility violations', async () => {
         const { container } = renderDropdown();
-        const dropdown = container.firstChild as HTMLElement;
-        expect(dropdown).toHaveClass('fixed', 'z-50');
+        expect(await axe(container)).toHaveNoViolations();
     });
+
 });

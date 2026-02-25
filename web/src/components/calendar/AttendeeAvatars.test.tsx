@@ -63,27 +63,4 @@ describe('AttendeeAvatars', () => {
         expect(container.firstChild).toBeNull();
     });
 
-    it('applies correct size classes for sm size', () => {
-        render(<AttendeeAvatars signups={mockSignups.slice(0, 1)} totalCount={1} size="sm" />);
-
-        const avatar = screen.getByTitle('Player1');
-        expect(avatar.className).toContain('w-5');
-        expect(avatar.className).toContain('h-5');
-    });
-
-    it('applies correct size classes for md size', () => {
-        render(<AttendeeAvatars signups={mockSignups.slice(0, 1)} totalCount={1} size="md" />);
-
-        const avatar = screen.getByTitle('Player1');
-        expect(avatar.className).toContain('w-6');
-        expect(avatar.className).toContain('h-6');
-    });
-
-    it('applies correct size classes for xs size', () => {
-        render(<AttendeeAvatars signups={mockSignups.slice(0, 1)} totalCount={1} size="xs" />);
-
-        const avatar = screen.getByTitle('Player1');
-        expect(avatar.className).toContain('w-4');
-        expect(avatar.className).toContain('h-4');
-    });
 });

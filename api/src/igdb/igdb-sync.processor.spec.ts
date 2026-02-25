@@ -48,9 +48,6 @@ describe('IgdbSyncProcessor', () => {
     processor = module.get<IgdbSyncProcessor>(IgdbSyncProcessor);
   });
 
-  it('should be defined', () => {
-    expect(processor).toBeDefined();
-  });
 
   it('should register queue with health service on init', () => {
     processor.onModuleInit();

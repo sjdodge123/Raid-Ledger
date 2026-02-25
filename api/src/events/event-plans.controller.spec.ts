@@ -74,9 +74,6 @@ describe('EventPlansController', () => {
     controller = module.get<EventPlansController>(EventPlansController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   // ─── getTimeSuggestions ──────────────────────────────────────────────────────
 

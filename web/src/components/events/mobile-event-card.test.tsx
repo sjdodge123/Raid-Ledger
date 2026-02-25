@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { MobileEventCard, MobileEventCardSkeleton } from './mobile-event-card';
+import { MobileEventCard } from './mobile-event-card';
 import type { EventResponseDto } from '@raid-ledger/contract';
 
 const MOCK_NOW = new Date('2026-02-10T19:00:00Z');
@@ -65,18 +65,6 @@ describe('MobileEventCard', () => {
         expect(onClick).toHaveBeenCalledTimes(1);
     });
 
-    it('has 4px game color border', () => {
-        render(<MobileEventCard event={createMockEvent()} />);
-        const card = screen.getByTestId('mobile-event-card');
-        expect(card.style.borderLeftWidth).toBe('4px');
-    });
-
-    it('renders min-height of 96px', () => {
-        render(<MobileEventCard event={createMockEvent()} />);
-        const card = screen.getByTestId('mobile-event-card');
-        expect(card.className).toContain('min-h-[96px]');
-    });
-
     it('renders avatar stack container', () => {
         const event = createMockEvent({
             signupsPreview: [
@@ -96,9 +84,3 @@ describe('MobileEventCard', () => {
     });
 });
 
-describe('MobileEventCardSkeleton', () => {
-    it('renders skeleton with animate-pulse', () => {
-        const { container } = render(<MobileEventCardSkeleton />);
-        expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
-    });
-});

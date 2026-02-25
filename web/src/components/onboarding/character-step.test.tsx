@@ -97,15 +97,6 @@ describe('CharacterStep', () => {
             expect(screen.getByPlaceholderText(/character name/i)).toBeInTheDocument();
         });
 
-        it('character name input meets minimum 44px touch target height (min-h-[44px])', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const nameInput = container.querySelector('input[placeholder="Character name"]');
-            expect(nameInput).not.toBeNull();
-            expect(nameInput!.className).toContain('min-h-[44px]');
-        });
-
         it('shows Class and Spec fields for MMO games with roles', () => {
             renderWithProviders(
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
@@ -134,59 +125,6 @@ describe('CharacterStep', () => {
                 <CharacterStep preselectedGame={baseGame} charIndex={0} />
             );
             expect(screen.getByPlaceholderText(/illidan/i)).toBeInTheDocument();
-        });
-    });
-
-    describe('Responsive grid (Class/Spec)', () => {
-        it('Class/Spec grid uses single column on mobile (grid-cols-1) and two columns on sm (sm:grid-cols-2)', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            // The grid container for class/spec should have both classes
-            const gridDiv = container.querySelector('.grid.grid-cols-1.sm\\:grid-cols-2');
-            expect(gridDiv).not.toBeNull();
-        });
-    });
-
-    describe('Input minimum heights (44px touch targets)', () => {
-        it('Class input has min-h-[44px]', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const classInput = container.querySelector('input[placeholder="e.g. Warrior"]');
-            expect(classInput!.className).toContain('min-h-[44px]');
-        });
-
-        it('Spec input has min-h-[44px]', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const specInput = container.querySelector('input[placeholder="e.g. Arms"]');
-            expect(specInput!.className).toContain('min-h-[44px]');
-        });
-
-        it('Role select has min-h-[44px]', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const roleSelect = container.querySelector('select');
-            expect(roleSelect!.className).toContain('min-h-[44px]');
-        });
-
-        it('Realm input has min-h-[44px]', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const realmInput = container.querySelector('input[placeholder="e.g. Illidan"]');
-            expect(realmInput!.className).toContain('min-h-[44px]');
-        });
-
-        it('Submit button has min-h-[44px]', () => {
-            const { container } = renderWithProviders(
-                <CharacterStep preselectedGame={baseGame} charIndex={0} />
-            );
-            const submitButton = container.querySelector('button[type="submit"]');
-            expect(submitButton!.className).toContain('min-h-[44px]');
         });
     });
 
@@ -297,7 +235,6 @@ describe('CharacterStep', () => {
 
             const addButton = screen.getByRole('button', { name: /add another character/i });
             expect(addButton).toBeInTheDocument();
-            expect(addButton.className).toContain('min-h-[44px]');
         });
 
         it('calls onAddAnother when Add Another Character is clicked', () => {

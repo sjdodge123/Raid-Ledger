@@ -60,9 +60,6 @@ describe('OgMetaService', () => {
     service = module.get<OgMetaService>(OgMetaService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   describe('renderInviteOgHtml', () => {
     it('should render OG tags for a valid invite', async () => {

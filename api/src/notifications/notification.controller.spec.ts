@@ -44,10 +44,6 @@ describe('NotificationController — getChannelAvailability (ROK-180 AC-7)', () 
     controller = module.get<NotificationController>(NotificationController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
   describe('GET /notifications/channels', () => {
     it('should return discord available when user has discordId and bot is connected', () => {
       const req = {

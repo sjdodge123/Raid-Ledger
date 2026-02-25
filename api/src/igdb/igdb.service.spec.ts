@@ -162,9 +162,6 @@ describe('IgdbService', () => {
     jest.clearAllMocks();
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   describe('searchGames', () => {
     it('should return Redis-cached games when available', async () => {

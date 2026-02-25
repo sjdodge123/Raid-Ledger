@@ -15,42 +15,6 @@ describe('AvatarUploadZone', () => {
         vi.clearAllMocks();
     });
 
-    describe('Responsive avatar preview sizing', () => {
-        it('renders avatar placeholder with mobile size class w-16 h-16', () => {
-            const { container } = render(<AvatarUploadZone {...defaultProps} />);
-            const placeholder = container.querySelector('.w-16.h-16');
-            expect(placeholder).toBeInTheDocument();
-        });
-
-        it('renders avatar placeholder with desktop size class sm:w-20 sm:h-20', () => {
-            const { container } = render(<AvatarUploadZone {...defaultProps} />);
-            // The placeholder div has both mobile and desktop size classes
-            const placeholder = container.querySelector('.w-16.h-16.sm\\:w-20.sm\\:h-20');
-            expect(placeholder).toBeInTheDocument();
-        });
-
-        it('renders preview image with responsive size classes when currentCustomUrl is provided', () => {
-            const { container } = render(
-                <AvatarUploadZone {...defaultProps} currentCustomUrl="https://example.com/avatar.png" />
-            );
-            const img = container.querySelector('img[alt="Avatar preview"]');
-            expect(img).toBeInTheDocument();
-            expect(img).toHaveClass('w-16');
-            expect(img).toHaveClass('h-16');
-            expect(img).toHaveClass('sm:w-20');
-            expect(img).toHaveClass('sm:h-20');
-        });
-
-        it('renders progress SVG with responsive size classes when uploading', () => {
-            const { container } = render(
-                <AvatarUploadZone {...defaultProps} isUploading={true} uploadProgress={50} />
-            );
-            // The progress SVG has responsive classes
-            const progressSvg = container.querySelector('svg.w-16.h-16.sm\\:w-20.sm\\:h-20');
-            expect(progressSvg).toBeInTheDocument();
-        });
-    });
-
     describe('Upload progress display', () => {
         it('shows upload progress percentage when uploading', () => {
             render(<AvatarUploadZone {...defaultProps} isUploading={true} uploadProgress={75} />);
@@ -163,11 +127,10 @@ describe('AvatarUploadZone', () => {
             expect(screen.getByText('Upload Custom Avatar')).toBeInTheDocument();
         });
 
-        it('has hidden file input with correct accept attribute', () => {
+        it('has file input with correct accept attribute', () => {
             const { container } = render(<AvatarUploadZone {...defaultProps} />);
             const input = container.querySelector('input[type="file"]');
             expect(input).toBeInTheDocument();
-            expect(input).toHaveClass('hidden');
             expect(input).toHaveAttribute('accept', 'image/png,image/jpeg,image/webp,image/gif');
         });
     });

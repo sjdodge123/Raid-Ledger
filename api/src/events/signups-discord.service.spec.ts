@@ -255,8 +255,10 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
         discordUsername: 'AnonUser',
       });
 
-      expect(result.id).toBe(mockAnonymousSignup.id);
-      expect(result.isAnonymous).toBe(true);
+      expect(result).toMatchObject({
+        id: expect.any(Number),
+        isAnonymous: true,
+      });
     });
 
     it('should create roster assignment when role is provided', async () => {

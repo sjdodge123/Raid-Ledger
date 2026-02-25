@@ -53,10 +53,6 @@ describe('EventReminderService', () => {
     service = module.get<EventReminderService>(EventReminderService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('sendReminder', () => {
     it('should insert tracking row and create notification', async () => {
       const trackingRow = {

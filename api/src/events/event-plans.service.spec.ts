@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { EventPlansService, EVENT_PLANS_QUEUE } from './event-plans.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../common/testing/drizzle-mock';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { EventsService } from './events.service';
@@ -86,24 +90,11 @@ function makePollAnswer(voterIds: string[]) {
 
 // ─── DB mock factory ──────────────────────────────────────────────────────────
 
-function makeDbMock() {
-  const chain = {
-    from: jest.fn().mockReturnThis(),
-    where: jest.fn().mockReturnThis(),
-    limit: jest.fn().mockResolvedValue([makePlan()]),
-    set: jest.fn().mockReturnThis(),
-    values: jest.fn().mockReturnThis(),
-    returning: jest.fn().mockResolvedValue([makePlan()]),
-    orderBy: jest.fn().mockReturnThis(),
-  };
-
-  return {
-    select: jest.fn().mockReturnValue(chain),
-    insert: jest.fn().mockReturnValue(chain),
-    update: jest.fn().mockReturnValue(chain),
-    delete: jest.fn().mockReturnValue(chain),
-    _chain: chain,
-  };
+function makeDbMock(): MockDb {
+  const mock = createDrizzleMock();
+  mock.limit.mockResolvedValue([makePlan()]);
+  mock.returning.mockResolvedValue([makePlan()]);
+  return mock;
 }
 
 // ─── Discord client mock ──────────────────────────────────────────────────────
@@ -159,7 +150,7 @@ function makeQueueMock() {
  * Subsequent calls (user lookup) -> returns registered user records
  */
 function setupRegisteredUsersResponse(
-  db: ReturnType<typeof makeDbMock>,
+  db: MockDb,
   registeredDiscordIds: string[],
 ) {
   // The where mock handles multiple chained calls.
@@ -173,13 +164,12 @@ function setupRegisteredUsersResponse(
   // Override the where chain for users lookup.
   // The plan fetch uses limit(), users lookup uses where() directly (no limit).
   // We need where to resolve to registered users when called by the users query.
-  db._chain.where.mockImplementation(() => {
-    // Return the chain for further chaining (limit, etc.)
-    // When this is used as a thenable/awaited directly, return registered users
-    const chainWithPromise = {
-      ...db._chain,
-      then: (resolve: (value: unknown) => void) => resolve(registeredResponse),
+  db.where.mockImplementation(() => {
+    const chainWithPromise = Object.create(db) as MockDb & {
+      then: (resolve: (value: unknown) => void) => void;
     };
+    chainWithPromise.then = (resolve: (value: unknown) => void) =>
+      resolve(registeredResponse);
     return chainWithPromise;
   });
 }
@@ -188,7 +178,7 @@ function setupRegisteredUsersResponse(
 
 describe('EventPlansService', () => {
   let service: EventPlansService;
-  let db: ReturnType<typeof makeDbMock>;
+  let db: MockDb;
   let discordClient: ReturnType<typeof makeDiscordMock>;
   let queue: ReturnType<typeof makeQueueMock>;
   let channelResolver: { resolveChannelForEvent: jest.Mock };
@@ -238,21 +228,10 @@ describe('EventPlansService', () => {
     queue.getJob.mockResolvedValue(queue._mockJob);
     eventsService.create.mockResolvedValue({ id: 99 });
     signupsService.signup.mockResolvedValue(undefined);
-    db._chain.limit.mockResolvedValue([makePlan()]);
-    db._chain.returning.mockResolvedValue([makePlan()]);
-    db.select.mockReturnValue(db._chain);
-    db.insert.mockReturnValue(db._chain);
-    db.update.mockReturnValue(db._chain);
-    db._chain.from.mockReturnThis();
-    db._chain.where.mockReturnThis();
-    db._chain.set.mockReturnThis();
-    db._chain.values.mockReturnThis();
-    db._chain.orderBy.mockReturnThis();
+    db.limit.mockResolvedValue([makePlan()]);
+    db.returning.mockResolvedValue([makePlan()]);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
 
   // ─── create ─────────────────────────────────────────────────────────────────
 
@@ -341,7 +320,7 @@ describe('EventPlansService', () => {
 
   describe('findOne', () => {
     it('should return plan DTO when found', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
+      db.limit.mockResolvedValue([makePlan()]);
 
       const result = await service.findOne(PLAN_ID);
 
@@ -350,7 +329,7 @@ describe('EventPlansService', () => {
     });
 
     it('should throw NotFoundException when plan does not exist', async () => {
-      db._chain.limit.mockResolvedValue([]);
+      db.limit.mockResolvedValue([]);
 
       await expect(service.findOne('non-existent-id')).rejects.toThrow(
         NotFoundException,
@@ -362,7 +341,7 @@ describe('EventPlansService', () => {
 
   describe('findAll', () => {
     it('should return array of all plans', async () => {
-      db._chain.orderBy.mockResolvedValue([makePlan(), makePlan()]);
+      db.orderBy.mockResolvedValue([makePlan(), makePlan()]);
 
       const results = await service.findAll();
 
@@ -371,7 +350,7 @@ describe('EventPlansService', () => {
     });
 
     it('should return empty array when no plans exist', async () => {
-      db._chain.orderBy.mockResolvedValue([]);
+      db.orderBy.mockResolvedValue([]);
 
       const results = await service.findAll();
 
@@ -383,7 +362,7 @@ describe('EventPlansService', () => {
 
   describe('cancel', () => {
     it('should throw NotFoundException when plan not found', async () => {
-      db._chain.limit.mockResolvedValue([]);
+      db.limit.mockResolvedValue([]);
 
       await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
         NotFoundException,
@@ -391,7 +370,7 @@ describe('EventPlansService', () => {
     });
 
     it('should throw ForbiddenException when caller is not creator', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
+      db.limit.mockResolvedValue([makePlan()]);
 
       const otherUserId = CREATOR_ID + 1;
       await expect(service.cancel(PLAN_ID, otherUserId)).rejects.toThrow(
@@ -400,7 +379,7 @@ describe('EventPlansService', () => {
     });
 
     it('should throw BadRequestException when plan is not in polling status', async () => {
-      db._chain.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
+      db.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
 
       await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
         BadRequestException,
@@ -408,7 +387,7 @@ describe('EventPlansService', () => {
     });
 
     it('should throw BadRequestException when plan is cancelled', async () => {
-      db._chain.limit.mockResolvedValue([makePlan({ status: 'cancelled' })]);
+      db.limit.mockResolvedValue([makePlan({ status: 'cancelled' })]);
 
       await expect(service.cancel(PLAN_ID, CREATOR_ID)).rejects.toThrow(
         BadRequestException,
@@ -416,8 +395,8 @@ describe('EventPlansService', () => {
     });
 
     it('should delete Discord poll message on cancel', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([
+      db.limit.mockResolvedValue([makePlan()]);
+      db.returning.mockResolvedValue([
         makePlan({ status: 'cancelled' }),
       ]);
 
@@ -430,8 +409,8 @@ describe('EventPlansService', () => {
     });
 
     it('should remove queued BullMQ job on cancel', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([
+      db.limit.mockResolvedValue([makePlan()]);
+      db.returning.mockResolvedValue([
         makePlan({ status: 'cancelled' }),
       ]);
 
@@ -442,8 +421,8 @@ describe('EventPlansService', () => {
     });
 
     it('should update plan status to cancelled', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([
+      db.limit.mockResolvedValue([makePlan()]);
+      db.returning.mockResolvedValue([
         makePlan({ status: 'cancelled' }),
       ]);
 
@@ -454,8 +433,8 @@ describe('EventPlansService', () => {
     });
 
     it('should proceed even if Discord message deletion fails', async () => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([
+      db.limit.mockResolvedValue([makePlan()]);
+      db.returning.mockResolvedValue([
         makePlan({ status: 'cancelled' }),
       ]);
       discordClient.deleteMessage.mockRejectedValue(new Error('Message gone'));
@@ -469,15 +448,15 @@ describe('EventPlansService', () => {
 
   describe('processPollClose', () => {
     beforeEach(() => {
-      db._chain.limit.mockResolvedValue([makePlan()]);
-      db._chain.returning.mockResolvedValue([makePlan()]);
+      db.limit.mockResolvedValue([makePlan()]);
+      db.returning.mockResolvedValue([makePlan()]);
 
       // Default: all voters are registered
       setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
     });
 
     it('should skip if plan is not found', async () => {
-      db._chain.limit.mockResolvedValue([]);
+      db.limit.mockResolvedValue([]);
 
       await service.processPollClose(PLAN_ID);
 
@@ -485,7 +464,7 @@ describe('EventPlansService', () => {
     });
 
     it('should skip if plan is not in polling status', async () => {
-      db._chain.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
+      db.limit.mockResolvedValue([makePlan({ status: 'completed' })]);
 
       await service.processPollClose(PLAN_ID);
 
@@ -675,7 +654,7 @@ describe('EventPlansService', () => {
       });
 
       beforeEach(() => {
-        db._chain.limit.mockResolvedValue([allOrNothingPlan]);
+        db.limit.mockResolvedValue([allOrNothingPlan]);
         setupRegisteredUsersResponse(db, REGISTERED_USER_IDS);
       });
 
@@ -692,8 +671,8 @@ describe('EventPlansService', () => {
           },
         });
 
-        db._chain.limit.mockResolvedValue([allOrNothingPlan]);
-        db._chain.orderBy.mockResolvedValue([]); // no game_interests users
+        db.limit.mockResolvedValue([allOrNothingPlan]);
+        db.orderBy.mockResolvedValue([]); // no game_interests users
 
         await service.processPollClose(PLAN_ID);
 
@@ -744,8 +723,8 @@ describe('EventPlansService', () => {
           pollMode: 'all_or_nothing',
           slotConfig: null,
         });
-        db._chain.limit.mockResolvedValue([noSlotPlan]);
-        db._chain.orderBy.mockResolvedValue([]); // fallback suggestions
+        db.limit.mockResolvedValue([noSlotPlan]);
+        db.orderBy.mockResolvedValue([]); // fallback suggestions
 
         discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
           poll: {
@@ -774,8 +753,8 @@ describe('EventPlansService', () => {
           },
         });
 
-        db._chain.limit.mockResolvedValue([allOrNothingPlan]);
-        db._chain.orderBy.mockResolvedValue([]); // no game_interests → fallback
+        db.limit.mockResolvedValue([allOrNothingPlan]);
+        db.orderBy.mockResolvedValue([]); // no game_interests → fallback
 
         // Simulate the new poll post failing
         discordClient.deleteMessage.mockResolvedValue(undefined);
@@ -784,7 +763,7 @@ describe('EventPlansService', () => {
         );
 
         // After repoll fails, plan expires
-        db._chain.returning.mockResolvedValue([
+        db.returning.mockResolvedValue([
           makePlan({ status: 'expired', pollMode: 'all_or_nothing' }),
         ]);
 
@@ -890,7 +869,7 @@ describe('EventPlansService', () => {
     });
 
     it('should return fallback suggestions when no game interests exist', async () => {
-      db._chain.where.mockResolvedValue([]); // no game interests
+      db.where.mockResolvedValue([]); // no game interests
 
       const result = await service.getTimeSuggestions(1);
 
@@ -925,9 +904,9 @@ describe('EventPlansService', () => {
 
     it('should return game-interest source when game interests and templates exist', async () => {
       // game interests
-      db._chain.where.mockResolvedValueOnce([{ userId: 1 }, { userId: 2 }]);
+      db.where.mockResolvedValueOnce([{ userId: 1 }, { userId: 2 }]);
       // game time templates
-      db._chain.where.mockResolvedValueOnce([
+      db.where.mockResolvedValueOnce([
         { dayOfWeek: 0, startHour: 18 },
         { dayOfWeek: 0, startHour: 18 }, // duplicate to give count=2
         { dayOfWeek: 1, startHour: 19 },
@@ -960,8 +939,8 @@ describe('EventPlansService', () => {
   describe('re-poll round tracking', () => {
     it('should increment pollRound when re-poll is triggered', async () => {
       const plan = makePlan({ pollMode: 'all_or_nothing', pollRound: 1 });
-      db._chain.limit.mockResolvedValue([plan]);
-      db._chain.orderBy.mockResolvedValue([]); // no game_interests → fallback
+      db.limit.mockResolvedValue([plan]);
+      db.orderBy.mockResolvedValue([]); // no game_interests → fallback
 
       // "None" vote triggers re-poll (no roster threshold since no slotConfig)
       discordClient._mockTextChannel.messages.fetch.mockResolvedValue({
@@ -982,7 +961,7 @@ describe('EventPlansService', () => {
       expect(updateCalls.length).toBeGreaterThan(0);
 
       // Find the set call that includes pollRound
-      const setCall = (db._chain.set.mock.calls as unknown[][]).find(
+      const setCall = (db.set.mock.calls as unknown[][]).find(
         (call: unknown[]) =>
           call[0] &&
           typeof call[0] === 'object' &&

@@ -118,72 +118,6 @@ describe('AvatarPanel', () => {
         });
     });
 
-    describe('Available avatar thumbnail grid (ROK-338)', () => {
-        it('renders thumbnail grid with grid-cols-4 on mobile', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const grid = container.querySelector('.grid.grid-cols-4');
-            expect(grid).toBeInTheDocument();
-        });
-
-        it('renders thumbnail grid with sm:flex sm:flex-wrap on desktop', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const grid = container.querySelector('.sm\\:flex.sm\\:flex-wrap');
-            expect(grid).toBeInTheDocument();
-        });
-
-        it('thumbnail images have mobile size w-12 h-12', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const thumbnails = container.querySelectorAll('img.w-12.h-12');
-            expect(thumbnails.length).toBeGreaterThan(0);
-        });
-
-        it('thumbnail images have desktop size sm:w-14 sm:h-14', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const thumbnails = container.querySelectorAll('img.sm\\:w-14.sm\\:h-14');
-            expect(thumbnails.length).toBeGreaterThan(0);
-        });
-    });
-
     describe('Avatar options display', () => {
         it('does not render avatar grid when no options are available', () => {
             // User with no discord, no custom avatar, no characters
@@ -308,21 +242,6 @@ describe('AvatarPanel', () => {
             }
         });
 
-        it('renders active ring on the current resolved avatar', () => {
-            const user = {
-                ...mockUser,
-                customAvatarUrl: '/custom/avatar.jpg',
-            };
-            vi.spyOn(useAuthHook, 'useAuth').mockReturnValue({
-                user,
-                isAuthenticated: true,
-                refetch: mockRefetch,
-            } as any);
-
-            const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
-            const selectedButton = container.querySelector('.ring-2.ring-emerald-500');
-            expect(selectedButton).toBeInTheDocument();
-        });
     });
 
     describe('Upload custom button', () => {

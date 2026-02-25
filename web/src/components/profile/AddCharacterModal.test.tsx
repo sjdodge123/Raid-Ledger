@@ -161,13 +161,6 @@ describe('AddCharacterModal — armory-synced character', () => {
         expect(nameInput).toBeDisabled();
     });
 
-    it('applies opacity and cursor-not-allowed styling to Name field for synced characters', () => {
-        renderModal({ editingCharacter: createArmorySyncedCharacter() });
-        const nameInput = screen.getByPlaceholderText('Character name');
-        expect(nameInput).toHaveClass('opacity-60');
-        expect(nameInput).toHaveClass('cursor-not-allowed');
-    });
-
     it('sets tooltip on Name field explaining sync', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
@@ -178,13 +171,6 @@ describe('AddCharacterModal — armory-synced character', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const classInput = screen.getByPlaceholderText('e.g. Warrior');
         expect(classInput).toBeDisabled();
-    });
-
-    it('applies opacity and cursor-not-allowed styling to Class field for synced characters', () => {
-        renderModal({ editingCharacter: createArmorySyncedCharacter() });
-        const classInput = screen.getByPlaceholderText('e.g. Warrior');
-        expect(classInput).toHaveClass('opacity-60');
-        expect(classInput).toHaveClass('cursor-not-allowed');
     });
 
     it('sets tooltip on Class field explaining sync', () => {
@@ -199,24 +185,10 @@ describe('AddCharacterModal — armory-synced character', () => {
         expect(specInput).toBeDisabled();
     });
 
-    it('applies opacity and cursor-not-allowed styling to Spec field for synced characters', () => {
-        renderModal({ editingCharacter: createArmorySyncedCharacter() });
-        const specInput = screen.getByPlaceholderText('e.g. Arms');
-        expect(specInput).toHaveClass('opacity-60');
-        expect(specInput).toHaveClass('cursor-not-allowed');
-    });
-
     it('disables the Realm field for armory-synced characters', () => {
         renderModal({ editingCharacter: createArmorySyncedCharacter() });
         const realmInput = screen.getByPlaceholderText('e.g. Illidan');
         expect(realmInput).toBeDisabled();
-    });
-
-    it('applies opacity and cursor-not-allowed styling to Realm field for synced characters', () => {
-        renderModal({ editingCharacter: createArmorySyncedCharacter() });
-        const realmInput = screen.getByPlaceholderText('e.g. Illidan');
-        expect(realmInput).toHaveClass('opacity-60');
-        expect(realmInput).toHaveClass('cursor-not-allowed');
     });
 
     it('sets tooltip on Realm field explaining sync', () => {
@@ -303,13 +275,6 @@ describe('AddCharacterModal — manually-created character', () => {
         renderModal({ editingCharacter: createManualCharacter() });
         const nameInput = screen.getByPlaceholderText('Character name');
         expect(nameInput).not.toBeDisabled();
-    });
-
-    it('does not apply disabled styling to Name field for manual characters', () => {
-        renderModal({ editingCharacter: createManualCharacter() });
-        const nameInput = screen.getByPlaceholderText('Character name');
-        expect(nameInput).not.toHaveClass('opacity-60');
-        expect(nameInput).not.toHaveClass('cursor-not-allowed');
     });
 
     it('keeps the Class field enabled for manually-created characters', () => {

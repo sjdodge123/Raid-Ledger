@@ -78,10 +78,6 @@ describe('DiscordNotificationProcessor', () => {
     );
   });
 
-  it('should be defined', () => {
-    expect(processor).toBeDefined();
-  });
-
   describe('process — success path', () => {
     it('should build embed and send DM on successful processing', async () => {
       const job = buildJob();

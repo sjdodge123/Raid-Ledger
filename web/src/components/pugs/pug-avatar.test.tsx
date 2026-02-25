@@ -96,21 +96,4 @@ describe('PugAvatar', () => {
         });
     });
 
-    describe('size customization', () => {
-        it('uses default size class h-10 w-10', () => {
-            const { container } = render(<PugAvatar username="test" />);
-            const div = container.firstElementChild;
-            expect(div?.className).toContain('h-10');
-            expect(div?.className).toContain('w-10');
-        });
-
-        it('accepts custom size class', () => {
-            const { container } = render(
-                <PugAvatar username="test" sizeClassName="h-8 w-8" />,
-            );
-            const div = container.firstElementChild;
-            expect(div?.className).toContain('h-8');
-            expect(div?.className).toContain('w-8');
-        });
-    });
 });

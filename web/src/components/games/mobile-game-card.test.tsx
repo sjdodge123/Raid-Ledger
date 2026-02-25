@@ -67,14 +67,6 @@ describe('MobileGameCard', () => {
         expect(screen.getByTestId('mobile-game-heart')).toBeInTheDocument();
     });
 
-    it('heart button has ≥44px tap target', () => {
-        renderWithRouter(<MobileGameCard game={createMockGame()} />);
-        const heart = screen.getByTestId('mobile-game-heart');
-        // w-11 = 44px, h-11 = 44px
-        expect(heart.className).toContain('w-11');
-        expect(heart.className).toContain('h-11');
-    });
-
     it('links to game detail page', () => {
         renderWithRouter(<MobileGameCard game={createMockGame()} />);
         const link = screen.getByTestId('mobile-game-card');

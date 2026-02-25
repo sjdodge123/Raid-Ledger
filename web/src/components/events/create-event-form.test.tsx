@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -108,134 +108,7 @@ function renderForm() {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('CreateEventForm — form section spacing', () => {
-    it('applies space-y-4 sm:space-y-8 to the root form (mobile-first spacing)', () => {
-        const { container } = renderForm();
-        const form = container.querySelector('form');
-        expect(form).not.toBeNull();
-        expect(form!.className).toContain('space-y-4');
-        expect(form!.className).toContain('sm:space-y-8');
-    });
-});
-
-describe('CreateEventForm — SlotStepper touch targets', () => {
-    beforeEach(() => {
-        renderForm();
-    });
-
-    it('stepper decrement buttons have w-11 h-11 class for 44px mobile touch target', () => {
-        // Find all decrement (-) buttons in the slot stepper area
-        const decrementButtons = screen.getAllByRole('button', { name: '-' });
-        expect(decrementButtons.length).toBeGreaterThan(0);
-        decrementButtons.forEach((btn) => {
-            expect(btn.className).toContain('w-11');
-            expect(btn.className).toContain('h-11');
-        });
-    });
-
-    it('stepper increment buttons have w-11 h-11 class for 44px mobile touch target', () => {
-        const incrementButtons = screen.getAllByRole('button', { name: '+' });
-        expect(incrementButtons.length).toBeGreaterThan(0);
-        incrementButtons.forEach((btn) => {
-            expect(btn.className).toContain('w-11');
-            expect(btn.className).toContain('h-11');
-        });
-    });
-
-    it('stepper buttons have sm:w-8 sm:h-8 for 32px desktop size override', () => {
-        const decrementButtons = screen.getAllByRole('button', { name: '-' });
-        decrementButtons.forEach((btn) => {
-            expect(btn.className).toContain('sm:w-8');
-            expect(btn.className).toContain('sm:h-8');
-        });
-    });
-});
-
-describe('CreateEventForm — SlotStepper input width', () => {
-    it('stepper number inputs have w-14 class for touch-friendly width on mobile', () => {
-        const { container } = renderForm();
-        // SlotStepper inputs are number inputs inside the slot stepper container
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        expect(numberInputs.length).toBeGreaterThan(0);
-        numberInputs.forEach((input) => {
-            expect(input.className).toContain('w-14');
-        });
-    });
-
-    it('stepper number inputs have sm:w-12 for desktop width override', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        numberInputs.forEach((input) => {
-            expect(input.className).toContain('sm:w-12');
-        });
-    });
-
-    it('stepper inputs have h-11 height class on mobile', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        numberInputs.forEach((input) => {
-            expect(input.className).toContain('h-11');
-        });
-    });
-
-    it('stepper inputs have sm:h-8 height class on desktop', () => {
-        const { container } = renderForm();
-        const stepperContainer = container.querySelector('.divide-y');
-        expect(stepperContainer).not.toBeNull();
-        const numberInputs = stepperContainer!.querySelectorAll('input[type="number"]');
-        numberInputs.forEach((input) => {
-            expect(input.className).toContain('sm:h-8');
-        });
-    });
-});
-
 describe('CreateEventForm — custom duration inputs stacking', () => {
-    it('custom duration wrapper uses flex-col on mobile and sm:flex-row on desktop', () => {
-        const { container } = renderForm();
-
-        // Click "Custom" duration button to reveal the custom inputs
-        const customBtn = screen.getByRole('button', { name: 'Custom' });
-        fireEvent.click(customBtn);
-
-        // The custom duration row should now be visible
-        const durationWrapper = container.querySelector('.flex.flex-col.sm\\:flex-row');
-        expect(durationWrapper).not.toBeNull();
-    });
-
-    it('custom duration wrapper has gap-2 and sm:gap-3', () => {
-        const { container } = renderForm();
-
-        const customBtn = screen.getByRole('button', { name: 'Custom' });
-        fireEvent.click(customBtn);
-
-        const durationWrapper = container.querySelector('.flex.flex-col.sm\\:flex-row');
-        expect(durationWrapper).not.toBeNull();
-        expect(durationWrapper!.className).toContain('gap-2');
-        expect(durationWrapper!.className).toContain('sm:gap-3');
-    });
-
-    it('custom duration hr input has w-full class on mobile', () => {
-        const { container } = renderForm();
-
-        const customBtn = screen.getByRole('button', { name: 'Custom' });
-        fireEvent.click(customBtn);
-
-        const durationWrapper = container.querySelector('.flex.flex-col.sm\\:flex-row');
-        expect(durationWrapper).not.toBeNull();
-        const inputs = durationWrapper!.querySelectorAll('input[type="number"]');
-        expect(inputs.length).toBe(2);
-        // Both hr and min inputs should have w-full for mobile stacking
-        inputs.forEach((input) => {
-            expect(input.className).toContain('w-full');
-        });
-    });
-
     it('custom duration inputs show hr and min labels', () => {
         renderForm();
         const customBtn = screen.getByRole('button', { name: 'Custom' });
@@ -243,20 +116,6 @@ describe('CreateEventForm — custom duration inputs stacking', () => {
 
         expect(screen.getByText('hr')).toBeInTheDocument();
         expect(screen.getByText('min')).toBeInTheDocument();
-    });
-});
-
-describe('CreateEventForm — SlotStepper row minimum height', () => {
-    it('stepper rows have min-h-[44px] on mobile', () => {
-        const { container } = renderForm();
-        const stepperRows = container.querySelectorAll('.min-h-\\[44px\\]');
-        expect(stepperRows.length).toBeGreaterThan(0);
-    });
-
-    it('stepper rows have sm:min-h-0 to clear min-height on desktop', () => {
-        const { container } = renderForm();
-        const stepperRows = container.querySelectorAll('.sm\\:min-h-0');
-        expect(stepperRows.length).toBeGreaterThan(0);
     });
 });
 

@@ -35,9 +35,6 @@ describe('IgdbController', () => {
     controller = module.get<IgdbController>(IgdbController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   describe('searchGames', () => {
     it('should return search results for valid query', async () => {

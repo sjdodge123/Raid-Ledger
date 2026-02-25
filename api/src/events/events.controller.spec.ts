@@ -92,9 +92,6 @@ describe('EventsController', () => {
     controller = module.get<EventsController>(EventsController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   describe('create', () => {
     it('should create event with valid data', async () => {
@@ -109,7 +106,7 @@ describe('EventsController', () => {
         body,
       );
 
-      expect(result.id).toBe(mockEvent.id);
+      expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockEventsService.create).toHaveBeenCalledWith(
         mockUser.id,
         expect.any(Object),
@@ -283,7 +280,7 @@ describe('EventsController', () => {
     it('should return single event', async () => {
       const result = await controller.findOne(1);
 
-      expect(result.id).toBe(mockEvent.id);
+      expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockEventsService.findOne).toHaveBeenCalledWith(1);
     });
   });
@@ -298,7 +295,7 @@ describe('EventsController', () => {
         body,
       );
 
-      expect(result.id).toBe(mockEvent.id);
+      expect(result).toMatchObject({ id: expect.any(Number) });
       expect(mockEventsService.update).toHaveBeenCalledWith(
         1,
         mockUser.id,

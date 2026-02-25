@@ -39,11 +39,4 @@ describe('MobilePlayerCard', () => {
         expect(link).toHaveAttribute('href', '/users/42');
     });
 
-    it('truncates long usernames', () => {
-        renderWithRouter(
-            <MobilePlayerCard player={createMockPlayer({ username: 'VeryLongUsernameForTesting' })} />,
-        );
-        const nameEl = screen.getByText('VeryLongUsernameForTesting');
-        expect(nameEl.className).toContain('truncate');
-    });
 });

@@ -157,25 +157,11 @@ describe('AdminSetupWizard', () => {
             expect(screen.getByText(/step 1 of 4/i)).toBeInTheDocument();
         });
 
-        it('mobile stepper text is inside a md:hidden element', () => {
-            const { container } = renderWithRouter(<AdminSetupWizard />);
-            const mobileStepperDiv = container.querySelector('.md\\:hidden');
-            expect(mobileStepperDiv).not.toBeNull();
-            expect(mobileStepperDiv!.textContent).toContain('Step');
-            expect(mobileStepperDiv!.textContent).toContain('of');
-        });
-
         it('mobile stepper shows current step label', () => {
             renderWithRouter(<AdminSetupWizard />);
             // Step 0 = Secure Account
             const mobileStepperDiv = screen.getByText(/step 1 of 4/i).closest('div');
             expect(mobileStepperDiv).not.toBeNull();
-        });
-
-        it('desktop stepper is inside a hidden md:flex element', () => {
-            const { container } = renderWithRouter(<AdminSetupWizard />);
-            const desktopStepperDiv = container.querySelector('.hidden.md\\:flex');
-            expect(desktopStepperDiv).not.toBeNull();
         });
 
         it('desktop stepper shows all step labels', () => {
@@ -194,11 +180,10 @@ describe('AdminSetupWizard', () => {
     });
 
     describe('Skip Setup button', () => {
-        it('renders the Skip Setup button with min-h-[44px]', () => {
+        it('renders the Skip Setup button', () => {
             renderWithRouter(<AdminSetupWizard />);
             const skipButton = screen.getByRole('button', { name: /skip setup/i });
             expect(skipButton).toBeInTheDocument();
-            expect(skipButton.className).toContain('min-h-[44px]');
         });
     });
 

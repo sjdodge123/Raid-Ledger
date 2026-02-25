@@ -52,10 +52,6 @@ describe('IntentTokenService', () => {
     service = module.get<IntentTokenService>(IntentTokenService);
   });
 
-  it('should be defined', () => {
-    expect(service).toBeDefined();
-  });
-
   describe('generate', () => {
     it('should call jwtService.sign with correct payload and TTL', () => {
       const token = service.generate(42, 'discord-user-123');

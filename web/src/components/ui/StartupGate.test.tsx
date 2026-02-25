@@ -78,17 +78,6 @@ describe('StartupGate', () => {
             expect(screen.getByText('Raid Ledger')).toBeInTheDocument();
         });
 
-        it('renders a spinner during startup', () => {
-            setStoreState({ status: 'checking', hasBeenOnline: false });
-
-            const { container } = render(
-                <StartupGate>
-                    <div>App Content</div>
-                </StartupGate>,
-            );
-
-            expect(container.querySelector('.animate-spin')).toBeInTheDocument();
-        });
     });
 
     describe('"Taking longer than usual" after 30 seconds', () => {

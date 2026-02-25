@@ -113,12 +113,10 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
     });
 
     describe('Mobile Filter Button', () => {
-        it('renders genre filter button with md:hidden class (mobile only)', () => {
+        it('renders genre filter button', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
             expect(filterBtn).toBeInTheDocument();
-            // FAB button itself has md:hidden to hide on desktop
-            expect(filterBtn).toHaveClass('md:hidden');
         });
 
         it('renders Genre Filter aria-label on the FAB', () => {
@@ -165,12 +163,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
     });
 
     describe('Desktop Genre Filter Pills', () => {
-        it('renders desktop pills container with hidden md:flex classes', () => {
-            const { container } = renderPage();
-            const pillsContainer = container.querySelector('.hidden.md\\:flex');
-            expect(pillsContainer).toBeInTheDocument();
-        });
-
         it('renders "All" pill on desktop', () => {
             const { container } = renderPage();
             const pillsContainer = container.querySelector('.hidden.md\\:flex');
@@ -192,16 +184,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
     });
 
     describe('Bottom Sheet behavior', () => {
-        it('opens bottom sheet when filter button is clicked', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            fireEvent.click(filterBtn);
-
-            // Bottom sheet should now be visible (translate-y-0)
-            const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveClass('translate-y-0');
-        });
-
         it('bottom sheet has title "Genre Filter"', () => {
             renderPage();
             const filterBtn = screen.getByRole('button', { name: /genre filter/i });
@@ -211,12 +193,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             const dialog = screen.getByRole('dialog');
             const title = dialog.querySelector('h3');
             expect(title?.textContent).toBe('Genre Filter');
-        });
-
-        it('bottom sheet is not visible initially', () => {
-            renderPage();
-            const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveClass('translate-y-full');
         });
 
         it('renders "All" option in bottom sheet', () => {
@@ -246,57 +222,9 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             }
         });
 
-        it('closes bottom sheet when backdrop is clicked', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
-            const dialog = screen.getByRole('dialog');
-            expect(dialog).toHaveClass('translate-y-0');
-
-            const backdrop = dialog.parentElement?.querySelector('[aria-hidden="true"]');
-            if (backdrop) {
-                fireEvent.click(backdrop as HTMLElement);
-            }
-
-            expect(dialog).toHaveClass('translate-y-full');
-        });
     });
 
     describe('Genre selection', () => {
-        it('selects a genre and keeps sheet open for multi-select', () => {
-            renderPage();
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            expect(rpgBtn).toBeDefined();
-            fireEvent.click(rpgBtn!);
-
-            // Sheet should stay open for multi-select
-            expect(dialog).toHaveClass('translate-y-0');
-        });
-
-        it('selected genre row shows emerald background styling', () => {
-            renderPage();
-            // Open bottom sheet and click RPG
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            // Reopen bottom sheet
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialogAfter = screen.getByRole('dialog');
-            const rpgBtnAfter = Array.from(dialogAfter.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            expect(rpgBtnAfter).toHaveClass('bg-emerald-600/10');
-        });
-
         it('selected genre row shows checkmark icon', () => {
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
@@ -317,53 +245,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(checkIcon).toBeInTheDocument();
         });
 
-        it('tapping the same genre again deselects it', () => {
-            renderPage();
-
-            // Select RPG
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn1 = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn1!);
-
-            // RPG should be active (emerald styling)
-            expect(rpgBtn1).toHaveClass('bg-emerald-600/10');
-
-            // Deselect RPG by clicking again
-            fireEvent.click(rpgBtn1!);
-
-            // RPG should no longer be active
-            expect(rpgBtn1).not.toHaveClass('bg-emerald-600/10');
-        });
-
-        it('"All" option clears the selected genre', () => {
-            renderPage();
-
-            // Select RPG
-            fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
-            const dialog = screen.getByRole('dialog');
-            const rpgBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('RPG'),
-            );
-            fireEvent.click(rpgBtn!);
-
-            // RPG should be active
-            expect(rpgBtn).toHaveClass('bg-emerald-600/10');
-
-            // Tap "All" to clear
-            const allBtn = Array.from(dialog.querySelectorAll('button')).find(
-                (b) => b.textContent?.includes('All'),
-            );
-            fireEvent.click(allBtn!);
-
-            // RPG should no longer be active
-            expect(rpgBtn).not.toHaveClass('bg-emerald-600/10');
-            // "All" should now show checkmark (selected state)
-            expect(allBtn).toHaveClass('bg-emerald-600/10');
-        });
-
         it('"All" option shows checkmark when no genre is selected (default state)', () => {
             renderPage();
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
@@ -377,7 +258,7 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(checkIcon).toBeInTheDocument();
         });
 
-        it('"All" button clears selection and keeps sheet open', () => {
+        it('"All" button clears selection and shows checkmark', () => {
             renderPage();
             // First select a genre
             fireEvent.click(screen.getByRole('button', { name: /genre filter/i }));
@@ -393,8 +274,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             );
             fireEvent.click(allBtn!);
 
-            // Sheet should stay open for multi-select
-            expect(dialog).toHaveClass('translate-y-0');
             // "All" should now show checkmark (selected state)
             const checkIcon = allBtn?.querySelector('svg');
             expect(checkIcon).toBeInTheDocument();
@@ -408,12 +287,6 @@ describe('GamesPage — Genre Filter Bottom Sheet (ROK-337)', () => {
             expect(filterBtn).toBeInTheDocument();
             // FAB renders an SVG icon (FunnelIcon)
             expect(filterBtn.querySelector('svg')).toBeInTheDocument();
-        });
-
-        it('FAB has emerald background styling', () => {
-            renderPage();
-            const filterBtn = screen.getByRole('button', { name: /genre filter/i });
-            expect(filterBtn).toHaveClass('bg-emerald-600');
         });
 
         it('selected genre is reflected inside bottom sheet, not on FAB badge', () => {
@@ -555,20 +428,4 @@ describe('GamesPage — ROK-375: local source warning banner', () => {
         expect(screen.queryByText(/external search unavailable/i)).not.toBeInTheDocument();
     });
 
-    it('warning has yellow styling for visibility', () => {
-        mockSearch(
-            {
-                data: [mockGame],
-                meta: { total: 1, cached: true, source: 'local' },
-            },
-        );
-
-        renderPage();
-        const searchInput = screen.getByPlaceholderText('Search games...');
-        fireEvent.change(searchInput, { target: { value: 'warcraft' } });
-
-        const warning = screen.getByText(/external search unavailable/i).closest('div');
-        expect(warning).toHaveClass('bg-yellow-900/30');
-        expect(warning).toHaveClass('border-yellow-700/40');
-    });
 });

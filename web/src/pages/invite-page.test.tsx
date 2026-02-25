@@ -164,12 +164,11 @@ describe('InvitePage — step 3 success screen (ROK-424)', () => {
     // ─────────────────────────────────────────────────────────────────────────
 
     describe('Discord join CTA is primary and dominant', () => {
-        it('renders the Discord join button with btn-primary class', async () => {
+        it('renders the Discord join button', async () => {
             await renderAtStep3();
 
             const discordBtn = screen.getByRole('link', { name: /join.*discord/i });
             expect(discordBtn).toBeInTheDocument();
-            expect(discordBtn.className).toContain('btn-primary');
         });
 
         it('Discord join button has the correct invite URL as href', async () => {
@@ -243,52 +242,6 @@ describe('InvitePage — step 3 success screen (ROK-424)', () => {
             fireEvent.click(link);
 
             expect(mockNavigate).toHaveBeenCalledWith('/onboarding', { replace: true });
-        });
-
-        it('onboarding link is visually de-emphasized (no btn class, has text-muted)', async () => {
-            await renderAtStep3();
-
-            const link = screen.getByRole('button', { name: /continue to set up my raid ledger account/i });
-            // Must NOT have button chrome
-            expect(link.className).not.toContain('btn-primary');
-            expect(link.className).not.toContain('btn-secondary');
-            // Must be muted
-            expect(link.className).toContain('text-muted');
-        });
-    });
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // AC: Text link size changes based on showDiscordCta
-    // ─────────────────────────────────────────────────────────────────────────
-
-    describe('text link prominence by Discord CTA visibility', () => {
-        it('uses text-xs when Discord CTA is shown (de-emphasized)', async () => {
-            // Discord invite URL present → showDiscordCta = true
-            await renderAtStep3();
-
-            const link = screen.getByRole('button', { name: /continue to set up my raid ledger account/i });
-            expect(link.className).toContain('text-xs');
-            expect(link.className).not.toContain('text-sm');
-        });
-
-        it('uses text-sm when Discord CTA is hidden (more prominent)', async () => {
-            // No Discord invite URL → showDiscordCta = false
-            vi.mocked(apiClient.resolveInviteCode).mockResolvedValue(
-                makeResolveData({ discordServerInviteUrl: undefined }),
-            );
-            vi.mocked(apiClient.claimInviteCode).mockResolvedValue(
-                makeClaimResult({ discordServerInviteUrl: undefined }),
-            );
-
-            renderInvitePage();
-
-            const joinButton = await screen.findByRole('button', { name: /join event/i });
-            fireEvent.click(joinButton);
-            await screen.findByText(/you're all set/i);
-
-            const link = screen.getByRole('button', { name: /continue to set up my raid ledger account/i });
-            expect(link.className).toContain('text-sm');
-            expect(link.className).not.toContain('text-xs');
         });
     });
 

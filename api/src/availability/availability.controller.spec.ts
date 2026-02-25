@@ -45,9 +45,6 @@ describe('AvailabilityController', () => {
     controller = module.get<AvailabilityController>(AvailabilityController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
 
   describe('findAll', () => {
     it('should return user availability list', async () => {

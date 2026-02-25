@@ -148,10 +148,6 @@ describe('AuthController — redeemIntent', () => {
     controller = module.get<AuthController>(AuthController);
   });
 
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
-  });
-
   describe('redeemIntent', () => {
     it('should return success with eventId when token is valid', async () => {
       mockIntentTokenService.validate.mockReturnValueOnce({

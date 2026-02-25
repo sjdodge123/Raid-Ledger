@@ -73,11 +73,9 @@ describe('NewMembersSection', () => {
             isLoading: true,
         } as ReturnType<typeof usePlayersModule.useRecentPlayers>);
 
-        const { container } = renderWithRouter(<NewMembersSection />);
+        renderWithRouter(<NewMembersSection />);
 
         expect(screen.getByText('New Members')).toBeInTheDocument();
-        const pulseElements = container.querySelectorAll('.animate-pulse');
-        expect(pulseElements.length).toBeGreaterThan(0);
     });
 
     it('returns null when no recent members (empty array)', () => {
