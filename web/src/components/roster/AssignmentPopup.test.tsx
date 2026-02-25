@@ -1,10 +1,16 @@
 import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AssignmentPopup } from './AssignmentPopup';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import type { ReactElement } from 'react';
+
+// Mock useUserCharacters so character-selection step does not make real HTTP calls
+vi.mock('../../hooks/use-characters', () => ({
+    useMyCharacters: vi.fn(() => ({ data: [], isLoading: false })),
+    useUserCharacters: vi.fn(() => ({ data: [], isLoading: false })),
+}));
 
 /** Wrap component in MemoryRouter + QueryClientProvider for hook context */
 function renderWithRouter(ui: ReactElement) {
@@ -399,5 +405,235 @@ describe('AssignmentPopup', () => {
         fireEvent.click(healerSlot!);
 
         expect(mockReassign).toHaveBeenCalledWith(10, 'healer', 1);
+    });
+});
+
+// ========== ROK-486: Generic roster — character modal skip ==========
+
+describe('AssignmentPopup — ROK-486 generic roster modal skip', () => {
+    const makePlayer = (overrides: Partial<RosterAssignmentResponse> = {}): RosterAssignmentResponse => ({
+        id: 0,
+        signupId: 1,
+        userId: 101,
+        discordId: '101',
+        username: 'GenericPlayer',
+        avatar: null,
+        slot: null,
+        position: 0,
+        isOverride: false,
+        character: null,
+        ...overrides,
+    });
+
+    const baseProps = {
+        isOpen: true,
+        onClose: vi.fn(),
+        eventId: 42,
+        slotRole: 'player' as RosterRole,
+        slotPosition: 1,
+    };
+
+    let mockOnAssign: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        mockOnAssign = vi.fn();
+        vi.clearAllMocks();
+    });
+
+    // ----------------------------------------------------------------
+    // 1. isMMO=false (generic) — targeted mode: assign directly, no modal
+    // ----------------------------------------------------------------
+
+    it('targeted mode: directly calls onAssign without character modal when isMMO is false', () => {
+        const player = makePlayer();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        {...baseProps}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        gameId={5}
+                        isMMO={false}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        // Should call onAssign directly — no character selection step opened
+        expect(mockOnAssign).toHaveBeenCalledWith(player.signupId);
+        expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
+    });
+
+    // ----------------------------------------------------------------
+    // 2. isMMO=true (MMO) with gameId — targeted mode: character modal appears
+    // ----------------------------------------------------------------
+
+    it('targeted mode: shows character selection step when isMMO is true and gameId is set', () => {
+        const player = makePlayer({ userId: 101 });
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        {...baseProps}
+                        slotRole={'tank' as RosterRole}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        gameId={5}
+                        isMMO={true}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        // Character selection step should be visible — modal title changes to "Select Character for …"
+        expect(screen.getByText(/Select Character for GenericPlayer/i)).toBeInTheDocument();
+        expect(mockOnAssign).not.toHaveBeenCalled();
+    });
+
+    // ----------------------------------------------------------------
+    // 3. Browse-all mode: generic roster skips character modal, opens slot picker
+    // ----------------------------------------------------------------
+
+    it('browse-all mode: skips character modal and opens slot picker when isMMO is false', () => {
+        const player = makePlayer({ signupId: 7 });
+        const availableSlots = [
+            { role: 'player' as RosterRole, position: 1, label: 'Player', color: '' },
+            { role: 'player' as RosterRole, position: 2, label: 'Player', color: '' },
+        ];
+        const mockOnAssignToSlot = vi.fn();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        isOpen={true}
+                        onClose={vi.fn()}
+                        eventId={42}
+                        slotRole={null}
+                        slotPosition={0}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        onAssignToSlot={mockOnAssignToSlot}
+                        availableSlots={availableSlots}
+                        gameId={5}
+                        isMMO={false}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        // No character selection modal should have appeared
+        expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
+
+        // Slot picker should now be visible (player was selected directly)
+        expect(screen.getByText('Pick a slot for GenericPlayer')).toBeInTheDocument();
+        expect(mockOnAssign).not.toHaveBeenCalled();
+    });
+
+    // ----------------------------------------------------------------
+    // 4. Browse-all mode: MMO with gameId still shows character modal first
+    // ----------------------------------------------------------------
+
+    it('browse-all mode: shows character modal before slot picker when isMMO is true', () => {
+        const player = makePlayer({ signupId: 8, userId: 201 });
+        const availableSlots = [
+            { role: 'tank' as RosterRole, position: 1, label: 'Tank', color: '' },
+        ];
+        const mockOnAssignToSlot = vi.fn();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        isOpen={true}
+                        onClose={vi.fn()}
+                        eventId={42}
+                        slotRole={null}
+                        slotPosition={0}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        onAssignToSlot={mockOnAssignToSlot}
+                        availableSlots={availableSlots}
+                        gameId={5}
+                        isMMO={true}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        // Character selection step should be visible first (MMO flow)
+        expect(screen.getByText(/Select Character for GenericPlayer/i)).toBeInTheDocument();
+        expect(mockOnAssign).not.toHaveBeenCalled();
+    });
+
+    // ----------------------------------------------------------------
+    // 5. Edge case: isMMO undefined — treated the same as false → skip modal
+    // ----------------------------------------------------------------
+
+    it('targeted mode: skips character modal when isMMO is not passed (undefined)', () => {
+        const player = makePlayer();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        {...baseProps}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        gameId={5}
+                        // isMMO intentionally omitted
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        expect(mockOnAssign).toHaveBeenCalledWith(player.signupId);
+        expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
+    });
+
+    // ----------------------------------------------------------------
+    // 6. Edge case: gameId null + isMMO true — no gameId means skip modal
+    // ----------------------------------------------------------------
+
+    it('targeted mode: skips character modal when gameId is absent even if isMMO is true', () => {
+        const player = makePlayer();
+        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+        render(
+            <QueryClientProvider client={queryClient}>
+                <MemoryRouter>
+                    <AssignmentPopup
+                        {...baseProps}
+                        unassigned={[player]}
+                        onAssign={mockOnAssign}
+                        // gameId intentionally omitted
+                        isMMO={true}
+                    />
+                </MemoryRouter>
+            </QueryClientProvider>
+        );
+
+        fireEvent.click(screen.getByText('Assign'));
+
+        expect(mockOnAssign).toHaveBeenCalledWith(player.signupId);
+        expect(screen.queryByText(/Select Character/i)).not.toBeInTheDocument();
     });
 });
