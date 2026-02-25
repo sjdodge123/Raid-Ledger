@@ -6,18 +6,6 @@ The operator controls the testing gate by moving stories in Linear. The lead ask
 
 ---
 
-## Three-Way Validation (applies to ALL decisions in this step)
-
-**Before making any pipeline decision (rework classification, gate agent spawning, skip/proceed), the lead MUST:**
-
-1. **Ask the Orchestrator:** `WHATS_NEXT: { story: 'ROK-XXX', event: '<event>' }`
-2. **Validate with the Scrum Master:** "Orchestrator says X — does this match SKILL.md?"
-3. **If discrepancy** — SKILL.md wins. The lead does NOT follow the Orchestrator blindly.
-
-**The lead is the hands, not the brain.** Orchestrator decides, Scrum Master validates, lead executes.
-
----
-
 ## 7a. Poll for Operator Test Results
 
 **Polling loop via Sprint Planner:**

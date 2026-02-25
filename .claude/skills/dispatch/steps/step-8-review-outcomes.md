@@ -4,16 +4,6 @@
 
 **All Linear updates in this step route through the Sprint Planner. The lead does NOT call `mcp__linear__*` tools directly.**
 
-## Three-Way Validation (applies to ALL decisions in this step)
-
-**Before any pipeline decision (proceed to architect, proceed to smoke test, create PR, enable auto-merge), the lead MUST:**
-
-1. **Ask the Orchestrator:** `WHATS_NEXT: { story: 'ROK-XXX', event: '<event>' }`
-2. **Validate with the Scrum Master:** "Orchestrator says X — does this match SKILL.md?"
-3. **If discrepancy** — SKILL.md wins. The Scrum Master is the pipeline guardian.
-
-**CRITICAL: Auto-merge is a one-way door. Before enabling it, the lead MUST confirm with BOTH the Orchestrator AND Scrum Master that ALL gates have passed. No exceptions.**
-
 ---
 
 ## 8a. Per-Story Review Handling
