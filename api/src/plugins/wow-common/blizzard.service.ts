@@ -1417,10 +1417,6 @@ export class BlizzardService {
   }
 
   /**
-   * Get OAuth2 access token from Blizzard.
-   * Uses single-flight pattern (same as IGDB service).
-   */
-  /**
    * Fetch JSON from a Blizzard API URL with automatic auth.
    * Used by BossDataRefreshService for journal API calls.
    */
@@ -1439,6 +1435,10 @@ export class BlizzardService {
     return res.json() as Promise<T>;
   }
 
+  /**
+   * Get OAuth2 access token from Blizzard.
+   * Uses single-flight pattern (same as IGDB service).
+   */
   private async getAccessToken(region: string): Promise<string> {
     if (this.accessToken && this.tokenExpiry && new Date() < this.tokenExpiry) {
       return this.accessToken;

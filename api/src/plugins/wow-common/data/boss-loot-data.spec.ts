@@ -39,7 +39,13 @@ interface LootEntry {
 const bosses = bossEncounterData as BossEntry[];
 const loot = bossLootData as LootEntry[];
 
-const VALID_QUALITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary'] as const;
+const VALID_QUALITIES = [
+  'Common',
+  'Uncommon',
+  'Rare',
+  'Epic',
+  'Legendary',
+] as const;
 
 // ---------------------------------------------------------------------------
 // Schema / structure
@@ -85,7 +91,10 @@ describe('boss-loot-data.json — schema', () => {
 
   it('every entry has a valid quality value', () => {
     const bad = loot.filter(
-      (l) => !VALID_QUALITIES.includes(l.quality as (typeof VALID_QUALITIES)[number]),
+      (l) =>
+        !VALID_QUALITIES.includes(
+          l.quality as (typeof VALID_QUALITIES)[number],
+        ),
     );
     expect(bad).toHaveLength(0);
   });
@@ -93,8 +102,7 @@ describe('boss-loot-data.json — schema', () => {
   it('slot is either null or a non-empty string', () => {
     const bad = loot.filter(
       (l) =>
-        l.slot !== null &&
-        (typeof l.slot !== 'string' || l.slot.trim() === ''),
+        l.slot !== null && (typeof l.slot !== 'string' || l.slot.trim() === ''),
     );
     expect(bad).toHaveLength(0);
   });
@@ -112,9 +120,7 @@ describe('boss-loot-data.json — schema', () => {
     const bad = loot.filter(
       (l) =>
         l.dropRate !== null &&
-        (typeof l.dropRate !== 'number' ||
-          l.dropRate < 0 ||
-          l.dropRate > 1),
+        (typeof l.dropRate !== 'number' || l.dropRate < 0 || l.dropRate > 1),
     );
     expect(bad).toHaveLength(0);
   });
@@ -124,7 +130,9 @@ describe('boss-loot-data.json — schema', () => {
       if (l.classRestrictions === null) return false;
       if (!Array.isArray(l.classRestrictions)) return true;
       if (l.classRestrictions.length === 0) return true; // should be null, not []
-      return l.classRestrictions.some((c) => typeof c !== 'string' || c.trim() === '');
+      return l.classRestrictions.some(
+        (c) => typeof c !== 'string' || c.trim() === '',
+      );
     });
     expect(bad).toHaveLength(0);
   });
@@ -133,8 +141,7 @@ describe('boss-loot-data.json — schema', () => {
     const bad = loot.filter(
       (l) =>
         l.iconUrl !== null &&
-        (typeof l.iconUrl !== 'string' ||
-          !l.iconUrl.startsWith('https://')),
+        (typeof l.iconUrl !== 'string' || !l.iconUrl.startsWith('https://')),
     );
     expect(bad).toHaveLength(0);
   });
@@ -161,9 +168,7 @@ describe('boss-loot-data.json — schema', () => {
 
 describe('boss-loot-data.json — uniqueness', () => {
   it('has no duplicate bossName+expansion+itemId combinations (seeder conflict key)', () => {
-    const keys = loot.map(
-      (l) => `${l.bossName}::${l.expansion}::${l.itemId}`,
-    );
+    const keys = loot.map((l) => `${l.bossName}::${l.expansion}::${l.itemId}`);
     const unique = new Set(keys);
     const dupes = keys.filter((k, i) => keys.indexOf(k) !== i);
     expect(dupes).toHaveLength(0);
@@ -193,11 +198,9 @@ describe('boss-loot-data.json — uniqueness', () => {
 // ---------------------------------------------------------------------------
 
 describe('boss-loot-data.json — completeness against boss-encounter-data.json', () => {
-  const lootIndex = new Set(
-    loot.map((l) => `${l.bossName}::${l.expansion}`),
-  );
+  const lootIndex = new Set(loot.map((l) => `${l.bossName}::${l.expansion}`));
 
-  it('covers all 150 seeded bosses (no boss has zero loot entries)', () => {
+  it('covers all seeded bosses (no boss has zero loot entries)', () => {
     const bossKeys = bosses.map((b) => `${b.name}::${b.expansion}`);
     const missing = bossKeys.filter((k) => !lootIndex.has(k));
     expect(missing).toHaveLength(0);
@@ -213,14 +216,12 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
     expect(orphans).toHaveLength(0);
   });
 
-  it('all 54 Classic bosses have at least one loot item', () => {
+  it('all Classic bosses have at least one loot item', () => {
     const classicBosses = bosses.filter((b) => b.expansion === 'classic');
     const classicLootBosses = new Set(
       loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
     );
-    const missing = classicBosses.filter(
-      (b) => !classicLootBosses.has(b.name),
-    );
+    const missing = classicBosses.filter((b) => !classicLootBosses.has(b.name));
     expect(missing).toHaveLength(0);
   });
 
@@ -269,9 +270,7 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
       'High Inquisitor Whitemane',
     ];
     const classicLootBosses = new Set(
-      loot
-        .filter((l) => l.expansion === 'classic')
-        .map((l) => l.bossName),
+      loot.filter((l) => l.expansion === 'classic').map((l) => l.bossName),
     );
     const missing = smBosses.filter((n) => !classicLootBosses.has(n));
     expect(missing).toHaveLength(0);
@@ -320,7 +319,9 @@ describe('boss-loot-data.json — completeness against boss-encounter-data.json'
 
 describe('boss-loot-data.json — data quality', () => {
   it('all loot items have a non-null quality', () => {
-    const nullQuality = loot.filter((l) => l.quality === null || l.quality === undefined);
+    const nullQuality = loot.filter(
+      (l) => l.quality === null || l.quality === undefined,
+    );
     expect(nullQuality).toHaveLength(0);
   });
 
@@ -351,10 +352,15 @@ describe('boss-loot-data.json — data quality', () => {
     expect(bad).toHaveLength(0);
   });
 
-  it('icon URLs that are present point to the Wowhead CDN domain', () => {
+  it('icon URLs that are present point to a known CDN domain', () => {
+    const KNOWN_ICON_HOSTS = [
+      'wow.zamimg.com',
+      'wowhead.com',
+      'render.worldofwarcraft.com',
+    ];
     const withIcon = loot.filter((l) => l.iconUrl !== null);
     const badDomain = withIcon.filter(
-      (l) => !l.iconUrl!.includes('wow.zamimg.com') && !l.iconUrl!.includes('wowhead.com'),
+      (l) => !KNOWN_ICON_HOSTS.some((host) => l.iconUrl!.includes(host)),
     );
     expect(badDomain).toHaveLength(0);
   });
@@ -375,7 +381,10 @@ describe('boss-loot-data.json — data quality', () => {
 
   it('Sulfuras, Hand of Ragnaros is Legendary quality', () => {
     const sulfuras = loot.find(
-      (l) => l.bossName === 'Ragnaros' && l.expansion === 'classic' && l.itemId === 17182,
+      (l) =>
+        l.bossName === 'Ragnaros' &&
+        l.expansion === 'classic' &&
+        l.itemId === 17182,
     );
     expect(sulfuras).toBeDefined();
     expect(sulfuras!.quality).toBe('Legendary');

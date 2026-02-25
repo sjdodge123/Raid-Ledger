@@ -111,9 +111,7 @@ export class BossDataRefreshService {
     try {
       // Fetch all Classic + TBC instances from the journal
       const instances = await this.fetchAllInstanceIds();
-      this.logger.log(
-        `Found ${instances.length} instances to refresh`,
-      );
+      this.logger.log(`Found ${instances.length} instances to refresh`);
 
       let totalBosses = 0;
       let totalLoot = 0;
@@ -124,9 +122,7 @@ export class BossDataRefreshService {
           totalBosses += result.bosses;
           totalLoot += result.loot;
         } catch (err) {
-          this.logger.warn(
-            `Failed to refresh instance ${inst.id}: ${err}`,
-          );
+          this.logger.warn(`Failed to refresh instance ${inst.id}: ${err}`);
         }
         // Rate limit: 100ms between instances
         await this.sleep(100);
@@ -257,10 +253,9 @@ export class BossDataRefreshService {
           const slotType = itemDetail.inventory_type?.type || '';
           const slot = SLOT_MAP[slotType] || null;
 
-          const media =
-            await this.blizzardService.fetchBlizzardApi<ItemMedia>(
-              `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
-            );
+          const media = await this.blizzardService.fetchBlizzardApi<ItemMedia>(
+            `${BASE_URL}/data/wow/media/item/${item.id}?namespace=${NAMESPACE}&locale=en_US`,
+          );
           await this.sleep(50);
 
           await this.db
