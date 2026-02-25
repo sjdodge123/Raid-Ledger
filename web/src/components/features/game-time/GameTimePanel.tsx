@@ -102,7 +102,7 @@ export function GameTimePanel({
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setShowAbsenceForm(!showAbsenceForm)}
-                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-panel text-muted hover:bg-overlay"
+                            className="px-4 py-2.5 text-sm font-medium rounded-lg transition-colors bg-red-600 text-foreground hover:bg-red-500"
                         >
                             {showAbsenceForm ? 'Cancel' : 'Absence'}
                         </button>
