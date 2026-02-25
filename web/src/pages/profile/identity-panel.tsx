@@ -112,7 +112,7 @@ export function IdentityPanel() {
             {/* Identity overview */}
             <div className="bg-surface border border-edge-subtle rounded-xl p-6">
                 <h2 className="text-xl font-semibold text-foreground mb-4">Identity</h2>
-                <p className="text-sm text-muted mb-6">Your profile identity and linked accounts.</p>
+                <p className="text-sm text-muted mb-6">Your profile identity and linked accounts. Click your avatar to change it.</p>
 
                 {/* User card */}
                 <div className="flex items-center gap-4 p-4 bg-panel rounded-lg border border-edge">
@@ -190,18 +190,6 @@ export function IdentityPanel() {
                 </div>
             )}
 
-            {/* Avatar section */}
-            <AvatarSection
-                user={user}
-                currentAvatarUrl={currentAvatarUrl}
-                avatarOptions={avatarOptions}
-                onSelect={handleAvatarSelect}
-                onUpload={handleUpload}
-                onRemoveCustom={handleRemoveCustomAvatar}
-                isUploading={isUploading}
-                uploadProgress={uploadProgress}
-            />
-
             <AvatarSelectorModal
                 isOpen={showAvatarModal}
                 onClose={() => setShowAvatarModal(false)}
@@ -218,105 +206,3 @@ export function IdentityPanel() {
     );
 }
 
-/** Inline avatar picker section within the consolidated Identity panel */
-function AvatarSection({
-    user,
-    currentAvatarUrl,
-    avatarOptions,
-    onSelect,
-    onUpload,
-    onRemoveCustom,
-    isUploading,
-    uploadProgress,
-}: {
-    user: { username: string; customAvatarUrl: string | null };
-    currentAvatarUrl: string;
-    avatarOptions: { url: string; label: string; type: AvatarType; characterName?: string }[];
-    onSelect: (url: string) => void;
-    onUpload: (file: File) => void;
-    onRemoveCustom: () => void;
-    isUploading: boolean;
-    uploadProgress: number;
-}) {
-    const currentLabel = avatarOptions.find(o => o.url === currentAvatarUrl)?.label ?? 'Default';
-
-    const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) onUpload(file);
-    }, [onUpload]);
-
-    return (
-        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
-            <h2 className="text-xl font-semibold text-foreground mb-1">Avatar</h2>
-            <p className="text-sm text-muted mb-5">Choose or upload your profile picture</p>
-
-            <div className="flex items-center gap-4 mb-6">
-                <img
-                    src={currentAvatarUrl}
-                    alt={user.username}
-                    className="w-20 h-20 rounded-full border-2 border-emerald-500/50 object-cover"
-                    onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
-                />
-                <div>
-                    <p className="text-sm font-medium text-foreground">
-                        {currentLabel} avatar
-                    </p>
-                    <p className="text-xs text-muted">Click below to change</p>
-                </div>
-            </div>
-
-            {avatarOptions.length > 0 && (
-                <div className="mb-6">
-                    <h3 className="text-sm font-medium text-secondary mb-3">Available Avatars</h3>
-                    <div className="grid grid-cols-4 sm:flex sm:flex-wrap gap-3">
-                        {avatarOptions.map((opt) => (
-                            <button
-                                key={opt.url}
-                                onClick={() => onSelect(opt.url)}
-                                className={`relative group rounded-full ${
-                                    currentAvatarUrl === opt.url
-                                        ? 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-surface'
-                                        : 'hover:ring-2 hover:ring-edge-strong hover:ring-offset-2 hover:ring-offset-surface'
-                                }`}
-                            >
-                                <img
-                                    src={opt.url}
-                                    alt={opt.label}
-                                    className="w-12 h-12 sm:w-14 sm:h-14 rounded-full object-cover"
-                                    onError={(e) => { e.currentTarget.src = '/default-avatar.svg'; }}
-                                />
-                                <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] text-muted whitespace-nowrap">
-                                    {opt.label}
-                                </span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            <div className="flex items-center gap-3 pt-2 border-t border-edge-subtle">
-                <label className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-foreground font-medium rounded-lg transition-colors cursor-pointer">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                    </svg>
-                    {isUploading ? `Uploading ${uploadProgress}%` : 'Upload Custom'}
-                    <input
-                        type="file"
-                        accept="image/png,image/jpeg,image/webp,image/gif"
-                        className="hidden"
-                        onChange={handleFileChange}
-                        disabled={isUploading}
-                    />
-                </label>
-                {user.customAvatarUrl && (
-                    <button
-                        onClick={onRemoveCustom}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-medium rounded-lg transition-colors border border-red-500/20"
-                    >
-                        Remove Custom
-                    </button>
-                )}
-            </div>
-        </div>
-    );
-}
