@@ -20,14 +20,38 @@
    ```
    Use **quick CI** for this push — full CI runs during batch PR-prep.
 
-3. **Add the story to the approved queue.** Track:
+3. **Architect Final Alignment Check (if `needs_architect: true`) — SEQUENTIAL, BEFORE smoke tester:**
+   ```
+   SendMessage(type: "message", recipient: "architect",
+     content: "FINAL_CHECK: ROK-<num>. Review complete diff: `git diff main...rok-<num>-<short-name>` in worktree ../Raid-Ledger--rok-<num>. Confirm implementation followed agreed approach and no architectural drift.",
+     summary: "Architect final check ROK-<num>")
+   ```
+   **WAIT for architect verdict BEFORE proceeding to smoke tester.**
+   - APPROVED → proceed to step 4
+   - BLOCKED → send back to dev, DO NOT proceed to smoke tester
+
+4. **Smoke Test Gate (MANDATORY — never skipped, even for `testing_level: light`):**
+   Spawn smoke tester in the story's worktree:
+   ```
+   Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
+        name: "smoke-rok-<num>", model: "sonnet", mode: "bypassPermissions",
+        prompt: <read and fill templates/smoke-tester.md>)
+   ```
+   **WAIT for smoke tester verdict BEFORE proceeding.**
+   - PASS → proceed to step 5
+   - FAIL → report regressions to orchestrator. Orchestrator decides: re-spawn dev to fix or flag to operator.
+
+   **CRITICAL: The architect check and smoke test are SEQUENTIAL gates. Do NOT run them in parallel.
+   Order: architect → smoke tester → approved queue. Parallel execution caused missed regressions in the trial run.**
+
+5. **Add the story to the approved queue.** Track:
    - Story ID (ROK-XXX)
    - Branch name (rok-<num>-<short-name>)
    - Worktree path
    - Linear issue ID
    - Summary of changes
 
-4. **Do NOT create a PR yet.** Wait for all stories in the batch to complete review.
+6. **Do NOT create a PR yet.** Wait for all stories in the batch to complete review.
 
 ### If reviewer requests changes (BLOCKED):
 

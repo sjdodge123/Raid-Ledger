@@ -24,6 +24,24 @@ has changed from "In Review". The operator approval gate is mandatory.
 **Edge case:** If stories remain in "In Review" for >24 hours, message the
 user to check on operator testing progress.
 
+## 7a.5. Commit Operator Testing Changes (MANDATORY)
+
+**After the operator finishes testing a story (whether approved or requesting changes), check for and commit any uncommitted changes in the story's worktree.**
+
+The operator often makes small tweaks while testing (CSS fixes, copy changes, config adjustments). These changes must be committed BEFORE re-deploying or spawning review agents, or they'll be lost.
+
+```bash
+cd ../Raid-Ledger--rok-<num>
+git status
+# If there are changes:
+git add -A
+git commit -m "chore: incorporate operator testing feedback"
+```
+
+**Do this for EVERY story after the operator moves it out of "In Review", regardless of whether they approved or requested changes.**
+
+---
+
 ## 7b. Handle Changes Requested (from operator testing)
 
 For stories the operator moved to "Changes Requested":
