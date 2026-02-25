@@ -164,7 +164,7 @@ export class InviteService {
       },
       slot: {
         id: slot.id,
-        role: slot.role as 'tank' | 'healer' | 'dps',
+        role: slot.role as 'tank' | 'healer' | 'dps' | 'player',
         status: slot.status as 'pending' | 'invited' | 'accepted' | 'claimed',
       },
       discordServerInviteUrl: discordServerInviteUrl ?? undefined,
@@ -184,7 +184,7 @@ export class InviteService {
   async claimInvite(
     code: string,
     userId: number,
-    roleOverride?: 'tank' | 'healer' | 'dps',
+    roleOverride?: 'tank' | 'healer' | 'dps' | 'player',
   ): Promise<{
     type: 'signup' | 'claimed';
     eventId: number;
@@ -255,7 +255,7 @@ export class InviteService {
 
     // Use role override from user selection, falling back to slot's preset role (ROK-394)
     const effectiveRole =
-      roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps');
+      roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps' | 'player');
 
     if (user.discordId) {
       // Existing RL member — create normal signup, delete PUG slot
@@ -298,7 +298,7 @@ export class InviteService {
       };
     }
 
-    // No Discord ID — claim the PUG slot directly
+    // No Discord ID — claim the PUG slot and create signup so user appears in roster
     await this.db
       .update(schema.pugSlots)
       .set({
@@ -308,8 +308,21 @@ export class InviteService {
       })
       .where(eq(schema.pugSlots.id, slot.id));
 
+    // ROK-488: Create event signup so the player appears in the roster UI
+    try {
+      await this.signupsService.signup(slot.eventId, userId, {
+        slotRole: effectiveRole,
+      });
+    } catch (err) {
+      this.logger.warn(
+        'Failed to create signup for PUG claim (no discordId): %s',
+        err instanceof Error ? err.message : 'Unknown error',
+      );
+      throw err;
+    }
+
     this.logger.log(
-      'Invite %s claimed by user %d (PUG slot) for event %d',
+      'Invite %s claimed by user %d (PUG slot + signup) for event %d',
       code,
       userId,
       slot.eventId,

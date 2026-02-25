@@ -335,7 +335,7 @@ export class DiscordNotificationEmbedService {
             inline: true,
           });
         }
-        if (payload.newRole) {
+        if (payload.newRole && payload.newRole !== 'player') {
           embed.addFields({
             name: 'New Role',
             value: toStr(payload.newRole),

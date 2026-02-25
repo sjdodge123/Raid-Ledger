@@ -516,6 +516,150 @@ describe('DiscordNotificationEmbedService', () => {
     });
   });
 
+  describe('roster_reassigned embed — ROK-487 generic roster fields', () => {
+    it('should omit "New Role" field when newRole is player', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-10',
+          type: 'roster_reassigned',
+          title: 'Roster Assignment',
+          message: "You've been assigned to the roster for Game Night",
+          payload: { oldRole: null, newRole: 'player', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields?: Array<{ name: string; value: string }>;
+      };
+      const newRoleField = json.fields?.find((f) => f.name === 'New Role');
+      expect(newRoleField).toBeUndefined();
+    });
+
+    it('should include "New Role" field when newRole is tank', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-11',
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          message: "You've been assigned to the Tank role",
+          payload: { oldRole: 'healer', newRole: 'tank', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const newRoleField = json.fields?.find((f) => f.name === 'New Role');
+      expect(newRoleField).toBeDefined();
+      expect(newRoleField?.value).toBe('tank');
+    });
+
+    it('should include "New Role" field when newRole is healer', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-12',
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          message: "You've been assigned to the Healer role",
+          payload: { oldRole: 'dps', newRole: 'healer', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const newRoleField = json.fields?.find((f) => f.name === 'New Role');
+      expect(newRoleField).toBeDefined();
+      expect(newRoleField?.value).toBe('healer');
+    });
+
+    it('should include "New Role" field when newRole is dps', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-13',
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          message: "You've been assigned to the DPS role",
+          payload: { oldRole: 'tank', newRole: 'dps', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const newRoleField = json.fields?.find((f) => f.name === 'New Role');
+      expect(newRoleField).toBeDefined();
+      expect(newRoleField?.value).toBe('dps');
+    });
+
+    it('should include "New Role" field when newRole is flex', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-14',
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          message: "You've been assigned to the Flex role",
+          payload: { oldRole: 'dps', newRole: 'flex', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const newRoleField = json.fields?.find((f) => f.name === 'New Role');
+      expect(newRoleField).toBeDefined();
+      expect(newRoleField?.value).toBe('flex');
+    });
+
+    it('should include "Previous Role" field when oldRole is present', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-15',
+          type: 'roster_reassigned',
+          title: 'Role Changed',
+          message: 'Your role changed',
+          payload: { oldRole: 'healer', newRole: 'tank', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const prevRoleField = json.fields?.find(
+        (f) => f.name === 'Previous Role',
+      );
+      expect(prevRoleField).toBeDefined();
+      expect(prevRoleField?.value).toBe('healer');
+    });
+
+    it('should omit "Previous Role" field when oldRole is absent', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-16',
+          type: 'roster_reassigned',
+          title: 'Roster Assignment',
+          message: 'Assigned to roster',
+          payload: { newRole: 'tank', eventId: '5' },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields?: Array<{ name: string; value: string }>;
+      };
+      const prevRoleField = json.fields?.find(
+        (f) => f.name === 'Previous Role',
+      );
+      expect(prevRoleField).toBeUndefined();
+    });
+  });
+
   describe('buildExtraRows — Roach Out button (ROK-378)', () => {
     it('should return a rows array with Roach Out button for event_reminder with eventId', async () => {
       const { rows } = await service.buildNotificationEmbed(

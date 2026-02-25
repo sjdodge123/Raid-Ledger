@@ -1767,6 +1767,7 @@ export class SignupsService {
       if (oldRole !== null) continue;
       if (newRole === null) continue;
 
+      const isGeneric = newRole === 'player';
       const formatLabel = (r: string) =>
         r.charAt(0).toUpperCase() + r.slice(1);
 
@@ -1774,7 +1775,9 @@ export class SignupsService {
         userId: assignment.userId,
         type: 'roster_reassigned',
         title: 'Roster Assignment',
-        message: `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
+        message: isGeneric
+          ? `You've been assigned to the roster for ${eventTitle}`
+          : `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
         payload: { eventId, newRole },
       });
     }
