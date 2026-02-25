@@ -632,7 +632,7 @@ export function EventDetailPage() {
                         signupSucceeded={signup.isSuccess}
                         currentUserId={user?.id}
                         onSelfRemove={isSignedUp && !canManageRoster ? handleSelfRemove : undefined}
-                        onGenerateInviteLink={canManageRoster && isMMOGame ? handleGenerateInviteLink : undefined}
+                        onGenerateInviteLink={canManageRoster ? handleGenerateInviteLink : undefined}
                         pugs={pugs}
                         onRemovePug={canManageRoster ? handleRemovePug : undefined}
                         onRegeneratePugLink={canManageRoster ? handleRegeneratePugLink : undefined}
@@ -945,6 +945,7 @@ export function EventDetailPage() {
                                 .map(s => s.user.discordId)
                                 .filter((id): id is string => !!id)
                         )}
+                        isMMOGame={isMMOGame}
                     />
                 </Suspense>
             )}

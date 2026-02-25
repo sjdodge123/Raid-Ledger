@@ -8,8 +8,8 @@ import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { useUserCharacters } from '../../hooks/use-characters';
 import './AssignmentPopup.css';
 
-/** PUG-eligible roles (only MMO combat roles map to PugRole) */
-const PUG_ELIGIBLE_ROLES = new Set<RosterRole>(['tank', 'healer', 'dps']);
+/** PUG-eligible roles (MMO combat roles + generic 'player' role) */
+const PUG_ELIGIBLE_ROLES = new Set<RosterRole>(['tank', 'healer', 'dps', 'player']);
 
 /** A single slot for the slot picker (may be empty or occupied) */
 export interface AvailableSlot {
