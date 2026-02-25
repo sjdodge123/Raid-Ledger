@@ -92,6 +92,7 @@ export function AssignmentPopup({
     onRemoveFromEvent,
     onReassignToSlot,
     gameId,
+    isMMO,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
@@ -166,8 +167,8 @@ export function AssignmentPopup({
 
     // ROK-461: Enter character selection step for a player
     const enterSelectionStep = (player: RosterAssignmentResponse) => {
-        // If game has no characters (no gameId), skip selection step
-        if (!gameId) {
+        // Skip character selection for non-MMO / generic rosters (ROK-486)
+        if (!gameId || !isMMO) {
             if (isBrowseAll && onAssignToSlot && availableSlots) {
                 setSelectedPlayerId(player.signupId);
             } else {
@@ -187,7 +188,7 @@ export function AssignmentPopup({
 
         if (isBrowseAll && onAssignToSlot && availableSlots) {
             // Browse-all mode: enter selection step, then show slot picker
-            if (gameId) {
+            if (gameId && isMMO) {
                 // Enter selection, but remember we need slot picker after
                 enterSelectionStep(player);
             } else {
