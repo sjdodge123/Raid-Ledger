@@ -134,6 +134,25 @@ describe('EventCard', () => {
         render(<EventCard event={createMockEvent()} signupCount={0} />);
         expect(screen.getByTestId('relative-time')).toBeInTheDocument();
     });
+
+    it('applies badge-overlay class to game cover container', () => {
+        const { container } = render(<EventCard event={createMockEvent()} signupCount={0} />);
+        const coverContainer = container.querySelector('.badge-overlay');
+        expect(coverContainer).toBeInTheDocument();
+        // The badge-overlay should be on the cover wrapper, which contains the status badge
+        const statusBadge = screen.getByTestId('event-status-badge');
+        expect(coverContainer!.contains(statusBadge)).toBe(true);
+    });
+
+    it('badge-overlay wraps game-time badge when matchesGameTime is true', () => {
+        const { container } = render(
+            <EventCard event={createMockEvent()} signupCount={0} matchesGameTime />,
+        );
+        const gameTimeBadge = screen.getByText('Inside Game Time');
+        const overlayContainer = container.querySelector('.badge-overlay');
+        expect(overlayContainer).toBeInTheDocument();
+        expect(overlayContainer!.contains(gameTimeBadge)).toBe(true);
+    });
 });
 
 describe('EventCardSkeleton', () => {

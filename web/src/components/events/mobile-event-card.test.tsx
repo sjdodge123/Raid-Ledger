@@ -82,5 +82,22 @@ describe('MobileEventCard', () => {
         render(<MobileEventCard event={createMockEvent()} />);
         expect(screen.getByTestId('mobile-event-relative')).toBeInTheDocument();
     });
+
+    it('applies badge-overlay class to status badge', () => {
+        render(<MobileEventCard event={createMockEvent()} />);
+        const statusBadge = screen.getByTestId('mobile-event-status');
+        expect(statusBadge).toHaveClass('badge-overlay');
+    });
+
+    it('applies badge-overlay class to game-time badge when matchesGameTime is true', () => {
+        render(<MobileEventCard event={createMockEvent()} matchesGameTime />);
+        const gameTimeBadge = screen.getByText('Game Time').closest('span');
+        expect(gameTimeBadge).toHaveClass('badge-overlay');
+    });
+
+    it('does not render game-time badge when matchesGameTime is false', () => {
+        render(<MobileEventCard event={createMockEvent()} />);
+        expect(screen.queryByText('Game Time')).not.toBeInTheDocument();
+    });
 });
 
