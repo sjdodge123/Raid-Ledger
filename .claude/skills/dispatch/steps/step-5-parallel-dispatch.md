@@ -2,6 +2,10 @@
 
 Process stories in the confirmed batch order. For each batch:
 
+**All Linear updates in this step route through the Sprint Planner with `QUEUE_UPDATE: { priority: "immediate" }`. The lead does NOT call `mcp__linear__*` tools directly.**
+
+---
+
 ## 5a. Setup Infrastructure
 
 1. **Create worktrees** for each story in the batch:
@@ -40,18 +44,31 @@ TeamCreate(team_name: "dispatch-batch-N")
 Create tasks in the shared task list:
 - One **implementation task** per story (assigned to dev teammates)
 - One **review task** per story (blocked by implementation — review agents spawn per-story after operator approval)
-- Branches are pushed per story after CI passes (Step 6b) — PRs are created after code review passes (Step 8)
 
-## 5c. Spawn Dev Teammates
+## 5c. Spawn Advisory Agents (per-batch)
+
+Spawn Architect, Product Manager, and Test Engineer for this batch. Read their templates:
+- `templates/architect.md`
+- `templates/pm.md`
+- `templates/test-engineer.md`
+
+These agents persist for the batch lifetime and are consulted at various gates.
+
+## 5d. Spawn Dev Teammates
 
 Spawn one dev teammate per story using the appropriate template from `templates/`:
-- **Rework stories** → use `templates/dev-rework.md`
-- **New work** → use `templates/dev-new-ready.md`
+- **Rework stories** -> use `templates/dev-rework.md`
+- **New work** -> use `templates/dev-new-ready.md`
 
-**Update Linear to "In Progress" for each story being dispatched (MANDATORY):**
+**Update Linear to "In Progress" via Sprint Planner (MANDATORY):**
+
 ```
-mcp__linear__update_issue(id: <issue_id>, state: "In Progress")
+SendMessage(type: "message", recipient: "sprint-planner",
+  content: "QUEUE_UPDATE: { action: 'update_status', issue: 'ROK-XXX', state: 'In Progress', priority: 'immediate' }",
+  summary: "Set ROK-XXX to In Progress")
 ```
+
+Repeat for each story being dispatched.
 
 ```
 Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
@@ -59,7 +76,7 @@ Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
      prompt: <read and fill the appropriate template>)
 ```
 
-## 5d. Spawn Build Teammate
+## 5e. Spawn Build Teammate
 
 Spawn one build/deploy teammate for the batch using `templates/build-agent.md`:
 ```
@@ -74,7 +91,7 @@ The build agent stays alive for the entire batch. It handles:
 - Deploying feature branches locally for operator testing
 - Health verification after deploys
 
-## 5e. Review Agents — DO NOT SPAWN YET
+## 5f. Review Agents — DO NOT SPAWN YET
 
 **Do NOT spawn review agents at dispatch time.** Review agents are spawned per-story
 after the operator moves each story to "Code Review" status in Linear. Each review agent
@@ -82,7 +99,7 @@ operates in that story's worktree and can auto-fix critical issues directly.
 
 **When to spawn:** In Step 7c, when a story is moved to "Code Review" by the operator.
 
-## 5f. Lead Enters Delegate Mode
+## 5g. Lead Enters Delegate Mode
 
 After spawning all teammates, the lead:
 1. Tells the operator which stories are running and in which worktrees

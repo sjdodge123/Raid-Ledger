@@ -2,6 +2,10 @@
 
 **Stories are processed individually as reviewers report back. Approved stories are QUEUED for PR creation — they are NOT merged immediately. PR creation happens in Step 8b after all stories in the batch have been reviewed.**
 
+**All Linear updates in this step route through the Sprint Planner. The lead does NOT call `mcp__linear__*` tools directly.**
+
+---
+
 ## 8a. Per-Story Review Handling
 
 ### If reviewer approves (APPROVED or APPROVED WITH FIXES):
@@ -27,8 +31,8 @@
      summary: "Architect final check ROK-<num>")
    ```
    **WAIT for architect verdict BEFORE proceeding to smoke tester.**
-   - APPROVED → proceed to step 4
-   - BLOCKED → send back to dev, DO NOT proceed to smoke tester
+   - APPROVED -> proceed to step 4
+   - BLOCKED -> send back to dev, DO NOT proceed to smoke tester
 
 4. **Smoke Test Gate (MANDATORY — never skipped, even for `testing_level: light`):**
    Spawn smoke tester in the story's worktree:
@@ -38,11 +42,11 @@
         prompt: <read and fill templates/smoke-tester.md>)
    ```
    **WAIT for smoke tester verdict BEFORE proceeding.**
-   - PASS → proceed to step 5
-   - FAIL → report regressions to orchestrator. Orchestrator decides: re-spawn dev to fix or flag to operator.
+   - PASS -> proceed to step 5
+   - FAIL -> report regressions to orchestrator. Orchestrator decides: re-spawn dev to fix or flag to operator.
 
    **CRITICAL: The architect check and smoke test are SEQUENTIAL gates. Do NOT run them in parallel.
-   Order: architect → smoke tester → approved queue. Parallel execution caused missed regressions in the trial run.**
+   Order: architect -> smoke tester -> approved queue. Parallel execution caused missed regressions in the trial run.**
 
 5. **Add the story to the approved queue.** Track:
    - Story ID (ROK-XXX)
@@ -55,87 +59,97 @@
 
 ### If reviewer requests changes (BLOCKED):
 
-1. Lead updates Linear -> "Changes Requested"
-2. **Re-block the review task** in the shared task list (add blocker back)
-   - The story must pass operator re-testing before code review can resume
-3. **Re-spawn the dev teammate** (it was shut down after CI passed in Step 6):
+1. **Update Linear via Sprint Planner:**
+   ```
+   SendMessage(type: "message", recipient: "sprint-planner",
+     content: "QUEUE_UPDATE: { action: 'update_status', issue: 'ROK-XXX', state: 'Changes Requested', priority: 'immediate' }",
+     summary: "Set ROK-XXX to Changes Requested (reviewer)")
+   ```
+
+2. **Re-block the review task** in the shared task list
+
+3. **Re-spawn the dev teammate** with reviewer feedback:
    ```
    Task(subagent_type: "general-purpose", team_name: "dispatch-batch-N",
         name: "dev-rok-<num>", mode: "bypassPermissions",
         prompt: <rework prompt with reviewer feedback>)
    ```
-4. Dev teammate fixes in its worktree, **including updating any unit tests affected by the code changes**, commits
-5. Dev teammate runs all tests to verify they pass, messages lead when done
+
+4. Dev teammate fixes, including updating any unit tests affected, commits
+
+5. Dev teammate runs all tests, messages lead when done
+
 6. **Shut down dev teammate** after fixes are committed
+
 7. **Delegate CI validation, push, and deploy to the build agent:**
    ```
    SendMessage(type: "message", recipient: "build-agent",
      content: "Full pipeline: validate, push, deploy ROK-<num>. Worktree: ../Raid-Ledger--rok-<num>, branch: rok-<num>-<short-name>",
      summary: "Full pipeline ROK-<num> reviewer fixes")
    ```
-   The build agent will: sync with origin/main (rebase) -> run CI -> push -> deploy feature branch -> verify health -> message lead with results.
-   If rebase conflicts or CI fails, the build agent messages back — re-spawn the dev teammate to fix.
-8. Lead moves Linear -> "In Review"
+
+8. **Move Linear back to "In Review" via Sprint Planner:**
+   ```
+   SendMessage(type: "message", recipient: "sprint-planner",
+     content: "QUEUE_UPDATE: { action: 'update_status', issue: 'ROK-XXX', state: 'In Review', priority: 'immediate' }",
+     summary: "Set ROK-XXX back to In Review after reviewer fixes")
+   ```
+
 9. Notify operator: "ROK-XXX has reviewer fixes re-deployed at localhost:5173 for re-test."
+
 10. **Review task stays BLOCKED** — cycle repeats from Step 7a (operator re-tests)
 
 ---
 
 ## 8a-td. Persist Tech Debt to Linear (after each review)
 
-When a reviewer's report includes **Tech Debt Identified** items, create Linear backlog stories so they aren't lost after `/clear`. Do this immediately after processing each reviewer message (whether approved or blocked).
+When a reviewer's report includes **Tech Debt Identified** items, queue them for creation via the Sprint Planner's deferred queue (they'll be flushed at dispatch end in Step 10b).
 
 **For each tech debt item (TD-1, TD-2, etc.) in the reviewer's report:**
 
-1. **Create a Linear issue in Backlog:**
-   ```
-   mcp__linear__create_issue(
-     title: "tech-debt: <concise description from TD item>",
-     description: <see template below>,
-     teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
-     projectId: "1bc39f98-abaa-4d85-912f-ba62c8da1532",
-     priority: <severity mapping: high=2, medium=3, low=4>,
-     state: "Backlog"
-   )
-   ```
+```
+SendMessage(type: "message", recipient: "sprint-planner",
+  content: "QUEUE_UPDATE: { action: 'create_issue', title: 'tech-debt: <description>', description: '<full description from template below>', teamId: '0728c19f-5268-4e16-aa45-c944349ce386', projectId: '1bc39f98-abaa-4d85-912f-ba62c8da1532', priority: <severity mapping>, state: 'Backlog', priority_queue: 'deferred' }",
+  summary: "Queue tech debt story from ROK-XXX review")
+```
 
-2. **Severity → Priority mapping:**
-   | Reviewer Severity | Linear Priority | Rationale |
-   |---|---|---|
-   | high | 2 (High) | Could cause issues if left unaddressed |
-   | medium | 3 (Normal) | Should be addressed in a future sprint |
-   | low | 4 (Low) | Nice-to-have improvement |
+**Severity -> Priority mapping:**
+| Reviewer Severity | Linear Priority | Rationale |
+|---|---|---|
+| high | 2 (High) | Could cause issues if left unaddressed |
+| medium | 3 (Normal) | Should be addressed in a future sprint |
+| low | 4 (Low) | Nice-to-have improvement |
 
-3. **Tech debt story description template:**
-   ```markdown
-   ## Tech Debt — <description>
+**Tech debt story description template:**
+```markdown
+## Tech Debt — <description>
 
-   **Source:** Code review of ROK-<parent story number>
-   **Identified by:** Review agent during dispatch batch <N>
-   **Severity:** <low/medium/high>
+**Source:** Code review of ROK-<parent story number>
+**Identified by:** Review agent during dispatch batch <N>
+**Severity:** <low/medium/high>
 
-   ### Details
+### Details
 
-   **File(s):** `<file:line>`
-   **Issue:** <description of the tech debt>
+**File(s):** `<file:line>`
+**Issue:** <description of the tech debt>
 
-   ### Suggested Fix
+### Suggested Fix
 
-   <suggested approach from the reviewer>
+<suggested approach from the reviewer>
 
-   ### Context
+### Context
 
-   - Found during review of ROK-<num> (<parent story title>)
-   - Not a regression — pre-existing or non-blocking for the parent story
-   - No immediate user impact
-   ```
+- Found during review of ROK-<num> (<parent story title>)
+- Not a regression — pre-existing or non-blocking for the parent story
+- No immediate user impact
+```
 
-4. **After creating all tech debt stories, report them in the story's review summary:**
-   ```
-   Tech debt stories created: <count>
-   - ROK-AAA: tech-debt: <title> (P<N>)
-   - ROK-BBB: tech-debt: <title> (P<N>)
-   ```
+**After queuing all tech debt stories, report them in the story's review summary:**
+```
+Tech debt stories queued (deferred): <count>
+- tech-debt: <title> (P<N>)
+- tech-debt: <title> (P<N>)
+```
 
 **Skip this step** if the reviewer reported 0 tech debt items.
 
@@ -143,7 +157,7 @@ When a reviewer's report includes **Tech Debt Identified** items, create Linear 
 
 ## 8b. Batch PR Creation (after all stories reviewed)
 
-Once all stories in the batch have passed code review (or been deferred), create PRs.
+Once all stories in the batch have passed code review, architect check, and smoke test (or been deferred), create PRs.
 
 **Strategy: try batch PR first, fall back to individual PRs if it fails.**
 
@@ -157,15 +171,13 @@ git fetch origin main
 git checkout -b batch-<N>-combined origin/main
 ```
 
-**2. Cherry-pick or merge each approved story's branch (in order of story ID):**
+**2. Merge each approved story's branch (in order of story ID):**
 ```bash
 git merge --no-ff rok-<num1>-<short-name> -m "merge: ROK-<num1> <title>"
 git merge --no-ff rok-<num2>-<short-name> -m "merge: ROK-<num2> <title>"
-# ... repeat for each approved story
 ```
 
-**3. If ANY merge conflicts occur → STOP and fall back to individual PRs (Attempt 2).**
-Remove the batch branch and proceed to Attempt 2:
+**3. If ANY merge conflicts occur -> STOP and fall back to individual PRs (Attempt 2).**
 ```bash
 git merge --abort
 git checkout main
@@ -180,9 +192,9 @@ SendMessage(type: "message", recipient: "build-agent",
 ```
 **WAIT for the build agent to confirm full CI passes.**
 
-If full CI fails (stories interact badly when combined), fall back to individual PRs (Attempt 2).
+If full CI fails, fall back to individual PRs (Attempt 2).
 
-**5. Push and create the batch PR:**
+**5. Push and create the batch PR (NO auto-merge yet):**
 ```bash
 git push -u origin batch-<N>-combined
 gh pr create --base main --head batch-<N>-combined \
@@ -201,26 +213,30 @@ gh pr create --base main --head batch-<N>-combined \
 Full build + lint + test passed locally.
 EOF
 )"
+```
+
+**6. Enable auto-merge ONLY after PR is created and all gates confirmed:**
+```bash
 gh pr merge <number> --auto --squash
 ```
 
-**6. After batch PR merges → update all stories in Linear → "Done":**
+**Auto-merge is the LAST action.** It is a one-way door — once CI passes on GitHub, the PR merges automatically and cannot be recalled.
+
+**7. After batch PR merges -> queue "Done" updates via Sprint Planner (deferred):**
 ```
 # For EACH story in the batch:
-mcp__linear__update_issue(id: <issue_id>, state: "Done")
-mcp__linear__create_comment(issueId: <issue_id>, body: "Code review passed. Merged to main via batch PR #<num>.\nKey files changed: <list>\nCommit SHA: <sha>")
+SendMessage(type: "message", recipient: "sprint-planner",
+  content: "QUEUE_UPDATE: { action: 'update_status', issue: 'ROK-XXX', state: 'Done', priority: 'deferred' }",
+  summary: "Queue Done transition for ROK-XXX")
+
+SendMessage(type: "message", recipient: "sprint-planner",
+  content: "QUEUE_UPDATE: { action: 'create_comment', issue: 'ROK-XXX', body: 'Code review passed. Merged to main via batch PR #<num>.\nKey files changed: <list>\nCommit SHA: <sha>', priority: 'deferred' }",
+  summary: "Queue merge comment for ROK-XXX")
 ```
 
-**7. Clean up all story worktrees + branches:**
-```bash
-# For each story:
-git worktree remove ../Raid-Ledger--rok-<num>
-git branch -d rok-<num>-<short-name>
-# Also clean up the batch branch (it was squash-merged):
-git branch -D batch-<N>-combined
-```
+**8. Worktree + branch cleanup is handled by the Janitor in Step 9b — do NOT clean up here.**
 
-**8. Report:**
+**9. Report:**
 ```
 ## Batch N — <count> stories merged via single PR
 PR: #<num> merged to main
@@ -243,32 +259,33 @@ If the batch merge failed (conflicts or CI failures), create individual PRs per 
      summary: "PR-prep ROK-<num>")
    ```
    **WAIT for the build agent to confirm everything passes before proceeding.**
-   The build agent will: sync with origin/main (rebase) -> full CI (build all + lint all + test all) -> push.
-   If anything fails, re-spawn the reviewer or dev to fix.
 
    **DO NOT create the PR until the build agent confirms PR-prep succeeded.**
 
-2. **Create PR and enable auto-merge:**
+2. **Create PR (NO auto-merge yet):**
    ```bash
    gh pr create --base main --head rok-<num>-<short-name> \
      --title "feat(ROK-<num>): <short description>" \
      --body "<summary of changes>"
+   ```
+
+3. **Enable auto-merge ONLY after confirming all gates passed:**
+   ```bash
    gh pr merge <number> --auto --squash
    ```
 
-3. **IMPORTANT: Wait for the PR to merge before processing the next story.**
-   Each subsequent story must rebase onto the updated main (the previous story's changes).
-   The build agent's PR-prep task handles this (it rebases onto origin/main).
+4. **IMPORTANT: Wait for the PR to merge before processing the next story.**
+   Each subsequent story must rebase onto the updated main.
 
-4. **Once CI passes and PR merges — update Linear → "Done" (MANDATORY):**
+5. **Once PR merges -> queue "Done" update via Sprint Planner (deferred):**
    ```
-   mcp__linear__update_issue(id: <issue_id>, state: "Done")
-   mcp__linear__create_comment(issueId: <issue_id>, body: "Code review passed. PR #<num> merged to main.\nKey files changed: <list>\nCommit SHA(s): <sha>")
-   ```
+   SendMessage(type: "message", recipient: "sprint-planner",
+     content: "QUEUE_UPDATE: { action: 'update_status', issue: 'ROK-XXX', state: 'Done', priority: 'deferred' }",
+     summary: "Queue Done transition for ROK-XXX")
 
-5. **Clean up worktree:**
-   ```bash
-   git worktree remove ../Raid-Ledger--rok-<num>
+   SendMessage(type: "message", recipient: "sprint-planner",
+     content: "QUEUE_UPDATE: { action: 'create_comment', issue: 'ROK-XXX', body: 'Code review passed. PR #<num> merged to main.\nKey files changed: <list>\nCommit SHA(s): <sha>', priority: 'deferred' }",
+     summary: "Queue merge comment for ROK-XXX")
    ```
 
 6. **Report progress per story:**
@@ -281,4 +298,4 @@ If the batch merge failed (conflicts or CI failures), create individual PRs per 
 
 ### Single-story batch (no batching needed)
 
-If only 1 story was approved in the batch, skip the batch merge attempt and go straight to Attempt 2 (individual PR) for that story.
+If only 1 story was approved, skip the batch merge attempt and go straight to Attempt 2 (individual PR).

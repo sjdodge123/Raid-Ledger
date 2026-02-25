@@ -18,22 +18,19 @@ this story works correctly locally (localhost:5173).
 
 ### Guidelines
 - Read the story's acceptance criteria carefully — each AC should map to at least one test step
-- Read the PR diff to understand what actually changed (routes, components, API endpoints)
+- Read the code diff to understand what actually changed (routes, components, API endpoints)
 - Include the specific URL paths to navigate to (e.g., localhost:5173/events, localhost:5173/profile)
 - Include specific actions: what to click, what to type, what to look for
 - Include edge cases: empty states, error states, mobile/responsive if relevant
 - Include regression checks: things that should still work after this change
 - Keep it practical — these are manual smoke tests, not exhaustive QA
 
-### Output Format
-Post your testing checklist as a Linear comment using this tool:
-```
-mcp__linear__create_comment(issueId: "<ISSUE_ID>", body: "<your checklist>")
-```
+### Output
 
-Use this format for the comment body:
-
-## Manual Testing Checklist
+**Write your testing checklist to a local file:**
+```bash
+cat > planning-artifacts/qa-cases-rok-<num>.md << 'QAEOF'
+## Manual Testing Checklist — ROK-XXX
 
 ### Setup
 - [ ] Feature branch deployed at localhost:5173
@@ -49,8 +46,12 @@ Use this format for the comment body:
 
 ### Regression
 - [ ] <related feature> still works after this change
+QAEOF
+```
 
----
-After posting the comment, **message the lead** confirming the testing checklist has been posted to Linear. Include the Linear issue ID so the Playwright agent can find it.
+**Then message the lead** confirming the testing checklist has been written. Include the file path and a brief summary (how many ACs covered, how many edge cases). The lead will route the checklist to Linear via the Sprint Planner.
 
-Do NOT edit any files or make any code changes. You are a TEAMMATE — communicate via SendMessage.
+### Rules
+- Do NOT call any `mcp__linear__*` tools directly. All Linear I/O goes through the Sprint Planner (via the lead).
+- Do NOT edit any source files or make any code changes.
+- You are a TEAMMATE — communicate via SendMessage to the lead.

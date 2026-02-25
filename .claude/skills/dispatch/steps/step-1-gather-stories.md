@@ -2,17 +2,23 @@
 
 **In-flight work takes priority over new stories.** Always check what's already in progress and finish it first.
 
+**Data source:** `planning-artifacts/sprint-status.yaml` (populated by Sprint Planner in Step 0b). The lead reads this file directly — do NOT call `mcp__linear__*` tools.
+
 ---
 
 ## Phase 1: Check In-Flight Work
 
-Fetch all in-flight stories in parallel:
+Read the Sprint Planner's local cache to find in-flight stories:
+
+```bash
+cat planning-artifacts/sprint-status.yaml
 ```
-mcp__linear__list_issues(project: "Raid Ledger", state: "In Progress")
-mcp__linear__list_issues(project: "Raid Ledger", state: "In Review")
-mcp__linear__list_issues(project: "Raid Ledger", state: "Code Review")
-mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
-```
+
+Filter for stories in these states:
+- **In Progress** — dev agents implementing
+- **In Review** — waiting for operator testing
+- **Code Review** — operator approved, awaiting code review
+- **Changes Requested** — needs rework
 
 ### Present In-Flight Dashboard
 
@@ -20,9 +26,9 @@ mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
 ## In-Flight Status
 
 ### In Progress (dev agents implementing)
-| Story | Title | Assignee | Updated |
-|-------|-------|----------|---------|
-| ROK-XXX | <title> | <agent/person> | <relative time> |
+| Story | Title | Updated |
+|-------|-------|---------|
+| ROK-XXX | <title> | <relative time> |
 
 ### In Review (waiting for operator testing)
 | Story | Title | Updated |
@@ -42,10 +48,10 @@ mcp__linear__list_issues(project: "Raid Ledger", state: "Changes Requested")
 
 ### Resume In-Flight Work
 
-If ANY in-flight stories exist, **suggest finishing them first** and route to the appropriate step to pick up where they left off:
+If ANY in-flight stories exist, **suggest finishing them first** and route to the appropriate step:
 
-- **"In Progress"**: Dev agents should still be working. Check if worktrees and agents are still active. If stale (no commits in >2 hours), suggest re-spawning dev agents to continue. Resume from **Step 5** (re-create the team and re-spawn agents in existing worktrees).
-- **"In Review"**: Waiting on operator testing. **Immediately build and run the feature branch locally** so the operator can test — do NOT wait to be asked. Use `deploy_dev.sh --branch <branch-name> --rebuild` to switch the local dev environment to that branch, and tell the operator which other branches are available. Resume from **Step 7a** (poll for operator results).
+- **"In Progress"**: Check if worktrees and agents are still active. If stale (no commits in >2 hours), suggest re-spawning dev agents. Resume from **Step 5** (re-create team, re-spawn agents in existing worktrees).
+- **"In Review"**: Waiting on operator testing. **Immediately build and run the feature branch locally** so the operator can test — do NOT wait to be asked. Use `deploy_dev.sh --branch <branch-name> --rebuild`. Resume from **Step 7a** (poll for operator results).
 - **"Code Review"**: Operator approved, needs reviewer. Resume from **Step 7c** (spawn review agents).
 - **"Changes Requested"**: Needs rework. Resume from **Step 7b** (handle changes requested — re-spawn dev agents with feedback).
 
@@ -66,9 +72,9 @@ Other branches available: deploy_dev.sh --branch <other-branch>
 Say "resume" to pick up in-flight work, or "new" to skip to new stories.
 ```
 
-**IMPORTANT: If "In Review" stories exist, build and run the first one locally IMMEDIATELY — don't wait for the operator to respond.** The operator needs a running app at localhost:5173 to test against. Start the local build while presenting the dashboard.
+**IMPORTANT: If "In Review" stories exist, build and run the first one locally IMMEDIATELY — don't wait for the operator to respond.** The operator needs a running app at localhost:5173 to test against.
 
-If the operator says "resume" (or equivalent), jump to the appropriate step for each story. If they say "new", proceed to Phase 2.
+If the operator says "resume" (or equivalent), jump to the appropriate step. If they say "new", proceed to Phase 2.
 
 ---
 
@@ -76,16 +82,12 @@ If the operator says "resume" (or equivalent), jump to the appropriate step for 
 
 Route based on `$ARGUMENTS`:
 
-- **`ROK-XXX`** (specific story ID) — fetch that single issue, regardless of status
-- **`rework`** — fetch only "Changes Requested" stories (from Phase 1 results)
-- **`todo`** — fetch only "Dispatch Ready" stories
-- **`all`** or **no arguments** — fetch both "Dispatch Ready" AND "Changes Requested" stories
+- **`ROK-XXX`** (specific story ID) — look up that story in the cache, regardless of status
+- **`rework`** — filter cache for "Changes Requested" stories only
+- **`todo`** — filter cache for "Dispatch Ready" stories only
+- **`all`** or **no arguments** — include both "Dispatch Ready" AND "Changes Requested" stories
 
-```
-mcp__linear__list_issues(project: "Raid Ledger", state: "Dispatch Ready")
-```
-
-Note: "Changes Requested" stories were already fetched in Phase 1. Reuse those results — do not re-fetch.
+All data comes from the Sprint Planner cache. No Linear API calls.
 
 Combine results into a single list grouped by type:
 - **Rework** = Changes Requested items (need review feedback)
