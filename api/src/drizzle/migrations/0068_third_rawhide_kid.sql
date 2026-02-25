@@ -1,0 +1,9 @@
+ALTER TABLE "events" ALTER COLUMN "reminder_1hour" SET DEFAULT true;--> statement-breakpoint
+ALTER TABLE "events" ALTER COLUMN "reminder_24hour" SET DEFAULT true;--> statement-breakpoint
+ALTER TABLE "user_notification_preferences" ALTER COLUMN "channel_prefs" SET DEFAULT '{"slot_vacated":{"inApp":true,"push":true,"discord":true},"event_reminder":{"inApp":true,"push":true,"discord":true},"new_event":{"inApp":true,"push":true,"discord":true},"subscribed_game":{"inApp":true,"push":true,"discord":true},"achievement_unlocked":{"inApp":true,"push":false,"discord":false},"level_up":{"inApp":true,"push":false,"discord":false},"missed_event_nudge":{"inApp":true,"push":false,"discord":false},"event_rescheduled":{"inApp":true,"push":true,"discord":true},"bench_promoted":{"inApp":true,"push":true,"discord":true},"event_cancelled":{"inApp":true,"push":true,"discord":true},"roster_reassigned":{"inApp":true,"push":true,"discord":true},"tentative_displaced":{"inApp":true,"push":true,"discord":true},"system":{"inApp":true,"push":false,"discord":false}}'::jsonb;--> statement-breakpoint
+ALTER TABLE "event_plans" ALTER COLUMN "reminder_1hour" SET DEFAULT true;--> statement-breakpoint
+ALTER TABLE "event_plans" ALTER COLUMN "reminder_24hour" SET DEFAULT true;--> statement-breakpoint
+ALTER TABLE "event_signups" ADD COLUMN "preferred_roles" text[];--> statement-breakpoint
+ALTER TABLE "event_signups" ADD COLUMN "attendance_status" varchar(20);--> statement-breakpoint
+ALTER TABLE "event_signups" ADD COLUMN "attendance_recorded_at" timestamp;--> statement-breakpoint
+ALTER TABLE "wow_classic_boss_loot" ADD COLUMN "item_subclass" varchar(50);
