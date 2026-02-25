@@ -176,44 +176,49 @@ const SUB_INSTANCE_PARENTS = {
   31604: 316,
 };
 
-// Instances that need boss data for classic_anniversary (classic + tbc)
-// Excluding instances that already have data
+// Instances that need boss data — all Classic through Cata
+// Only includes instances NOT already in the JSON files
 const MISSING_INSTANCES = [
-  // Classic dungeons
-  { id: 226, expansion: 'classic' },  // Ragefire Chasm
-  { id: 228, expansion: 'classic' },  // Blackrock Depths
-  { id: 230, expansion: 'classic' },  // Dire Maul East
-  { id: 232, expansion: 'classic' },  // Maraudon (parent)
-  { id: 233, expansion: 'classic' },  // Razorfen Downs
-  { id: 234, expansion: 'classic' },  // Razorfen Kraul
-  { id: 236, expansion: 'classic' },  // Stratholme Live
-  { id: 238, expansion: 'classic' },  // The Stockade
-  { id: 239, expansion: 'classic' },  // Uldaman
-  { id: 240, expansion: 'classic' },  // Wailing Caverns
-  { id: 241, expansion: 'classic' },  // Zul'Farrak
-  { id: 246, expansion: 'classic' },  // Scholomance
-  { id: 311, expansion: 'classic' },  // Scarlet Halls
-  { id: 1276, expansion: 'classic' }, // Dire Maul West
-  { id: 1277, expansion: 'classic' }, // Dire Maul North
-  { id: 1292, expansion: 'classic' }, // Stratholme UD
-  // Classic raids
-  { id: 743, expansion: 'classic' },  // Ruins of Ahn'Qiraj (AQ20)
-  // TBC dungeons
-  { id: 247, expansion: 'tbc' },  // Auchenai Crypts
-  { id: 249, expansion: 'tbc' },  // Magisters' Terrace
-  { id: 250, expansion: 'tbc' },  // Mana-Tombs
-  { id: 251, expansion: 'tbc' },  // Old Hillsbrad Foothills
-  { id: 252, expansion: 'tbc' },  // Sethekk Halls
-  { id: 253, expansion: 'tbc' },  // Shadow Labyrinth
-  { id: 254, expansion: 'tbc' },  // The Arcatraz
-  { id: 255, expansion: 'tbc' },  // The Black Morass
-  { id: 256, expansion: 'tbc' },  // The Blood Furnace
-  { id: 257, expansion: 'tbc' },  // The Botanica
-  { id: 258, expansion: 'tbc' },  // The Mechanar
-  { id: 259, expansion: 'tbc' },  // The Shattered Halls
-  { id: 260, expansion: 'tbc' },  // The Slave Pens
-  { id: 261, expansion: 'tbc' },  // The Steamvault
-  { id: 262, expansion: 'tbc' },  // The Underbog
+  // WotLK dungeons
+  { id: 271, expansion: 'wotlk' },  // Ahn'kahet: The Old Kingdom
+  { id: 272, expansion: 'wotlk' },  // Azjol-Nerub
+  { id: 273, expansion: 'wotlk' },  // Drak'Tharon Keep
+  { id: 274, expansion: 'wotlk' },  // Gundrak
+  { id: 275, expansion: 'wotlk' },  // Halls of Lightning
+  { id: 276, expansion: 'wotlk' },  // Halls of Reflection
+  { id: 277, expansion: 'wotlk' },  // Halls of Stone
+  { id: 278, expansion: 'wotlk' },  // Pit of Saron
+  { id: 279, expansion: 'wotlk' },  // The Culling of Stratholme
+  { id: 280, expansion: 'wotlk' },  // The Forge of Souls
+  { id: 281, expansion: 'wotlk' },  // The Nexus
+  { id: 282, expansion: 'wotlk' },  // The Oculus
+  { id: 283, expansion: 'wotlk' },  // The Violet Hold
+  { id: 284, expansion: 'wotlk' },  // Trial of the Champion
+  { id: 286, expansion: 'wotlk' },  // Utgarde Pinnacle
+  // WotLK raids
+  { id: 753, expansion: 'wotlk' },  // Vault of Archavon
+  { id: 755, expansion: 'wotlk' },  // The Obsidian Sanctum
+  { id: 756, expansion: 'wotlk' },  // The Eye of Eternity
+  { id: 757, expansion: 'wotlk' },  // Trial of the Crusader
+  { id: 761, expansion: 'wotlk' },  // The Ruby Sanctum
+  // Cata dungeons
+  { id: 65, expansion: 'cata' },   // Throne of the Tides
+  { id: 66, expansion: 'cata' },   // Blackrock Caverns
+  { id: 67, expansion: 'cata' },   // The Stonecore
+  { id: 68, expansion: 'cata' },   // The Vortex Pinnacle
+  { id: 69, expansion: 'cata' },   // Lost City of the Tol'vir
+  { id: 70, expansion: 'cata' },   // Halls of Origination
+  { id: 71, expansion: 'cata' },   // Grim Batol
+  { id: 76, expansion: 'cata' },   // Zul'Gurub
+  { id: 77, expansion: 'cata' },   // Zul'Aman
+  { id: 184, expansion: 'cata' },  // End Time
+  { id: 185, expansion: 'cata' },  // Well of Eternity
+  { id: 186, expansion: 'cata' },  // Hour of Twilight
+  // Cata raids
+  { id: 72, expansion: 'cata' },   // The Bastion of Twilight
+  { id: 74, expansion: 'cata' },   // Throne of the Four Winds
+  { id: 75, expansion: 'cata' },   // Baradin Hold
+  { id: 1301, expansion: 'cata' }, // Blackrock Depths (Cata raid version)
 ];
 
 // Rate limiter
