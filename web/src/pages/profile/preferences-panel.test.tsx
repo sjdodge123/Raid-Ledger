@@ -31,9 +31,15 @@ describe('PreferencesPanel (ROK-359)', () => {
         expect(screen.getByTestId('timezone-section')).toBeInTheDocument();
     });
 
-    it('renders both sections together in a single panel', () => {
-        render(<PreferencesPanel />);
-        expect(screen.getByTestId('appearance-panel')).toBeInTheDocument();
-        expect(screen.getByTestId('timezone-section')).toBeInTheDocument();
+    it('renders Appearance section before Timezone section in the DOM', () => {
+        const { container } = render(<PreferencesPanel />);
+        const appearance = container.querySelector('[data-testid="appearance-panel"]');
+        const timezone = container.querySelector('[data-testid="timezone-section"]');
+        expect(appearance).not.toBeNull();
+        expect(timezone).not.toBeNull();
+        // Appearance should appear before Timezone in document order
+        expect(
+            appearance!.compareDocumentPosition(timezone!) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
     });
 });

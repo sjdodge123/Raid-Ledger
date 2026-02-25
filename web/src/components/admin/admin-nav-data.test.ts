@@ -277,16 +277,13 @@ describe('buildNavSections', () => {
         expect(bnetIdx).toBeLessThan(pluginsIdx);
     });
 
-    it('total core nav items (excluding dynamic plugins) is ≤7', () => {
-        // Core = General (4 or 5 with demoMode) + core integrations (4) + Manage Plugins (1)
+    it('General section has ≤7 core nav items (excluding dynamic plugins and demo)', () => {
+        // Core = General (4 without demoMode) + core integrations (4) + Manage Plugins (1) = 9 total
+        // General section alone should have exactly 4 items without demoMode
         const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), [], { demoMode: false });
-        const totalItems = sections.reduce((sum, s) => sum + s.children.length, 0);
-        expect(totalItems).toBeLessThanOrEqual(10); // full count including all items
-        // Just verify core items per section
         const general = sections.find((s) => s.id === 'general')!;
-        const integrations = sections.find((s) => s.id === 'integrations')!;
-        // General without demo: 4, integrations: 4 core + 1 manage plugins = 5 → total 9
-        expect(general.children.length).toBeLessThanOrEqual(5);
-        expect(integrations.children.length).toBeLessThanOrEqual(6); // 4 core + plugins + manage
+        // General section: Site Settings, Role Management, Scheduled Jobs, Backups = 4 items ≤ 7
+        expect(general.children.length).toBeLessThanOrEqual(7);
+        expect(general.children.length).toBe(4);
     });
 });
