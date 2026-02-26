@@ -13,7 +13,6 @@
  *   signup-interaction.listener.spec.ts.
  */
 /* eslint-disable @typescript-eslint/no-unsafe-call */
-/* eslint-disable @typescript-eslint/no-unsafe-member-access */
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { SignupInteractionListener } from './signup-interaction.listener';
