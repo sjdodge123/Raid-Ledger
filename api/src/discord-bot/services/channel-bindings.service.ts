@@ -154,6 +154,36 @@ export class ChannelBindingsService {
   }
 
   /**
+   * Get all bindings for a guild with game names joined from the games table.
+   */
+  async getBindingsWithGameNames(
+    guildId: string,
+  ): Promise<(BindingRecord & { gameName: string | null })[]> {
+    const rows = await this.db
+      .select({
+        id: schema.channelBindings.id,
+        guildId: schema.channelBindings.guildId,
+        channelId: schema.channelBindings.channelId,
+        channelType: schema.channelBindings.channelType,
+        bindingPurpose: schema.channelBindings.bindingPurpose,
+        gameId: schema.channelBindings.gameId,
+        recurrenceGroupId: schema.channelBindings.recurrenceGroupId,
+        config: schema.channelBindings.config,
+        createdAt: schema.channelBindings.createdAt,
+        updatedAt: schema.channelBindings.updatedAt,
+        gameName: schema.games.name,
+      })
+      .from(schema.channelBindings)
+      .leftJoin(
+        schema.games,
+        eq(schema.channelBindings.gameId, schema.games.id),
+      )
+      .where(eq(schema.channelBindings.guildId, guildId));
+
+    return rows as (BindingRecord & { gameName: string | null })[];
+  }
+
+  /**
    * Get a specific binding by ID.
    */
   async getBindingById(id: string): Promise<BindingRecord | null> {
@@ -266,7 +296,7 @@ export class ChannelBindingsService {
 
     const mergedConfig = { ...(existing.config ?? {}), ...config };
 
-    const updateSet: Record<string, unknown> = {
+    const updateSet: Partial<typeof schema.channelBindings.$inferInsert> = {
       config: mergedConfig,
       updatedAt: new Date(),
     };

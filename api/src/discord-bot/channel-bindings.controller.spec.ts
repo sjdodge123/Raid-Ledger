@@ -34,6 +34,7 @@ describe('ChannelBindingsController', () => {
           provide: ChannelBindingsService,
           useValue: {
             getBindings: jest.fn().mockResolvedValue([]),
+            getBindingsWithGameNames: jest.fn().mockResolvedValue([]),
             getBindingById: jest.fn().mockResolvedValue(null),
             bind: jest.fn(),
             unbind: jest.fn().mockResolvedValue(true),
@@ -69,11 +70,11 @@ describe('ChannelBindingsController', () => {
       const result = await controller.listBindings();
 
       expect(result).toEqual({ data: [] });
-      expect(bindingsService.getBindings).not.toHaveBeenCalled();
+      expect(bindingsService.getBindingsWithGameNames).not.toHaveBeenCalled();
     });
 
     it('should return empty data array when no bindings configured', async () => {
-      bindingsService.getBindings.mockResolvedValue([]);
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([]);
 
       const result = await controller.listBindings();
 
@@ -81,7 +82,9 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should return bindings with enriched channel names from Discord', async () => {
-      bindingsService.getBindings.mockResolvedValue([makeBinding()]);
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([
+        { ...makeBinding(), gameName: null },
+      ]);
       clientService.getTextChannels.mockReturnValue([
         { id: 'channel-456', name: 'general' },
       ]);
@@ -93,7 +96,9 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should return undefined channelName when channel not found in Discord cache', async () => {
-      bindingsService.getBindings.mockResolvedValue([makeBinding()]);
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([
+        { ...makeBinding(), gameName: null },
+      ]);
       clientService.getTextChannels.mockReturnValue([]);
       clientService.getVoiceChannels.mockReturnValue([]);
 
@@ -112,7 +117,9 @@ describe('ChannelBindingsController', () => {
         gameId: 42,
         config: { minPlayers: 5 },
       });
-      bindingsService.getBindings.mockResolvedValue([binding]);
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([
+        { ...binding, gameName: 'World of Warcraft' },
+      ]);
 
       const result = await controller.listBindings();
 
@@ -123,6 +130,7 @@ describe('ChannelBindingsController', () => {
         channelType: 'text',
         bindingPurpose: 'game-announcements',
         gameId: 42,
+        gameName: 'World of Warcraft',
         config: { minPlayers: 5 },
       });
       expect(typeof result.data[0].createdAt).toBe('string');
@@ -130,8 +138,8 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should enrich voice channel names from voice channel list', async () => {
-      bindingsService.getBindings.mockResolvedValue([
-        makeBinding({ channelId: 'voice-ch-1', channelType: 'voice' }),
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([
+        { ...makeBinding({ channelId: 'voice-ch-1', channelType: 'voice' }), gameName: null },
       ]);
       clientService.getTextChannels.mockReturnValue([]);
       clientService.getVoiceChannels.mockReturnValue([
@@ -144,9 +152,9 @@ describe('ChannelBindingsController', () => {
     });
 
     it('should return multiple bindings', async () => {
-      bindingsService.getBindings.mockResolvedValue([
-        makeBinding({ id: 'b-1', channelId: 'ch-1' }),
-        makeBinding({ id: 'b-2', channelId: 'ch-2' }),
+      bindingsService.getBindingsWithGameNames.mockResolvedValue([
+        { ...makeBinding({ id: 'b-1', channelId: 'ch-1' }), gameName: null },
+        { ...makeBinding({ id: 'b-2', channelId: 'ch-2' }), gameName: null },
       ]);
 
       const result = await controller.listBindings();

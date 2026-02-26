@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -19,6 +19,9 @@ import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
 /** Minimum interval between end-time extensions (ms). */
 const EXTEND_THROTTLE_MS = 5 * 60 * 1000;
 
+/** Interval for periodic end-time extension checks (ms). */
+const EXTEND_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+
 /** In-memory state for an active ad-hoc event. */
 interface ActiveAdHocState {
   eventId: number;
@@ -27,11 +30,14 @@ interface ActiveAdHocState {
 }
 
 @Injectable()
-export class AdHocEventService implements OnModuleInit {
+export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AdHocEventService.name);
 
   /** Map of channelBindingId -> active ad-hoc state */
   private activeEvents = new Map<string, ActiveAdHocState>();
+
+  /** Periodic timer for extending end times of occupied events. */
+  private extendInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -77,6 +83,43 @@ export class AdHocEventService implements OnModuleInit {
       this.logger.log(
         `Recovered ${liveEvents.length} live ad-hoc event(s) on startup`,
       );
+    }
+
+    this.startExtendInterval();
+  }
+
+  onModuleDestroy(): void {
+    this.stopExtendInterval();
+  }
+
+  /**
+   * Start the periodic interval that extends end times for occupied events.
+   * AC-8: Event end time continuously extends while the channel is occupied.
+   */
+  private startExtendInterval(): void {
+    this.stopExtendInterval();
+    this.extendInterval = setInterval(() => {
+      this.extendAllActiveEvents().catch((err) => {
+        this.logger.error(`Periodic end-time extension failed: ${err}`);
+      });
+    }, EXTEND_CHECK_INTERVAL_MS);
+  }
+
+  private stopExtendInterval(): void {
+    if (this.extendInterval) {
+      clearInterval(this.extendInterval);
+      this.extendInterval = null;
+    }
+  }
+
+  /**
+   * Extend end times for all active events that still have members.
+   */
+  private async extendAllActiveEvents(): Promise<void> {
+    for (const [bindingId, state] of this.activeEvents) {
+      if (state.memberSet.size > 0) {
+        await this.maybeExtendEndTime(state);
+      }
     }
   }
 

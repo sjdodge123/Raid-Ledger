@@ -11,6 +11,9 @@ import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
 /** Debounce window per user to avoid rapid join/leave thrashing. */
 const DEBOUNCE_MS = 2000;
 
+/** TTL for channel binding cache entries (ms). */
+const CACHE_TTL_MS = 60 * 1000;
+
 /**
  * VoiceStateListener — listens for Discord `voiceStateUpdate` events and
  * delegates ad-hoc event management to AdHocEventService (ROK-293).
@@ -36,14 +39,17 @@ export class VoiceStateListener {
   private channelBindingCache = new Map<
     string,
     {
-      bindingId: string;
-      gameId: number | null;
-      config: {
-        minPlayers?: number;
-        gracePeriod?: number;
-        notificationChannelId?: string;
+      cachedAt: number;
+      value: {
+        bindingId: string;
+        gameId: number | null;
+        config: {
+          minPlayers?: number;
+          gracePeriod?: number;
+          notificationChannelId?: string;
+        } | null;
       } | null;
-    } | null
+    }
   >();
 
   /** Tracks members per channel for threshold checking */
@@ -213,7 +219,7 @@ export class VoiceStateListener {
   }
 
   /**
-   * Resolve a channel ID to a binding (cached).
+   * Resolve a channel ID to a binding (cached with TTL).
    */
   private async resolveBinding(channelId: string): Promise<{
     bindingId: string;
@@ -224,13 +230,14 @@ export class VoiceStateListener {
       notificationChannelId?: string;
     } | null;
   } | null> {
-    if (this.channelBindingCache.has(channelId)) {
-      return this.channelBindingCache.get(channelId) ?? null;
+    const cached = this.channelBindingCache.get(channelId);
+    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      return cached.value;
     }
 
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
-      this.channelBindingCache.set(channelId, null);
+      this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: null });
       return null;
     }
 
@@ -242,7 +249,7 @@ export class VoiceStateListener {
     );
 
     if (!binding) {
-      this.channelBindingCache.set(channelId, null);
+      this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: null });
       return null;
     }
 
@@ -256,7 +263,7 @@ export class VoiceStateListener {
       } | null,
     };
 
-    this.channelBindingCache.set(channelId, result);
+    this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: result });
     return result;
   }
 

@@ -186,12 +186,13 @@ export function DiscordPanel() {
                                                 type="checkbox"
                                                 checked={adHocEventsStatus.data?.enabled ?? false}
                                                 onChange={(e) => {
+                                                    const newEnabled = e.target.checked;
                                                     updateAdHocEvents.mutate(
-                                                        { enabled: e.target.checked },
+                                                        { enabled: newEnabled },
                                                         {
                                                             onSuccess: () => {
                                                                 toast.success(
-                                                                    e.target.checked
+                                                                    newEnabled
                                                                         ? 'Ad-hoc events enabled'
                                                                         : 'Ad-hoc events disabled',
                                                                 );
