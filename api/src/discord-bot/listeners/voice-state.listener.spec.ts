@@ -226,9 +226,6 @@ describe('VoiceStateListener', () => {
     });
 
     it('detects join event (null -> channel)', async () => {
-      // Use real timers for this async test to avoid fake timer + microtask issues
-      jest.useRealTimers();
-
       mockChannelBindingsService.getBindings.mockResolvedValue([
         {
           id: 'bind-join',
@@ -246,16 +243,6 @@ describe('VoiceStateListener', () => {
         lastExtendedAt: 0,
       });
 
-      // Re-register with real timers
-      const newClient = createMockClient();
-      newClient.on.mockImplementation(
-        (_event: string, handler: (...args: unknown[]) => void) => {
-          voiceHandler = handler;
-        },
-      );
-      mockClientService.getClient.mockReturnValue(newClient);
-      await listener.onBotConnected();
-
       voiceHandler(
         { channelId: null, id: 'user-join' },
         {
@@ -268,19 +255,13 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      // Wait for debounce (2000ms) + async processing (generous for CI coverage)
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      // Advance past debounce and flush async processing
+      await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
-
-      listener.onBotDisconnected();
-      jest.useFakeTimers();
-    }, 10000);
+    });
 
     it('detects leave event (channel -> null)', async () => {
-      // Use real timers for this async test
-      jest.useRealTimers();
-
       mockChannelBindingsService.getBindings.mockResolvedValue([
         {
           id: 'bind-leave',
@@ -291,31 +272,18 @@ describe('VoiceStateListener', () => {
         },
       ]);
 
-      const newClient = createMockClient();
-      newClient.on.mockImplementation(
-        (_event: string, handler: (...args: unknown[]) => void) => {
-          voiceHandler = handler;
-        },
-      );
-      mockClientService.getClient.mockReturnValue(newClient);
-      await listener.onBotConnected();
-
       voiceHandler(
         { channelId: 'voice-ch-leave', id: 'user-leave' },
         { channelId: null, id: 'user-leave', member: null },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      // Advance past debounce and flush async processing
+      await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
-
-      listener.onBotDisconnected();
-      jest.useFakeTimers();
-    }, 10000);
+    });
 
     it('detects move event (channel A -> channel B) as leave+join', async () => {
-      jest.useRealTimers();
-
       // Both channels are bound
       mockChannelBindingsService.getBindings.mockResolvedValue([
         {
@@ -341,15 +309,6 @@ describe('VoiceStateListener', () => {
         lastExtendedAt: 0,
       });
 
-      const newClient = createMockClient();
-      newClient.on.mockImplementation(
-        (_event: string, handler: (...args: unknown[]) => void) => {
-          voiceHandler = handler;
-        },
-      );
-      mockClientService.getClient.mockReturnValue(newClient);
-      await listener.onBotConnected();
-
       voiceHandler(
         { channelId: 'ch-a', id: 'user-move' },
         {
@@ -362,20 +321,16 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      // Advance past debounce and flush async processing
+      await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
-
-      listener.onBotDisconnected();
-      jest.useFakeTimers();
-    }, 10000);
+    });
   });
 
   describe('threshold checking', () => {
     it('does not trigger event creation when below minPlayers threshold', async () => {
-      jest.useRealTimers();
-
       let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
@@ -413,19 +368,14 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
-
-      listener.onBotDisconnected();
-      jest.useFakeTimers();
-    }, 10000);
+    });
   });
 
   describe('binding resolution', () => {
     it('skips unbound channels without calling ad-hoc services', async () => {
-      jest.useRealTimers();
-
       let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
@@ -452,12 +402,9 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 3500));
+      await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
-
-      listener.onBotDisconnected();
-      jest.useFakeTimers();
-    }, 10000);
+    });
   });
 });
