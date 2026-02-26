@@ -1,9 +1,14 @@
 /**
  * Integration test application helper.
  *
- * Boots a real NestJS app backed by a Testcontainers PostgreSQL instance.
- * Singleton per test run — the container and app are created once and reused
- * across all integration test suites for performance.
+ * Boots a real NestJS app backed by a PostgreSQL database.
+ * Singleton per test run — the DB connection and app are created once and
+ * reused across all integration test suites for performance.
+ *
+ * Dual-mode:
+ *   - Local dev: Testcontainers spins up a fresh PostgreSQL container.
+ *   - CI: Detects DATABASE_URL env var and connects to the existing
+ *     CI postgres service (no Docker-in-Docker needed).
  *
  * Usage:
  *   const { app, request } = await getTestApp();
@@ -58,27 +63,36 @@ export interface TestApp {
   request: ReturnType<typeof supertest.default>;
   db: ReturnType<typeof drizzle>;
   seed: SeededData;
-  container: StartedPostgreSqlContainer;
+  /** Only set when running locally via Testcontainers; null in CI. */
+  container: StartedPostgreSqlContainer | null;
 }
 
 let instance: TestApp | null = null;
 
 /**
  * Get or create the singleton TestApp.
- * First call starts the PostgreSQL container, runs migrations, boots NestJS.
+ * First call provisions a PostgreSQL database (Testcontainers locally,
+ * existing service in CI), runs migrations, and boots NestJS.
  * Subsequent calls return the cached instance.
  */
 export async function getTestApp(): Promise<TestApp> {
   if (instance) return instance;
 
-  // 1. Start PostgreSQL container
-  const container = await new PostgreSqlContainer('postgres:15-alpine')
-    .withDatabase('raid_ledger_test')
-    .withUsername('test')
-    .withPassword('test')
-    .start();
+  let connectionString: string;
+  let container: StartedPostgreSqlContainer | null = null;
 
-  const connectionString = container.getConnectionUri();
+  if (process.env.DATABASE_URL) {
+    // CI mode — use the pre-existing postgres service
+    connectionString = process.env.DATABASE_URL;
+  } else {
+    // Local mode — spin up a Testcontainers PostgreSQL instance
+    container = await new PostgreSqlContainer('postgres:15-alpine')
+      .withDatabase('raid_ledger_test')
+      .withUsername('test')
+      .withPassword('test')
+      .start();
+    connectionString = container.getConnectionUri();
+  }
 
   // 2. Run Drizzle migrations
   const migrationClient = postgres(connectionString, { max: 1 });
@@ -128,6 +142,8 @@ export async function closeTestApp(): Promise<void> {
   if (!instance) return;
 
   await instance.app.close();
-  await instance.container.stop();
+  if (instance.container) {
+    await instance.container.stop();
+  }
   instance = null;
 }
