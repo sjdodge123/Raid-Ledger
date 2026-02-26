@@ -10,8 +10,10 @@ import {
   AdHocParticipantService,
   type VoiceMemberInfo,
 } from './ad-hoc-participant.service';
+import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
 
 /** Minimum interval between end-time extensions (ms). */
@@ -37,8 +39,10 @@ export class AdHocEventService implements OnModuleInit {
     private readonly settingsService: SettingsService,
     private readonly usersService: UsersService,
     private readonly participantService: AdHocParticipantService,
+    private readonly notificationService: AdHocNotificationService,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
+    private readonly gateway: AdHocEventsGateway,
   ) {}
 
   /**
@@ -114,7 +118,7 @@ export class AdHocEventService implements OnModuleInit {
       await this.gracePeriodQueue.cancel(state.eventId);
 
       // Update event status back to live if in grace_period
-      await this.db
+      const [updated] = await this.db
         .update(schema.events)
         .set({ adHocStatus: 'live', updatedAt: new Date() })
         .where(
@@ -122,10 +126,19 @@ export class AdHocEventService implements OnModuleInit {
             eq(schema.events.id, state.eventId),
             sql`${schema.events.adHocStatus} = 'grace_period'`,
           ),
-        );
+        )
+        .returning({ id: schema.events.id });
+
+      if (updated) {
+        this.gateway.emitStatusChange(state.eventId, 'live');
+      }
 
       // Add participant to roster
       await this.participantService.addParticipant(state.eventId, member);
+
+      // Notify Discord embed + WebSocket clients
+      this.notificationService.queueUpdate(state.eventId, bindingId);
+      await this.emitRosterToClients(state.eventId);
 
       // Extend end time if throttle elapsed
       await this.maybeExtendEndTime(state);
@@ -156,6 +169,39 @@ export class AdHocEventService implements OnModuleInit {
     // Add the first participant
     await this.participantService.addParticipant(eventId, member);
 
+    // Notify Discord embed (spawn) + WebSocket clients
+    const event = await this.getEvent(eventId);
+    if (event) {
+      let gameName: string | undefined;
+      if (binding.gameId) {
+        const [game] = await this.db
+          .select({ name: schema.games.name })
+          .from(schema.games)
+          .where(eq(schema.games.id, binding.gameId))
+          .limit(1);
+        if (game) gameName = game.name;
+      }
+
+      await this.notificationService.notifySpawn(
+        eventId,
+        bindingId,
+        {
+          id: eventId,
+          title: event.title,
+          gameName,
+        },
+        [
+          {
+            discordUserId: member.discordUserId,
+            discordUsername: member.discordUsername,
+          },
+        ],
+      );
+    }
+
+    this.gateway.emitStatusChange(eventId, 'live');
+    await this.emitRosterToClients(eventId);
+
     this.logger.log(`Ad-hoc event ${eventId} created for binding ${bindingId}`);
   }
 
@@ -174,9 +220,18 @@ export class AdHocEventService implements OnModuleInit {
     // Mark participant as left
     await this.participantService.markLeave(state.eventId, discordUserId);
 
+    // Notify Discord embed + WebSocket clients
+    const event = await this.getEvent(state.eventId);
+    if (event?.channelBindingId) {
+      this.notificationService.queueUpdate(
+        state.eventId,
+        event.channelBindingId,
+      );
+    }
+    await this.emitRosterToClients(state.eventId);
+
     if (state.memberSet.size === 0) {
       // All members gone — start grace period
-      const event = await this.getEvent(state.eventId);
       if (!event) return;
 
       const binding = event.channelBindingId
@@ -197,6 +252,9 @@ export class AdHocEventService implements OnModuleInit {
 
       // Enqueue finalization
       await this.gracePeriodQueue.enqueue(state.eventId, gracePeriodMs);
+
+      // Notify WebSocket clients of status change
+      this.gateway.emitStatusChange(state.eventId, 'grace_period');
 
       this.logger.log(
         `Ad-hoc event ${state.eventId} entered grace period (${gracePeriod} min)`,
@@ -236,6 +294,39 @@ export class AdHocEventService implements OnModuleInit {
         updatedAt: now,
       })
       .where(eq(schema.events.id, eventId));
+
+    // Notify Discord embed (completed) + WebSocket clients
+    if (event.channelBindingId) {
+      let gameName: string | undefined;
+      if (event.gameId) {
+        const [game] = await this.db
+          .select({ name: schema.games.name })
+          .from(schema.games)
+          .where(eq(schema.games.id, event.gameId))
+          .limit(1);
+        if (game) gameName = game.name;
+      }
+
+      const participants = await this.participantService.getRoster(eventId);
+      await this.notificationService.notifyCompleted(
+        eventId,
+        event.channelBindingId,
+        {
+          id: eventId,
+          title: event.title,
+          gameName,
+          startTime: event.duration[0].toISOString(),
+          endTime: now.toISOString(),
+        },
+        participants.map((p) => ({
+          discordUserId: p.discordUserId,
+          discordUsername: p.discordUsername,
+          totalDurationSeconds: p.totalDurationSeconds,
+        })),
+      );
+    }
+
+    this.gateway.emitStatusChange(eventId, 'ended');
 
     // Remove from active events map
     if (event.channelBindingId) {
@@ -366,7 +457,21 @@ export class AdHocEventService implements OnModuleInit {
       })
       .where(eq(schema.events.id, state.eventId));
 
+    this.gateway.emitEndTimeExtended(state.eventId, newEnd.toISOString());
+
     this.logger.debug(`Extended end time for ad-hoc event ${state.eventId}`);
+  }
+
+  /**
+   * Emit current roster to WebSocket clients.
+   */
+  private async emitRosterToClients(eventId: number): Promise<void> {
+    const roster = await this.getAdHocRoster(eventId);
+    this.gateway.emitRosterUpdate(
+      eventId,
+      roster.participants,
+      roster.activeCount,
+    );
   }
 
   /**

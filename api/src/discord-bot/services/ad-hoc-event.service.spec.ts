@@ -6,7 +6,10 @@ import { SettingsService } from '../../settings/settings.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import { SETTING_KEYS } from '../../drizzle/schema';
 
 describe('AdHocEventService', () => {
@@ -86,8 +89,14 @@ describe('AdHocEventService', () => {
         { provide: SettingsService, useValue: mockSettingsService },
         { provide: UsersService, useValue: mockUsersService },
         { provide: AdHocParticipantService, useValue: mockParticipantService },
-        { provide: ChannelBindingsService, useValue: mockChannelBindingsService },
-        { provide: AdHocGracePeriodQueueService, useValue: mockGracePeriodQueue },
+        {
+          provide: ChannelBindingsService,
+          useValue: mockChannelBindingsService,
+        },
+        {
+          provide: AdHocGracePeriodQueueService,
+          useValue: mockGracePeriodQueue,
+        },
       ],
     }).compile();
 
@@ -253,10 +262,12 @@ describe('AdHocEventService', () => {
       await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
 
       // Mock the getEvent DB call
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 400,
-        channelBindingId: 'binding-leave',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 400,
+          channelBindingId: 'binding-leave',
+        },
+      ]);
       // Mock getBindingById
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-leave',
@@ -279,12 +290,18 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 401 }]);
-      await service.handleVoiceJoin('binding-default-grace', baseMember, baseBinding);
+      await service.handleVoiceJoin(
+        'binding-default-grace',
+        baseMember,
+        baseBinding,
+      );
 
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 401,
-        channelBindingId: 'binding-default-grace',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 401,
+          channelBindingId: 'binding-default-grace',
+        },
+      ]);
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-default-grace',
         config: null,
@@ -304,12 +321,17 @@ describe('AdHocEventService', () => {
       // finalizeEvent does: select().from().where().limit() then update().set().where()
       // The first .where() must return `this` (for chaining to .limit()).
       // The .limit() is the terminal for the select query.
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 500,
-        adHocStatus: 'grace_period',
-        channelBindingId: 'binding-fin',
-        duration: [new Date('2026-02-10T18:00:00Z'), new Date('2026-02-10T19:00:00Z')],
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 500,
+          adHocStatus: 'grace_period',
+          channelBindingId: 'binding-fin',
+          duration: [
+            new Date('2026-02-10T18:00:00Z'),
+            new Date('2026-02-10T19:00:00Z'),
+          ],
+        },
+      ]);
       // The second .where() is the terminal for the update query — leave it as returnThis default
 
       await service.finalizeEvent(500);
@@ -324,11 +346,13 @@ describe('AdHocEventService', () => {
     });
 
     it('skips finalization when event is not in grace_period', async () => {
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 501,
-        adHocStatus: 'live',
-        channelBindingId: 'binding-fin2',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 501,
+          adHocStatus: 'live',
+          channelBindingId: 'binding-fin2',
+        },
+      ]);
 
       await service.finalizeEvent(501);
 
@@ -353,12 +377,14 @@ describe('AdHocEventService', () => {
       expect(service.getActiveState('binding-cleanup')).toBeDefined();
 
       // Now finalize: select().from().where().limit() then update().set().where()
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 600,
-        adHocStatus: 'grace_period',
-        channelBindingId: 'binding-cleanup',
-        duration: [new Date(), new Date()],
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 600,
+          adHocStatus: 'grace_period',
+          channelBindingId: 'binding-cleanup',
+          duration: [new Date(), new Date()],
+        },
+      ]);
       // Don't set .where as mockResolvedValueOnce — it needs to returnThis for the select chain
 
       await service.finalizeEvent(600);

@@ -5,7 +5,10 @@ import { DiscordEmbedFactory } from './discord-embed.factory';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 describe('AdHocNotificationService', () => {
   let service: AdHocNotificationService;
@@ -64,7 +67,9 @@ describe('AdHocNotificationService', () => {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
       getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
       getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
-      getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('default-channel'),
+      getDiscordBotDefaultChannel: jest
+        .fn()
+        .mockResolvedValue('default-channel'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -73,7 +78,10 @@ describe('AdHocNotificationService', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: DiscordEmbedFactory, useValue: mockEmbedFactory },
-        { provide: ChannelBindingsService, useValue: mockChannelBindingsService },
+        {
+          provide: ChannelBindingsService,
+          useValue: mockChannelBindingsService,
+        },
         { provide: SettingsService, useValue: mockSettingsService },
       ],
     }).compile();
@@ -120,7 +128,9 @@ describe('AdHocNotificationService', () => {
         [],
       );
 
-      expect(mockSettingsService.getDiscordBotDefaultChannel).toHaveBeenCalled();
+      expect(
+        mockSettingsService.getDiscordBotDefaultChannel,
+      ).toHaveBeenCalled();
       expect(mockClientService.sendEmbed).toHaveBeenCalledWith(
         'default-channel',
         expect.any(Object),
@@ -146,7 +156,9 @@ describe('AdHocNotificationService', () => {
         id: 'binding-3',
         config: { notificationChannelId: 'channel-err' },
       });
-      mockClientService.sendEmbed.mockRejectedValue(new Error('Discord API error'));
+      mockClientService.sendEmbed.mockRejectedValue(
+        new Error('Discord API error'),
+      );
 
       await expect(
         service.notifySpawn(45, 'binding-3', { id: 45, title: 'Test' }, []),

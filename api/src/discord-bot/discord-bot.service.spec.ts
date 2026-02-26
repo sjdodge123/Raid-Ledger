@@ -35,6 +35,7 @@ describe('DiscordBotService', () => {
             getDiscordBotConfig: jest.fn(),
             isDiscordBotConfigured: jest.fn(),
             isDiscordBotSetupCompleted: jest.fn().mockResolvedValue(false),
+            getAdHocEventsEnabled: jest.fn().mockResolvedValue(false),
           },
         },
       ],
@@ -261,6 +262,7 @@ describe('DiscordBotService', () => {
         guildName: 'Test Guild',
         memberCount: 100,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
 
@@ -281,6 +283,7 @@ describe('DiscordBotService', () => {
         guildName: undefined,
         memberCount: undefined,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
 
@@ -301,6 +304,7 @@ describe('DiscordBotService', () => {
         guildName: undefined,
         memberCount: undefined,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
 
@@ -322,6 +326,7 @@ describe('DiscordBotService', () => {
         guildName: undefined,
         memberCount: undefined,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
 
@@ -342,6 +347,7 @@ describe('DiscordBotService', () => {
         guildName: undefined,
         memberCount: undefined,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
 
@@ -362,6 +368,7 @@ describe('DiscordBotService', () => {
         guildName: undefined,
         memberCount: undefined,
         setupCompleted: false,
+        adHocEventsEnabled: false,
       });
     });
   });

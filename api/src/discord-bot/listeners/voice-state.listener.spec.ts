@@ -60,7 +60,10 @@ describe('VoiceStateListener', () => {
         VoiceStateListener,
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: AdHocEventService, useValue: mockAdHocEventService },
-        { provide: ChannelBindingsService, useValue: mockChannelBindingsService },
+        {
+          provide: ChannelBindingsService,
+          useValue: mockChannelBindingsService,
+        },
         { provide: UsersService, useValue: mockUsersService },
       ],
     }).compile();
@@ -133,7 +136,9 @@ describe('VoiceStateListener', () => {
         ]),
       };
 
-      const mockClient = createMockClient(new Map([['voice-ch-1', voiceChannel]]));
+      const mockClient = createMockClient(
+        new Map([['voice-ch-1', voiceChannel]]),
+      );
       mockClientService.getClient.mockReturnValue(mockClient);
 
       mockChannelBindingsService.getBindings.mockResolvedValue([
@@ -149,7 +154,9 @@ describe('VoiceStateListener', () => {
       await listener.onBotConnected();
 
       // Recovery should have looked up bindings for the voice channel
-      expect(mockChannelBindingsService.getBindings).toHaveBeenCalledWith('guild-1');
+      expect(mockChannelBindingsService.getBindings).toHaveBeenCalledWith(
+        'guild-1',
+      );
     });
   });
 
@@ -173,9 +180,11 @@ describe('VoiceStateListener', () => {
 
     beforeEach(async () => {
       const mockClient = createMockClient();
-      mockClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        voiceHandler = handler;
-      });
+      mockClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          voiceHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(mockClient);
 
       await listener.onBotConnected();
@@ -199,7 +208,10 @@ describe('VoiceStateListener', () => {
         {
           channelId: 'ch-1',
           id: 'user-rapid',
-          member: { displayName: 'Test', user: { username: 'Test', avatar: null } },
+          member: {
+            displayName: 'Test',
+            user: { username: 'Test', avatar: null },
+          },
         },
       );
 
@@ -236,9 +248,11 @@ describe('VoiceStateListener', () => {
 
       // Re-register with real timers
       const newClient = createMockClient();
-      newClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        voiceHandler = handler;
-      });
+      newClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          voiceHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(newClient);
       await listener.onBotConnected();
 
@@ -277,9 +291,11 @@ describe('VoiceStateListener', () => {
       ]);
 
       const newClient = createMockClient();
-      newClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        voiceHandler = handler;
-      });
+      newClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          voiceHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(newClient);
       await listener.onBotConnected();
 
@@ -324,9 +340,11 @@ describe('VoiceStateListener', () => {
       });
 
       const newClient = createMockClient();
-      newClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        voiceHandler = handler;
-      });
+      newClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          voiceHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(newClient);
       await listener.onBotConnected();
 
@@ -357,9 +375,11 @@ describe('VoiceStateListener', () => {
 
       let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
-      mockClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        capturedHandler = handler;
-      });
+      mockClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          capturedHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(mockClient);
 
       mockChannelBindingsService.getBindings.mockResolvedValue([
@@ -404,9 +424,11 @@ describe('VoiceStateListener', () => {
 
       let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
-      mockClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        capturedHandler = handler;
-      });
+      mockClient.on.mockImplementation(
+        (_event: string, handler: (...args: unknown[]) => void) => {
+          capturedHandler = handler;
+        },
+      );
       mockClientService.getClient.mockReturnValue(mockClient);
 
       // No bindings at all

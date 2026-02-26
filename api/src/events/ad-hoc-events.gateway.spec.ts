@@ -1,5 +1,5 @@
 import { AdHocEventsGateway } from './ad-hoc-events.gateway';
-import type { Server, Socket } from 'socket.io';
+import type { Socket } from 'socket.io';
 
 describe('AdHocEventsGateway', () => {
   let gateway: AdHocEventsGateway;

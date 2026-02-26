@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 
 describe('AdHocParticipantService', () => {
   let service: AdHocParticipantService;

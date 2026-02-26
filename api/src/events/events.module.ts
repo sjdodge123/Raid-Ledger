@@ -61,6 +61,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     AttendanceService,
     PugsService,
     InviteService,
+    AdHocEventsGateway,
   ],
 })
 export class EventsModule {}

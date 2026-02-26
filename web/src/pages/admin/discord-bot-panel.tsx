@@ -20,7 +20,7 @@ const DiscordBotIcon = (
  * ROK-385: Hidden when admin has no linked Discord account.
  */
 export function DiscordBotPanel() {
-    const { discordBotStatus, adHocEventsStatus, updateAdHocEvents } = useAdminSettings();
+    const { discordBotStatus } = useAdminSettings();
     const { user } = useAuth();
 
     const hasDiscord = isDiscordLinked(user?.discordId);
@@ -81,49 +81,6 @@ export function DiscordBotPanel() {
             >
                 <DiscordBotForm />
             </IntegrationCard>
-
-            {/* ROK-293: Ad-Hoc Events Toggle */}
-            {discordBotStatus.data?.connected && (
-                <div className="bg-surface rounded-xl border border-edge p-6">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <h3 className="text-base font-semibold text-foreground">
-                                Ad-Hoc Voice Events
-                            </h3>
-                            <p className="text-sm text-muted mt-1">
-                                Automatically create events when members join bound voice channels.
-                                Disabled by default.
-                            </p>
-                        </div>
-                        <label className="relative inline-flex items-center cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={adHocEventsStatus.data?.enabled ?? false}
-                                onChange={(e) => {
-                                    updateAdHocEvents.mutate(
-                                        { enabled: e.target.checked },
-                                        {
-                                            onSuccess: () => {
-                                                toast.success(
-                                                    e.target.checked
-                                                        ? 'Ad-hoc events enabled'
-                                                        : 'Ad-hoc events disabled',
-                                                );
-                                            },
-                                            onError: () => {
-                                                toast.error('Failed to update ad-hoc events setting');
-                                            },
-                                        },
-                                    );
-                                }}
-                                disabled={updateAdHocEvents.isPending}
-                                className="sr-only peer"
-                            />
-                            <div className="w-11 h-6 bg-dim rounded-full peer peer-checked:bg-emerald-500 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-emerald-500/50 after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full" />
-                        </label>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
