@@ -148,7 +148,8 @@ describe('VoiceStateListener', () => {
 
       await listener.onBotConnected();
 
-      // Recovery should track members — no error
+      // Recovery should have looked up bindings for the voice channel
+      expect(mockChannelBindingsService.getBindings).toHaveBeenCalledWith('guild-1');
     });
   });
 
@@ -294,7 +295,41 @@ describe('VoiceStateListener', () => {
       jest.useFakeTimers();
     }, 10000);
 
-    it('detects move event (channel A -> channel B) as leave+join', () => {
+    it('detects move event (channel A -> channel B) as leave+join', async () => {
+      jest.useRealTimers();
+
+      // Both channels are bound
+      mockChannelBindingsService.getBindings.mockResolvedValue([
+        {
+          id: 'bind-a',
+          channelId: 'ch-a',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 1,
+          config: { minPlayers: 1 },
+        },
+        {
+          id: 'bind-b',
+          channelId: 'ch-b',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 2,
+          config: { minPlayers: 1 },
+        },
+      ]);
+
+      // Active state exists for both so threshold check passes
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 200,
+        memberSet: new Set(),
+        lastExtendedAt: 0,
+      });
+
+      const newClient = createMockClient();
+      newClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
+        voiceHandler = handler;
+      });
+      mockClientService.getClient.mockReturnValue(newClient);
+      await listener.onBotConnected();
+
       voiceHandler(
         { channelId: 'ch-a', id: 'user-move' },
         {
@@ -307,16 +342,23 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      jest.advanceTimersByTime(2100);
-      // Should handle leave from ch-a and join to ch-b
-    });
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+
+      expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+
+      jest.useFakeTimers();
+    }, 10000);
   });
 
   describe('threshold checking', () => {
     it('does not trigger event creation when below minPlayers threshold', async () => {
+      jest.useRealTimers();
+
+      let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
       mockClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
-        // no-op, we test via method
+        capturedHandler = handler;
       });
       mockClientService.getClient.mockReturnValue(mockClient);
 
@@ -330,38 +372,65 @@ describe('VoiceStateListener', () => {
         },
       ]);
 
-      // getActiveState returns undefined (no active event)
+      // No active event — threshold must be met before creating one
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
 
       await listener.onBotConnected();
 
-      // With no active event and only 1 member < 3 minPlayers,
-      // the listener should NOT call handleVoiceJoin
-    });
+      // Single join — only 1 member, below minPlayers=3
+      capturedHandler!(
+        { channelId: null, id: 'user-below-thresh' },
+        {
+          channelId: 'voice-thresh',
+          id: 'user-below-thresh',
+          member: {
+            displayName: 'Solo',
+            user: { username: 'Solo', avatar: null },
+          },
+        },
+      );
+
+      await new Promise((resolve) => setTimeout(resolve, 2200));
+
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      jest.useFakeTimers();
+    }, 10000);
   });
 
   describe('binding resolution', () => {
-    it('returns null for unbound channels', async () => {
+    it('skips unbound channels without calling ad-hoc services', async () => {
+      jest.useRealTimers();
+
+      let capturedHandler: (oldState: unknown, newState: unknown) => void;
       const mockClient = createMockClient();
-      mockClient.on.mockImplementation(() => {});
+      mockClient.on.mockImplementation((_event: string, handler: (...args: unknown[]) => void) => {
+        capturedHandler = handler;
+      });
       mockClientService.getClient.mockReturnValue(mockClient);
 
+      // No bindings at all
       mockChannelBindingsService.getBindings.mockResolvedValue([]);
 
       await listener.onBotConnected();
 
-      // Unbound channels should be skipped silently
-    });
+      capturedHandler!(
+        { channelId: null, id: 'user-unbound' },
+        {
+          channelId: 'unbound-channel',
+          id: 'user-unbound',
+          member: {
+            displayName: 'Unbound',
+            user: { username: 'Unbound', avatar: null },
+          },
+        },
+      );
 
-    it('caches binding lookups', async () => {
-      const mockClient = createMockClient();
-      mockClient.on.mockImplementation(() => {});
-      mockClientService.getClient.mockReturnValue(mockClient);
+      await new Promise((resolve) => setTimeout(resolve, 2200));
 
-      await listener.onBotConnected();
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
-      // After disconnect, cache should be cleared
-      listener.onBotDisconnected();
-    });
+      jest.useFakeTimers();
+    }, 10000);
   });
 });

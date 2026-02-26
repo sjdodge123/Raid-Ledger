@@ -7,11 +7,6 @@ import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
 
-/** Flush all microtasks without running more timers */
-function flushMicrotasks(): Promise<void> {
-  return new Promise((resolve) => setImmediate(resolve));
-}
-
 describe('AdHocNotificationService', () => {
   let service: AdHocNotificationService;
   let mockDb: MockDb;
@@ -156,18 +151,6 @@ describe('AdHocNotificationService', () => {
       await expect(
         service.notifySpawn(45, 'binding-3', { id: 45, title: 'Test' }, []),
       ).resolves.not.toThrow();
-    });
-  });
-
-  describe('queueUpdate', () => {
-    it('deduplicates updates for the same event via Map', () => {
-      // Queue same event multiple times
-      service.queueUpdate(50, 'binding-dedup');
-      service.queueUpdate(50, 'binding-dedup');
-      service.queueUpdate(50, 'binding-dedup');
-
-      // The Map should only have one entry
-      // We verify this indirectly — no direct inspection of private state
     });
   });
 

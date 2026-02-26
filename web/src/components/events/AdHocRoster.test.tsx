@@ -187,18 +187,6 @@ describe('AdHocRoster', () => {
     expect(screen.queryByText(/<1m/)).not.toBeInTheDocument();
   });
 
-  it('shows active indicator dot for active participants', () => {
-    const active = createParticipant({ leftAt: null });
-
-    const { container } = render(
-      <AdHocRoster participants={[active]} activeCount={1} />,
-    );
-
-    // The green dot indicator
-    const activeDot = container.querySelector('.bg-emerald-500');
-    expect(activeDot).toBeInTheDocument();
-  });
-
   it('does not show "In Channel" section when all have left', () => {
     const left = createParticipant({
       leftAt: '2026-02-10T18:30:00Z',

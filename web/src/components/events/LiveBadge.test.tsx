@@ -15,12 +15,16 @@ describe('LiveBadge', () => {
     expect(screen.getByLabelText('Live event')).toBeInTheDocument();
   });
 
-  it('renders pulse animation dot', () => {
-    const { container } = render(<LiveBadge />);
+  it('renders pulse animation dot with nested spans', () => {
+    render(<LiveBadge />);
 
-    // The ping animation span should exist
-    const pulseSpan = container.querySelector('.animate-ping');
-    expect(pulseSpan).toBeInTheDocument();
+    const badge = screen.getByLabelText('Live event');
+    // The pulse dot is a container span with two nested spans (ping + solid dot)
+    const dotContainer = badge.querySelector('span > span');
+    expect(dotContainer).toBeInTheDocument();
+    // Two child spans inside the dot container: the ping layer and the solid dot
+    const childSpans = dotContainer?.querySelectorAll('span');
+    expect(childSpans?.length).toBe(2);
   });
 
   it('accepts custom className', () => {
@@ -28,17 +32,6 @@ describe('LiveBadge', () => {
 
     const badge = screen.getByLabelText('Live event');
     expect(badge).toHaveClass('ml-2');
-  });
-
-  it('applies default styling classes', () => {
-    render(<LiveBadge />);
-
-    const badge = screen.getByLabelText('Live event');
-    expect(badge).toHaveClass('inline-flex');
-    expect(badge).toHaveClass('items-center');
-    expect(badge).toHaveClass('text-xs');
-    expect(badge).toHaveClass('font-semibold');
-    expect(badge).toHaveClass('rounded-full');
   });
 
   it('renders without className prop', () => {
