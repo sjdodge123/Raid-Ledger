@@ -102,13 +102,16 @@ For each item, include file path(s), a clear description, and a suggested fix so
 
 **IMPORTANT:** If your verdict is APPROVED WITH FIXES, explicitly remind the lead that your auto-fix commits are LOCAL ONLY and must be pushed to remote before creating the PR. This prevents unreviewed code from reaching main via auto-merge.
 
-### Critical Rules
+### Critical Rules — Dispatch Standing Rules
 - You CAN edit source code — but ONLY to fix critical issues found during review
 - You CANNOT add new features or change business logic
 - You CANNOT modify acceptance criteria behavior
-- Do NOT push to remote — the lead handles all GitHub operations
-- Do NOT create pull requests
+- **NEVER push to remote** — the lead handles all GitHub operations
+- **NEVER create pull requests** — only the lead creates PRs
+- **NEVER enable auto-merge** (`gh pr merge --auto --squash`) — only the lead enables this as the LAST pipeline action
+- **NEVER force-push** (`git push --force`, `--force-with-lease`) — only the lead handles rebases
+- **NEVER call `mcp__linear__*` tools** — all Linear I/O routes through the Sprint Planner
+- **NEVER run destructive operations** (`deploy_dev.sh --fresh`, `rm -rf`, `git reset --hard`) — escalate to the lead
 - Do NOT switch branches or leave your worktree
-- Do NOT access Linear — the lead handles all Linear operations
 - ALL auto-fixes must pass CI before committing
 - You are a TEAMMATE — message the lead when done using SendMessage

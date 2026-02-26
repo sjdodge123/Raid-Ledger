@@ -35,4 +35,5 @@ module.exports = {
         global: { branches: 40, functions: 38, lines: 45, statements: 45 },
     },
     testEnvironment: 'node',
+    testPathIgnorePatterns: ['\\.integration\\.spec\\.ts$'],
 };

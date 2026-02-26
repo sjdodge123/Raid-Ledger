@@ -11,9 +11,12 @@ Testing patterns, anti-patterns, and conventions for Raid Ledger.
 ## Running Tests
 
 ```bash
-# Backend
+# Backend (unit)
 npm run test -w api                    # Run all
 npm run test:cov -w api                # With coverage enforcement
+
+# Backend (integration — requires Docker)
+npm run test:integration -w api        # Uses Testcontainers (auto-manages PostgreSQL)
 
 # Frontend
 npm run test -w web                    # Run all
@@ -184,6 +187,74 @@ import { renderWithProviders } from '../../test/render-helpers';
 renderWithProviders(<MyPage />);
 ```
 
+## Integration Tests (Backend)
+
+Integration tests run against a real PostgreSQL database using [Testcontainers](https://node.testcontainers.org/). They catch bugs that unit tests with `drizzle-mock` cannot — like persistence failures, missing JOINs, and FK constraint issues.
+
+**Requires:** Docker running locally. Testcontainers auto-starts and auto-stops a PostgreSQL container.
+
+### When to write integration tests
+
+- CRUD flows where data must persist correctly (settings, events, channel bindings)
+- Queries involving JOINs across tables (e.g., channel binding + game name)
+- Auth flows (login → token → protected endpoint)
+- Any bug found in production that passed unit tests
+
+### Test infrastructure
+
+| File | Purpose |
+|------|---------|
+| `api/src/common/testing/test-app.ts` | Singleton TestApp: starts container, runs migrations, boots NestJS |
+| `api/src/common/testing/integration-helpers.ts` | DB seeding, truncation, login helper |
+| `api/jest.integration.config.js` | Jest config targeting `*.integration.spec.ts` |
+
+### Writing an integration test
+
+```ts
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { truncateAllTables, loginAsAdmin } from '../common/testing/integration-helpers';
+
+describe('My Feature (integration)', () => {
+    let testApp: TestApp;
+    let adminToken: string;
+
+    beforeAll(async () => {
+        testApp = await getTestApp();
+        adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    });
+
+    afterEach(async () => {
+        // Clean slate between tests — re-seeds baseline data
+        testApp.seed = await truncateAllTables(testApp.db);
+        adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    });
+
+    it('should persist and retrieve data', async () => {
+        const res = await testApp.request
+            .post('/my-endpoint')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ key: 'value' });
+
+        expect(res.status).toBe(200);
+    });
+});
+```
+
+### Key details
+
+- **Singleton pattern:** `getTestApp()` boots the container and app once per test run (not per file). All suites share the same instance for performance.
+- **DB isolation:** `truncateAllTables()` clears all tables and re-seeds baseline data between tests.
+- **Baseline seed data:** An admin user with local credentials and a sample game. Access via `testApp.seed`.
+- **File naming:** `*.integration.spec.ts` — picked up by `jest.integration.config.js`, excluded from unit test runs.
+- **Timeout:** 120s per test (container startup takes ~10-20s on first run).
+- **Global teardown:** `closeTestApp()` runs automatically after all suites via `globalTeardown` in the Jest config. Do not call it in `afterAll`.
+
+### HTTP endpoints vs direct DB operations
+
+Prefer **HTTP endpoints** (`testApp.request.get/post/put/delete`) for tests that verify the full request-response cycle — auth, validation, serialization, and persistence through the real controller+service stack.
+
+Use **direct DB operations** (`testApp.db.insert/select/delete`) only when the controller is not directly testable (e.g., Discord bot endpoints that require a live bot connection) or when verifying DB-level behavior like FK cascades, unique constraints, and JOINs.
+
 ## Anti-Patterns to Avoid
 
 ### 1. "Should be defined" boilerplate
@@ -310,6 +381,7 @@ These files demonstrate best testing practices — use them as templates:
 | `sentry/sentry-exception.filter.spec.ts` | HTTP/non-HTTP contexts, non-Error throwables |
 | `discord-bot/discord-bot-client.service.spec.ts` | Real bot lifecycle, error recovery |
 | `discord-bot/listeners/signup-interaction.listener.spec.ts` | Full signup flows, cooldowns |
+| `settings/settings.integration.spec.ts` | **Integration test exemplar** — real DB CRUD, encrypted settings persistence |
 
 ### Frontend
 | File | Pattern |

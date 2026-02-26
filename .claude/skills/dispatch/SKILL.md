@@ -56,6 +56,98 @@ PRs are NEVER created until AFTER all applicable gates pass (Step 8).
 Creating a PR with auto-merge before review causes unreviewed code to ship to main.
 "In Review" = Playwright passed, branch pushed, awaiting operator — it does NOT mean a PR exists.
 
+**Auto-merge is the LAST action in the pipeline.** NEVER enable `gh pr merge --auto --squash` at PR creation. Create the PR first (no auto-merge) → complete all remaining gates → enable auto-merge as the final step only after everything passes. Auto-merge is a one-way door — once CI passes, it merges automatically and cannot be recalled.
+
+---
+
+## STOP Protocol
+
+If the operator sends **STOP**, **PAUSE**, or **halt**: immediately cease ALL tool calls. Do not finish the current action chain. Do not run "one more" command. Send one acknowledgment message ("Stopped.") and wait for further instructions. No exceptions.
+
+---
+
+## Post-Compaction Startup Checklist
+
+After any context compaction event, the lead MUST execute this checklist before taking ANY pipeline action:
+
+1. **Verify Sprint Planner alive** — `SendMessage` ping, confirm it can read/write Linear
+2. **Verify Orchestrator alive** — `SendMessage` ping, confirm it has pipeline state (reads `planning-artifacts/pipeline-state.yaml`)
+3. **Verify Scrum Master alive** — `SendMessage` ping, send brief status update
+3b. **Send Scrum Master catch-up checkpoint** — After confirming the Scrum Master is alive, send a `CATCH_UP_CHECKPOINT` summarizing ALL gates completed during the compacted window:
+   ```
+   SendMessage(type: "message", recipient: "scrum-master",
+     content: "CATCH_UP_CHECKPOINT: Context was compacted. Summary of gates completed during compacted window:
+     - ROK-XXX: [list each gate that passed with evidence]
+     - ROK-YYY: [same]
+     Update your pipeline state records accordingly.",
+     summary: "Scrum Master catch-up after compaction")
+   ```
+   Construct this from: `planning-artifacts/pipeline-state.yaml`, `planning-artifacts/sprint-status.yaml`, and any gate messages visible in the current context. **Wait for Scrum Master acknowledgment before proceeding.**
+4. **Read sprint-status.yaml** — get current story states from local cache (do NOT call Linear directly)
+5. **Ask Orchestrator for STATUS** — get pipeline state for all stories
+6. **Scrum Master validates** — Scrum Master confirms Orchestrator's state matches SKILL.md gate order before lead proceeds
+
+If any advisory agent is dead, re-spawn it BEFORE proceeding. If the Orchestrator's `pipeline-state.yaml` is missing, re-establish state by sending current story statuses to the Orchestrator before requesting any WHATS_NEXT directions.
+
+**The lead NEVER calls `mcp__linear__*` tools directly.** All Linear I/O routes through the Sprint Planner. If the Sprint Planner is unreachable, re-spawn it. If it cannot be re-spawned, ask the operator — do not self-route.
+
+---
+
+## Destructive Operations
+
+The following operations require a **pre-execution checkpoint with the Scrum Master AND operator approval** before running:
+
+- `deploy_dev.sh --fresh` (wipes DB volume)
+- `git push --force` / `git reset --hard`
+- `rm -rf` on any project directory
+- DB volume deletes, table drops
+- Any operation the lead is unsure about
+
+Rule: If in doubt whether an operation is destructive, it is. Ask first.
+
+---
+
+## Three-Way Validation
+
+For all pipeline decisions: **Orchestrator decides → Scrum Master validates against SKILL.md gate order → Lead executes.** When the Orchestrator's direction conflicts with the mandatory gate order above, SKILL.md is the law. The Scrum Master flags discrepancies before the lead acts.
+
+---
+
+## Dispatch Standing Rules (for all branch-touching agents)
+
+These rules apply to ALL agents that work in worktrees (dev, co-lead dev, build agent, fix agents, reviewers). They are repeated in each agent template but the source of truth is here:
+
+1. **NEVER enable auto-merge** (`gh pr merge --auto --squash`). Only the lead enables auto-merge as the LAST pipeline action after ALL gates pass.
+2. **NEVER force-push** (`git push --force`, `git push --force-with-lease`). Only the lead force-pushes when necessary (e.g., after rebase), with Scrum Master checkpoint.
+3. **NEVER create pull requests.** Only the lead creates PRs in Step 8b.
+4. **NEVER call `mcp__linear__*` tools.** All Linear I/O routes through the Sprint Planner.
+5. **NEVER run destructive operations** (`deploy_dev.sh --fresh`, `rm -rf`, `git reset --hard`, DB drops). Escalate to the lead.
+6. **ALWAYS stay in your assigned worktree.** Do not `cd` to sibling worktrees or the main worktree.
+
+---
+
+## Step 3+4 Collapse Rule
+
+If the operator explicitly approves a batch plan during Step 3 discussion (e.g., "let's go with that", "sounds good", "dispatch all"), skip the formal Step 4 confirmation prompt. Operator approval during discussion IS the confirmation. Do not re-ask.
+
+---
+
+## Team Agent Communication
+
+Team agents (spawned via `Task` with `team_name`) communicate via the **mailbox system** (`SendMessage`). They are NOT background shell tasks.
+
+**Rules:**
+- **NEVER use `TaskOutput` to check on team agents.** `TaskOutput` is for background shell tasks (`run_in_background: true`). It will always return "No task found" for team agents.
+- **NEVER poll with `sleep + stat`** to check if an agent has written a file. Team agents send a message when they're done — the system delivers it automatically.
+- **Agent bootstrap takes 5-10+ turns.** Agents need to: load ToolSearch → find MCP tools → execute initial task → write files → send message. Don't expect instant results.
+- **While waiting for agents to bootstrap, do useful parallel work:** read the next step file, check git worktree state, verify CI status on existing branches, review sprint-status.yaml cache. Do NOT wait idle.
+
+---
+
+## Git Pull Strategy
+
+Always use `git pull --rebase origin/main` or `git rebase origin/main` instead of `git pull origin main`. After a squash-merge PR, local and remote have different commit hashes for the same changes, causing divergent branch errors with regular pull.
+
 ---
 
 ## Team Hierarchy
@@ -130,15 +222,15 @@ All agent prompt templates are in the `templates/` directory. Read the appropria
 | Architect | `templates/architect.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
 | Product Manager | `templates/pm.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
 | Test Engineer | `templates/test-engineer.md` | Step 5a (batch start) | sonnet | Per-batch (until Step 9 docs) |
-| Dev (rework) | `templates/dev-rework.md` | Step 5d — for Changes Requested stories | default | Per-story |
-| Dev (new) | `templates/dev-new-ready.md` | Step 5d — for Dispatch Ready stories | default | Per-story |
-| Co-Lead Dev | `templates/co-lead-dev.md` | Step 7b — minor operator fixes | default | Per-fix |
+| Dev (rework) | `templates/dev-rework.md` | Step 5d — for Changes Requested stories | opus | Per-story |
+| Dev (new) | `templates/dev-new-ready.md` | Step 5d — for Dispatch Ready stories | opus | Per-story |
+| Co-Lead Dev | `templates/co-lead-dev.md` | Step 7b — minor operator fixes | opus | Per-fix |
 | Build agent | `templates/build-agent.md` | Step 5d — one per batch | sonnet | Per-batch |
-| Test agent | `templates/test-agent.md` | Step 6a — after dev completes | sonnet | Per-story |
+| Test agent | `templates/test-agent.md` | Step 6a — after dev completes | opus | Per-story |
 | Quality Checker | `templates/quality-checker.md` | Step 6a.6 — after test engineer | sonnet | Per-story |
 | QA test cases | `templates/qa-test-cases.md` | Step 6d — generates test plan for Playwright | sonnet | Per-story |
 | Playwright tester | `templates/playwright-tester.md` | Step 6e — Playwright gate (before "In Review") | sonnet | Per-story |
 | UX Reviewer | `templates/ux-reviewer.md` | Step 6e.5 — after Playwright (UI stories only) | sonnet | Per-story |
-| Reviewer | `templates/reviewer.md` | Step 7c — after operator approves | default | Per-story |
+| Reviewer | `templates/reviewer.md` | Step 7c — after operator approves | opus | Per-story |
 | Smoke Tester | `templates/smoke-tester.md` | Step 8a.4 — before PR (SEQUENTIAL, after architect) | sonnet | Per-story |
 | Retrospective Analyst | `templates/retrospective-analyst.md` | Step 10b — end of dispatch | sonnet | Per-dispatch |

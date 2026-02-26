@@ -28,9 +28,12 @@ The reviewer has requested changes on this story. Address ALL of the following f
 5. **STOP HERE — do NOT push, create PRs, or switch branches.**
 6. Message the lead with: branch name, commit SHA, files changed, what was done.
 
-### Critical Rules
+### Critical Rules — Dispatch Standing Rules
 - **Stay in your worktree** — other dev agents are working concurrently in their own worktrees. All file reads, edits, builds, and tests must use paths within `<WORKTREE_PATH>`. Never `cd` outside your worktree or run commands that affect sibling worktrees.
-- Do NOT push to remote — the lead handles all GitHub operations
-- Do NOT create pull requests
+- **NEVER push to remote** — the lead handles all GitHub operations
+- **NEVER create pull requests** — only the lead creates PRs
+- **NEVER enable auto-merge** (`gh pr merge --auto --squash`) — only the lead enables this as the LAST pipeline action
+- **NEVER force-push** (`git push --force`, `--force-with-lease`) — only the lead handles rebases and force-pushes
+- **NEVER call `mcp__linear__*` tools** — all Linear I/O routes through the Sprint Planner
+- **NEVER run destructive operations** (`deploy_dev.sh --fresh`, `rm -rf`, `git reset --hard`) — escalate to the lead
 - Do NOT switch branches or leave your worktree
-- Do NOT access Linear — the lead handles all Linear operations
