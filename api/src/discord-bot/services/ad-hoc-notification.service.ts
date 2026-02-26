@@ -221,6 +221,9 @@ export class AdHocNotificationService {
 
   /**
    * Resolve the notification channel for a binding.
+   * Priority: 1) explicit notificationChannelId in config,
+   *           2) game-announcements binding for the same game,
+   *           3) default bot channel.
    */
   private async resolveNotificationChannel(
     bindingId: string,
@@ -228,7 +231,7 @@ export class AdHocNotificationService {
     const binding = await this.channelBindingsService.getBindingById(bindingId);
     if (!binding) return null;
 
-    // Use configured notification channel, or fall back to default channel
+    // 1. Use configured notification channel if set
     const config = binding.config as {
       notificationChannelId?: string;
     } | null;
@@ -237,7 +240,20 @@ export class AdHocNotificationService {
       return config.notificationChannelId;
     }
 
-    // Fall back to default bot channel
+    // 2. Look for a game-announcements binding for the same game
+    if (binding.gameId && binding.guildId) {
+      const bindings = await this.channelBindingsService.getBindings(binding.guildId);
+      const announcementBinding = bindings.find(
+        (b) =>
+          b.bindingPurpose === 'game-announcements' &&
+          b.gameId === binding.gameId,
+      );
+      if (announcementBinding) {
+        return announcementBinding.channelId;
+      }
+    }
+
+    // 3. Fall back to default bot channel
     return this.settingsService.getDiscordBotDefaultChannel();
   }
 

@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -14,6 +15,7 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
 
 /** Minimum interval between end-time extensions (ms). */
@@ -49,7 +51,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
     private readonly gateway: AdHocEventsGateway,
-  ) {}
+  ) { }
 
   /**
    * On startup, recover any live ad-hoc events from the database.
@@ -62,6 +64,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         and(
           eq(schema.events.isAdHoc, true),
           sql`${schema.events.adHocStatus} = 'live'`,
+          sql`${schema.events.cancelledAt} IS NULL`,
         ),
       );
 
@@ -189,15 +192,59 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    // No active event — check if we should create one
+    // No active ad-hoc event — check if we should create one
+
+    // Suppress if a scheduled (non-ad-hoc) event is currently active on this binding.
+    // Also extend the scheduled event's end time if members are still in the channel,
+    // preventing the event from expiring and triggering an ad-hoc spawn.
+    const now = new Date();
+    const lookbackMs = 30 * 60 * 1000; // 30 min — catch events that just ended
+    const lookbackTime = new Date(now.getTime() - lookbackMs);
+
+    const [activeScheduled] = await this.db
+      .select({
+        id: schema.events.id,
+        duration: schema.events.duration,
+      })
+      .from(schema.events)
+      .where(
+        and(
+          eq(schema.events.channelBindingId, bindingId),
+          eq(schema.events.isAdHoc, false),
+          sql`${schema.events.cancelledAt} IS NULL`,
+          // Match if: event is currently active OR ended within last 30 min
+          sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+          sql`upper(${schema.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz`,
+        ),
+      )
+      .limit(1);
+
+    if (activeScheduled) {
+      // Extend the scheduled event's end time by 1 hour from now
+      // so it doesn't expire while members are still in the channel
+      const newEnd = new Date(now.getTime() + 60 * 60 * 1000);
+      const currentEnd = activeScheduled.duration?.[1];
+
+      if (!currentEnd || currentEnd < newEnd) {
+        await this.db
+          .update(schema.events)
+          .set({
+            duration: [activeScheduled.duration[0], newEnd] as [Date, Date],
+            updatedAt: now,
+          })
+          .where(eq(schema.events.id, activeScheduled.id));
+
+        this.logger.debug(
+          `Extended scheduled event ${activeScheduled.id} end time to ${newEnd.toISOString()} (members still in voice)`,
+        );
+      }
+
+      return;
+    }
+
     // Track this member temporarily to count
     const tempMembers = new Set<string>();
     tempMembers.add(member.discordUserId);
-
-    // We need to check if this single join meets threshold
-    // The caller (VoiceStateListener) tracks cumulative members
-    // For now, always create when first join triggers this method
-    // The listener handles threshold checking before calling us
 
     // Create a new ad-hoc event
     const eventId = await this.createAdHocEvent(bindingId, binding, member);
@@ -279,8 +326,8 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
       const binding = event.channelBindingId
         ? await this.channelBindingsService.getBindingById(
-            event.channelBindingId,
-          )
+          event.channelBindingId,
+        )
         : null;
 
       const gracePeriod =
@@ -398,6 +445,45 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
    */
   getActiveState(bindingId: string): ActiveAdHocState | undefined {
     return this.activeEvents.get(bindingId);
+  }
+
+  /**
+   * Clean up active state when an ad-hoc event is cancelled via the UI.
+   * This allows a new ad-hoc event to spawn on the same binding.
+   */
+  @OnEvent(APP_EVENT_EVENTS.CANCELLED)
+  async onEventCancelled(payload: { eventId: number; isAdHoc?: boolean }): Promise<void> {
+    if (!payload?.eventId) return;
+
+    for (const [bindingId, state] of this.activeEvents) {
+      if (state.eventId === payload.eventId) {
+        await this.gracePeriodQueue.cancel(state.eventId);
+        this.activeEvents.delete(bindingId);
+        this.logger.log(
+          `Cleaned up active state for cancelled ad-hoc event ${payload.eventId} (binding ${bindingId})`,
+        );
+        break;
+      }
+    }
+  }
+
+  /**
+   * Clean up active state when an ad-hoc event is deleted.
+   */
+  @OnEvent(APP_EVENT_EVENTS.DELETED)
+  async onEventDeleted(payload: { eventId: number }): Promise<void> {
+    if (!payload?.eventId) return;
+
+    for (const [bindingId, state] of this.activeEvents) {
+      if (state.eventId === payload.eventId) {
+        await this.gracePeriodQueue.cancel(state.eventId);
+        this.activeEvents.delete(bindingId);
+        this.logger.log(
+          `Cleaned up active state for deleted event ${payload.eventId} (binding ${bindingId})`,
+        );
+        break;
+      }
+    }
   }
 
   /**

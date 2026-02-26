@@ -166,8 +166,28 @@ describe('AdHocEventService', () => {
       expect(mockParticipantService.addParticipant).not.toHaveBeenCalled();
     });
 
+    it('suppresses ad-hoc creation when a scheduled event is active on the binding', async () => {
+      mockSettingsService.get.mockResolvedValue('true');
+      // Scheduled event overlap check returns a match (with duration for extension)
+      const eventStart = new Date('2026-02-10T18:00:00Z');
+      const eventEnd = new Date('2026-02-10T19:00:00Z');
+      mockDb.limit.mockResolvedValueOnce([{
+        id: 42,
+        duration: [eventStart, eventEnd],
+      }]);
+
+      await service.handleVoiceJoin('binding-suppress', baseMember, baseBinding);
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockParticipantService.addParticipant).not.toHaveBeenCalled();
+      // Should have extended the scheduled event's end time
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
     it('creates a new ad-hoc event when no active event exists', async () => {
       mockSettingsService.get.mockResolvedValue('true');
+      // Scheduled event overlap check: no scheduled event
+      mockDb.limit.mockResolvedValueOnce([]);
       // createAdHocEvent: admin lookup not needed since userId is provided
       // game name lookup
       mockDb.limit.mockResolvedValueOnce([{ name: 'World of Warcraft' }]);
@@ -197,6 +217,8 @@ describe('AdHocEventService', () => {
     it('creates event with "Gaming" title when no game is bound', async () => {
       mockSettingsService.get.mockResolvedValue('true');
       const noGameBinding = { ...baseBinding, gameId: null };
+      // Scheduled event overlap check: no scheduled event
+      mockDb.limit.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: 101 }]);
       // getEvent after create (for notification) — no gameId so no game lookup
       mockDb.limit.mockResolvedValueOnce([
@@ -220,6 +242,8 @@ describe('AdHocEventService', () => {
     it('falls back to admin user when member has no linked account', async () => {
       mockSettingsService.get.mockResolvedValue('true');
       const anonymousMember = { ...baseMember, userId: null };
+      // Scheduled event overlap check: no scheduled event
+      mockDb.limit.mockResolvedValueOnce([]);
       // First limit: admin user lookup
       mockDb.limit.mockResolvedValueOnce([{ id: 99 }]);
       // Second limit: game name lookup
@@ -250,6 +274,8 @@ describe('AdHocEventService', () => {
     it('returns null when no admin found and no linked user', async () => {
       mockSettingsService.get.mockResolvedValue('true');
       const anonymousMember = { ...baseMember, userId: null };
+      // Scheduled event overlap check: no scheduled event
+      mockDb.limit.mockResolvedValueOnce([]);
       // Admin lookup: empty
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -261,7 +287,8 @@ describe('AdHocEventService', () => {
 
     it('adds joiner to existing live event and cancels grace period', async () => {
       mockSettingsService.get.mockResolvedValue('true');
-      // First create an event
+      // First create an event — scheduled overlap check
+      mockDb.limit.mockResolvedValueOnce([]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 200 }]);
       // getEvent after create (for notification)
@@ -298,6 +325,8 @@ describe('AdHocEventService', () => {
 
     it('sets event reminders to false for ad-hoc events', async () => {
       mockSettingsService.get.mockResolvedValue('true');
+      // Scheduled event overlap check: no scheduled event
+      mockDb.limit.mockResolvedValueOnce([]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'Game' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 300 }]);
       // getEvent after create (for notification)
@@ -336,6 +365,7 @@ describe('AdHocEventService', () => {
     it('marks participant as left and starts grace period when channel empties', async () => {
       // First set up an active event
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 400 }]);
       // getEvent after create (for notification)
@@ -376,6 +406,7 @@ describe('AdHocEventService', () => {
 
     it('uses default 5 minute grace period when not configured', async () => {
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 401 }]);
       // getEvent after create (for notification)
@@ -470,6 +501,7 @@ describe('AdHocEventService', () => {
     it('removes binding from active events map', async () => {
       // Create an active event first
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 600 }]);
       // getEvent after create (for notification)
@@ -544,6 +576,7 @@ describe('AdHocEventService', () => {
 
     it('returns state after event creation', async () => {
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 700 }]);
       // getEvent after create (for notification)
@@ -573,6 +606,7 @@ describe('AdHocEventService', () => {
 
       // Create an active event
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 900 }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -624,6 +658,7 @@ describe('AdHocEventService', () => {
 
       // Create an active event
       mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 901 }]);
       mockDb.limit.mockResolvedValueOnce([
@@ -728,6 +763,110 @@ describe('AdHocEventService', () => {
 
       // No error, no active state
       expect(service.getActiveState('anything')).toBeUndefined();
+    });
+  });
+
+  describe('onEventCancelled', () => {
+    it('cleans up active state when a live ad-hoc event is cancelled', async () => {
+      // Create an active event first
+      mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 800 }]);
+      mockDb.limit.mockResolvedValueOnce([{
+        id: 800,
+        title: 'WoW — Ad-Hoc Session',
+        gameId: 1,
+        channelBindingId: 'binding-cancel',
+      }]);
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+
+      await service.handleVoiceJoin('binding-cancel', baseMember, baseBinding);
+      expect(service.getActiveState('binding-cancel')).toBeDefined();
+
+      // Cancel the event
+      await service.onEventCancelled({ eventId: 800 });
+
+      // Active state should be cleared, allowing recreation
+      expect(service.getActiveState('binding-cancel')).toBeUndefined();
+      expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(800);
+    });
+
+    it('does nothing when event ID has no active state', async () => {
+      await service.onEventCancelled({ eventId: 999 });
+      // No error thrown
+      expect(mockGracePeriodQueue.cancel).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('onEventDeleted', () => {
+    it('cleans up active state when a live ad-hoc event is deleted', async () => {
+      // Create an active event first
+      mockSettingsService.get.mockResolvedValue('true');
+      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 850 }]);
+      mockDb.limit.mockResolvedValueOnce([{
+        id: 850,
+        title: 'WoW — Ad-Hoc Session',
+        gameId: 1,
+        channelBindingId: 'binding-delete',
+      }]);
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+
+      await service.handleVoiceJoin('binding-delete', baseMember, baseBinding);
+      expect(service.getActiveState('binding-delete')).toBeDefined();
+
+      // Delete the event
+      await service.onEventDeleted({ eventId: 850 });
+
+      expect(service.getActiveState('binding-delete')).toBeUndefined();
+      expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(850);
+    });
+  });
+
+  describe('scheduled event interaction', () => {
+    it('extends scheduled event end time when members join during active event', async () => {
+      mockSettingsService.get.mockResolvedValue('true');
+      // Return a scheduled event with an end time in the past
+      const eventStart = new Date(Date.now() - 3600000);
+      const eventEnd = new Date(Date.now() - 60000); // ended 1 min ago
+      mockDb.limit.mockResolvedValueOnce([{
+        id: 42,
+        duration: [eventStart, eventEnd],
+      }]);
+
+      await service.handleVoiceJoin('binding-extend', baseMember, baseBinding);
+
+      // Should NOT create an ad-hoc event
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      // Should extend the scheduled event's end time
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          duration: expect.any(Array),
+        }),
+      );
+    });
+
+    it('allows ad-hoc creation when no scheduled event exists', async () => {
+      mockSettingsService.get.mockResolvedValue('true');
+      // No scheduled event found
+      mockDb.limit.mockResolvedValueOnce([]);
+      // Game lookup + insert
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: 999 }]);
+      mockDb.limit.mockResolvedValueOnce([{
+        id: 999,
+        title: 'WoW — Ad-Hoc Session',
+        gameId: 1,
+        channelBindingId: 'binding-new',
+      }]);
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+
+      await service.handleVoiceJoin('binding-new', baseMember, baseBinding);
+
+      expect(mockDb.insert).toHaveBeenCalled();
     });
   });
 });
