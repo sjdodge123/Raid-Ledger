@@ -35,6 +35,8 @@ export interface EventPayload {
   } | null;
   recurrenceGroupId?: string | null;
   creatorId?: number;
+  /** ROK-293: Ad-hoc events skip Discord Scheduled Event creation */
+  isAdHoc?: boolean;
 }
 
 /**
@@ -59,8 +61,18 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.CREATED)
   async handleEventCreated(payload: EventPayload): Promise<void> {
+    this.logger.log(
+      `handleEventCreated fired for event ${payload.eventId} (isAdHoc=${payload.isAdHoc}, connected=${this.clientService.isConnected()})`,
+    );
+
+    // ROK-293: Ad-hoc events do NOT trigger Discord Scheduled Event / embed creation
+    if (payload.isAdHoc) {
+      this.logger.log(`Skipping embed for ad-hoc event ${payload.eventId}`);
+      return;
+    }
+
     if (!this.clientService.isConnected()) {
-      this.logger.debug('Bot not connected, skipping event.created embed');
+      this.logger.warn('Bot not connected, skipping event.created embed');
       return;
     }
 
@@ -72,8 +84,8 @@ export class DiscordEventListener {
     const timezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
 
     if (!shouldPostEmbed(payload.event.startTime, leadTimeMs, timezone)) {
-      this.logger.debug(
-        `Event ${payload.eventId} is outside lead-time window, deferring embed to scheduler`,
+      this.logger.log(
+        `Event ${payload.eventId} outside lead-time window (start=${payload.event.startTime}, leadTime=${leadTimeMs}ms, tz=${timezone}), deferring`,
       );
       return;
     }

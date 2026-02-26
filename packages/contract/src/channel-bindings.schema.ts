@@ -12,6 +12,7 @@ export const ChannelBindingConfigSchema = z.object({
   minPlayers: z.number().int().min(1).optional(),
   autoClose: z.boolean().optional(),
   gracePeriod: z.number().int().min(0).optional(),
+  notificationChannelId: z.string().optional(),
 });
 
 export const ChannelBindingSchema = z.object({

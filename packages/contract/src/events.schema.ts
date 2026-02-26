@@ -140,6 +140,12 @@ export const EventResponseSchema = z.object({
     reminder24hour: z.boolean().optional(),
     cancelledAt: z.string().datetime().nullable().optional(),
     cancellationReason: z.string().nullable().optional(),
+    /** ROK-293: Whether this event was auto-created from voice channel activity */
+    isAdHoc: z.boolean().optional(),
+    /** ROK-293: Ad-hoc event lifecycle status (null for scheduled events) */
+    adHocStatus: z.enum(['live', 'grace_period', 'ended']).nullable().optional(),
+    /** ROK-293: Channel binding that spawned this ad-hoc event */
+    channelBindingId: z.string().uuid().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
@@ -176,6 +182,8 @@ export const EventListQuerySchema = z.object({
     signedUpAs: z.string().optional(),
     /** Include cancelled events in results. Default false (ROK-469) */
     includeCancelled: z.enum(['true', 'false']).optional(),
+    /** ROK-293: Include ad-hoc events in results. Default true */
+    includeAdHoc: z.enum(['true', 'false']).optional(),
 }).refine(
     (data) => {
         if (data.startAfter && data.endBefore) {

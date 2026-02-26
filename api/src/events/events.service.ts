@@ -217,6 +217,11 @@ export class EventsService {
       }
     }
 
+    // ROK-293: Exclude ad-hoc events unless explicitly requested
+    if (query.includeAdHoc === 'false') {
+      conditions.push(eq(schema.events.isAdHoc, false));
+    }
+
     // ROK-213: signedUpAs filter — "me" resolves to authenticated user
     if (query.signedUpAs && query.signedUpAs === 'me' && authenticatedUserId) {
       const signedUpEventIds = this.db
@@ -1391,6 +1396,10 @@ export class EventsService {
       reminder24hour: event.reminder24hour,
       cancelledAt: event.cancelledAt?.toISOString() ?? null,
       cancellationReason: event.cancellationReason ?? null,
+      isAdHoc: event.isAdHoc,
+      adHocStatus:
+        (event.adHocStatus as 'live' | 'grace_period' | 'ended') ?? null,
+      channelBindingId: event.channelBindingId ?? null,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };
@@ -1426,6 +1435,7 @@ export class EventsService {
       recurrenceRule: eventResponse.recurrenceRule ?? null,
       recurrenceGroupId: eventResponse.recurrenceGroupId ?? null,
       creatorId: eventResponse.creator.id,
+      isAdHoc: eventResponse.isAdHoc ?? false,
     });
   }
 

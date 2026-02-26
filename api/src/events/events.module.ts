@@ -23,6 +23,7 @@ import {
   BenchPromotionProcessor,
   BENCH_PROMOTION_QUEUE,
 } from './bench-promotion.service';
+import { AdHocEventsGateway } from './ad-hoc-events.gateway';
 
 @Module({
   imports: [
@@ -52,6 +53,7 @@ import {
     BenchPromotionProcessor,
     EventPlansService,
     EventPlansProcessor,
+    AdHocEventsGateway,
   ],
   exports: [
     EventsService,
@@ -59,6 +61,7 @@ import {
     AttendanceService,
     PugsService,
     InviteService,
+    AdHocEventsGateway,
   ],
 })
 export class EventsModule {}

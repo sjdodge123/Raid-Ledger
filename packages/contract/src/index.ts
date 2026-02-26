@@ -90,3 +90,6 @@ export * from './boss-encounters.schema.js';
 
 // Quest Progress (ROK-246)
 export * from './quest-progress.schema.js';
+
+// Ad-Hoc Events (ROK-293)
+export * from './ad-hoc-events.schema.js';

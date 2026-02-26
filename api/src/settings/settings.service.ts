@@ -617,4 +617,23 @@ export class SettingsService {
 
     return null;
   }
+
+  /**
+   * Get ad-hoc events enabled status (ROK-293).
+   */
+  async getAdHocEventsEnabled(): Promise<boolean> {
+    const value = await this.get(SETTING_KEYS.AD_HOC_EVENTS_ENABLED);
+    return value === 'true';
+  }
+
+  /**
+   * Set ad-hoc events enabled status (ROK-293).
+   */
+  async setAdHocEventsEnabled(enabled: boolean): Promise<void> {
+    await this.set(
+      SETTING_KEYS.AD_HOC_EVENTS_ENABLED,
+      enabled ? 'true' : 'false',
+    );
+    this.logger.log(`Ad-hoc events ${enabled ? 'enabled' : 'disabled'}`);
+  }
 }

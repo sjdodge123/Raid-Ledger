@@ -6,6 +6,7 @@ import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
+import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -102,6 +103,16 @@ describe('EventsController', () => {
             shareToDiscordChannels: jest
               .fn()
               .mockResolvedValue({ channelsPosted: 0, channelsSkipped: 0 }),
+          },
+        },
+        {
+          provide: AdHocEventService,
+          useValue: {
+            getAdHocRoster: jest.fn().mockResolvedValue({
+              eventId: 1,
+              participants: [],
+              activeCount: 0,
+            }),
           },
         },
       ],

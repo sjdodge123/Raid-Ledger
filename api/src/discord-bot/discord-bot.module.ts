@@ -20,6 +20,9 @@ import { SetupWizardService } from './services/setup-wizard.service';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { PugInviteService } from './services/pug-invite.service';
 import { GameActivityService } from './services/game-activity.service';
+import { AdHocEventService } from './services/ad-hoc-event.service';
+import { AdHocParticipantService } from './services/ad-hoc-participant.service';
+import { AdHocNotificationService } from './services/ad-hoc-notification.service';
 import { DiscordEventListener } from './listeners/event.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
@@ -27,11 +30,17 @@ import { SignupInteractionListener } from './listeners/signup-interaction.listen
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
 import { ActivityListener } from './listeners/activity.listener';
+import { VoiceStateListener } from './listeners/voice-state.listener';
 import {
   EmbedSyncQueueService,
   EMBED_SYNC_QUEUE,
 } from './queues/embed-sync.queue';
+import {
+  AdHocGracePeriodQueueService,
+  AD_HOC_GRACE_QUEUE,
+} from './queues/ad-hoc-grace-period.queue';
 import { EmbedSyncProcessor } from './processors/embed-sync.processor';
+import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
 import { EventsListCommand } from './commands/events-list.command';
@@ -57,6 +66,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     CharactersModule,
     CronJobModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
+    BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -73,15 +83,21 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     SetupWizardService,
     ChannelBindingsService,
     PugInviteService,
+    AdHocEventService,
+    AdHocParticipantService,
+    AdHocNotificationService,
     DiscordEventListener,
     DiscordSyncListener,
     EmbedSyncQueueService,
     EmbedSyncProcessor,
+    AdHocGracePeriodQueueService,
+    AdHocGracePeriodProcessor,
     InteractionListener,
     SignupInteractionListener,
     RoachOutInteractionListener,
     PugInviteListener,
     ActivityListener,
+    VoiceStateListener,
     GameActivityService,
     EventLinkListener,
     EmbedPosterService,
@@ -106,6 +122,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     ChannelBindingsService,
     ChannelResolverService,
     PugInviteService,
+    AdHocEventService,
   ],
 })
 export class DiscordBotModule {}

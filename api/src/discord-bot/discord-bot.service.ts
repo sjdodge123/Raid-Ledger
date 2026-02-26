@@ -126,6 +126,8 @@ export class DiscordBotService
     const guildInfo = connected ? this.clientService.getGuildInfo() : null;
     const setupCompleted =
       await this.settingsService.isDiscordBotSetupCompleted();
+    const adHocEventsEnabled =
+      await this.settingsService.getAdHocEventsEnabled();
 
     return {
       configured,
@@ -135,6 +137,7 @@ export class DiscordBotService
       guildName: guildInfo?.name,
       memberCount: guildInfo?.memberCount,
       setupCompleted,
+      adHocEventsEnabled,
     };
   }
 

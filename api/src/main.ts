@@ -72,6 +72,7 @@ async function bootstrap() {
           'http://localhost',
           'http://localhost:80',
           'http://localhost:5173',
+          'http://localhost:5174',
         );
       }
 
