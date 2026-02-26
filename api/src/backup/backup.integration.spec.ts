@@ -230,9 +230,9 @@ describe('Backup CRUD (integration)', () => {
         .get('/admin/backups')
         .set('Authorization', `Bearer ${adminToken}`);
 
-      const migrationBackups = listRes.body.backups.filter(
-        (b: { type: string }) => b.type === 'migration',
-      );
+      const migrationBackups = (
+        listRes.body.backups as { type: string; filename: string }[]
+      ).filter((b) => b.type === 'migration');
       expect(migrationBackups.length).toBeGreaterThanOrEqual(1);
       expect(migrationBackups[0].filename).toMatch(/^pre_restore_/);
     });
