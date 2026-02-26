@@ -96,6 +96,12 @@ export async function loginAsAdmin(
     .post('/auth/local')
     .send({ email: seed.adminEmail, password: seed.adminPassword });
 
+  if (res.status !== 200) {
+    throw new Error(
+      `loginAsAdmin failed: expected 200 but got ${res.status} — ${JSON.stringify(res.body)}`,
+    );
+  }
+
   // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   return res.body.access_token as string;
 }
