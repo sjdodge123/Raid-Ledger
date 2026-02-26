@@ -18,9 +18,7 @@ describe('AdHocNotificationService', () => {
     editEmbed: jest.Mock;
   };
   let mockEmbedFactory: {
-    buildAdHocSpawnEmbed: jest.Mock;
-    buildAdHocUpdateEmbed: jest.Mock;
-    buildAdHocCompletedEmbed: jest.Mock;
+    buildEventEmbed: jest.Mock;
   };
   let mockChannelBindingsService: {
     getBindingById: jest.Mock;
@@ -32,6 +30,28 @@ describe('AdHocNotificationService', () => {
     getDiscordBotDefaultChannel: jest.Mock;
   };
 
+  const fakeEmbed = { toJSON: () => ({}) };
+
+  /** Mock the DB calls that buildEmbedEventData makes (event + game lookup) */
+  function mockBuildEmbedData(event?: Record<string, unknown>) {
+    // 1st limit: event lookup
+    mockDb.limit.mockResolvedValueOnce([
+      {
+        id: event?.id ?? 42,
+        title: event?.title ?? 'WoW — Ad-Hoc Session',
+        gameId: event?.gameId ?? 1,
+        duration: event?.duration ?? [new Date(), new Date()],
+        maxAttendees: null,
+        slotConfig: { type: 'generic' },
+        ...event,
+      },
+    ]);
+    // 2nd limit: game lookup
+    mockDb.limit.mockResolvedValueOnce([
+      { name: 'World of Warcraft', coverUrl: 'https://example.com/wow.jpg' },
+    ]);
+  }
+
   beforeEach(async () => {
     jest.useFakeTimers();
 
@@ -42,18 +62,8 @@ describe('AdHocNotificationService', () => {
       editEmbed: jest.fn().mockResolvedValue(undefined),
     };
 
-    const fakeEmbed = { toJSON: () => ({}) };
-
     mockEmbedFactory = {
-      buildAdHocSpawnEmbed: jest.fn().mockReturnValue({
-        embed: fakeEmbed,
-        row: undefined,
-      }),
-      buildAdHocUpdateEmbed: jest.fn().mockReturnValue({
-        embed: fakeEmbed,
-        row: undefined,
-      }),
-      buildAdHocCompletedEmbed: jest.fn().mockReturnValue({
+      buildEventEmbed: jest.fn().mockReturnValue({
         embed: fakeEmbed,
         row: undefined,
       }),
@@ -100,6 +110,7 @@ describe('AdHocNotificationService', () => {
         id: 'binding-1',
         config: { notificationChannelId: 'notif-channel-1' },
       });
+      mockBuildEmbedData();
 
       await service.notifySpawn(
         42,
@@ -108,6 +119,15 @@ describe('AdHocNotificationService', () => {
         [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
       );
 
+      expect(mockEmbedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 42,
+          title: 'WoW — Ad-Hoc Session',
+          game: expect.objectContaining({ name: 'World of Warcraft' }),
+        }),
+        expect.any(Object),
+        expect.objectContaining({ state: 'live', buttons: 'view' }),
+      );
       expect(mockClientService.sendEmbed).toHaveBeenCalledWith(
         'notif-channel-1',
         expect.any(Object),
@@ -120,6 +140,9 @@ describe('AdHocNotificationService', () => {
         id: 'binding-2',
         config: {},
       });
+      mockBuildEmbedData({ id: 43, title: 'Gaming — Ad-Hoc Session', gameId: null });
+      // No game lookup needed since gameId is null — override the second limit
+      // (won't be consumed since gameId is null)
 
       await service.notifySpawn(
         43,
@@ -156,6 +179,7 @@ describe('AdHocNotificationService', () => {
         id: 'binding-3',
         config: { notificationChannelId: 'channel-err' },
       });
+      mockBuildEmbedData({ id: 45 });
       mockClientService.sendEmbed.mockRejectedValue(
         new Error('Discord API error'),
       );
@@ -172,6 +196,7 @@ describe('AdHocNotificationService', () => {
         id: 'binding-complete',
         config: { notificationChannelId: 'complete-channel' },
       });
+      mockBuildEmbedData({ id: 60 });
 
       await service.notifyCompleted(
         60,
@@ -192,7 +217,11 @@ describe('AdHocNotificationService', () => {
         ],
       );
 
-      expect(mockEmbedFactory.buildAdHocCompletedEmbed).toHaveBeenCalled();
+      expect(mockEmbedFactory.buildEventEmbed).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 60 }),
+        expect.any(Object),
+        expect.objectContaining({ state: 'completed', buttons: 'none' }),
+      );
       expect(mockClientService.sendEmbed).toHaveBeenCalledWith(
         'complete-channel',
         expect.any(Object),
@@ -205,6 +234,7 @@ describe('AdHocNotificationService', () => {
         id: 'binding-cleanup',
         config: { notificationChannelId: 'cleanup-channel' },
       });
+      mockBuildEmbedData({ id: 70 });
 
       // Queue an update
       service.queueUpdate(70, 'binding-cleanup');
@@ -231,6 +261,7 @@ describe('AdHocNotificationService', () => {
         id: 'binding-err',
         config: { notificationChannelId: 'err-channel' },
       });
+      mockBuildEmbedData({ id: 80 });
       mockClientService.sendEmbed.mockRejectedValue(new Error('fail'));
 
       await expect(

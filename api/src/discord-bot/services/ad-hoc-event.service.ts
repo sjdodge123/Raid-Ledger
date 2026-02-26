@@ -157,46 +157,60 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     const state = this.activeEvents.get(bindingId);
 
     if (state) {
-      // AC-11: Add to existing live event
-      state.memberSet.add(member.discordUserId);
+      // Verify event still exists and is active in DB (may have been
+      // cancelled or ended externally while in-memory state was stale)
+      const existing = await this.getEvent(state.eventId);
+      if (!existing || existing.adHocStatus === 'ended' || existing.cancelledAt) {
+        this.activeEvents.delete(bindingId);
+        this.logger.warn(
+          `Removed stale active state for event ${state.eventId} (status: ${existing?.adHocStatus ?? 'deleted'})`,
+        );
+        // Fall through to create a new event below
+      } else {
+        // AC-11: Add to existing live event
+        state.memberSet.add(member.discordUserId);
 
-      // Cancel any pending grace period
-      await this.gracePeriodQueue.cancel(state.eventId);
+        // Cancel any pending grace period
+        await this.gracePeriodQueue.cancel(state.eventId);
 
-      // Update event status back to live if in grace_period
-      const [updated] = await this.db
-        .update(schema.events)
-        .set({ adHocStatus: 'live', updatedAt: new Date() })
-        .where(
-          and(
-            eq(schema.events.id, state.eventId),
-            sql`${schema.events.adHocStatus} = 'grace_period'`,
-          ),
-        )
-        .returning({ id: schema.events.id });
+        // Update event status back to live if in grace_period
+        const [updated] = await this.db
+          .update(schema.events)
+          .set({ adHocStatus: 'live', updatedAt: new Date() })
+          .where(
+            and(
+              eq(schema.events.id, state.eventId),
+              sql`${schema.events.adHocStatus} = 'grace_period'`,
+            ),
+          )
+          .returning({ id: schema.events.id });
 
-      if (updated) {
-        this.gateway.emitStatusChange(state.eventId, 'live');
+        if (updated) {
+          this.gateway.emitStatusChange(state.eventId, 'live');
+        }
+
+        // Add participant to roster + auto-signup for slot grid
+        await this.participantService.addParticipant(state.eventId, member);
+        await this.autoSignupParticipant(state.eventId, member);
+
+        // Notify Discord embed + WebSocket clients
+        this.notificationService.queueUpdate(state.eventId, bindingId);
+        await this.emitRosterToClients(state.eventId);
+
+        // Extend end time if throttle elapsed
+        await this.maybeExtendEndTime(state);
+
+        return;
       }
-
-      // Add participant to roster
-      await this.participantService.addParticipant(state.eventId, member);
-
-      // Notify Discord embed + WebSocket clients
-      this.notificationService.queueUpdate(state.eventId, bindingId);
-      await this.emitRosterToClients(state.eventId);
-
-      // Extend end time if throttle elapsed
-      await this.maybeExtendEndTime(state);
-
-      return;
     }
 
     // No active ad-hoc event — check if we should create one
 
-    // Suppress if a scheduled (non-ad-hoc) event is currently active on this binding.
-    // Also extend the scheduled event's end time if members are still in the channel,
-    // preventing the event from expiring and triggering an ad-hoc spawn.
+    // Suppress if a scheduled (non-ad-hoc) event for the same game is currently
+    // active. Scheduled events don't have channelBindingId set, so match on
+    // gameId instead. Also extend the scheduled event's end time if members
+    // are still in the channel, preventing it from expiring and triggering an
+    // ad-hoc spawn.
     const now = new Date();
     const lookbackMs = 30 * 60 * 1000; // 30 min — catch events that just ended
     const lookbackTime = new Date(now.getTime() - lookbackMs);
@@ -209,7 +223,10 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       .from(schema.events)
       .where(
         and(
-          eq(schema.events.channelBindingId, bindingId),
+          // Match by binding (ad-hoc→ad-hoc) OR by game (scheduled events)
+          binding.gameId
+            ? sql`(${schema.events.channelBindingId} = ${bindingId} OR ${schema.events.gameId} = ${binding.gameId})`
+            : eq(schema.events.channelBindingId, bindingId),
           eq(schema.events.isAdHoc, false),
           sql`${schema.events.cancelledAt} IS NULL`,
           // Match if: event is currently active OR ended within last 30 min
@@ -256,8 +273,9 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       lastExtendedAt: Date.now(),
     });
 
-    // Add the first participant
+    // Add the first participant + auto-signup for slot grid
     await this.participantService.addParticipant(eventId, member);
+    await this.autoSignupParticipant(eventId, member);
 
     // Notify Discord embed (spawn) + WebSocket clients
     const event = await this.getEvent(eventId);
@@ -307,12 +325,21 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
     state.memberSet.delete(discordUserId);
 
+    // Verify event still exists and is active
+    const event = await this.getEvent(state.eventId);
+    if (!event || event.adHocStatus === 'ended' || event.cancelledAt) {
+      this.activeEvents.delete(bindingId);
+      this.logger.warn(
+        `Removed stale active state on leave for event ${state.eventId}`,
+      );
+      return;
+    }
+
     // Mark participant as left
     await this.participantService.markLeave(state.eventId, discordUserId);
 
     // Notify Discord embed + WebSocket clients
-    const event = await this.getEvent(state.eventId);
-    if (event?.channelBindingId) {
+    if (event.channelBindingId) {
       this.notificationService.queueUpdate(
         state.eventId,
         event.channelBindingId,
@@ -322,26 +349,25 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
     if (state.memberSet.size === 0) {
       // All members gone — start grace period
-      if (!event) return;
-
       const binding = event.channelBindingId
         ? await this.channelBindingsService.getBindingById(
           event.channelBindingId,
         )
         : null;
 
-      const gracePeriod =
+      const rawGracePeriod =
         (binding?.config as { gracePeriod?: number } | null)?.gracePeriod ?? 5;
+      const gracePeriod = Math.max(1, rawGracePeriod);
       const gracePeriodMs = gracePeriod * 60 * 1000;
 
-      // Update status to grace_period
+      // Enqueue finalization FIRST — if this fails, status stays live
+      await this.gracePeriodQueue.enqueue(state.eventId, gracePeriodMs);
+
+      // Enqueue succeeded — update status to grace_period
       await this.db
         .update(schema.events)
         .set({ adHocStatus: 'grace_period', updatedAt: new Date() })
         .where(eq(schema.events.id, state.eventId));
-
-      // Enqueue finalization
-      await this.gracePeriodQueue.enqueue(state.eventId, gracePeriodMs);
 
       // Notify WebSocket clients of status change
       this.gateway.emitStatusChange(state.eventId, 'grace_period');
@@ -421,6 +447,14 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     // Remove from active events map
     if (event.channelBindingId) {
       this.activeEvents.delete(event.channelBindingId);
+    } else {
+      // Fallback: scan map for this eventId (shouldn't happen, but be safe)
+      for (const [bId, s] of this.activeEvents) {
+        if (s.eventId === eventId) {
+          this.activeEvents.delete(bId);
+          break;
+        }
+      }
     }
 
     this.logger.log(`Ad-hoc event ${eventId} finalized (completed)`);
@@ -601,6 +635,122 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       roster.participants,
       roster.activeCount,
     );
+  }
+
+  /**
+   * Auto-create an event signup and roster slot assignment for an ad-hoc
+   * voice participant. This bridges ad-hoc participants into the regular
+   * roster system so they appear in the PLAYERS slot grid.
+   *
+   * Idempotent: skips if the participant already has a signup for this event.
+   */
+  private async autoSignupParticipant(
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<void> {
+    try {
+      // Check if signup already exists (re-join case)
+      const [existing] = await this.db
+        .select({ id: schema.eventSignups.id })
+        .from(schema.eventSignups)
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            eq(schema.eventSignups.discordUserId, member.discordUserId),
+          ),
+        )
+        .limit(1);
+
+      if (existing) return;
+
+      // Create signup with Discord identity (and userId if linked)
+      const [signup] = await this.db
+        .insert(schema.eventSignups)
+        .values({
+          eventId,
+          userId: member.userId,
+          discordUserId: member.discordUserId,
+          discordUsername: member.discordUsername,
+          discordAvatarHash: member.discordAvatarHash,
+          confirmationStatus: 'confirmed',
+          status: 'signed_up',
+        })
+        .onConflictDoNothing()
+        .returning({ id: schema.eventSignups.id });
+
+      if (!signup) return; // Conflict — already exists
+
+      // Find next available 'player' slot position
+      const existingSlots = await this.db
+        .select({ position: schema.rosterAssignments.position })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.role, 'player'),
+          ),
+        );
+
+      const usedPositions = new Set(existingSlots.map((s) => s.position));
+
+      // Get max player slots from the event's slotConfig (default: 10)
+      const event = await this.getEvent(eventId);
+      const slotConfig = event?.slotConfig as { player?: number; bench?: number } | null;
+      const maxPlayers = slotConfig?.player ?? 10;
+      const maxBench = slotConfig?.bench ?? 5;
+
+      let position = 1;
+      while (usedPositions.has(position) && position <= maxPlayers) {
+        position++;
+      }
+
+      if (position <= maxPlayers) {
+        // Assign to player slot
+        await this.db.insert(schema.rosterAssignments).values({
+          eventId,
+          signupId: signup.id,
+          role: 'player',
+          position,
+          isOverride: 0,
+        });
+      } else {
+        // Player slots full — try bench
+        const benchSlots = await this.db
+          .select({ position: schema.rosterAssignments.position })
+          .from(schema.rosterAssignments)
+          .where(
+            and(
+              eq(schema.rosterAssignments.eventId, eventId),
+              eq(schema.rosterAssignments.role, 'bench'),
+            ),
+          );
+
+        const usedBench = new Set(benchSlots.map((s) => s.position));
+        let benchPos = 1;
+        while (usedBench.has(benchPos) && benchPos <= maxBench) {
+          benchPos++;
+        }
+
+        if (benchPos <= maxBench) {
+          await this.db.insert(schema.rosterAssignments).values({
+            eventId,
+            signupId: signup.id,
+            role: 'bench',
+            position: benchPos,
+            isOverride: 0,
+          });
+        }
+        // If both player and bench are full, signup exists but no slot assignment
+      }
+
+      this.logger.debug(
+        `Auto-signed up ${member.discordUsername} for event ${eventId}`,
+      );
+    } catch (err) {
+      this.logger.error(
+        `Failed to auto-signup participant ${member.discordUserId} for event ${eventId}: ${err}`,
+      );
+    }
   }
 
   /**

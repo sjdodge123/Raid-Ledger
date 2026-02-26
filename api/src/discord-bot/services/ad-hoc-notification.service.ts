@@ -7,7 +7,9 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import {
   DiscordEmbedFactory,
   type EmbedContext,
+  type EmbedEventData,
 } from './discord-embed.factory';
+import { EMBED_STATES } from '../discord-bot.constants';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { SettingsService } from '../../settings/settings.service';
 
@@ -26,6 +28,9 @@ interface PendingUpdate {
  * - Posts an embed when an ad-hoc event spawns
  * - Batched edit-in-place updates as players join/leave (5s flush interval)
  * - Posts a final summary embed when the event completes
+ *
+ * Uses the standard buildEventEmbed() layout so ad-hoc embeds match
+ * the look of scheduled event embeds (game cover art, roster, timestamps).
  */
 @Injectable()
 export class AdHocNotificationService {
@@ -42,6 +47,9 @@ export class AdHocNotificationService {
 
   /** Flush timer */
   private flushTimer: NodeJS.Timeout | null = null;
+
+  /** Guard against concurrent flushes */
+  private flushing = false;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -67,10 +75,18 @@ export class AdHocNotificationService {
     if (!channelId) return;
 
     const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildAdHocSpawnEmbed(
-      event,
-      participants,
+    const embedData = await this.buildEmbedEventData(eventId, participants.map((p) => ({
+      discordUserId: p.discordUserId,
+      discordUsername: p.discordUsername,
+      isActive: true,
+    })));
+
+    if (!embedData) return;
+
+    const { embed, row } = this.embedFactory.buildEventEmbed(
+      embedData,
       context,
+      { state: EMBED_STATES.LIVE, buttons: 'view' },
     );
 
     try {
@@ -80,6 +96,10 @@ export class AdHocNotificationService {
           channelId,
           messageId: message.id,
         });
+      } else {
+        this.logger.warn(
+          `sendEmbed returned no message for event ${eventId} — edit-in-place updates disabled`,
+        );
       }
     } catch (err) {
       this.logger.error(
@@ -118,10 +138,18 @@ export class AdHocNotificationService {
     if (!channelId) return;
 
     const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildAdHocCompletedEmbed(
-      event,
-      participants,
+    const embedData = await this.buildEmbedEventData(eventId, participants.map((p) => ({
+      discordUserId: p.discordUserId,
+      discordUsername: p.discordUsername,
+      isActive: false,
+    })));
+
+    if (!embedData) return;
+
+    const { embed, row } = this.embedFactory.buildEventEmbed(
+      embedData,
       context,
+      { state: EMBED_STATES.COMPLETED, buttons: 'none' },
     );
 
     try {
@@ -141,19 +169,24 @@ export class AdHocNotificationService {
    * Flush pending updates — edit-in-place the tracked messages.
    */
   private async flushUpdates(): Promise<void> {
-    if (this.pendingUpdates.size === 0) return;
+    if (this.flushing || this.pendingUpdates.size === 0) return;
+    this.flushing = true;
 
-    const updates = Array.from(this.pendingUpdates.values());
-    this.pendingUpdates.clear();
+    try {
+      const updates = Array.from(this.pendingUpdates.values());
+      this.pendingUpdates.clear();
 
-    for (const update of updates) {
-      try {
-        await this.processUpdate(update);
-      } catch (err) {
-        this.logger.error(
-          `Failed to flush ad-hoc update for event ${update.eventId}: ${err}`,
-        );
+      for (const update of updates) {
+        try {
+          await this.processUpdate(update);
+        } catch (err) {
+          this.logger.error(
+            `Failed to flush ad-hoc update for event ${update.eventId}: ${err}`,
+          );
+        }
       }
+    } finally {
+      this.flushing = false;
     }
   }
 
@@ -167,25 +200,6 @@ export class AdHocNotificationService {
       .from(schema.adHocParticipants)
       .where(eq(schema.adHocParticipants.eventId, update.eventId));
 
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, update.eventId))
-      .limit(1);
-
-    if (!event) return;
-
-    // Resolve game name
-    let gameName: string | undefined;
-    if (event.gameId) {
-      const [game] = await this.db
-        .select({ name: schema.games.name })
-        .from(schema.games)
-        .where(eq(schema.games.id, event.gameId))
-        .limit(1);
-      if (game) gameName = game.name;
-    }
-
     const participants = rows.map((r) => ({
       discordUserId: r.discordUserId,
       discordUsername: r.discordUsername,
@@ -193,14 +207,14 @@ export class AdHocNotificationService {
     }));
 
     const context = await this.buildContext();
-    const { embed, row } = this.embedFactory.buildAdHocUpdateEmbed(
-      {
-        id: event.id,
-        title: event.title,
-        gameName,
-      },
-      participants,
+    const embedData = await this.buildEmbedEventData(update.eventId, participants);
+
+    if (!embedData) return;
+
+    const { embed, row } = this.embedFactory.buildEventEmbed(
+      embedData,
       context,
+      { state: EMBED_STATES.LIVE, buttons: 'view' },
     );
 
     try {
@@ -217,6 +231,62 @@ export class AdHocNotificationService {
       // Remove tracked message if edit fails (message may have been deleted)
       this.messageIds.delete(update.eventId);
     }
+  }
+
+  /**
+   * Build a standard EmbedEventData from the DB for an ad-hoc event.
+   * Fetches the event, game (with cover art), and formats participants
+   * as signupMentions so the standard embed layout renders them.
+   */
+  private async buildEmbedEventData(
+    eventId: number,
+    participants: Array<{
+      discordUserId: string;
+      discordUsername: string;
+      isActive: boolean;
+    }>,
+  ): Promise<EmbedEventData | null> {
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (!event) return null;
+
+    // Resolve game name + cover art
+    let game: { name: string; coverUrl?: string | null } | null = null;
+    if (event.gameId) {
+      const [gameRow] = await this.db
+        .select({ name: schema.games.name, coverUrl: schema.games.coverUrl })
+        .from(schema.games)
+        .where(eq(schema.games.id, event.gameId))
+        .limit(1);
+      if (gameRow) game = gameRow;
+    }
+
+    // Only count active participants for the signup count
+    const activeCount = participants.filter((p) => p.isActive).length;
+
+    return {
+      id: event.id,
+      title: event.title,
+      startTime: event.duration[0].toISOString(),
+      endTime: event.duration[1].toISOString(),
+      signupCount: activeCount,
+      maxAttendees: event.maxAttendees,
+      slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+      game: game ?? undefined,
+      // Map participants as signup mentions for the roster section
+      signupMentions: participants
+        .filter((p) => p.isActive)
+        .map((p) => ({
+          discordId: p.discordUserId,
+          username: p.discordUsername,
+          role: null,
+          preferredRoles: null,
+        })),
+    };
   }
 
   /**

@@ -132,7 +132,7 @@ describe('BindingConfigForm', () => {
       <BindingConfigForm
         binding={makeBinding({
           bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: false, gracePeriod: 300 },
+          config: { minPlayers: 2, autoClose: false, gracePeriod: 5 },
         })}
         onSave={onSave}
         onCancel={onCancel}
@@ -165,7 +165,7 @@ describe('BindingConfigForm', () => {
     expect(inputs).toContain('2');
   });
 
-  it('uses default gracePeriod of 300 when config is null', () => {
+  it('uses default gracePeriod of 5 when config is null', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
@@ -181,7 +181,7 @@ describe('BindingConfigForm', () => {
     const inputs = screen
       .getAllByRole('spinbutton')
       .map((el) => (el as HTMLInputElement).value);
-    expect(inputs).toContain('300');
+    expect(inputs).toContain('5');
   });
 
   it('defaults autoClose to true when config is null', () => {
@@ -203,12 +203,12 @@ describe('BindingConfigForm', () => {
     expect(checkbox.checked).toBe(true);
   });
 
-  it('displays grace period in human-readable format when >= 60 seconds', () => {
+  it('displays grace period label with minutes unit', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({
           bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 90 },
+          config: { minPlayers: 2, autoClose: true, gracePeriod: 10 },
         })}
         onSave={onSave}
         onCancel={onCancel}
@@ -216,24 +216,7 @@ describe('BindingConfigForm', () => {
       />,
     );
 
-    // 90s = "1m 30s"
-    expect(screen.getByText('1m 30s')).toBeInTheDocument();
-  });
-
-  it('displays grace period in seconds when < 60 seconds', () => {
-    render(
-      <BindingConfigForm
-        binding={makeBinding({
-          bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 30 },
-        })}
-        onSave={onSave}
-        onCancel={onCancel}
-        isSaving={false}
-      />,
-    );
-
-    expect(screen.getByText('30s')).toBeInTheDocument();
+    expect(screen.getByText(/minutes before closing/)).toBeInTheDocument();
   });
 
   // ── Non-voice-monitor mode ────────────────────────────────────
@@ -293,7 +276,7 @@ describe('BindingConfigForm', () => {
         binding={makeBinding({
           id: 'uuid-1',
           bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 3, autoClose: true, gracePeriod: 120 },
+          config: { minPlayers: 3, autoClose: true, gracePeriod: 10 },
         })}
         onSave={onSave}
         onCancel={onCancel}
@@ -307,7 +290,7 @@ describe('BindingConfigForm', () => {
       config: {
         minPlayers: 3,
         autoClose: true,
-        gracePeriod: 120,
+        gracePeriod: 10,
       },
     });
   });
@@ -341,7 +324,7 @@ describe('BindingConfigForm', () => {
         binding={makeBinding({
           id: 'uuid-1',
           bindingPurpose: 'game-voice-monitor',
-          config: { minPlayers: 2, autoClose: true, gracePeriod: 300 },
+          config: { minPlayers: 2, autoClose: true, gracePeriod: 5 },
         })}
         onSave={onSave}
         onCancel={onCancel}

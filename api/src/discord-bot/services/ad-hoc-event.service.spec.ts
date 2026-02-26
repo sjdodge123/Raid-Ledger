@@ -120,6 +120,12 @@ describe('AdHocEventService', () => {
     }).compile();
 
     service = module.get(AdHocEventService);
+
+    // autoSignupParticipant makes additional DB calls that would consume
+    // mock responses; stub it to avoid interference with existing test chains.
+    jest
+      .spyOn(service as any, 'autoSignupParticipant')
+      .mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -311,6 +317,10 @@ describe('AdHocEventService', () => {
         discordUserId: 'discord-456',
         discordUsername: 'Player2',
       };
+      // getEvent() to verify event still exists (stale state check)
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 200, adHocStatus: 'live', channelBindingId: 'binding-5' },
+      ]);
       // update().set().where().returning() for grace_period→live status change
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -381,11 +391,11 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
 
-      // handleVoiceLeave: getEvent for notification queueUpdate
+      // handleVoiceLeave: getEvent to verify event still active + for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 400, channelBindingId: 'binding-leave' },
+        { id: 400, adHocStatus: 'live', channelBindingId: 'binding-leave' },
       ]);
-      // handleVoiceLeave: memberSet empty → grace period path reuses already-fetched event
+      // handleVoiceLeave: memberSet empty → grace period path
       // Mock getBindingById
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-leave',
@@ -426,9 +436,9 @@ describe('AdHocEventService', () => {
         baseBinding,
       );
 
-      // handleVoiceLeave: getEvent for notification queueUpdate
+      // handleVoiceLeave: getEvent to verify event still active + for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 401, channelBindingId: 'binding-default-grace' },
+        { id: 401, adHocStatus: 'live', channelBindingId: 'binding-default-grace' },
       ]);
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-default-grace',

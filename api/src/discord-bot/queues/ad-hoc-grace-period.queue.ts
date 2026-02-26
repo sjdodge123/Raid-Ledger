@@ -58,6 +58,7 @@ export class AdHocGracePeriodQueueService {
       this.logger.error(
         `Failed to enqueue grace period for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
+      throw error;
     }
   }
 

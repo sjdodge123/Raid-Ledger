@@ -25,7 +25,7 @@ export function BindingConfigForm({
     binding.config?.autoClose ?? true,
   );
   const [gracePeriod, setGracePeriod] = useState(
-    binding.config?.gracePeriod ?? 300,
+    binding.config?.gracePeriod ?? 5,
   );
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -78,22 +78,17 @@ export function BindingConfigForm({
 
           <div>
             <label className="block text-xs text-muted mb-1">
-              Grace Period (seconds before closing)
+              Grace Period (minutes before closing)
             </label>
             <input
               type="number"
-              min={0}
-              max={3600}
-              step={30}
+              min={1}
+              max={60}
+              step={1}
               value={gracePeriod}
               onChange={(e) => setGracePeriod(Number(e.target.value))}
               className="w-full px-3 py-2 bg-panel border border-border rounded-lg text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
             />
-            <p className="text-xs text-muted mt-1">
-              {gracePeriod >= 60
-                ? `${Math.floor(gracePeriod / 60)}m ${gracePeriod % 60}s`
-                : `${gracePeriod}s`}
-            </p>
           </div>
         </>
       )}

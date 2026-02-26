@@ -13,9 +13,29 @@ interface AdHocSocketState {
 }
 
 /**
+ * Fetch the current roster via REST so the UI is populated immediately,
+ * before any WebSocket events arrive.
+ */
+async function fetchInitialRoster(
+  eventId: number,
+): Promise<{ participants: AdHocParticipantDto[]; activeCount: number } | null> {
+  try {
+    const token = localStorage.getItem('raid_ledger_token');
+    const res = await fetch(`${API_BASE}/events/${eventId}/ad-hoc-roster`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Hook for real-time ad-hoc event updates via WebSocket (ROK-293).
  *
- * Connects to the /ad-hoc namespace and subscribes to updates for a specific event.
+ * Fetches the initial roster via REST on mount, then connects to the /ad-hoc
+ * namespace and subscribes to live updates for a specific event.
  * Automatically reconnects and cleans up on unmount.
  */
 export function useAdHocSocket(eventId: number | null): AdHocSocketState {
@@ -28,6 +48,26 @@ export function useAdHocSocket(eventId: number | null): AdHocSocketState {
     endTime: null,
   });
 
+  // Fetch initial roster via REST so UI is never empty on load
+  useEffect(() => {
+    if (!eventId) return;
+
+    let cancelled = false;
+    void fetchInitialRoster(eventId).then((data) => {
+      if (cancelled || !data) return;
+      setState((prev) => ({
+        ...prev,
+        participants: data.participants,
+        activeCount: data.activeCount,
+      }));
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [eventId]);
+
+  // WebSocket connection for live updates
   useEffect(() => {
     if (!eventId) return;
 

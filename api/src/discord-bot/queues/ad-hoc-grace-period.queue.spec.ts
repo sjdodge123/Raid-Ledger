@@ -70,10 +70,10 @@ describe('AdHocGracePeriodQueueService', () => {
       expect(mockQueue.add).toHaveBeenCalled();
     });
 
-    it('handles queue errors gracefully', async () => {
+    it('propagates queue errors to caller', async () => {
       mockQueue.add.mockRejectedValue(new Error('Redis down'));
 
-      await expect(service.enqueue(42, 300_000)).resolves.not.toThrow();
+      await expect(service.enqueue(42, 300_000)).rejects.toThrow('Redis down');
     });
   });
 
