@@ -69,7 +69,20 @@ export interface TestApp {
   container: StartedPostgreSqlContainer | null;
 }
 
-let instance: TestApp | null = null;
+/**
+ * Store singleton on globalThis so it survives Jest's per-file module
+ * re-evaluation (Jest creates a fresh module registry for each test file,
+ * even with --runInBand, so a module-level `let` resets to null).
+ */
+const INSTANCE_KEY = Symbol.for('__raid_ledger_test_app');
+
+function getInstance(): TestApp | null {
+  return (globalThis as Record<symbol, TestApp | null>)[INSTANCE_KEY] ?? null;
+}
+
+function setInstance(app: TestApp | null): void {
+  (globalThis as Record<symbol, TestApp | null>)[INSTANCE_KEY] = app;
+}
 
 /**
  * Get or create the singleton TestApp.
@@ -78,7 +91,8 @@ let instance: TestApp | null = null;
  * Subsequent calls return the cached instance.
  */
 export async function getTestApp(): Promise<TestApp> {
-  if (instance) return instance;
+  const cached = getInstance();
+  if (cached) return cached;
 
   let connectionString: string;
   let container: StartedPostgreSqlContainer | null = null;
@@ -133,7 +147,7 @@ export async function getTestApp(): Promise<TestApp> {
   const request = supertest.default(app.getHttpServer());
 
   const testApp: TestApp = { app, request, db, seed, container };
-  instance = testApp;
+  setInstance(testApp);
   return testApp;
 }
 
@@ -142,11 +156,12 @@ export async function getTestApp(): Promise<TestApp> {
  * Call this in globalTeardown or afterAll of the last suite.
  */
 export async function closeTestApp(): Promise<void> {
+  const instance = getInstance();
   if (!instance) return;
 
   await instance.app.close();
   if (instance.container) {
     await instance.container.stop();
   }
-  instance = null;
+  setInstance(null);
 }
