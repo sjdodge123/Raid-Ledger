@@ -268,11 +268,12 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      // Wait for debounce (2000ms) + async processing
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      // Wait for debounce (2000ms) + async processing (generous for CI coverage)
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
 
+      listener.onBotDisconnected();
       jest.useFakeTimers();
     }, 10000);
 
@@ -304,10 +305,11 @@ describe('VoiceStateListener', () => {
         { channelId: null, id: 'user-leave', member: null },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
 
+      listener.onBotDisconnected();
       jest.useFakeTimers();
     }, 10000);
 
@@ -360,11 +362,12 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
       expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
 
+      listener.onBotDisconnected();
       jest.useFakeTimers();
     }, 10000);
   });
@@ -410,10 +413,11 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
+      listener.onBotDisconnected();
       jest.useFakeTimers();
     }, 10000);
   });
@@ -448,10 +452,11 @@ describe('VoiceStateListener', () => {
         },
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 2200));
+      await new Promise((resolve) => setTimeout(resolve, 3500));
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
 
+      listener.onBotDisconnected();
       jest.useFakeTimers();
     }, 10000);
   });
