@@ -55,6 +55,7 @@ describe('BackupService', () => {
             get: jest.fn((key: string) => {
               if (key === 'DATABASE_URL')
                 return 'postgresql://user:pass@localhost:5432/raid_ledger';
+              if (key === 'DB_CONTAINER_NAME') return '';
               return undefined;
             }),
           },
@@ -79,11 +80,12 @@ describe('BackupService', () => {
   describe('onModuleInit', () => {
     it('should create backup directories', () => {
       service.onModuleInit();
-      expect(mockFs.mkdirSync).toHaveBeenCalledWith('/data/backups/daily', {
-        recursive: true,
-      });
       expect(mockFs.mkdirSync).toHaveBeenCalledWith(
-        '/data/backups/migrations',
+        expect.stringContaining('backups/daily'),
+        { recursive: true },
+      );
+      expect(mockFs.mkdirSync).toHaveBeenCalledWith(
+        expect.stringContaining('backups/migrations'),
         { recursive: true },
       );
     });

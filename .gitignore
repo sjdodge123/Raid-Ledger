@@ -65,6 +65,9 @@ yarn-error.log*
 # Avatar uploads (local dev)
 uploads/
 
+# Database backups (local dev — created by BackupService)
+**/backups/
+
 # Project state
 task.md
 project-context.md

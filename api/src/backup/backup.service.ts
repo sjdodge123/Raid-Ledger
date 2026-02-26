@@ -18,11 +18,17 @@ import type { BackupFileDto } from '@raid-ledger/contract';
 
 const execFileAsync = promisify(execFile);
 
-/** Default backup path (inside /data Docker volume in production) */
-const DEFAULT_BACKUP_BASE = '/data/backups';
+/** Default backup path — relative to cwd, works in both dev and Docker.
+ *  Docker overrides via BACKUP_DIR env var to use the /data volume. */
+const DEFAULT_BACKUP_BASE = path.join(process.cwd(), 'backups');
 
 /** Number of days to retain daily backups */
 const DAILY_RETENTION_DAYS = 30;
+
+/** Default container name for the Docker DB (used to route pg_dump/pg_restore
+ *  through the container so the tool version matches the server).
+ *  Override via DB_CONTAINER_NAME env var, or set to empty to use direct execution. */
+const DEFAULT_DB_CONTAINER = 'raid-ledger-db';
 
 @Injectable()
 export class BackupService implements OnModuleInit {
@@ -31,6 +37,9 @@ export class BackupService implements OnModuleInit {
   private readonly backupBase: string;
   private readonly dailyDir: string;
   private readonly migrationDir: string;
+  /** When set, pg_dump/pg_restore route through this Docker container.
+   *  Empty string = use direct execution (production or integration tests). */
+  private readonly dbContainer: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -42,6 +51,14 @@ export class BackupService implements OnModuleInit {
       throw new Error('DATABASE_URL is required for BackupService');
     }
     this.databaseUrl = url;
+    const isProduction = process.env.NODE_ENV === 'production';
+    // In production, pg tools are co-located with the DB — use direct execution.
+    // In dev, route through the Docker container to avoid version mismatch.
+    // DB_CONTAINER_NAME env var allows override (empty = direct execution).
+    this.dbContainer = isProduction
+      ? ''
+      : (this.configService.get<string>('DB_CONTAINER_NAME') ??
+          DEFAULT_DB_CONTAINER);
     this.backupBase =
       this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
     this.dailyDir = path.join(this.backupBase, 'daily');
@@ -248,14 +265,42 @@ export class BackupService implements OnModuleInit {
     this.logger.warn(`Starting database restore from: ${type}/${filename}`);
 
     try {
-      await execFileAsync('pg_restore', [
-        '--clean',
-        '--if-exists',
-        '--no-owner',
-        '--no-privileges',
-        `--dbname=${this.databaseUrl}`,
-        filepath,
-      ]);
+      if (!this.dbContainer) {
+        await execFileAsync('pg_restore', [
+          '--clean',
+          '--if-exists',
+          '--no-owner',
+          '--no-privileges',
+          `--dbname=${this.databaseUrl}`,
+          filepath,
+        ]);
+      } else {
+        // Route through Docker container so pg_restore version matches the server.
+        const containerTmp = '/tmp/restore.dump';
+        await execFileAsync('docker', [
+          'cp',
+          filepath,
+          `${this.dbContainer}:${containerTmp}`,
+        ]);
+        await execFileAsync('docker', [
+          'exec',
+          this.dbContainer,
+          'pg_restore',
+          '--clean',
+          '--if-exists',
+          '--no-owner',
+          '--no-privileges',
+          `--dbname=${this.databaseUrl}`,
+          containerTmp,
+        ]);
+        await execFileAsync('docker', [
+          'exec',
+          this.dbContainer,
+          'rm',
+          '-f',
+          containerTmp,
+        ]);
+      }
       this.logger.log(`Database restore complete from: ${filename}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -312,11 +357,20 @@ export class BackupService implements OnModuleInit {
     this.settingsService.emitAllIntegrationsCleared();
 
     this.logger.warn('Dropping all database schemas...');
-    await execFileAsync('psql', [
-      this.databaseUrl,
-      '-c',
-      'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;',
-    ]);
+    const dropSql =
+      'DROP SCHEMA public CASCADE; CREATE SCHEMA public; DROP SCHEMA IF EXISTS drizzle CASCADE;';
+    if (!this.dbContainer) {
+      await execFileAsync('psql', [this.databaseUrl, '-c', dropSql]);
+    } else {
+      await execFileAsync('docker', [
+        'exec',
+        this.dbContainer,
+        'psql',
+        this.databaseUrl,
+        '-c',
+        dropSql,
+      ]);
+    }
 
     // __dirname at runtime = api/dist/src/backup/
     // Go up 3 levels to reach the api/ root
@@ -380,16 +434,47 @@ export class BackupService implements OnModuleInit {
 
   /**
    * Run pg_dump in custom format (compressed, supports selective restore).
+   * In dev mode, routes through Docker to avoid pg_dump version mismatch
+   * (host pg_dump may be newer than the Postgres server in the container).
    */
   private async runPgDump(outputPath: string): Promise<void> {
     try {
-      await execFileAsync('pg_dump', [
-        '--format=custom',
-        '--no-owner',
-        '--no-privileges',
-        `--file=${outputPath}`,
-        this.databaseUrl,
-      ]);
+      if (!this.dbContainer) {
+        await execFileAsync('pg_dump', [
+          '--format=custom',
+          '--no-owner',
+          '--no-privileges',
+          `--file=${outputPath}`,
+          this.databaseUrl,
+        ]);
+      } else {
+        // Route through Docker container so pg_dump version matches the server.
+        // Dump to a temp file inside the container, then docker cp it out.
+        const containerTmp = '/tmp/backup.dump';
+        await execFileAsync('docker', [
+          'exec',
+          this.dbContainer,
+          'pg_dump',
+          '--format=custom',
+          '--no-owner',
+          '--no-privileges',
+          `--file=${containerTmp}`,
+          this.databaseUrl,
+        ]);
+        await execFileAsync('docker', [
+          'cp',
+          `${this.dbContainer}:${containerTmp}`,
+          outputPath,
+        ]);
+        // Clean up temp file in container
+        await execFileAsync('docker', [
+          'exec',
+          this.dbContainer,
+          'rm',
+          '-f',
+          containerTmp,
+        ]);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.logger.error(`pg_dump failed: ${message}`);
