@@ -52,6 +52,7 @@ services:
       CLIENT_URL: http://localhost:80
       CORS_ORIGIN: http://localhost:80
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
+      BACKUP_DIR: /data/backups
       # ROK-306: Sentry telemetry opt-out — uncomment to disable error tracking.
       # DISABLE_TELEMETRY: "true"
     volumes:
