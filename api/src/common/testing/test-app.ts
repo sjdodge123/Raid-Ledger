@@ -31,7 +31,7 @@ import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
-import { seedBaseline, type SeededData } from './integration-helpers';
+import { truncateAllTables, type SeededData } from './integration-helpers';
 
 /** In-memory Redis mock that satisfies the minimal interface used by the app. */
 function createRedisMock() {
@@ -70,18 +70,20 @@ export interface TestApp {
 }
 
 /**
- * Store singleton on globalThis so it survives Jest's per-file module
- * re-evaluation (Jest creates a fresh module registry for each test file,
- * even with --runInBand, so a module-level `let` resets to null).
+ * Store singleton on `process` so it survives Jest's per-file module
+ * re-evaluation. Jest creates a separate VM context (and therefore a
+ * separate `globalThis`) for each test file, even with --runInBand.
+ * The `process` object IS shared across VM contexts in the same
+ * Node.js process, making it a reliable cross-file singleton store.
  */
-const INSTANCE_KEY = Symbol.for('__raid_ledger_test_app');
+const INSTANCE_KEY = '__raid_ledger_test_app';
 
 function getInstance(): TestApp | null {
-  return (globalThis as Record<symbol, TestApp | null>)[INSTANCE_KEY] ?? null;
+  return (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] ?? null;
 }
 
 function setInstance(app: TestApp | null): void {
-  (globalThis as Record<symbol, TestApp | null>)[INSTANCE_KEY] = app;
+  (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] = app;
 }
 
 /**
@@ -122,8 +124,10 @@ export async function getTestApp(): Promise<TestApp> {
   const appClient = postgres(connectionString, { max: 10 });
   const db = drizzle(appClient, { schema });
 
-  // 4. Seed baseline data
-  const seed = await seedBaseline(db);
+  // 4. Seed baseline data (truncate first for idempotency — if a previous
+  //    test file seeded and the singleton cache was lost, this avoids
+  //    duplicate-key errors on re-initialization)
+  const seed = await truncateAllTables(db);
 
   // 5. Boot NestJS with real DB, mock Redis, and test env vars
   process.env.DATABASE_URL = connectionString;
