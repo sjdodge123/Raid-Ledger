@@ -5,6 +5,8 @@ import { ChannelBindingsService } from './channel-bindings.service';
 import { SettingsService } from '../../settings/settings.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { AdHocNotificationService } from './ad-hoc-notification.service';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -97,6 +99,23 @@ describe('AdHocEventService', () => {
           provide: AdHocGracePeriodQueueService,
           useValue: mockGracePeriodQueue,
         },
+        {
+          provide: AdHocNotificationService,
+          useValue: {
+            notifySpawn: jest.fn(),
+            queueUpdate: jest.fn(),
+            notifyCompleted: jest.fn(),
+            flush: jest.fn(),
+          },
+        },
+        {
+          provide: AdHocEventsGateway,
+          useValue: {
+            emitRosterUpdate: jest.fn(),
+            emitStatusChange: jest.fn(),
+            emitEndTimeExtended: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -149,6 +168,17 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'World of Warcraft' }]);
       // event insert
       mockDb.returning.mockResolvedValueOnce([{ id: 100 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 100,
+          title: 'World of Warcraft — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-1',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'World of Warcraft' }]);
 
       await service.handleVoiceJoin('binding-1', baseMember, baseBinding);
 
@@ -163,6 +193,15 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       const noGameBinding = { ...baseBinding, gameId: null };
       mockDb.returning.mockResolvedValueOnce([{ id: 101 }]);
+      // getEvent after create (for notification) — no gameId so no game lookup
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 101,
+          title: 'Gaming — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'binding-2',
+        },
+      ]);
 
       await service.handleVoiceJoin('binding-2', baseMember, noGameBinding);
 
@@ -182,6 +221,17 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'FFXIV' }]);
       // Insert returning
       mockDb.returning.mockResolvedValueOnce([{ id: 102 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 102,
+          title: 'FFXIV — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-3',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'FFXIV' }]);
 
       await service.handleVoiceJoin('binding-3', anonymousMember, baseBinding);
 
@@ -209,6 +259,17 @@ describe('AdHocEventService', () => {
       // First create an event
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 200 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 200,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-5',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin('binding-5', baseMember, baseBinding);
 
       // Second join to same binding
@@ -218,6 +279,8 @@ describe('AdHocEventService', () => {
         discordUserId: 'discord-456',
         discordUsername: 'Player2',
       };
+      // update().set().where().returning() for grace_period→live status change
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await service.handleVoiceJoin('binding-5', secondMember, baseBinding);
 
@@ -232,6 +295,17 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'Game' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 300 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 300,
+          title: 'Game — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-6',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'Game' }]);
 
       await service.handleVoiceJoin('binding-6', baseMember, baseBinding);
 
@@ -259,15 +333,24 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 400 }]);
-      await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
-
-      // Mock the getEvent DB call
+      // getEvent after create (for notification)
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 400,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
           channelBindingId: 'binding-leave',
         },
       ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
+      await service.handleVoiceJoin('binding-leave', baseMember, baseBinding);
+
+      // handleVoiceLeave: getEvent for notification queueUpdate
+      mockDb.limit.mockResolvedValueOnce([
+        { id: 400, channelBindingId: 'binding-leave' },
+      ]);
+      // handleVoiceLeave: memberSet empty → grace period path reuses already-fetched event
       // Mock getBindingById
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-leave',
@@ -290,17 +373,26 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 401 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 401,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-default-grace',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin(
         'binding-default-grace',
         baseMember,
         baseBinding,
       );
 
+      // handleVoiceLeave: getEvent for notification queueUpdate
       mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 401,
-          channelBindingId: 'binding-default-grace',
-        },
+        { id: 401, channelBindingId: 'binding-default-grace' },
       ]);
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-default-grace',
@@ -326,6 +418,7 @@ describe('AdHocEventService', () => {
           id: 500,
           adHocStatus: 'grace_period',
           channelBindingId: 'binding-fin',
+          gameId: 1,
           duration: [
             new Date('2026-02-10T18:00:00Z'),
             new Date('2026-02-10T19:00:00Z'),
@@ -333,6 +426,8 @@ describe('AdHocEventService', () => {
         },
       ]);
       // The second .where() is the terminal for the update query — leave it as returnThis default
+      // notifyCompleted: game name lookup
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.finalizeEvent(500);
 
@@ -372,6 +467,17 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 600 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 600,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-cleanup',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin('binding-cleanup', baseMember, baseBinding);
 
       expect(service.getActiveState('binding-cleanup')).toBeDefined();
@@ -382,10 +488,12 @@ describe('AdHocEventService', () => {
           id: 600,
           adHocStatus: 'grace_period',
           channelBindingId: 'binding-cleanup',
+          gameId: 1,
           duration: [new Date(), new Date()],
         },
       ]);
-      // Don't set .where as mockResolvedValueOnce — it needs to returnThis for the select chain
+      // notifyCompleted: game name lookup
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.finalizeEvent(600);
 
@@ -433,6 +541,17 @@ describe('AdHocEventService', () => {
       mockSettingsService.get.mockResolvedValue('true');
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 700 }]);
+      // getEvent after create (for notification)
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 700,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-state',
+        },
+      ]);
+      // game name lookup for notifySpawn
+      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-state', baseMember, baseBinding);
 
