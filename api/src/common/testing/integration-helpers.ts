@@ -7,6 +7,8 @@
 import * as bcrypt from 'bcrypt';
 import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import * as supertest from 'supertest';
+import type TestAgent from 'supertest/lib/agent';
 import * as schema from '../../drizzle/schema';
 
 export interface SeededData {
@@ -87,16 +89,13 @@ export async function truncateAllTables(
  * Convenience helper for tests that need authenticated requests.
  */
 export async function loginAsAdmin(
-  request: {
-    post: (url: string) => {
-      send: (body: unknown) => Promise<{ body: { access_token: string } }>;
-    };
-  },
+  request: TestAgent<supertest.Test>,
   seed: SeededData,
 ): Promise<string> {
   const res = await request
     .post('/auth/local')
     .send({ email: seed.adminEmail, password: seed.adminPassword });
 
-  return res.body.access_token;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+  return res.body.access_token as string;
 }

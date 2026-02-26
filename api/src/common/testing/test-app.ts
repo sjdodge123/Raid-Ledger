@@ -21,8 +21,10 @@ import {
   type StartedPostgreSqlContainer,
 } from '@testcontainers/postgresql';
 import { drizzle } from 'drizzle-orm/postgres-js';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as supertest from 'supertest';
+import type TestAgent from 'supertest/lib/agent';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import * as path from 'path';
 import * as schema from '../../drizzle/schema';
@@ -60,8 +62,8 @@ function createRedisMock() {
 
 export interface TestApp {
   app: INestApplication;
-  request: ReturnType<typeof supertest.default>;
-  db: ReturnType<typeof drizzle>;
+  request: TestAgent<supertest.Test>;
+  db: PostgresJsDatabase<typeof schema>;
   seed: SeededData;
   /** Only set when running locally via Testcontainers; null in CI. */
   container: StartedPostgreSqlContainer | null;
@@ -130,8 +132,9 @@ export async function getTestApp(): Promise<TestApp> {
   // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const request = supertest.default(app.getHttpServer());
 
-  instance = { app, request, db, seed, container };
-  return instance;
+  const testApp: TestApp = { app, request, db, seed, container };
+  instance = testApp;
+  return testApp;
 }
 
 /**

@@ -15,7 +15,7 @@ describe('Auth flow (integration)', () => {
   });
 
   afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db as never);
+    testApp.seed = await truncateAllTables(testApp.db);
   });
 
   it('should login with valid credentials and return a JWT', async () => {

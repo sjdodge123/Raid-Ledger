@@ -211,7 +211,7 @@ Integration tests run against a real PostgreSQL database using [Testcontainers](
 ### Writing an integration test
 
 ```ts
-import { getTestApp, closeTestApp, type TestApp } from '../common/testing/test-app';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables, loginAsAdmin } from '../common/testing/integration-helpers';
 
 describe('My Feature (integration)', () => {
@@ -220,17 +220,13 @@ describe('My Feature (integration)', () => {
 
     beforeAll(async () => {
         testApp = await getTestApp();
-        adminToken = await loginAsAdmin(testApp.request as never, testApp.seed);
-    });
-
-    afterAll(async () => {
-        await closeTestApp();
+        adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     });
 
     afterEach(async () => {
         // Clean slate between tests — re-seeds baseline data
-        testApp.seed = await truncateAllTables(testApp.db as never);
-        adminToken = await loginAsAdmin(testApp.request as never, testApp.seed);
+        testApp.seed = await truncateAllTables(testApp.db);
+        adminToken = await loginAsAdmin(testApp.request, testApp.seed);
     });
 
     it('should persist and retrieve data', async () => {
@@ -251,6 +247,13 @@ describe('My Feature (integration)', () => {
 - **Baseline seed data:** An admin user with local credentials and a sample game. Access via `testApp.seed`.
 - **File naming:** `*.integration.spec.ts` — picked up by `jest.integration.config.js`, excluded from unit test runs.
 - **Timeout:** 120s per test (container startup takes ~10-20s on first run).
+- **Global teardown:** `closeTestApp()` runs automatically after all suites via `globalTeardown` in the Jest config. Do not call it in `afterAll`.
+
+### HTTP endpoints vs direct DB operations
+
+Prefer **HTTP endpoints** (`testApp.request.get/post/put/delete`) for tests that verify the full request-response cycle — auth, validation, serialization, and persistence through the real controller+service stack.
+
+Use **direct DB operations** (`testApp.db.insert/select/delete`) only when the controller is not directly testable (e.g., Discord bot endpoints that require a live bot connection) or when verifying DB-level behavior like FK cascades, unique constraints, and JOINs.
 
 ## Anti-Patterns to Avoid
 

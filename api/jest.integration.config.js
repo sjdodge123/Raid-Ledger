@@ -27,6 +27,8 @@ module.exports = {
   testTimeout: 120_000,
   // Run sequentially — tests share a single Testcontainers instance
   maxWorkers: 1,
-  // Force exit after tests complete — Testcontainers resource reaper handles container cleanup
+  // Graceful shutdown — closes NestJS app and Testcontainers PostgreSQL
+  globalTeardown: '<rootDir>/common/testing/global-teardown.ts',
+  // Safety net for open handles (postgres-js connection pool)
   forceExit: true,
 };

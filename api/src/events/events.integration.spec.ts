@@ -17,12 +17,12 @@ describe('Events CRUD (integration)', () => {
 
   beforeAll(async () => {
     testApp = await getTestApp();
-    adminToken = await loginAsAdmin(testApp.request as never, testApp.seed);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
   afterEach(async () => {
-    testApp.seed = await truncateAllTables(testApp.db as never);
-    adminToken = await loginAsAdmin(testApp.request as never, testApp.seed);
+    testApp.seed = await truncateAllTables(testApp.db);
+    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
   });
 
   it('should create an event and retrieve it with all fields persisted', async () => {
