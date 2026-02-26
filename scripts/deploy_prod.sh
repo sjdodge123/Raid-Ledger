@@ -109,6 +109,49 @@ reset_password() {
     print_success "Admin password has been reset (check output above for new password)"
 }
 
+create_safety_backup() {
+    # Create a pg_dump safety backup before destructive operations.
+    # Saves to the local filesystem (api/backups/) so it survives volume wipes.
+    if ! docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" ps db 2>/dev/null | grep -q "running"; then
+        print_warning "Database not running, skipping safety backup"
+        return 0
+    fi
+
+    load_env
+
+    # Quick check: does the DB have any user data worth backing up?
+    local user_count
+    user_count=$(docker exec raid-ledger-db psql "$DATABASE_URL" -tAc "SELECT count(*) FROM users" 2>/dev/null || echo "0")
+    if [ "$user_count" = "0" ] || [ -z "$user_count" ]; then
+        print_warning "Database is empty, skipping safety backup"
+        return 0
+    fi
+
+    local backup_dir="$PROJECT_DIR/api/backups/daily"
+    mkdir -p "$backup_dir"
+    local timestamp
+    timestamp=$(date +%Y-%m-%d_%H%M%S)
+    local filename="pre_fresh_${timestamp}.dump"
+    local filepath="$backup_dir/$filename"
+
+    print_warning "Creating safety backup before fresh start..."
+
+    if docker exec raid-ledger-db pg_dump \
+        --format=custom \
+        --no-owner \
+        --no-privileges \
+        "--file=/tmp/safety_backup.dump" \
+        "$DATABASE_URL" 2>/dev/null && \
+       docker cp "raid-ledger-db:/tmp/safety_backup.dump" "$filepath" 2>/dev/null && \
+       docker exec raid-ledger-db rm -f /tmp/safety_backup.dump 2>/dev/null; then
+        local size
+        size=$(du -h "$filepath" | cut -f1)
+        print_success "Safety backup created: $filename ($size)"
+    else
+        print_warning "Safety backup failed — proceeding without backup"
+    fi
+}
+
 start_containers() {
     local rebuild=$1
     local fresh=$2
@@ -120,31 +163,18 @@ start_containers() {
 
     # Fresh start: wipe volumes (new admin password will be auto-generated on bootstrap)
     if [ "$fresh" = "true" ]; then
+        # Create a safety backup before wiping
+        create_safety_backup
+
         print_warning "Fresh start: removing volumes and rebuilding..."
-
-        # Preserve backups across volume wipe (ROK-420)
-        local has_backups=false
-        if docker run --rm -v raid-ledger_avatar_data:/data alpine test -d /data/backups 2>/dev/null; then
-            print_warning "Preserving database backups..."
-            docker run --rm \
-                -v raid-ledger_avatar_data:/data \
-                -v /tmp:/host \
-                alpine cp -a /data/backups /host/raid-ledger-backups-preserve 2>/dev/null && has_backups=true
-        fi
-
         docker compose -f "$COMPOSE_FILE" --profile "$PROFILE" down -v 2>/dev/null || true
 
-        # Restore backups after volume recreation (ROK-420)
-        if [ "$has_backups" = "true" ] && [ -d /tmp/raid-ledger-backups-preserve ]; then
-            print_warning "Restoring database backups..."
-            # Create volume by starting a throwaway container, then copy backups in
-            docker volume create raid-ledger_avatar_data 2>/dev/null || true
-            docker run --rm \
-                -v raid-ledger_avatar_data:/data \
-                -v /tmp:/host \
-                alpine sh -c "mkdir -p /data && cp -a /host/raid-ledger-backups-preserve /data/backups"
-            rm -rf /tmp/raid-ledger-backups-preserve
-            print_success "Database backups restored"
+        # Local backups (api/backups/) live on the filesystem, not in Docker volumes,
+        # so they survive volume wipes automatically.
+        local backup_count
+        backup_count=$(find "$PROJECT_DIR/api/backups" -name "*.dump" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$backup_count" -gt 0 ]; then
+            print_success "Local backups preserved ($backup_count .dump files in api/backups/)"
         fi
 
         print_success "Database wiped. New admin password will be generated on bootstrap."
