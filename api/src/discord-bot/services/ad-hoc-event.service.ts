@@ -382,30 +382,40 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
    * Finalize an ad-hoc event — called when grace period expires.
    */
   async finalizeEvent(eventId: number): Promise<void> {
-    // Check the event still exists and is in grace_period
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
+    // Atomically claim the event for finalization — only proceeds if still in grace_period.
+    // Prevents race condition where a rejoin updates status to 'live' concurrently.
+    const now = new Date();
 
-    if (!event || event.adHocStatus !== 'grace_period') {
+    const [claimed] = await this.db
+      .update(schema.events)
+      .set({
+        adHocStatus: 'ended',
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(schema.events.id, eventId),
+          sql`${schema.events.adHocStatus} = 'grace_period'`,
+        ),
+      )
+      .returning();
+
+    if (!claimed) {
       this.logger.debug(
-        `Skipping finalization for event ${eventId} (status: ${event?.adHocStatus})`,
+        `Skipping finalization for event ${eventId} (not in grace_period or already claimed)`,
       );
       return;
     }
 
+    const event = claimed;
+
     // Finalize all participants
     await this.participantService.finalizeAll(eventId);
 
-    // Update event status
-    const now = new Date();
+    // Set the end time to now
     await this.db
       .update(schema.events)
       .set({
-        adHocStatus: 'ended',
-        // Set the end time to now
         duration: [event.duration[0], now] as [Date, Date],
         updatedAt: now,
       })
@@ -578,7 +588,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         gameId: binding.gameId,
         creatorId,
         duration: [now, endTime],
-        slotConfig: { type: 'generic' },
+        slotConfig: { type: 'generic', player: 25, bench: 10 },
         maxAttendees: null,
         isAdHoc: true,
         adHocStatus: 'live',
@@ -693,11 +703,10 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
       const usedPositions = new Set(existingSlots.map((s) => s.position));
 
-      // Get max player slots from the event's slotConfig (default: 10)
-      const event = await this.getEvent(eventId);
-      const slotConfig = event?.slotConfig as { player?: number; bench?: number } | null;
-      const maxPlayers = slotConfig?.player ?? 10;
-      const maxBench = slotConfig?.bench ?? 5;
+      // Ad-hoc events always use generic slotConfig with fixed defaults —
+      // no need to query the event since we control the creation values.
+      const maxPlayers = 25;
+      const maxBench = 10;
 
       let position = 1;
       while (usedPositions.has(position) && position <= maxPlayers) {

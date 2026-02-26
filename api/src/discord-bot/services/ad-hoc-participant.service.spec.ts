@@ -240,45 +240,26 @@ describe('AdHocParticipantService', () => {
   });
 
   describe('finalizeAll', () => {
-    it('marks all active participants as left with computed durations', async () => {
-      jest.useFakeTimers();
-
-      const joinedAt = new Date('2026-02-10T18:00:00Z');
-      const activeRows = [
-        {
-          id: 'uuid-1',
-          joinedAt,
-          totalDurationSeconds: 100,
-        },
-        {
-          id: 'uuid-2',
-          joinedAt,
-          totalDurationSeconds: null,
-        },
-      ];
-
-      // First call: select active rows
-      mockDb.where.mockResolvedValueOnce(activeRows);
-      // Two update calls for each participant
-      mockDb.where.mockResolvedValueOnce(undefined);
-      mockDb.where.mockResolvedValueOnce(undefined);
-
-      // Set system time 600 seconds after join
-      jest.setSystemTime(new Date(joinedAt.getTime() + 600_000));
+    it('marks all active participants as left in a single query', async () => {
+      // Single update().set().where().returning() chain
+      mockDb.returning.mockResolvedValueOnce([{ id: 'uuid-1' }, { id: 'uuid-2' }]);
 
       await service.finalizeAll(42);
 
-      expect(mockDb.update).toHaveBeenCalledTimes(2);
-
-      jest.useRealTimers();
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          leftAt: expect.any(Date),
+        }),
+      );
     });
 
-    it('does nothing when no active participants exist', async () => {
-      mockDb.where.mockResolvedValueOnce([]);
+    it('handles no active participants gracefully', async () => {
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await service.finalizeAll(42);
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
     });
   });
 

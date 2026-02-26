@@ -456,10 +456,9 @@ describe('AdHocEventService', () => {
 
   describe('finalizeEvent', () => {
     it('finalizes event when status is grace_period', async () => {
-      // finalizeEvent does: select().from().where().limit() then update().set().where()
-      // The first .where() must return `this` (for chaining to .limit()).
-      // The .limit() is the terminal for the select query.
-      mockDb.limit.mockResolvedValueOnce([
+      // finalizeEvent now does: update().set().where().returning() (atomic claim)
+      // then update().set().where() (set end time)
+      mockDb.returning.mockResolvedValueOnce([
         {
           id: 500,
           adHocStatus: 'grace_period',
@@ -471,7 +470,6 @@ describe('AdHocEventService', () => {
           ],
         },
       ]);
-      // The second .where() is the terminal for the update query — leave it as returnThis default
       // notifyCompleted: game name lookup
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
@@ -487,13 +485,8 @@ describe('AdHocEventService', () => {
     });
 
     it('skips finalization when event is not in grace_period', async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 501,
-          adHocStatus: 'live',
-          channelBindingId: 'binding-fin2',
-        },
-      ]);
+      // Atomic claim returns empty — event was not in grace_period
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await service.finalizeEvent(501);
 
@@ -501,7 +494,8 @@ describe('AdHocEventService', () => {
     });
 
     it('skips finalization when event not found', async () => {
-      mockDb.limit.mockResolvedValueOnce([]);
+      // Atomic claim returns empty — event not found
+      mockDb.returning.mockResolvedValueOnce([]);
 
       await service.finalizeEvent(999);
 
@@ -529,8 +523,8 @@ describe('AdHocEventService', () => {
 
       expect(service.getActiveState('binding-cleanup')).toBeDefined();
 
-      // Now finalize: select().from().where().limit() then update().set().where()
-      mockDb.limit.mockResolvedValueOnce([
+      // Now finalize: update().set().where().returning() (atomic claim)
+      mockDb.returning.mockResolvedValueOnce([
         {
           id: 600,
           adHocStatus: 'grace_period',

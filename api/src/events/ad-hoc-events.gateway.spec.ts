@@ -1,4 +1,5 @@
 import { AdHocEventsGateway } from './ad-hoc-events.gateway';
+import { JwtService } from '@nestjs/jwt';
 import type { Socket } from 'socket.io';
 
 describe('AdHocEventsGateway', () => {
@@ -8,44 +9,74 @@ describe('AdHocEventsGateway', () => {
   };
   let mockEmit: jest.Mock;
 
+  let mockJwtService: { verify: jest.Mock };
+
   beforeEach(() => {
     mockEmit = jest.fn();
     mockServer = {
       to: jest.fn().mockReturnValue({ emit: mockEmit }),
     };
+    mockJwtService = {
+      verify: jest.fn().mockReturnValue({ sub: 1, username: 'test' }),
+    };
 
-    gateway = new AdHocEventsGateway();
+    gateway = new AdHocEventsGateway(mockJwtService as unknown as JwtService);
     // Assign mock server (normally injected by NestJS)
     (gateway as unknown as { server: typeof mockServer }).server = mockServer;
   });
 
   describe('handleConnection', () => {
-    it('accepts connection with auth token', () => {
+    it('accepts connection with valid auth token', () => {
       const mockClient = {
         id: 'client-1',
-        handshake: { auth: { token: 'jwt-token' } },
+        handshake: { auth: { token: 'valid-jwt-token' } },
+        disconnect: jest.fn(),
       } as unknown as Socket;
 
-      // Should not throw
       gateway.handleConnection(mockClient);
+
+      expect(mockJwtService.verify).toHaveBeenCalledWith('valid-jwt-token');
+      expect(mockClient.disconnect).not.toHaveBeenCalled();
     });
 
-    it('accepts connection without auth token (read-only)', () => {
+    it('disconnects client without auth token', () => {
       const mockClient = {
         id: 'client-2',
         handshake: { auth: {} },
+        disconnect: jest.fn(),
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
+
+      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
     });
 
-    it('handles missing auth object gracefully', () => {
+    it('disconnects client with invalid auth token', () => {
+      mockJwtService.verify.mockImplementationOnce(() => {
+        throw new Error('invalid token');
+      });
+
       const mockClient = {
         id: 'client-3',
-        handshake: {},
+        handshake: { auth: { token: 'bad-token' } },
+        disconnect: jest.fn(),
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
+
+      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
+    });
+
+    it('disconnects client with missing auth object', () => {
+      const mockClient = {
+        id: 'client-4',
+        handshake: {},
+        disconnect: jest.fn(),
+      } as unknown as Socket;
+
+      gateway.handleConnection(mockClient);
+
+      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
     });
   });
 

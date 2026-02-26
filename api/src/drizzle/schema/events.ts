@@ -95,5 +95,7 @@ export const events = pgTable(
     // Performance indexes for common query patterns
     index('idx_events_creator_id').on(table.creatorId),
     index('idx_events_game_id').on(table.gameId),
+    // ROK-293: Supports ad-hoc event lookup by binding + status
+    index('idx_events_ad_hoc_binding').on(table.channelBindingId, table.isAdHoc),
   ],
 );

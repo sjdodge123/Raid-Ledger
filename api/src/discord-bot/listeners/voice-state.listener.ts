@@ -35,6 +35,9 @@ export class VoiceStateListener {
   /** Debounce timers per user to avoid rapid join/leave noise */
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
+  /** Periodic sweep timer to evict stale cache entries */
+  private cacheSweepTimer: ReturnType<typeof setInterval> | null = null;
+
   /** Cache: channelId -> bindingId + config (avoids repeated DB lookups) */
   private channelBindingCache = new Map<
     string,
@@ -81,6 +84,16 @@ export class VoiceStateListener {
 
     // Startup recovery: scan voice channels for current members
     await this.recoverFromVoiceChannels();
+
+    // Periodic cache sweep — evict entries older than 10 minutes
+    this.cacheSweepTimer = setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of this.channelBindingCache) {
+        if (now - entry.cachedAt > 10 * 60 * 1000) {
+          this.channelBindingCache.delete(key);
+        }
+      }
+    }, 10 * 60 * 1000);
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
@@ -98,6 +111,11 @@ export class VoiceStateListener {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+
+    if (this.cacheSweepTimer) {
+      clearInterval(this.cacheSweepTimer);
+      this.cacheSweepTimer = null;
+    }
 
     this.logger.log('Unregistered voiceStateUpdate listener');
   }
@@ -292,15 +310,26 @@ export class VoiceStateListener {
         const binding = await this.resolveBinding(channelId);
         if (!binding) continue;
 
-        // Track these members
+        // Track these members and trigger joins if no active event exists
         const memberSet = new Set<string>();
         for (const [memberId] of members) {
           memberSet.add(memberId);
         }
         this.channelMembers.set(channelId, memberSet);
 
+        // Trigger handleChannelJoin for each member so the ad-hoc service
+        // can reconcile or create events for channels occupied at startup
+        for (const [memberId, guildMember] of members) {
+          await this.handleChannelJoin(channelId, {
+            discordUserId: memberId,
+            discordUsername:
+              guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+            discordAvatarHash: guildMember.user?.avatar ?? null,
+          });
+        }
+
         this.logger.log(
-          `Recovery: found ${members.size} member(s) in bound channel ${channelId}`,
+          `Recovery: reconciled ${members.size} member(s) in bound channel ${channelId}`,
         );
       }
     } catch (err) {

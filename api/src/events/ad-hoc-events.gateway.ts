@@ -1,4 +1,5 @@
-import { Logger } from '@nestjs/common';
+import { Inject, Logger } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import {
   WebSocketGateway,
   WebSocketServer,
@@ -35,19 +36,31 @@ export class AdHocEventsGateway
 {
   private readonly logger = new Logger(AdHocEventsGateway.name);
 
+  constructor(@Inject(JwtService) private readonly jwtService: JwtService) {}
+
   @WebSocketServer()
   server!: Server;
 
   handleConnection(client: Socket): void {
-    // Basic auth check — in production, validate JWT here
     const token = (client.handshake.auth as Record<string, unknown> | undefined)
       ?.token;
-    if (!token) {
+
+    if (!token || typeof token !== 'string') {
       this.logger.debug(
-        `Client ${client.id} connected without auth token (read-only)`,
+        `Client ${client.id} rejected: no auth token provided`,
       );
-    } else {
-      this.logger.debug(`Client ${client.id} connected with auth token`);
+      client.disconnect(true);
+      return;
+    }
+
+    try {
+      this.jwtService.verify(token);
+      this.logger.debug(`Client ${client.id} connected with valid token`);
+    } catch {
+      this.logger.debug(
+        `Client ${client.id} rejected: invalid auth token`,
+      );
+      client.disconnect(true);
     }
   }
 

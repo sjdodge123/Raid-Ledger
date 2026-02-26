@@ -135,34 +135,23 @@ export class AdHocParticipantService {
   async finalizeAll(eventId: number): Promise<void> {
     const now = new Date();
 
-    // Get all participants who haven't left yet
-    const activeRows = await this.db
-      .select()
-      .from(schema.adHocParticipants)
+    // Single UPDATE with computed duration — avoids N+1 per-row updates
+    const result = await this.db
+      .update(schema.adHocParticipants)
+      .set({
+        leftAt: now,
+        totalDurationSeconds: sql`COALESCE(${schema.adHocParticipants.totalDurationSeconds}, 0) + EXTRACT(EPOCH FROM ${now.toISOString()}::timestamptz - ${schema.adHocParticipants.joinedAt})::int`,
+      })
       .where(
         and(
           eq(schema.adHocParticipants.eventId, eventId),
           isNull(schema.adHocParticipants.leftAt),
         ),
-      );
-
-    for (const row of activeRows) {
-      const sessionDuration = Math.round(
-        (now.getTime() - row.joinedAt.getTime()) / 1000,
-      );
-      const totalDuration = (row.totalDurationSeconds ?? 0) + sessionDuration;
-
-      await this.db
-        .update(schema.adHocParticipants)
-        .set({
-          leftAt: now,
-          totalDurationSeconds: totalDuration,
-        })
-        .where(eq(schema.adHocParticipants.id, row.id));
-    }
+      )
+      .returning({ id: schema.adHocParticipants.id });
 
     this.logger.log(
-      `Finalized ${activeRows.length} participants for ad-hoc event ${eventId}`,
+      `Finalized ${result.length} participants for ad-hoc event ${eventId}`,
     );
   }
 

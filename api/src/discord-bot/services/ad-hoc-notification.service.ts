@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -33,7 +33,7 @@ interface PendingUpdate {
  * the look of scheduled event embeds (game cover art, roster, timestamps).
  */
 @Injectable()
-export class AdHocNotificationService {
+export class AdHocNotificationService implements OnModuleDestroy {
   private readonly logger = new Logger(AdHocNotificationService.name);
 
   /** Tracks the notification message ID per event for edit-in-place */
@@ -60,6 +60,13 @@ export class AdHocNotificationService {
     private readonly settingsService: SettingsService,
   ) {
     this.startFlushTimer();
+  }
+
+  onModuleDestroy(): void {
+    if (this.flushTimer) {
+      clearInterval(this.flushTimer);
+      this.flushTimer = null;
+    }
   }
 
   /**
