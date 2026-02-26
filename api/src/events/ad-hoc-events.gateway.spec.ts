@@ -27,28 +27,30 @@ describe('AdHocEventsGateway', () => {
 
   describe('handleConnection', () => {
     it('accepts connection with valid auth token', () => {
+      const disconnectMock = jest.fn();
       const mockClient = {
         id: 'client-1',
         handshake: { auth: { token: 'valid-jwt-token' } },
-        disconnect: jest.fn(),
+        disconnect: disconnectMock,
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
 
       expect(mockJwtService.verify).toHaveBeenCalledWith('valid-jwt-token');
-      expect(mockClient.disconnect).not.toHaveBeenCalled();
+      expect(disconnectMock).not.toHaveBeenCalled();
     });
 
     it('disconnects client without auth token', () => {
+      const disconnectMock = jest.fn();
       const mockClient = {
         id: 'client-2',
         handshake: { auth: {} },
-        disconnect: jest.fn(),
+        disconnect: disconnectMock,
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
 
-      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
+      expect(disconnectMock).toHaveBeenCalledWith(true);
     });
 
     it('disconnects client with invalid auth token', () => {
@@ -56,27 +58,29 @@ describe('AdHocEventsGateway', () => {
         throw new Error('invalid token');
       });
 
+      const disconnectMock = jest.fn();
       const mockClient = {
         id: 'client-3',
         handshake: { auth: { token: 'bad-token' } },
-        disconnect: jest.fn(),
+        disconnect: disconnectMock,
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
 
-      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
+      expect(disconnectMock).toHaveBeenCalledWith(true);
     });
 
     it('disconnects client with missing auth object', () => {
+      const disconnectMock = jest.fn();
       const mockClient = {
         id: 'client-4',
         handshake: {},
-        disconnect: jest.fn(),
+        disconnect: disconnectMock,
       } as unknown as Socket;
 
       gateway.handleConnection(mockClient);
 
-      expect(mockClient.disconnect).toHaveBeenCalledWith(true);
+      expect(disconnectMock).toHaveBeenCalledWith(true);
     });
   });
 

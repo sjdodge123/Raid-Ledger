@@ -1,4 +1,10 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -51,7 +57,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
     private readonly gateway: AdHocEventsGateway,
-  ) { }
+  ) {}
 
   /**
    * On startup, recover any live ad-hoc events from the database.
@@ -119,7 +125,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
    * Extend end times for all active events that still have members.
    */
   private async extendAllActiveEvents(): Promise<void> {
-    for (const [bindingId, state] of this.activeEvents) {
+    for (const [, state] of this.activeEvents) {
       if (state.memberSet.size > 0) {
         await this.maybeExtendEndTime(state);
       }
@@ -160,7 +166,11 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       // Verify event still exists and is active in DB (may have been
       // cancelled or ended externally while in-memory state was stale)
       const existing = await this.getEvent(state.eventId);
-      if (!existing || existing.adHocStatus === 'ended' || existing.cancelledAt) {
+      if (
+        !existing ||
+        existing.adHocStatus === 'ended' ||
+        existing.cancelledAt
+      ) {
         this.activeEvents.delete(bindingId);
         this.logger.warn(
           `Removed stale active state for event ${state.eventId} (status: ${existing?.adHocStatus ?? 'deleted'})`,
@@ -351,8 +361,8 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       // All members gone — start grace period
       const binding = event.channelBindingId
         ? await this.channelBindingsService.getBindingById(
-          event.channelBindingId,
-        )
+            event.channelBindingId,
+          )
         : null;
 
       const rawGracePeriod =
@@ -496,7 +506,10 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
    * This allows a new ad-hoc event to spawn on the same binding.
    */
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
-  async onEventCancelled(payload: { eventId: number; isAdHoc?: boolean }): Promise<void> {
+  async onEventCancelled(payload: {
+    eventId: number;
+    isAdHoc?: boolean;
+  }): Promise<void> {
     if (!payload?.eventId) return;
 
     for (const [bindingId, state] of this.activeEvents) {
