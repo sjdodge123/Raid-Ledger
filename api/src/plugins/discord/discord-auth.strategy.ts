@@ -127,7 +127,7 @@ export class DiscordAuthStrategy
     accessToken: string,
     refreshToken: string,
     profile: Profile,
-  ): Promise<any> {
+  ): Promise<{ id: number; username: string; role: string }> {
     if (!this.isStrategyConfigured) {
       throw new Error('Discord OAuth is not configured');
     }
@@ -138,6 +138,9 @@ export class DiscordAuthStrategy
       username,
       avatar ?? undefined,
     );
+    if (!user) {
+      throw new Error('Failed to validate Discord user');
+    }
     return user;
   }
 }

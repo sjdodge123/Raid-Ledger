@@ -6,6 +6,6 @@ import { DiscordPanel } from '../../../pages/admin/discord-panel';
  * Only renders when the current pluginSlug context matches 'discord'.
  */
 export function DiscordIntegrationSlot({ pluginSlug }: { pluginSlug?: string }) {
-    if (pluginSlug && pluginSlug !== 'discord') return null;
+    if (pluginSlug !== 'discord') return null;
     return <DiscordPanel />;
 }
