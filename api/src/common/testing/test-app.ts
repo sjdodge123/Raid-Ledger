@@ -33,12 +33,31 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { truncateAllTables, type SeededData } from './integration-helpers';
 
-/** In-memory Redis mock that satisfies the minimal interface used by the app. */
+/** In-memory Redis mock that satisfies the interface used by the app. */
 function createRedisMock() {
   const store = new Map<string, string>();
   return {
     get: (key: string) => Promise.resolve(store.get(key) ?? null),
-    set: (key: string, value: string) => {
+    /**
+     * Supports overloads used across the codebase:
+     *   set(key, val)
+     *   set(key, val, 'EX', seconds)
+     *   set(key, val, 'PX', milliseconds)
+     *   set(key, val, 'EX', seconds, 'NX')
+     */
+    set: (key: string, value: string, ...args: (string | number)[]) => {
+      // Handle NX flag — only set if key does not exist
+      const hasNX = args.some(
+        (a) => typeof a === 'string' && a.toUpperCase() === 'NX',
+      );
+      if (hasNX && store.has(key)) {
+        return Promise.resolve(null);
+      }
+      store.set(key, value);
+      return Promise.resolve('OK');
+    },
+    /** set with expiration — setex(key, ttlSeconds, value) */
+    setex: (key: string, _seconds: number, value: string) => {
       store.set(key, value);
       return Promise.resolve('OK');
     },
@@ -49,10 +68,29 @@ function createRedisMock() {
       }
       return Promise.resolve(count);
     },
+    /** Increment a key's numeric value, initialising to 0 if absent. */
+    incr: (key: string) => {
+      const current = parseInt(store.get(key) ?? '0', 10);
+      const next = current + 1;
+      store.set(key, String(next));
+      return Promise.resolve(next);
+    },
     expire: () => Promise.resolve(1),
     ttl: () => Promise.resolve(-1),
     exists: (...keys: string[]) =>
       Promise.resolve(keys.filter((k) => store.has(k)).length),
+    /** Glob-style key search (supports trailing `*` wildcard). */
+    keys: (pattern: string) => {
+      if (pattern === '*') {
+        return Promise.resolve([...store.keys()]);
+      }
+      // Convert simple glob (e.g. "games:discover:*") to a RegExp
+      const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$');
+      const matched = [...store.keys()].filter((k) => re.test(k));
+      return Promise.resolve(matched);
+    },
+    ping: () => Promise.resolve('PONG'),
     quit: () => Promise.resolve('OK'),
     disconnect: () => undefined,
     status: 'ready',
