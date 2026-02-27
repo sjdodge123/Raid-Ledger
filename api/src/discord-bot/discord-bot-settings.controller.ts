@@ -16,6 +16,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { DiscordEmojiService } from './services/discord-emoji.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
@@ -55,6 +56,7 @@ export class DiscordBotSettingsController {
   constructor(
     private readonly discordBotService: DiscordBotService,
     private readonly discordBotClientService: DiscordBotClientService,
+    private readonly discordEmojiService: DiscordEmojiService,
     private readonly setupWizardService: SetupWizardService,
     private readonly settingsService: SettingsService,
     private readonly charactersService: CharactersService,
@@ -73,6 +75,40 @@ export class DiscordBotSettingsController {
     permissions: { name: string; granted: boolean }[];
   } {
     return this.discordBotService.checkPermissions();
+  }
+
+  /**
+   * Manually trigger emoji sync. Useful for re-trying after permission
+   * changes without restarting the container.
+   */
+  @Post('sync-emojis')
+  @HttpCode(HttpStatus.OK)
+  async syncEmojis(): Promise<{ success: boolean; message: string }> {
+    if (!this.discordBotClientService.isConnected()) {
+      throw new BadRequestException(
+        'Discord bot must be connected to sync emojis',
+      );
+    }
+
+    try {
+      await this.discordEmojiService.syncAllEmojis();
+      const usingCustom = this.discordEmojiService.isUsingCustomEmojis();
+      return {
+        success: true,
+        message: usingCustom
+          ? 'Emoji sync completed — custom emojis active.'
+          : 'Emoji sync completed — still using Unicode fallback. Check container logs for details.',
+      };
+    } catch (error) {
+      this.logger.error(
+        'Manual emoji sync failed:',
+        error instanceof Error ? error.message : error,
+      );
+      return {
+        success: false,
+        message: `Emoji sync failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
   }
 
   @Put()

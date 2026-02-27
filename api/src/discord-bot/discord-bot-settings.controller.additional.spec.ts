@@ -9,6 +9,7 @@ import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { DiscordEmojiService } from './services/discord-emoji.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
@@ -36,6 +37,13 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
           useValue: {
             getTextChannels: jest.fn().mockReturnValue([]),
             isConnected: jest.fn().mockReturnValue(isConnected),
+          },
+        },
+        {
+          provide: DiscordEmojiService,
+          useValue: {
+            syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+            isUsingCustomEmojis: jest.fn().mockReturnValue(false),
           },
         },
         {
@@ -198,6 +206,13 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             },
           },
           {
+            provide: DiscordEmojiService,
+            useValue: {
+              syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+              isUsingCustomEmojis: jest.fn().mockReturnValue(false),
+            },
+          },
+          {
             provide: SetupWizardService,
             useValue: {
               sendSetupWizardToAdmin: jest.fn(),
@@ -258,6 +273,13 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             useValue: {
               getTextChannels: jest.fn().mockReturnValue([]),
               isConnected: jest.fn().mockReturnValue(true),
+            },
+          },
+          {
+            provide: DiscordEmojiService,
+            useValue: {
+              syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+              isUsingCustomEmojis: jest.fn().mockReturnValue(false),
             },
           },
           {
@@ -412,6 +434,13 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             },
           },
           {
+            provide: DiscordEmojiService,
+            useValue: {
+              syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+              isUsingCustomEmojis: jest.fn().mockReturnValue(false),
+            },
+          },
+          {
             provide: SetupWizardService,
             useValue: {
               sendSetupWizardToAdmin: jest.fn(),
@@ -474,6 +503,13 @@ describe('DiscordBotSettingsController — resendSetupWizard (ROK-349)', () => {
             useValue: {
               getTextChannels: jest.fn().mockReturnValue([]),
               isConnected: jest.fn().mockReturnValue(true),
+            },
+          },
+          {
+            provide: DiscordEmojiService,
+            useValue: {
+              syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+              isUsingCustomEmojis: jest.fn().mockReturnValue(false),
             },
           },
           {
