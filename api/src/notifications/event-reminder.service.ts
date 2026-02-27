@@ -280,6 +280,11 @@ export class EventReminderService {
       input.minutesUntil,
     );
 
+    // ROK-538: Look up Discord embed URL for the event
+    const discordUrl = await this.notificationService.getDiscordEmbedUrl(
+      input.eventId,
+    );
+
     // Create in-app notification (this also dispatches to Discord DM via the standard pipeline)
     await this.notificationService.create({
       userId: input.userId,
@@ -290,6 +295,7 @@ export class EventReminderService {
         eventId: input.eventId,
         reminderWindow: input.windowType,
         characterDisplay: input.characterDisplay,
+        ...(discordUrl ? { discordUrl } : {}),
       },
     });
 

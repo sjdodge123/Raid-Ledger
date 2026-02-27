@@ -944,12 +944,15 @@ export class SignupsService {
     // Notify organizer if the user held a roster slot
     if (notifyData) {
       const slotLabel = notifyData.role ?? 'assigned';
+      // ROK-538: Look up Discord embed URL for the event
+      const discordUrl =
+        await this.notificationService.getDiscordEmbedUrl(eventId);
       await this.notificationService.create({
         userId: notifyData.creatorId,
         type: 'slot_vacated',
         title: 'Slot Vacated',
         message: `${notifyData.displayName} left the ${slotLabel} slot for ${notifyData.eventTitle}`,
-        payload: { eventId },
+        payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
       });
 
       // ROK-229: Schedule bench promotion for vacated non-bench slot
@@ -1236,12 +1239,15 @@ export class SignupsService {
 
     // Notify organizer about the vacated slot
     const slotLabel = assignment.role ?? 'assigned';
+    // ROK-538: Look up Discord embed URL for the event
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
     await this.notificationService.create({
       userId: event.creatorId,
       type: 'slot_vacated',
       title: 'Slot Vacated',
       message: `${user?.username ?? 'Unknown'} left the ${slotLabel} slot for ${event.title}`,
-      payload: { eventId },
+      payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
     });
 
     // ROK-229: Schedule bench promotion for vacated non-bench slot
@@ -1348,12 +1354,15 @@ export class SignupsService {
 
     // Notify the removed user (only if they have a registered account)
     if (signup.userId) {
+      // ROK-538: Look up Discord embed URL for the event
+      const discordUrl =
+        await this.notificationService.getDiscordEmbedUrl(eventId);
       await this.notificationService.create({
         userId: signup.userId,
         type: 'slot_vacated',
         title: 'Removed from Event',
         message: `You were removed from ${event.title}`,
-        payload: { eventId },
+        payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
       });
     }
 
@@ -1745,6 +1754,10 @@ export class SignupsService {
     signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
     oldRoleBySignupId: Map<number, string | null>,
   ): Promise<void> {
+    // ROK-538: Look up Discord embed URL once for all notifications in this method
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+
     for (const assignment of newAssignments) {
       // Skip anonymous participants (no RL user to notify)
       if (!assignment.userId) continue;
@@ -1774,7 +1787,7 @@ export class SignupsService {
           type: 'bench_promoted',
           title: 'Promoted from Bench',
           message: `You've been moved from bench to ${formatLabel(newRole)} for ${eventTitle}`,
-          payload: { eventId },
+          payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
         });
       } else {
         // Role change or moved to bench → roster_reassigned
@@ -1789,7 +1802,7 @@ export class SignupsService {
           message: isBenched
             ? `You've been moved from ${oldLabel} to bench for ${eventTitle}`
             : `Your role changed from ${oldLabel} to ${newLabel} for ${eventTitle}`,
-          payload: { eventId, oldRole, newRole },
+          payload: { eventId, oldRole, newRole, ...(discordUrl ? { discordUrl } : {}) },
         });
       }
     }
@@ -1806,6 +1819,10 @@ export class SignupsService {
     signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
     oldRoleBySignupId: Map<number, string | null>,
   ): Promise<void> {
+    // ROK-538: Look up Discord embed URL once for all notifications in this method
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+
     for (const assignment of newAssignments) {
       if (!assignment.userId) continue;
 
@@ -1830,7 +1847,7 @@ export class SignupsService {
         message: isGeneric
           ? `You've been assigned to the roster for ${eventTitle}`
           : `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
-        payload: { eventId, newRole },
+        payload: { eventId, newRole, ...(discordUrl ? { discordUrl } : {}) },
       });
     }
   }
@@ -2294,13 +2311,16 @@ export class SignupsService {
           .limit(1);
 
         if (signup?.userId) {
+          // ROK-538: Look up Discord embed URL for the event
+          const discordUrl =
+            await this.notificationService.getDiscordEmbedUrl(eventId);
           this.notificationService
             .create({
               userId: signup.userId,
               type: 'tentative_displaced',
               title: 'Roster update',
               message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
-              payload: { eventId },
+              payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
             })
             .catch((err: unknown) => {
               this.logger.warn(
