@@ -31,6 +31,9 @@ async function bootstrapAdmin() {
     const resetMode =
         process.argv.includes('--reset') ||
         process.env.RESET_PASSWORD === 'true';
+    // If ADMIN_PASSWORD is set in .env, use it instead of random.
+    // This avoids password churn when the DB is recreated during dev.
+    const fixedPassword = process.env.ADMIN_PASSWORD || '';
 
     if (!databaseUrl) {
         console.error('DATABASE_URL environment variable is required');
@@ -50,8 +53,9 @@ async function bootstrapAdmin() {
 
         if (existingCreds.length > 0) {
             if (resetMode) {
-                // --reset flag or RESET_PASSWORD=true: generate and set new random password
-                const password = crypto.randomBytes(16).toString('base64');
+                // --reset flag or RESET_PASSWORD=true: use ADMIN_PASSWORD from env or generate random
+                const password =
+                    fixedPassword || crypto.randomBytes(16).toString('base64');
                 const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
                 await db
@@ -92,8 +96,9 @@ async function bootstrapAdmin() {
             return;
         }
 
-        // No admin exists -- create one with a random password
-        const password = crypto.randomBytes(16).toString('base64');
+        // No admin exists -- use ADMIN_PASSWORD from env or generate random
+        const password =
+            fixedPassword || crypto.randomBytes(16).toString('base64');
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
         // Create user record first
