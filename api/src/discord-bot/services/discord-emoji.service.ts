@@ -3,7 +3,7 @@ import { OnEvent } from '@nestjs/event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { GuildPremiumTier } from 'discord.js';
+import { DiscordAPIError, GuildPremiumTier, PermissionsBitField } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
@@ -147,6 +147,18 @@ const UNICODE_FALLBACK: Record<string, string> = {
   dps: '\u2694\uFE0F',
 };
 
+/** Extract detailed diagnostic info from a Discord API error. */
+function formatDiscordError(error: unknown): string {
+  if (error instanceof DiscordAPIError) {
+    return (
+      `DiscordAPIError: ${error.message} ` +
+      `(code=${String(error.code)}, status=${String(error.status)}, ` +
+      `method=${error.method}, url=${error.url})`
+    );
+  }
+  return error instanceof Error ? error.message : 'Unknown error';
+}
+
 @Injectable()
 export class DiscordEmojiService {
   private readonly logger = new Logger(DiscordEmojiService.name);
@@ -264,8 +276,9 @@ export class DiscordEmojiService {
    * Sync all emojis: role icons + class icons.
    * Checks guild capacity before uploading. Role icons are prioritized;
    * class icons are best-effort (won't prevent role emojis on failure).
+   * Public so it can be triggered from admin API for diagnostics.
    */
-  private async syncAllEmojis(): Promise<void> {
+  async syncAllEmojis(): Promise<void> {
     const client = this.clientService.getClient();
     if (!client?.isReady()) return;
 
@@ -274,6 +287,19 @@ export class DiscordEmojiService {
       this.logger.warn('No guild available for emoji sync');
       return;
     }
+
+    // Diagnostic: log guild info and bot permissions at sync time (DEBUG only)
+    const me = guild.members.me;
+    const hasManageExpressions = me?.permissions.has(
+      PermissionsBitField.Flags.ManageGuildExpressions,
+    );
+    const permBits = me?.permissions.bitfield.toString();
+    this.logger.debug(
+      `Emoji sync starting — guild=${guild.name} (${guild.id}), ` +
+        `me=${me?.user.tag ?? 'null'}, ` +
+        `ManageGuildExpressions=${String(hasManageExpressions)}, ` +
+        `permBits=${permBits ?? 'null'}`,
+    );
 
     // Check guild emoji capacity
     const emojiLimit =
@@ -320,7 +346,7 @@ export class DiscordEmojiService {
         this.logger.warn(
           'Failed to sync emoji %s: %s',
           def.name,
-          error instanceof Error ? error.message : 'Unknown error',
+          formatDiscordError(error),
         );
         allRolesSynced = false;
       }
@@ -367,7 +393,7 @@ export class DiscordEmojiService {
         this.logger.warn(
           'Failed to sync class emoji %s: %s',
           def.name,
-          error instanceof Error ? error.message : 'Unknown error',
+          formatDiscordError(error),
         );
         allClassesSynced = false;
       }

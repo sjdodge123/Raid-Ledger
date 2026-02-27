@@ -4,6 +4,7 @@ import { BadRequestException } from '@nestjs/common';
 import { DiscordBotSettingsController } from './discord-bot-settings.controller';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
+import { DiscordEmojiService } from './services/discord-emoji.service';
 import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
@@ -32,6 +33,13 @@ describe('DiscordBotSettingsController', () => {
           useValue: {
             getTextChannels: jest.fn(),
             isConnected: jest.fn().mockReturnValue(true),
+          },
+        },
+        {
+          provide: DiscordEmojiService,
+          useValue: {
+            syncAllEmojis: jest.fn().mockResolvedValue(undefined),
+            isUsingCustomEmojis: jest.fn().mockReturnValue(false),
           },
         },
         {
