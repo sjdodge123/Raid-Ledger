@@ -27,6 +27,7 @@ describe('InviteCommand', () => {
 
     mockSettingsService = {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
+      getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
     };
 
     mockEventsService = {

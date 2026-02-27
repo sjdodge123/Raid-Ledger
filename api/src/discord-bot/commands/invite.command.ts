@@ -192,11 +192,15 @@ export class InviteCommand
     const query = interaction.options.getFocused();
 
     try {
-      const result = await this.eventsService.findAll({
-        page: 1,
-        upcoming: 'true',
-        limit: 25,
-      });
+      const [result, defaultTimezone] = await Promise.all([
+        this.eventsService.findAll({
+          page: 1,
+          upcoming: 'true',
+          limit: 25,
+        }),
+        this.settingsService.getDefaultTimezone(),
+      ]);
+      const timezone = defaultTimezone ?? 'UTC';
 
       const filtered = result.data
         .filter((event) =>
@@ -208,10 +212,12 @@ export class InviteCommand
           const formatted = date.toLocaleDateString('en-US', {
             month: 'short',
             day: 'numeric',
+            timeZone: timezone,
           });
           const time = date.toLocaleTimeString('en-US', {
             hour: 'numeric',
             minute: '2-digit',
+            timeZone: timezone,
           });
           const label = `${event.title} — ${formatted} at ${time}`;
           return {

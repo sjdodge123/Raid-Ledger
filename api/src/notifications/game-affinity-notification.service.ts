@@ -6,6 +6,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { REDIS_CLIENT } from '../redis/redis.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from './notification.service';
+import { SettingsService } from '../settings/settings.service';
 
 /** TTL for game-alert dedup keys: 30 days in seconds */
 const GAME_ALERT_TTL_SECONDS = 30 * 24 * 60 * 60;
@@ -41,6 +42,7 @@ export class GameAffinityNotificationService {
     @Inject(REDIS_CLIENT)
     private redis: Redis,
     private readonly notificationService: NotificationService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   /**
@@ -93,10 +95,13 @@ export class GameAffinityNotificationService {
     await this.redis.set(dedupKey, '1', 'EX', GAME_ALERT_TTL_SECONDS);
 
     // Format the event date for the notification message
+    const defaultTimezone =
+      (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
     const eventDate = new Date(input.startTime).toLocaleDateString('en-US', {
       weekday: 'short',
       month: 'short',
       day: 'numeric',
+      timeZone: defaultTimezone,
     });
 
     const message = `New event for ${input.gameName}: ${input.eventTitle} on ${eventDate}`;

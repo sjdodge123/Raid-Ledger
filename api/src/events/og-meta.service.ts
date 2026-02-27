@@ -54,7 +54,7 @@ export class OgMetaService {
     }
 
     const title = `You're invited to: ${event.title}`;
-    const description = this.buildDescription(event);
+    const description = await this.buildDescription(event);
     const imageUrl = event.game?.coverUrl ?? null;
 
     return this.renderHtml({
@@ -65,26 +65,30 @@ export class OgMetaService {
     });
   }
 
-  private buildDescription(event: {
+  private async buildDescription(event: {
     title: string;
     startTime?: string;
     endTime?: string;
     game?: { name: string; coverUrl?: string | null } | null;
-  }): string {
+  }): Promise<string> {
     const lines: string[] = [];
     lines.push(`You're invited to join ${event.title}!`);
     lines.push('');
 
     if (event.startTime) {
+      const timezone =
+        (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
       const date = new Date(event.startTime);
       const dayStr = date.toLocaleDateString('en-US', {
         weekday: 'long',
         month: 'long',
         day: 'numeric',
+        timeZone: timezone,
       });
       const timeStr = date.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
+        timeZone: timezone,
       });
       lines.push(`${dayStr} at ${timeStr}`);
     }
