@@ -29,8 +29,6 @@ export function LoginPage() {
     const isFirstRun = systemStatus?.isFirstRun ?? false;
     const authProviders: LoginMethodDto[] = systemStatus?.authProviders ?? [];
     const hasProviders = authProviders.length > 0;
-    // Backwards compat: also check discordConfigured for older API responses
-    const discordConfigured = systemStatus?.discordConfigured ?? false;
     const communityName = systemStatus?.communityName || 'Raid Ledger';
     const communityLogoUrl = systemStatus?.communityLogoUrl
         ? `${API_BASE_URL}${systemStatus.communityLogoUrl}`
@@ -38,10 +36,10 @@ export function LoginPage() {
 
     // Auto-expand local login on first run so admin can see the credentials form
     useEffect(() => {
-        if (isFirstRun && (hasProviders || discordConfigured)) {
+        if (isFirstRun && hasProviders) {
             setShowLocalLogin(true);
         }
-    }, [isFirstRun, hasProviders, discordConfigured]);
+    }, [isFirstRun, hasProviders]);
 
     const handleLocalLogin = async (e: React.FormEvent) => {
         e.preventDefault();

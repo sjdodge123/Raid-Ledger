@@ -242,8 +242,7 @@ export class DiscordAuthController {
 
     let userId: number;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-      userId = this.jwtService.verify(token).sub;
+      userId = this.jwtService.verify<{ sub: number }>(token).sub;
     } catch {
       res.redirect(
         `${clientUrl}/profile?linked=error&message=${encodeURIComponent('Invalid or expired token. Please try again.')}`,
