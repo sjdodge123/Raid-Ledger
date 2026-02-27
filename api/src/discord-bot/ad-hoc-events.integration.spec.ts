@@ -468,7 +468,7 @@ describe('Ad-Hoc Events (integration)', () => {
         totalDurationSeconds: 1800,
         sessionCount: 2,
       });
-      expect(leftParticipant.leftAt).not.toBeNull();
+      expect(leftParticipant!.leftAt).not.toBeNull();
     });
   });
 
