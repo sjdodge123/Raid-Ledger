@@ -109,7 +109,7 @@ export class BossDataRefreshService {
     this.logger.log('Starting boss data refresh from Blizzard Journal API...');
 
     try {
-      // Fetch all Classic + TBC instances from the journal
+      // Fetch all TBC instances from the journal
       const instances = await this.fetchAllInstanceIds();
       this.logger.log(`Found ${instances.length} instances to refresh`);
 
@@ -138,13 +138,15 @@ export class BossDataRefreshService {
   }
 
   /**
-   * Fetch the list of Classic + TBC instance IDs from the Blizzard journal.
+   * Fetch the list of TBC instance IDs from the Blizzard journal.
+   * Classic is excluded because the retail Journal API returns MoP-revamped
+   * data for Classic dungeons; Classic seed data is curated and correct.
    */
   private async fetchAllInstanceIds(): Promise<
     Array<{ id: number; expansion: string }>
   > {
     const result: Array<{ id: number; expansion: string }> = [];
-    const targetExpansions = new Set(['Classic', 'Burning Crusade']);
+    const targetExpansions = new Set(['Burning Crusade']);
 
     // Fetch expansion index
     const index = await this.blizzardService.fetchBlizzardApi<{
