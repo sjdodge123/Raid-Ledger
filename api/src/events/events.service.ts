@@ -886,6 +886,10 @@ export class EventsService {
     const eventTitle = existing[0].title;
     const reasonSuffix = dto.reason ? ` Reason: ${dto.reason}` : '';
 
+    // ROK-538: Look up Discord embed URL for the event
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+
     await Promise.all(
       usersToNotify.map((uid) =>
         this.notificationService.create({
@@ -896,6 +900,7 @@ export class EventsService {
           payload: {
             eventId,
             reason: dto.reason ?? null,
+            ...(discordUrl ? { discordUrl } : {}),
           },
         }),
       ),
@@ -1118,6 +1123,10 @@ export class EventsService {
         minute: '2-digit',
       });
 
+    // ROK-538: Look up Discord embed URL for the event
+    const discordUrl =
+      await this.notificationService.getDiscordEmbedUrl(eventId);
+
     await Promise.all(
       usersToNotify.map((uid) =>
         this.notificationService.create({
@@ -1131,6 +1140,7 @@ export class EventsService {
             oldEndTime: existing[0].duration[1].toISOString(),
             newStartTime: dto.startTime,
             newEndTime: dto.endTime,
+            ...(discordUrl ? { discordUrl } : {}),
           },
         }),
       ),

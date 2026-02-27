@@ -13,7 +13,10 @@ import { BenchPromotionService } from './bench-promotion.service';
 describe('SignupsService', () => {
   let service: SignupsService;
   let mockDb: Record<string, jest.Mock>;
-  let mockNotificationService: { create: jest.Mock };
+  let mockNotificationService: {
+    create: jest.Mock;
+    getDiscordEmbedUrl: jest.Mock;
+  };
   let mockBenchPromotionService: {
     schedulePromotion: jest.Mock;
     cancelPromotion: jest.Mock;
@@ -56,7 +59,10 @@ describe('SignupsService', () => {
   };
 
   beforeEach(async () => {
-    mockNotificationService = { create: jest.fn().mockResolvedValue(null) };
+    mockNotificationService = {
+      create: jest.fn().mockResolvedValue(null),
+      getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+    };
     mockBenchPromotionService = {
       schedulePromotion: jest.fn().mockResolvedValue(undefined),
       cancelPromotion: jest.fn().mockResolvedValue(undefined),

@@ -8,7 +8,10 @@ import { SettingsService } from '../settings/settings.service';
 describe('EventReminderService', () => {
   let service: EventReminderService;
   let mockDb: Record<string, jest.Mock>;
-  let mockNotificationService: { create: jest.Mock };
+  let mockNotificationService: {
+    create: jest.Mock;
+    getDiscordEmbedUrl: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockDb = {
@@ -26,6 +29,7 @@ describe('EventReminderService', () => {
         message: 'Test message',
         createdAt: new Date().toISOString(),
       }),
+      getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
