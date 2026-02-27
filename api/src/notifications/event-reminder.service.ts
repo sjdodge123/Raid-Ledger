@@ -169,6 +169,10 @@ export class EventReminderService {
 
     const userMap = new Map(users.map((u) => [u.id, u]));
 
+    // Batch fetch per-user timezone preferences for time formatting (ROK-544)
+    const userTimezones = await this.getUserTimezones();
+    const tzMap = new Map(userTimezones.map((ut) => [ut.userId, ut.timezone]));
+
     // Batch fetch characters for signed-up users
     const characters =
       allUserIds.length > 0
@@ -224,6 +228,7 @@ export class EventReminderService {
           startTime,
           minutesUntil,
           characterDisplay: charDisplay,
+          timezone: tzMap.get(userId),
         });
       }
     }
@@ -243,6 +248,7 @@ export class EventReminderService {
     startTime: Date;
     minutesUntil: number;
     characterDisplay: string | null;
+    timezone?: string;
   }): Promise<boolean> {
     const result = await this.db
       .insert(schema.eventRemindersSent)
@@ -265,12 +271,19 @@ export class EventReminderService {
       return false;
     }
 
+    // Resolve timezone: per-user preference → system default → UTC
+    const timezone =
+      input.timezone ??
+      (await this.settingsService.getDefaultTimezone()) ??
+      'UTC';
+
     // Build the time display string
     const timeStr = input.startTime.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
       timeZoneName: 'short',
+      timeZone: timezone,
     });
 
     const messageText = this.buildReminderMessage(

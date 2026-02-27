@@ -49,6 +49,9 @@ describe('EventReminderService', () => {
           provide: SettingsService,
           useValue: {
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
+            getDefaultTimezone: jest
+              .fn()
+              .mockResolvedValue('America/New_York'),
           },
         },
       ],
@@ -274,11 +277,21 @@ describe('EventReminderService', () => {
         }),
       };
 
+      // Fifth call: getUserTimezones (ROK-544)
+      const tzSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([
+            { userId: 1, value: 'America/New_York' },
+          ]),
+        }),
+      };
+
       mockDb.select
         .mockReturnValueOnce(eventsSelectChain)
         .mockReturnValueOnce(signupsSelectChain)
         .mockReturnValueOnce(usersSelectChain)
-        .mockReturnValueOnce(charsSelectChain);
+        .mockReturnValueOnce(charsSelectChain)
+        .mockReturnValueOnce(tzSelectChain);
 
       // Mock sendReminder tracking insert
       const trackingRow = {
@@ -369,11 +382,19 @@ describe('EventReminderService', () => {
         }),
       };
 
+      // Fifth call: getUserTimezones (ROK-544)
+      const tzSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
       mockDb.select
         .mockReturnValueOnce(eventsSelectChain)
         .mockReturnValueOnce(signupsSelectChain)
         .mockReturnValueOnce(usersSelectChain)
-        .mockReturnValueOnce(charsSelectChain);
+        .mockReturnValueOnce(charsSelectChain)
+        .mockReturnValueOnce(tzSelectChain);
 
       const trackingRow = {
         id: 1,
