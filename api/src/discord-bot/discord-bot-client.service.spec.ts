@@ -589,7 +589,7 @@ describe('DiscordBotClientService', () => {
     it('should return all false when no client exists', () => {
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(9);
+      expect(results).toHaveLength(10);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -599,7 +599,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(9);
+      expect(results).toHaveLength(10);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -612,7 +612,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(9);
+      expect(results).toHaveLength(10);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -626,7 +626,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(9);
+      expect(results).toHaveLength(10);
       results.forEach((r) => expect(r.granted).toBe(false));
     });
 
@@ -648,7 +648,7 @@ describe('DiscordBotClientService', () => {
 
       const results = service.checkPermissions();
 
-      expect(results).toHaveLength(9);
+      expect(results).toHaveLength(10);
       const manageRoles = results.find((r) => r.name === 'Manage Roles');
       expect(manageRoles?.granted).toBe(false);
       const sendMessages = results.find((r) => r.name === 'Send Messages');

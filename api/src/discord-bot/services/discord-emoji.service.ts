@@ -288,16 +288,28 @@ export class DiscordEmojiService {
       return;
     }
 
+    // Force-refresh the bot's guild member to pick up permission changes
+    // made after the bot connected (guild.members.me is cached from login).
+    try {
+      await guild.members.fetchMe({ force: true });
+    } catch {
+      this.logger.warn('Could not refresh bot member data, using cached permissions');
+    }
+
     // Diagnostic: log guild info and bot permissions at sync time (DEBUG only)
     const me = guild.members.me;
     const hasManageExpressions = me?.permissions.has(
       PermissionsBitField.Flags.ManageGuildExpressions,
+    );
+    const hasCreateExpressions = me?.permissions.has(
+      PermissionsBitField.Flags.CreateGuildExpressions,
     );
     const permBits = me?.permissions.bitfield.toString();
     this.logger.debug(
       `Emoji sync starting — guild=${guild.name} (${guild.id}), ` +
         `me=${me?.user.tag ?? 'null'}, ` +
         `ManageGuildExpressions=${String(hasManageExpressions)}, ` +
+        `CreateGuildExpressions=${String(hasCreateExpressions)}, ` +
         `permBits=${permBits ?? 'null'}`,
     );
 
