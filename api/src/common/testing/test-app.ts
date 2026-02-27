@@ -136,6 +136,8 @@ export async function getTestApp(): Promise<TestApp> {
   process.env.JWT_SECRET = 'integration-test-secret';
   process.env.CLIENT_URL = 'http://localhost:5173';
   process.env.CORS_ORIGIN = 'http://localhost:5173';
+  process.env.THROTTLE_DEFAULT_LIMIT = '999999';
+  process.env.THROTTLE_DISABLED = 'true'; // Disable tiered rate limits in tests
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
