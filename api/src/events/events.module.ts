@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
+import { JwtModule } from '@nestjs/jwt';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { PugsService } from './pugs.service';
@@ -33,6 +35,14 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     forwardRef(() => DiscordBotModule),
     BullModule.registerQueue({ name: BENCH_PROMOTION_QUEUE }),
     BullModule.registerQueue({ name: EVENT_PLANS_QUEUE }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '24h' },
+      }),
+      inject: [ConfigService],
+    }),
   ],
   controllers: [
     EventsController,
