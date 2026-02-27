@@ -32,9 +32,7 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations, {
-        demoMode: systemStatus?.demoMode ?? false,
-    });
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
 
     if (!isOpen) return null;
 

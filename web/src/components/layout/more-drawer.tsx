@@ -479,9 +479,7 @@ function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose:
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations, {
-        demoMode: systemStatus?.demoMode ?? false,
-    });
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
 
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="admin-submenu">
