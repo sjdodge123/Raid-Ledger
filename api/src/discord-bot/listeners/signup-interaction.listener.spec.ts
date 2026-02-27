@@ -1540,6 +1540,73 @@ describe('SignupInteractionListener', () => {
       expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
     });
 
+    it('should gracefully handle expired interaction (code 10062) at deferReply', async () => {
+      const userId = 'user-defer-10062';
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2010`,
+        userId,
+      );
+
+      // Simulate: interaction token already expired when deferReply is called
+      const discordError = new Error('Unknown interaction');
+      (discordError as unknown as { code: number }).code = 10062;
+      interaction.deferReply.mockRejectedValueOnce(discordError);
+
+      // Should not throw — handler returns gracefully
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).resolves.not.toThrow();
+
+      // Should not attempt any further interaction responses
+      expect(interaction.editReply).not.toHaveBeenCalled();
+      expect(interaction.reply).not.toHaveBeenCalled();
+    });
+
+    it('should re-throw non-Discord errors from deferReply', async () => {
+      const userId = 'user-defer-rethrow';
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2011`,
+        userId,
+      );
+
+      // Simulate: deferReply throws a non-Discord error (e.g., network failure)
+      interaction.deferReply.mockRejectedValueOnce(
+        new Error('Network failure'),
+      );
+
+      // Should propagate the non-Discord error
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).rejects.toThrow('Network failure');
+    });
+
+    it('should gracefully handle already-acknowledged interaction (code 40060) at deferReply', async () => {
+      const userId = 'user-defer-40060';
+
+      const interaction = makeButtonInteraction(
+        `${SIGNUP_BUTTON_IDS.SIGNUP}:2012`,
+        userId,
+      );
+
+      // Simulate: interaction already acknowledged when deferReply is called
+      const discordError = new Error(
+        'Interaction has already been acknowledged',
+      );
+      (discordError as unknown as { code: number }).code = 40060;
+      interaction.deferReply.mockRejectedValueOnce(discordError);
+
+      // Should not throw — handler returns gracefully
+      await expect(
+        listener.handleButtonInteraction(interaction),
+      ).resolves.not.toThrow();
+
+      // Should not attempt any further interaction responses
+      expect(interaction.editReply).not.toHaveBeenCalled();
+      expect(interaction.reply).not.toHaveBeenCalled();
+    });
+
     it('should gracefully handle already-acknowledged interaction (code 40060) in error path', async () => {
       const userId = 'user-race-40060';
       mockSignupsService.findByDiscordUser.mockRejectedValueOnce(
