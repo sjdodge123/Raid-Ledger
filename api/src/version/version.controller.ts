@@ -31,6 +31,7 @@ export class VersionController {
 
     return {
       version: this.versionCheck.getVersion(),
+      commitSha: process.env.COMMIT_SHA || null,
       relayHubEnabled: relayEnabled === 'true',
     };
   }

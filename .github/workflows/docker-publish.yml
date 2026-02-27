@@ -59,6 +59,8 @@ jobs:
           context: .
           file: ./Dockerfile.allinone
           platforms: ${{ matrix.platform }}
+          build-args: |
+            COMMIT_SHA=${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=allinone-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=allinone-${{ matrix.platform }}

@@ -87,6 +87,8 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
 
 # Set environment
+ARG COMMIT_SHA=""
+ENV COMMIT_SHA=${COMMIT_SHA}
 ENV NODE_ENV=production
 ENV NODE_OPTIONS="--max-old-space-size=1024"
 ENV PORT=3000

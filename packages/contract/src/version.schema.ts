@@ -6,6 +6,7 @@ import { z } from 'zod';
  */
 export const VersionInfoSchema = z.object({
     version: z.string(),
+    commitSha: z.string().nullable().optional(),
     relayHubEnabled: z.boolean(),
 });
 
