@@ -441,20 +441,20 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted">
-                    {character.level && <span>Lv.{character.level}</span>}
-                    {character.level && character.class && <span>·</span>}
-                    {character.class && <span>{character.class}</span>}
+                <div className="flex items-center gap-2 text-sm text-muted truncate">
+                    {character.level && <span className="shrink-0">Lv.{character.level}</span>}
+                    {character.level && character.class && <span className="shrink-0">·</span>}
+                    {character.class && <span className="truncate">{character.class}</span>}
                     {character.spec && (
                         <>
-                            <span>·</span>
-                            <span>{character.spec}</span>
+                            <span className="shrink-0">·</span>
+                            <span className="truncate">{character.spec}</span>
                         </>
                     )}
                     {character.itemLevel && (
                         <>
-                            <span>·</span>
-                            <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                            <span className="shrink-0">·</span>
+                            <span className="shrink-0 text-purple-400">{character.itemLevel} iLvl</span>
                         </>
                     )}
                 </div>
@@ -463,7 +463,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
             {/* Role badge */}
             {role && (
                 <span
-                    className={`px-2 py-1 text-xs font-medium rounded border ${ROLE_COLORS[role]}`}
+                    className={`shrink-0 px-2 py-1 text-xs font-medium rounded border whitespace-nowrap ${ROLE_COLORS[role]}`}
                 >
                     <RoleIcon role={role} size="w-3.5 h-3.5" /> {role.charAt(0).toUpperCase() + role.slice(1)}
                 </span>
@@ -471,7 +471,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
 
             {/* Selection indicator */}
             {isSelected && (
-                <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                <div className="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
                     <svg
                         className="w-3 h-3 text-foreground"
                         fill="none"
