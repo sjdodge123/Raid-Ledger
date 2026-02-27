@@ -33,7 +33,8 @@ export function InlineCharacterForm({
     const [realm, setRealm] = useState('');
     const [error, setError] = useState('');
     // Track plugin import mode — hide the manual form when plugin is in import mode
-    const [pluginImportActive, setPluginImportActive] = useState(true);
+    // Defaults to false so manual form shows for non-WoW games where the plugin returns null
+    const [pluginImportActive, setPluginImportActive] = useState(false);
     const handleModeChange = useCallback((mode: 'import' | 'manual') => {
         setPluginImportActive(mode === 'import');
     }, []);

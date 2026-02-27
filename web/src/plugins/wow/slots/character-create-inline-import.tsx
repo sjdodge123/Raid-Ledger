@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 
 interface CharacterCreateInlineImportProps {
@@ -33,6 +33,13 @@ export function CharacterCreateInlineImport({
     const [mode, setMode] = useState<'manual' | 'import'>('import');
     const isClassic = gameSlug === 'world-of-warcraft-classic';
     const [classicVariant, setClassicVariant] = useState('classic_anniversary');
+
+    // Notify parent of initial import mode on mount so it hides the manual form
+    useEffect(() => {
+        if (gameSlug && isWowSlug(gameSlug)) {
+            onModeChange?.('import');
+        }
+    }, [gameSlug, onModeChange]);
 
     if (!gameSlug || !isWowSlug(gameSlug)) return null;
 
