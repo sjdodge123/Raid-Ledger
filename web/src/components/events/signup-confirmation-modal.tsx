@@ -95,17 +95,19 @@ export function SignupConfirmationModal({
 
     // Auto-select main character when characters load after modal is already open
     useEffect(() => {
-        if (defaultCharacterId && !selectedCharacterId) {
-            setSelectedCharacterId(defaultCharacterId);
+        if (!defaultCharacterId) return;
+        // Only auto-select if nothing is selected yet (avoids overriding user choice)
+        setSelectedCharacterId((prev) => {
+            if (prev) return prev; // Already selected — don't override
             if (!preSelectedRole) {
                 const defaultChar = characters.find((c) => c.id === defaultCharacterId);
                 const defaultRole = (defaultChar?.effectiveRole as CharacterRole) ?? null;
                 setSelectedRole(defaultRole);
                 setSelectedRoles(defaultRole ? [defaultRole] : []);
             }
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [defaultCharacterId]);
+            return defaultCharacterId;
+        });
+    }, [defaultCharacterId, preSelectedRole, characters]);
 
     const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
 
@@ -114,11 +116,9 @@ export function SignupConfirmationModal({
         setSelectedCharacterId(characterId);
         if (!preSelectedRole) {
             const char = characters.find((c) => c.id === characterId);
-            if (char?.effectiveRole) {
-                const role = char.effectiveRole as CharacterRole;
-                setSelectedRole(role);
-                setSelectedRoles([role]);
-            }
+            const role = (char?.effectiveRole as CharacterRole) ?? null;
+            setSelectedRole(role);
+            setSelectedRoles(role ? [role] : []);
         }
     };
 
