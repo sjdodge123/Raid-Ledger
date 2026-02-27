@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { useSystemStatus } from '../../hooks/use-system-status';
+
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { useSeenAdminSections } from '../../hooks/use-seen-admin-sections';
 import { NewBadge } from '../ui/new-badge';
@@ -23,8 +23,6 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
     const { igdbStatus } = useAdminSettings();
-    const { data: systemStatus } = useSystemStatus();
-
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
             configured: igdbStatus.data?.configured ?? false,

@@ -11,7 +11,7 @@ import { SECTIONS as PROFILE_SECTIONS } from '../profile/profile-nav-data';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
-import { useSystemStatus } from '../../hooks/use-system-status';
+
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
@@ -470,8 +470,6 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
 function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const { plugins } = usePluginAdmin();
     const { igdbStatus } = useAdminSettings();
-    const { data: systemStatus } = useSystemStatus();
-
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
