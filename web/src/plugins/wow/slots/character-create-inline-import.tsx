@@ -14,6 +14,12 @@ function isWowSlug(slug: string): boolean {
     return WOW_SLUGS.has(slug);
 }
 
+const CLASSIC_VARIANTS = [
+    { value: 'classic_anniversary', label: 'Classic Anniversary (TBC)' },
+    { value: 'classic_era', label: 'Classic Era / SoD' },
+    { value: 'classic', label: 'Classic (Cata)' },
+] as const;
+
 /**
  * Inline import slot: renders mode toggle + WowArmoryImportForm
  * inside the InlineCharacterForm context (signup confirmation modal etc).
@@ -24,11 +30,12 @@ export function CharacterCreateInlineImport({
     gameSlug,
 }: CharacterCreateInlineImportProps) {
     const [mode, setMode] = useState<'manual' | 'import'>('import');
+    const isClassic = gameSlug === 'world-of-warcraft-classic';
+    const [classicVariant, setClassicVariant] = useState('classic_anniversary');
 
     if (!gameSlug || !isWowSlug(gameSlug)) return null;
 
-    const gameVariant = gameSlug === 'world-of-warcraft-classic'
-        ? 'classic_era' : 'retail';
+    const gameVariant = isClassic ? classicVariant : 'retail';
 
     return (
         <>
@@ -57,6 +64,19 @@ export function CharacterCreateInlineImport({
                     Manual
                 </button>
             </div>
+
+            {/* Classic variant selector — matches the full-page import form options */}
+            {mode === 'import' && isClassic && (
+                <select
+                    value={classicVariant}
+                    onChange={(e) => setClassicVariant(e.target.value)}
+                    className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                    {CLASSIC_VARIANTS.map((v) => (
+                        <option key={v.value} value={v.value}>{v.label}</option>
+                    ))}
+                </select>
+            )}
 
             {mode === 'import' && (
                 <WowArmoryImportForm
