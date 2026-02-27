@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Signups, Attendance & Roster Integration Tests (ROK-522)
  *
@@ -13,7 +14,7 @@ import {
 } from '../common/testing/integration-helpers';
 import * as bcrypt from 'bcrypt';
 import * as schema from '../drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 /** Helper to create a member user with local credentials and return their token. */
 async function createMemberAndLogin(
@@ -283,7 +284,7 @@ describe('Signups, Attendance & Roster (integration)', () => {
 
   describe('confirm signup', () => {
     it('should confirm signup with character selection', async () => {
-      const { userId, token } = await createMemberAndLogin(
+      const { token } = await createMemberAndLogin(
         testApp,
         'char_player',
         'char_player@test.local',
@@ -327,7 +328,7 @@ describe('Signups, Attendance & Roster (integration)', () => {
     });
 
     it('should transition to changed status on re-confirmation', async () => {
-      const { userId, token } = await createMemberAndLogin(
+      const { token } = await createMemberAndLogin(
         testApp,
         'reconfirm',
         'reconfirm@test.local',
@@ -590,9 +591,7 @@ describe('Signups, Attendance & Roster (integration)', () => {
         .limit(1);
 
       const eventStart = event.duration[0];
-      const roachedOutAt = new Date(
-        eventStart.getTime() - 48 * 60 * 60 * 1000,
-      ); // 48h before
+      const roachedOutAt = new Date(eventStart.getTime() - 48 * 60 * 60 * 1000); // 48h before
 
       await testApp.db.insert(schema.eventSignups).values({
         eventId,

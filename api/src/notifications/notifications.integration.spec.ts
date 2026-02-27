@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Event Reminders & Notification Lifecycle Integration Tests (ROK-524)
  *
@@ -47,16 +48,15 @@ async function createMemberAndLogin(
 
 describe('Event Reminders & Notifications (integration)', () => {
   let testApp: TestApp;
-  let adminToken: string;
 
   beforeAll(async () => {
     testApp = await getTestApp();
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    await loginAsAdmin(testApp.request, testApp.seed);
   });
 
   afterEach(async () => {
     testApp.seed = await truncateAllTables(testApp.db);
-    adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    await loginAsAdmin(testApp.request, testApp.seed);
   });
 
   // ===================================================================
@@ -281,9 +281,7 @@ describe('Event Reminders & Notifications (integration)', () => {
       expect(res.status).toBe(200);
       expect(res.body.length).toBeGreaterThanOrEqual(1);
 
-      const notification = res.body.find(
-        (n: any) => n.title === 'New Event!',
-      );
+      const notification = res.body.find((n: any) => n.title === 'New Event!');
       expect(notification).toBeDefined();
       expect(notification.type).toBe('new_event');
     });

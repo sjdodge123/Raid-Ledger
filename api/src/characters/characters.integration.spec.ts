@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call */
 /**
  * Characters & User Management Integration Tests (ROK-525)
  *
@@ -127,9 +128,7 @@ describe('Characters & User Management (integration)', () => {
         .get('/users/me/characters')
         .set('Authorization', `Bearer ${token}`);
 
-      const oldMain = listRes.body.data.find(
-        (c: any) => c.name === 'OldMain',
-      );
+      const oldMain = listRes.body.data.find((c: any) => c.name === 'OldMain');
       expect(oldMain.isMain).toBe(false);
     });
 
@@ -392,9 +391,7 @@ describe('Characters & User Management (integration)', () => {
         .send({
           title: 'Cascade Test Event',
           startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          endTime: new Date(
-            Date.now() + 27 * 60 * 60 * 1000,
-          ).toISOString(),
+          endTime: new Date(Date.now() + 27 * 60 * 60 * 1000).toISOString(),
         });
 
       await testApp.request
@@ -436,7 +433,7 @@ describe('Characters & User Management (integration)', () => {
     });
 
     it('should reassign events to admin when user is deleted', async () => {
-      const { userId, token } = await createMemberAndLogin(
+      const { userId } = await createMemberAndLogin(
         testApp,
         'eventcreator',
         'eventcreator@test.local',
@@ -449,9 +446,10 @@ describe('Characters & User Management (integration)', () => {
         .where(eq(schema.users.id, userId));
 
       // Re-login to get updated token
-      const reloginRes = await testApp.request
-        .post('/auth/local')
-        .send({ email: 'eventcreator@test.local', password: 'TestPassword123!' });
+      const reloginRes = await testApp.request.post('/auth/local').send({
+        email: 'eventcreator@test.local',
+        password: 'TestPassword123!',
+      });
       const updatedToken = reloginRes.body.access_token as string;
 
       const eventRes = await testApp.request
@@ -460,9 +458,7 @@ describe('Characters & User Management (integration)', () => {
         .send({
           title: 'Orphaned Event',
           startTime: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          endTime: new Date(
-            Date.now() + 27 * 60 * 60 * 1000,
-          ).toISOString(),
+          endTime: new Date(Date.now() + 27 * 60 * 60 * 1000).toISOString(),
         });
 
       const eventId = eventRes.body.id;
@@ -585,8 +581,7 @@ describe('Characters & User Management (integration)', () => {
 
   describe('auth guards', () => {
     it('should require authentication for character endpoints', async () => {
-      const res = await testApp.request
-        .get('/users/me/characters');
+      const res = await testApp.request.get('/users/me/characters');
 
       expect(res.status).toBe(401);
     });
