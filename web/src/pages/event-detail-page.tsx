@@ -112,7 +112,9 @@ export function EventDetailPage() {
     // ROK-374: Check if event is cancelled
     const isCancelled = !!event?.cancelledAt;
     // ROK-208: Admins use assignment popup, not click-to-join
-    const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster && !isCancelled;
+    // Allow signed-up users in the unassigned pool to click slots too
+    const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
+    const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !canManageRoster && !isCancelled;
     const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
@@ -259,6 +261,7 @@ export function EventDetailPage() {
 
     // ROK-226: Handle self-unassign from roster slot
     const handleSelfRemove = async () => {
+        if (selfUnassign.isPending) return; // Guard against double-clicks
         try {
             await selfUnassign.mutateAsync();
             toast.success('Left roster slot', {
