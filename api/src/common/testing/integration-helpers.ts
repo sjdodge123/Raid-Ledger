@@ -69,7 +69,7 @@ export async function truncateAllTables(
   db: PostgresJsDatabase<typeof schema>,
 ): Promise<SeededData> {
   // Discover all application tables (exclude Drizzle migration tracking)
-  const tables: { tablename: string }[] = await db.execute(sql`
+  const tables = await db.execute<{ tablename: string }>(sql`
     SELECT tablename FROM pg_tables
     WHERE schemaname = 'public'
       AND tablename NOT LIKE '__drizzle%'
