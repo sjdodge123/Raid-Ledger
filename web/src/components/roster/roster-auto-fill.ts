@@ -59,6 +59,9 @@ export function computeAutoFill(
         // MMO algorithm (5 passes) — ROK-452: now uses preferredRoles
         const mmoRoles: RosterRole[] = ['tank', 'healer', 'dps'];
 
+        // ROK-539: Priority ordering for flex players — tank/healer before DPS
+        const rolePriority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
+
         // Pass 0 (ROK-452): Preferred-role match — assign rigid players (1 preferred role) first,
         // then flexible players (2+ preferred roles) to maximize slot coverage
         const withPrefs = remaining.filter(p => p.preferredRoles && p.preferredRoles.length > 0);
@@ -67,7 +70,10 @@ export function computeAutoFill(
 
         for (const player of withPrefs) {
             if (!remaining.some(r => r.signupId === player.signupId)) continue;
-            for (const prefRole of (player.preferredRoles ?? [])) {
+            const sortedPrefs = [...(player.preferredRoles ?? [])].sort(
+                (a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99),
+            );
+            for (const prefRole of sortedPrefs) {
                 const pos = findNextEmptyPosition(prefRole as RosterRole);
                 if (pos !== null) {
                     assignPlayer(player, prefRole as RosterRole, pos, player.character?.role !== prefRole);

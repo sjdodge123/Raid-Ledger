@@ -1916,7 +1916,11 @@ export class SignupsService {
     if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0) {
       return;
     }
-    const newPrefs = newSignup.preferredRoles as string[];
+    // ROK-539: Sort preferred roles so tank/healer are tried before DPS
+    const rolePriority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
+    const newPrefs = [...(newSignup.preferredRoles as string[])].sort(
+      (a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99),
+    );
 
     // Build occupied positions per role for gap-finding
     const occupiedPositions: Record<string, Set<number>> = { tank: new Set(), healer: new Set(), dps: new Set() };
