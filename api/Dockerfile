@@ -69,6 +69,9 @@ COPY --from=builder /app/api/dist/scripts ./dist/scripts
 # Copy seed data files (games-seed.json for ROK-160)
 COPY --from=builder /app/api/seeds ./dist/seeds
 
+# Copy emoji assets (role-icons, class-icons for ROK-465)
+COPY --from=builder /app/api/assets ./assets
+
 # Create avatar upload directory and backup directories
 RUN mkdir -p /data/avatars /data/backups/daily /data/backups/migrations \
     && chown -R nestjs:nodejs /data
