@@ -461,6 +461,8 @@ export class SignupInteractionListener {
 
   /**
    * Handle the Tentative button click.
+   * Mirrors handleSignup() flow — prompts for character/role when applicable,
+   * but creates the signup with status 'tentative' instead of 'signed_up'.
    */
   private async handleTentative(
     interaction: ButtonInteraction,
@@ -491,8 +493,7 @@ export class SignupInteractionListener {
       return;
     }
 
-    // No existing signup — create one with tentative status
-    // Check for linked RL account first
+    // No existing signup — check for linked RL account to determine flow
     const [linkedUser] = await this.db
       .select()
       .from(schema.users)
@@ -500,20 +501,156 @@ export class SignupInteractionListener {
       .limit(1);
 
     if (linkedUser) {
+      // Linked RL user — check for character/role selection (mirrors handleSignup)
+      const [event] = await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (!event) {
+        await interaction.editReply({ content: 'Event not found.' });
+        return;
+      }
+
+      if (event.gameId) {
+        const [game] = await this.db
+          .select()
+          .from(schema.games)
+          .where(eq(schema.games.id, event.gameId))
+          .limit(1);
+
+        if (game) {
+          const characterList = await this.charactersService.findAllForUser(
+            linkedUser.id,
+            event.gameId,
+          );
+          const characters = characterList.data;
+
+          const slotConfig = event.slotConfig as Record<string, unknown> | null;
+
+          // MMO events: always show character select (even with 1 char)
+          if (slotConfig?.type === 'mmo' && characters.length >= 1) {
+            await this.showCharacterSelect(
+              interaction,
+              eventId,
+              event.title,
+              characters,
+              'tentative',
+            );
+            return;
+          }
+
+          if (characters.length > 1) {
+            // Multiple characters, non-MMO — show select dropdown
+            await this.showCharacterSelect(
+              interaction,
+              eventId,
+              event.title,
+              characters,
+              'tentative',
+            );
+            return;
+          }
+
+          if (characters.length === 1) {
+            const char = characters[0];
+
+            // Non-MMO: auto-select character and sign up immediately as tentative
+            const signupResult = await this.signupsService.signup(
+              eventId,
+              linkedUser.id,
+            );
+            await this.signupsService.confirmSignup(
+              eventId,
+              signupResult.id,
+              linkedUser.id,
+              { characterId: char.id },
+            );
+            await this.signupsService.updateStatus(
+              eventId,
+              { userId: linkedUser.id },
+              { status: 'tentative' },
+            );
+
+            await interaction.editReply({
+              content: `You're marked as **tentative** with **${char.name}**.`,
+            });
+            await this.updateEmbedSignupCount(eventId);
+            return;
+          }
+
+          // No characters — for MMO events, show role select
+          if (slotConfig?.type === 'mmo') {
+            await this.showRoleSelect(
+              interaction,
+              eventId,
+              undefined,
+              undefined,
+              'tentative',
+            );
+            return;
+          }
+
+          // Non-MMO, no characters — instant tentative signup
+          await this.signupsService.signup(eventId, linkedUser.id);
+          await this.signupsService.updateStatus(
+            eventId,
+            { userId: linkedUser.id },
+            { status: 'tentative' },
+          );
+
+          await interaction.editReply({
+            content: "You're marked as **tentative**.",
+          });
+          await this.updateEmbedSignupCount(eventId);
+          return;
+        }
+      }
+
+      // No game or game not found — plain tentative signup
       await this.signupsService.signup(eventId, linkedUser.id);
       await this.signupsService.updateStatus(
         eventId,
         { userId: linkedUser.id },
         { status: 'tentative' },
       );
-    } else {
-      await this.signupsService.signupDiscord(eventId, {
-        discordUserId,
-        discordUsername: interaction.user.username,
-        discordAvatarHash: interaction.user.avatar,
-        status: 'tentative',
+
+      await interaction.editReply({
+        content: "You're marked as **tentative**.",
       });
+      await this.updateEmbedSignupCount(eventId);
+      return;
     }
+
+    // Unlinked Discord user — check for role selection (MMO events)
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    if (event) {
+      const slotConfig = event.slotConfig as Record<string, unknown> | null;
+      if (slotConfig?.type === 'mmo') {
+        await this.showRoleSelect(
+          interaction,
+          eventId,
+          undefined,
+          undefined,
+          'tentative',
+        );
+        return;
+      }
+    }
+
+    // No role requirement — instant anonymous tentative signup
+    await this.signupsService.signupDiscord(eventId, {
+      discordUserId,
+      discordUsername: interaction.user.username,
+      discordAvatarHash: interaction.user.avatar,
+      status: 'tentative',
+    });
 
     await interaction.editReply({
       content: "You're marked as **tentative**.",
@@ -711,16 +848,24 @@ export class SignupInteractionListener {
    *
    * When `characterInfo` is provided (linked user), the character name is shown
    * in the message and the role dropdown pre-selects based on the character's role.
+   *
+   * When `signupStatus` is provided, it is appended to the customId so the
+   * role select handler creates the signup with that status (e.g. 'tentative'):
+   * `role_select:<eventId>[:<characterId>]:<status>`
    */
   private async showRoleSelect(
     interaction: ButtonInteraction | StringSelectMenuInteraction,
     eventId: number,
     characterId?: string,
     characterInfo?: { name: string; role: string | null },
+    signupStatus?: 'tentative',
   ): Promise<void> {
-    const customId = characterId
+    let customId = characterId
       ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
       : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
+    if (signupStatus) {
+      customId += `:${signupStatus}`;
+    }
 
     // ROK-452: Allow multi-role selection (1-3 roles)
     // ROK-465: Use custom WoW role emojis when available
@@ -773,12 +918,17 @@ export class SignupInteractionListener {
   /**
    * Show character selection dropdown for linked users (ROK-138).
    * Does NOT sign the user up yet — signup happens after character selection.
+   *
+   * When `signupStatus` is provided, it is appended to the customId so the
+   * character select handler can thread the status through to the signup:
+   * `char_select:<eventId>:<status>`
    */
   private async showCharacterSelect(
     interaction: ButtonInteraction,
     eventId: number,
     eventTitle: string,
     characters: import('@raid-ledger/contract').CharacterDto[],
+    signupStatus?: 'tentative',
   ): Promise<void> {
     const mainChar = characters.find((c) => c.isMain);
 
@@ -811,8 +961,12 @@ export class SignupInteractionListener {
       };
     });
 
+    const customId = signupStatus
+      ? `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}:${signupStatus}`
+      : `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}`;
+
     const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(`${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}`)
+      .setCustomId(customId)
       .setPlaceholder('Select a character')
       .addOptions(options);
 
@@ -829,23 +983,55 @@ export class SignupInteractionListener {
   /**
    * Handle select menu interactions (role selection for anonymous signup,
    * character selection for linked users).
+   *
+   * CustomId formats:
+   * - `role_select:<eventId>` — anonymous role select
+   * - `role_select:<eventId>:tentative` — anonymous tentative role select
+   * - `role_select:<eventId>:<characterId>` — linked user role select
+   * - `role_select:<eventId>:<characterId>:tentative` — linked user tentative role select
+   * - `char_select:<eventId>` — character select (signed_up)
+   * - `char_select:<eventId>:tentative` — character select (tentative)
    */
   private async handleSelectMenuInteraction(
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = interaction.customId.split(':');
-    if (parts.length < 2 || parts.length > 3) return;
+    if (parts.length < 2 || parts.length > 4) return;
 
     const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
     if (isNaN(eventId)) return;
 
     if (action === SIGNUP_BUTTON_IDS.ROLE_SELECT) {
-      // Optional 3rd segment is characterId (linked user role select after character)
-      const characterId = parts.length === 3 ? parts[2] : undefined;
-      await this.handleRoleSelectMenu(interaction, eventId, characterId);
+      // Parse optional characterId and signupStatus from remaining segments.
+      // 'tentative' is a reserved keyword — any other 3rd segment is a characterId.
+      let characterId: string | undefined;
+      let signupStatus: 'tentative' | undefined;
+
+      if (parts.length === 3) {
+        if (parts[2] === 'tentative') {
+          signupStatus = 'tentative';
+        } else {
+          characterId = parts[2];
+        }
+      } else if (parts.length === 4) {
+        characterId = parts[2];
+        signupStatus = parts[3] === 'tentative' ? 'tentative' : undefined;
+      }
+
+      await this.handleRoleSelectMenu(
+        interaction,
+        eventId,
+        characterId,
+        signupStatus,
+      );
     } else if (action === SIGNUP_BUTTON_IDS.CHARACTER_SELECT) {
-      await this.handleCharacterSelectMenu(interaction, eventId);
+      // Optional 3rd segment is signupStatus
+      const signupStatus =
+        parts.length === 3 && parts[2] === 'tentative'
+          ? 'tentative'
+          : undefined;
+      await this.handleCharacterSelectMenu(interaction, eventId, signupStatus);
     }
   }
 
@@ -854,11 +1040,15 @@ export class SignupInteractionListener {
    *
    * When `characterId` is provided (linked user), creates a linked signup with
    * both the selected role and character. Otherwise falls back to anonymous signup.
+   *
+   * When `signupStatus` is 'tentative', the signup is created and then
+   * immediately set to tentative status.
    */
   private async handleRoleSelectMenu(
     interaction: StringSelectMenuInteraction,
     eventId: number,
     characterId?: string,
+    signupStatus?: 'tentative',
   ): Promise<void> {
     await interaction.deferUpdate();
 
@@ -903,13 +1093,24 @@ export class SignupInteractionListener {
           { characterId },
         );
 
+        if (signupStatus === 'tentative') {
+          await this.signupsService.updateStatus(
+            eventId,
+            { userId: linkedUser.id },
+            { status: 'tentative' },
+          );
+        }
+
         const character = await this.charactersService.findOne(
           linkedUser.id,
           characterId,
         );
 
         await interaction.editReply({
-          content: `Signed up as **${character.name}** (${rolesLabel})!`,
+          content:
+            signupStatus === 'tentative'
+              ? `You're marked as **tentative** with **${character.name}** (${rolesLabel}).`
+              : `Signed up as **${character.name}** (${rolesLabel})!`,
           components: [],
         });
 
@@ -936,6 +1137,14 @@ export class SignupInteractionListener {
             : { preferredRoles: selectedRoles },
         );
 
+        if (signupStatus === 'tentative') {
+          await this.signupsService.updateStatus(
+            eventId,
+            { userId: linkedUserForRole.id },
+            { status: 'tentative' },
+          );
+        }
+
         const [event] = await this.db
           .select()
           .from(schema.events)
@@ -949,7 +1158,10 @@ export class SignupInteractionListener {
         }
 
         await interaction.editReply({
-          content: `You're signed up for **${event?.title ?? 'the event'}** (${rolesLabel})!${nudge}`,
+          content:
+            signupStatus === 'tentative'
+              ? `You're marked as **tentative** for **${event?.title ?? 'the event'}** (${rolesLabel}).`
+              : `You're signed up for **${event?.title ?? 'the event'}** (${rolesLabel})!${nudge}`,
           components: [],
         });
 
@@ -965,6 +1177,7 @@ export class SignupInteractionListener {
         discordAvatarHash: interaction.user.avatar,
         role: selectedRoles.length === 1 ? primaryRole : undefined,
         preferredRoles: selectedRoles,
+        status: signupStatus ?? undefined,
       });
 
       const clientUrl = process.env.CLIENT_URL ?? '';
@@ -973,7 +1186,10 @@ export class SignupInteractionListener {
         : '';
 
       await interaction.editReply({
-        content: `You're signed up as **${interaction.user.username}** (${rolesLabel})!${accountLink}`,
+        content:
+          signupStatus === 'tentative'
+            ? `You're marked as **tentative** (${rolesLabel}).`
+            : `You're signed up as **${interaction.user.username}** (${rolesLabel})!${accountLink}`,
         components: [],
       });
 
@@ -992,10 +1208,15 @@ export class SignupInteractionListener {
 
   /**
    * Handle character selection for linked users (ROK-138).
+   *
+   * When `signupStatus` is 'tentative', the signup is created and then
+   * immediately set to tentative status. The status is also threaded through
+   * to showRoleSelect for MMO events.
    */
   private async handleCharacterSelectMenu(
     interaction: StringSelectMenuInteraction,
     eventId: number,
+    signupStatus?: 'tentative',
   ): Promise<void> {
     await interaction.deferUpdate();
 
@@ -1032,10 +1253,16 @@ export class SignupInteractionListener {
             linkedUser.id,
             characterId,
           );
-          await this.showRoleSelect(interaction, eventId, characterId, {
-            name: character.name,
-            role: character.roleOverride ?? character.role ?? null,
-          });
+          await this.showRoleSelect(
+            interaction,
+            eventId,
+            characterId,
+            {
+              name: character.name,
+              role: character.roleOverride ?? character.role ?? null,
+            },
+            signupStatus,
+          );
           return;
         }
       }
@@ -1052,6 +1279,14 @@ export class SignupInteractionListener {
         { characterId },
       );
 
+      if (signupStatus === 'tentative') {
+        await this.signupsService.updateStatus(
+          eventId,
+          { userId: linkedUser.id },
+          { status: 'tentative' },
+        );
+      }
+
       // Get character name for confirmation message
       const character = await this.charactersService.findOne(
         linkedUser.id,
@@ -1059,7 +1294,10 @@ export class SignupInteractionListener {
       );
 
       await interaction.editReply({
-        content: `Signed up as **${character.name}**!`,
+        content:
+          signupStatus === 'tentative'
+            ? `You're marked as **tentative** with **${character.name}**.`
+            : `Signed up as **${character.name}**!`,
         components: [],
       });
 
