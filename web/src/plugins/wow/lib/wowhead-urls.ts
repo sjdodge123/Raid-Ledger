@@ -51,10 +51,6 @@ export function getWowheadQuestData(questId: number, variant?: string | null): s
 /**
  * Resolve a loot item expansion key to the correct Wowhead domain segments.
  * Used by boss loot panels where each item may come from a different expansion.
- *
- * Note: Classic dungeon items use the retail Wowhead database because the
- * Blizzard Journal API (static-us namespace) returns MoP-revamp item IDs
- * for Classic dungeons, which don't exist in any Classic-era Wowhead DB.
  */
 function getWowheadDomainForExpansion(expansion: string): { urlBase: string; tooltipDomain: string } {
     switch (expansion) {
@@ -65,8 +61,8 @@ function getWowheadDomainForExpansion(expansion: string): { urlBase: string; too
         case 'cata':
             return { urlBase: 'www.wowhead.com/cata', tooltipDomain: 'cata' };
         case 'sod':
-            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         case 'classic':
+            return { urlBase: 'www.wowhead.com/classic', tooltipDomain: 'classic&dataEnv=1' };
         default:
             return { urlBase: 'www.wowhead.com', tooltipDomain: 'www' };
     }
