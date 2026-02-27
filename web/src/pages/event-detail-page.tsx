@@ -16,6 +16,7 @@ import { Modal } from '../components/ui/modal';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { getEventStatus } from '../lib/event-utils';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
 import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from '../hooks/use-pugs';
@@ -111,6 +112,8 @@ export function EventDetailPage() {
     const canManageRoster = isEventCreator || canManageEvent;
     // ROK-374: Check if event is cancelled
     const isCancelled = !!event?.cancelledAt;
+    // ROK-502: Check if event has ended
+    const isEnded = event ? getEventStatus(event.startTime, event.endTime) === 'ended' : false;
     const { data: rosterAssignments } = useRoster(eventId);
     // ROK-208: Admins use assignment popup, not click-to-join
     // Allow signed-up users in the unassigned pool to click slots too
@@ -427,7 +430,7 @@ export function EventDetailPage() {
                 </button>
 
                 {/* Invite button for any signed-up user */}
-                {isSignedUp && !canManageRoster && !isCancelled && (
+                {isSignedUp && !canManageRoster && !isCancelled && !isEnded && (
                     <button
                         onClick={() => setShowInviteModal(true)}
                         className="btn btn-primary btn-sm"
@@ -436,7 +439,7 @@ export function EventDetailPage() {
                     </button>
                 )}
 
-                {canManageRoster && !isCancelled && (
+                {canManageRoster && !isCancelled && !isEnded && (
                     <div className="grid grid-cols-2 gap-2 sm:flex">
                         <button
                             onClick={() => setShowInviteModal(true)}

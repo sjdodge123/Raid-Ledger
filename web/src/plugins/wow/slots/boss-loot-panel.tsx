@@ -39,6 +39,7 @@ const LOOT_TO_EQUIP_SLOT: Record<string, string> = {
 function slugToVariant(gameSlug?: string): string {
     switch (gameSlug) {
         case 'wow-classic-anniversary':
+            return 'classic_anniversary';
         case 'world-of-warcraft-classic':
             return 'classic';
         case 'wow-classic':
