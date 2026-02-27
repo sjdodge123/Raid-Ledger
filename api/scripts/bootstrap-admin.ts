@@ -101,7 +101,7 @@ async function bootstrapAdmin() {
             fixedPassword || crypto.randomBytes(16).toString('base64');
         const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
 
-        // Create user record first
+        // ROK-531: Upsert user record to avoid duplicates after backup restore
         const [user] = await db
             .insert(schema.users)
             .values({
@@ -109,14 +109,29 @@ async function bootstrapAdmin() {
                 username: 'Admin',
                 role: 'admin',
             })
+            .onConflictDoNothing({ target: schema.users.discordId })
             .returning();
 
-        // Create local credential linked to user
+        // If user already existed (from backup), look it up
+        const adminUser = user ?? (await db
+            .select()
+            .from(schema.users)
+            .where(eq(schema.users.discordId, `local:${DEFAULT_EMAIL}`))
+            .limit(1)
+            .then(rows => rows[0]));
+
+        if (!adminUser) {
+            console.error('Failed to create or find admin user');
+            await sql.end();
+            process.exit(1);
+        }
+
+        // ROK-531: Upsert local credential to avoid duplicates after backup restore
         await db.insert(schema.localCredentials).values({
             email: DEFAULT_EMAIL,
             passwordHash,
-            userId: user.id,
-        });
+            userId: adminUser.id,
+        }).onConflictDoNothing({ target: schema.localCredentials.email });
 
         console.log('');
         console.log(
