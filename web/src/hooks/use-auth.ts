@@ -5,6 +5,7 @@ import type { UserRole } from '@raid-ledger/contract';
 
 const TOKEN_KEY = 'raid_ledger_token';
 const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
+const USER_CACHE_KEY = 'raid_ledger_user_cache';
 
 export interface User {
     id: number;
@@ -44,38 +45,52 @@ export function isImpersonating(): boolean {
 }
 
 /**
- * Fetch current authenticated user from /auth/me
+ * Read cached user from localStorage (for instant perceived load on return visits).
  */
-async function fetchCurrentUser(): Promise<User | null> {
+export function getCachedUser(): User | null {
+    try {
+        const cached = localStorage.getItem(USER_CACHE_KEY);
+        return cached ? JSON.parse(cached) : null;
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Fetch current authenticated user from /auth/me.
+ *
+ * Returns null for explicit "not authenticated" (no token, 401).
+ * Throws on network/server errors so React Query preserves any
+ * seeded cache data instead of overwriting it with null.
+ */
+export async function fetchCurrentUser(): Promise<User | null> {
     const token = getAuthToken();
 
     if (!token) {
         return null;
     }
 
-    try {
-        const response = await fetch(`${API_BASE_URL}/auth/me`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-        });
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+        headers: {
+            'Authorization': `Bearer ${token}`,
+        },
+    });
 
-        if (!response.ok) {
-            // 401 means token is invalid/expired - clear it
-            if (response.status === 401) {
-                localStorage.removeItem(TOKEN_KEY);
-                localStorage.removeItem(ORIGINAL_TOKEN_KEY);
-                // Note: Don't show toast here - this runs on every page load
-                // Session expiry feedback is handled by ProtectedRoute redirecting to login
-                return null;
-            }
-            throw new Error(`HTTP ${response.status}`);
+    if (!response.ok) {
+        // 401 means token is invalid/expired - clear it
+        if (response.status === 401) {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+            localStorage.removeItem(USER_CACHE_KEY);
+            return null;
         }
-
-        return response.json();
-    } catch {
-        return null;
+        throw new Error(`HTTP ${response.status}`);
     }
+
+    const user: User = await response.json();
+    // Cache for instant load on next visit
+    localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    return user;
 }
 
 /**
@@ -110,6 +125,7 @@ export function useAuth() {
     const logout = () => {
         localStorage.removeItem(TOKEN_KEY);
         localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+        localStorage.removeItem(USER_CACHE_KEY);
         queryClient.setQueryData(['auth', 'me'], null);
     };
 

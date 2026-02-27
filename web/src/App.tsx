@@ -11,12 +11,22 @@ import {
 import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
 import { useConnectivityStore } from './stores/connectivity-store';
+import { queryClient } from './lib/query-client';
+import { getAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { Layout } from './components/layout';
 import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
+
+// Seed auth cache from localStorage for instant return visits.
+// Runs at module load (before React renders) so AuthGuard never
+// shows "Checking authentication..." for returning users.
+const _cachedUser = getCachedUser();
+if (_cachedUser && getAuthToken()) {
+  queryClient.setQueryData(['auth', 'me'], _cachedUser);
+}
 
 export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
 
@@ -132,6 +142,19 @@ function App() {
     const cleanup = startPolling();
     return cleanup;
   }, [startPolling]);
+
+  // Revalidate auth in parallel with health check.
+  // If seeded from localStorage, this confirms the token is still valid.
+  // If not seeded, this prefetches so AuthGuard sees data sooner.
+  useEffect(() => {
+    if (getAuthToken()) {
+      void queryClient.prefetchQuery({
+        queryKey: ['auth', 'me'],
+        queryFn: fetchCurrentUser,
+        staleTime: 0, // Always revalidate on app load
+      });
+    }
+  }, []);
 
   return (
     <StartupGate>

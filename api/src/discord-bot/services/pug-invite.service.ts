@@ -427,22 +427,26 @@ export class PugInviteService {
     _role: string,
     event: typeof schema.events.$inferSelect,
   ): Promise<void> {
-    const [branding, clientUrl] = await Promise.all([
+    const [branding, clientUrl, defaultTimezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
     ]);
     const communityName = branding.communityName || 'Raid Ledger';
+    const timezone = defaultTimezone ?? 'UTC';
 
     const startDate = event.duration[0];
     const dateStr = startDate.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
+      timeZone: timezone,
     });
     const timeStr = startDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       timeZoneName: 'short',
+      timeZone: timezone,
     });
 
     const embed = new EmbedBuilder()
@@ -537,22 +541,26 @@ export class PugInviteService {
       return;
     }
 
-    const [branding, clientUrl] = await Promise.all([
+    const [branding, clientUrl, defaultTimezone] = await Promise.all([
       this.settingsService.getBranding(),
       this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
     ]);
     const communityName = branding.communityName || 'Raid Ledger';
+    const timezone = defaultTimezone ?? 'UTC';
 
     const startDate = event.duration[0];
     const dateStr = startDate.toLocaleDateString('en-US', {
       weekday: 'long',
       month: 'short',
       day: 'numeric',
+      timeZone: timezone,
     });
     const timeStr = startDate.toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       timeZoneName: 'short',
+      timeZone: timezone,
     });
 
     const embed = new EmbedBuilder()

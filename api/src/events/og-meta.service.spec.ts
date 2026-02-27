@@ -39,7 +39,7 @@ function makeValidInvite(
 describe('OgMetaService', () => {
   let service: OgMetaService;
   let inviteService: { resolveInvite: jest.Mock };
-  let settingsService: { getClientUrl: jest.Mock };
+  let settingsService: { getClientUrl: jest.Mock; getDefaultTimezone: jest.Mock };
 
   beforeEach(async () => {
     inviteService = {
@@ -47,6 +47,7 @@ describe('OgMetaService', () => {
     };
     settingsService = {
       getClientUrl: jest.fn().mockResolvedValue('https://raid.example.com'),
+      getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
