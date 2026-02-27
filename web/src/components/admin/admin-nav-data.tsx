@@ -80,10 +80,7 @@ export function buildNavSections(
         { to: '/admin/settings/general/backups', label: 'Backups' },
     ];
 
-    // Demo Data conditionally shown when DEMO_MODE is active
-    if (options?.demoMode) {
-        generalChildren.splice(2, 0, { to: '/admin/settings/general/data', label: 'Demo Data' });
-    }
+    generalChildren.splice(2, 0, { to: '/admin/settings/general/data', label: 'Demo Data' });
 
     return [
         {
