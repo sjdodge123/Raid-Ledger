@@ -111,11 +111,11 @@ export function EventDetailPage() {
     const canManageRoster = isEventCreator || canManageEvent;
     // ROK-374: Check if event is cancelled
     const isCancelled = !!event?.cancelledAt;
+    const { data: rosterAssignments } = useRoster(eventId);
     // ROK-208: Admins use assignment popup, not click-to-join
     // Allow signed-up users in the unassigned pool to click slots too
     const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
     const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !canManageRoster && !isCancelled;
-    const { data: rosterAssignments } = useRoster(eventId);
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
