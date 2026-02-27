@@ -72,11 +72,12 @@ git worktree add ../Raid-Ledger--rok-<num> -b <branch-name>
 cd ../Raid-Ledger--rok-<num>
 npm install --legacy-peer-deps
 
-# 3. Build contract (required before API/web can build)
+# 3. Build contract + copy .env files (script auto-detects worktree)
 npm run build -w packages/contract
 
-# 4. Copy .env (worktrees don't get .gitignored files)
+# 4. Copy .env files (worktrees don't get .gitignored files)
 cp /Users/sdodge/Documents/Projects/Raid-Ledger/.env .env
+cp /Users/sdodge/Documents/Projects/Raid-Ledger/api/.env api/.env
 
 # 5. Viability check — verify builds succeed
 npm run build -w api
@@ -118,7 +119,7 @@ Message lead with push result (include whether rebase brought in new commits).
 ### 3. "Deploy feature branch ROK-XXX for testing"
 Deploy the feature branch locally so Playwright or the operator can test.
 
-**IMPORTANT: Do NOT use `deploy_dev.sh --branch`** when the branch is checked out in a worktree — git won't allow the same branch in two places. Instead, deploy directly from the worktree:
+**Use `deploy_dev.sh` from the worktree.** The script is worktree-aware: it auto-detects the main repo, uses correct Docker volumes, copies .env files, and runs a health check with retries.
 
 ```bash
 # 1. Kill any running API/web processes first
@@ -127,45 +128,33 @@ pkill -f 'node.*enable-source-maps.*api/dist/src/main' 2>/dev/null
 pkill -f 'node.*vite' 2>/dev/null
 sleep 2
 
-# 2. Ensure Docker DB + Redis are running
-docker compose -f /Users/sdodge/Documents/Projects/Raid-Ledger/docker-compose.yml up -d db redis
-
-# 3. Copy .env to worktree (worktrees don't get .gitignored files)
-cp /Users/sdodge/Documents/Projects/Raid-Ledger/.env ../Raid-Ledger--rok-<num>/.env
-
-# 4. Build contract (required before API/web can start)
+# 2. Deploy from the worktree — ONE command handles everything:
+#    - Auto-copies .env and api/.env from main repo
+#    - Uses correct Docker volumes (never creates worktree-prefixed volumes)
+#    - Builds contract, runs migrations, seeds data
+#    - Starts API + web in watch mode
+#    - Waits for API health check with retries (60s timeout)
 cd ../Raid-Ledger--rok-<num>
-npm run build -w packages/contract
-
-# 5. Source env vars and start servers
-# NOTE: NestJS ConfigModule may not find .env via file path in worktrees,
-# so we source the vars into the shell environment explicitly.
-set -a && source .env && set +a
-npm run start:dev -w api > /tmp/rok-<num>-api.log 2>&1 &
-npm run dev -w web > /tmp/rok-<num>-web.log 2>&1 &
-
-# 6. Wait for startup and verify health
-sleep 15
-curl -sf http://localhost:3000/health && echo "HEALTHY" || echo "UNHEALTHY"
+./scripts/deploy_dev.sh --ci --rebuild
 ```
 
 The operator's app settings (Discord OAuth, Blizzard keys, etc.) are in the shared PostgreSQL database, not the filesystem — all worktrees share the same DB.
 
 **Migration conflicts:** If the API crashes with migration errors (e.g., "table already exists", "hash mismatch in migration journal"), do NOT use `deploy_dev.sh --fresh`. That wipes the DB and requires operator approval. Instead:
 
-1. **First try:** Use the main project's DB (all worktrees share it via Docker on port 5432). The migration may already be applied from main. Check if the new columns/tables exist: `docker exec raid-ledger-db psql -U postgres -d raidledger -c "\d <table_name>"`
+1. **First try:** The migration may already be applied from main. Check if the new columns/tables exist: `docker exec raid-ledger-db psql -U postgres -d raidledger -c "\d <table_name>"`
 2. **If columns are missing:** Apply them manually with `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. This is additive and safe.
 3. **If the migration journal has a hash mismatch:** The worktree branch has a different hash for the same migration file. Check `_drizzle_migrations` table. If the migration content is functionally identical (same columns, just different hash), skip it.
-4. **Only escalate to the lead** if none of the above work. The lead will consult the Scrum Master and operator before any destructive action.
+4. **Only escalate to the lead** if none of the above work.
 
-Message lead with deploy + health result. If health check fails, check `/tmp/rok-<num>-api.log` for errors.
+Message lead with deploy + health result. If health check fails, check the log output for errors.
 
 ### 4. "Full pipeline: validate, push, deploy ROK-XXX"
 Runs the full pipeline in this order. Stop and report if any step fails:
 1. **Sync with main** — `git fetch origin main && git rebase origin/main` (from Task 2)
 2. **Validate** — **quick CI** (from Task 1)
 3. **Push** — `git push -u origin <branch-name>`
-4. **Deploy from worktree** — follow the worktree deploy procedure in Task 3 (NOT `deploy_dev.sh --branch`)
+4. **Deploy from worktree** — `./scripts/deploy_dev.sh --ci --rebuild` (from Task 3)
 
 Note: The sync + validate in steps 1-2 replaces the standalone validate (Task 1). Do NOT validate twice.
 

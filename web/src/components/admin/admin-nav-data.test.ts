@@ -166,37 +166,17 @@ describe('buildNavSections', () => {
         expect(sections[1].id).toBe('integrations');
     });
 
-    it('General section has 4 items when demoMode is false', () => {
-        const sections = buildNavSections([], [], { demoMode: false });
-        const general = sections.find((s) => s.id === 'general')!;
-        expect(general.children).toHaveLength(4);
-    });
-
-    it('General section has 5 items when demoMode is true (Demo Data included)', () => {
-        const sections = buildNavSections([], [], { demoMode: true });
+    it('General section has 5 items (including Demo Data)', () => {
+        const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children).toHaveLength(5);
     });
 
-    it('Demo Data item is at index 2 when demoMode is true (after Site Settings and User Management)', () => {
-        const sections = buildNavSections([], [], { demoMode: true });
+    it('Demo Data item is at index 2 (after Site Settings and User Management)', () => {
+        const sections = buildNavSections([], []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children[2].label).toBe('Demo Data');
         expect(general.children[2].to).toBe('/admin/settings/general/data');
-    });
-
-    it('Demo Data item is absent when demoMode is false', () => {
-        const sections = buildNavSections([], [], { demoMode: false });
-        const general = sections.find((s) => s.id === 'general')!;
-        const demoData = general.children.find((c) => c.label === 'Demo Data');
-        expect(demoData).toBeUndefined();
-    });
-
-    it('Demo Data item is absent when options not provided', () => {
-        const sections = buildNavSections([], []);
-        const general = sections.find((s) => s.id === 'general')!;
-        const demoData = general.children.find((c) => c.label === 'Demo Data');
-        expect(demoData).toBeUndefined();
     });
 
     it('General section includes Site Settings, User Management, Scheduled Jobs, Backups', () => {
@@ -244,10 +224,10 @@ describe('buildNavSections', () => {
         expect(bnetIdx).toBeLessThan(pluginsIdx);
     });
 
-    it('General section has ≤7 core nav items (excluding dynamic plugins and demo)', () => {
-        const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), [], { demoMode: false });
+    it('General section has ≤7 core nav items', () => {
+        const sections = buildNavSections(buildCoreIntegrationItems(allOfflineStatuses), []);
         const general = sections.find((s) => s.id === 'general')!;
         expect(general.children.length).toBeLessThanOrEqual(7);
-        expect(general.children.length).toBe(4);
+        expect(general.children.length).toBe(5);
     });
 });

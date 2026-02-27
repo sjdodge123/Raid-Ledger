@@ -12,8 +12,8 @@ interface SignupConfirmationModalProps {
     onClose: () => void;
     /** ROK-439/452: Called when user confirms character/role selection BEFORE signup */
     onConfirm: (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => void;
-    /** ROK-439: Called when user has no characters and wants to sign up without one */
-    onSkip: () => void;
+    /** ROK-439/529: Called when user has no characters and wants to sign up without one */
+    onSkip: (options?: { preferredRoles?: CharacterRole[] }) => void;
     /** Whether the confirm action is in progress (signup mutation pending) */
     isConfirming?: boolean;
     gameId?: number;
@@ -93,6 +93,22 @@ export function SignupConfirmationModal({
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [sessionKey]);
 
+    // Auto-select main character when characters load after modal is already open
+    useEffect(() => {
+        if (!defaultCharacterId) return;
+        // Only auto-select if nothing is selected yet (avoids overriding user choice)
+        setSelectedCharacterId((prev) => {
+            if (prev) return prev; // Already selected — don't override
+            if (!preSelectedRole) {
+                const defaultChar = characters.find((c) => c.id === defaultCharacterId);
+                const defaultRole = (defaultChar?.effectiveRole as CharacterRole) ?? null;
+                setSelectedRole(defaultRole);
+                setSelectedRoles(defaultRole ? [defaultRole] : []);
+            }
+            return defaultCharacterId;
+        });
+    }, [defaultCharacterId, preSelectedRole, characters]);
+
     const selectedCharacter = characters.find((c) => c.id === selectedCharacterId);
 
     // When character selection changes, update role to character's default (unless pre-selected)
@@ -100,11 +116,9 @@ export function SignupConfirmationModal({
         setSelectedCharacterId(characterId);
         if (!preSelectedRole) {
             const char = characters.find((c) => c.id === characterId);
-            if (char?.effectiveRole) {
-                const role = char.effectiveRole as CharacterRole;
-                setSelectedRole(role);
-                setSelectedRoles([role]);
-            }
+            const role = (char?.effectiveRole as CharacterRole) ?? null;
+            setSelectedRole(role);
+            setSelectedRoles(role ? [role] : []);
         }
     };
 
@@ -158,13 +172,57 @@ export function SignupConfirmationModal({
 
             {/* No characters state — sign up instantly or create one (ROK-439/234) */}
             {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
-                <div className="text-center py-6 text-muted">
-                    <p className="mb-3">
+                <div className="space-y-4">
+                    <p className="text-center text-muted">
                         No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
                     </p>
+
+                    {/* ROK-529: Show role picker even without characters for MMO events */}
+                    {hasRoles && (
+                        <div>
+                            <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                                Preferred Roles
+                                <span className="ml-1 text-muted font-normal normal-case">(select all you can play)</span>
+                            </h3>
+                            <div className="flex gap-2">
+                                {ROLES.map((role) => {
+                                    const isSelected = selectedRoles.includes(role);
+                                    return (
+                                        <button
+                                            key={role}
+                                            onClick={() => {
+                                                let next: CharacterRole[];
+                                                if (isSelected) {
+                                                    next = selectedRoles.filter((r) => r !== role);
+                                                } else {
+                                                    next = [...selectedRoles, role];
+                                                }
+                                                setSelectedRoles(next);
+                                                setSelectedRole(next[0] ?? null);
+                                            }}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                                                isSelected
+                                                    ? `${ROLE_COLORS[role]} border-current`
+                                                    : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+                                            }`}
+                                        >
+                                            <RoleIcon role={role} size="w-5 h-5" />
+                                            <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {selectedRoles.length > 1 && (
+                                <p className="text-xs text-emerald-400/80 mt-1.5">
+                                    You'll be auto-assigned to the best available slot.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     <div className="flex flex-col gap-2">
                         <button
-                            onClick={onSkip}
+                            onClick={() => onSkip(hasRoles && selectedRoles.length > 0 ? { preferredRoles: selectedRoles } : undefined)}
                             disabled={isConfirming}
                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors"
                         >
@@ -397,20 +455,20 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
                         </span>
                     )}
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted">
-                    {character.level && <span>Lv.{character.level}</span>}
-                    {character.level && character.class && <span>·</span>}
-                    {character.class && <span>{character.class}</span>}
+                <div className="flex items-center gap-2 text-sm text-muted truncate">
+                    {character.level && <span className="shrink-0">Lv.{character.level}</span>}
+                    {character.level && character.class && <span className="shrink-0">·</span>}
+                    {character.class && <span className="truncate">{character.class}</span>}
                     {character.spec && (
                         <>
-                            <span>·</span>
-                            <span>{character.spec}</span>
+                            <span className="shrink-0">·</span>
+                            <span className="truncate">{character.spec}</span>
                         </>
                     )}
                     {character.itemLevel && (
                         <>
-                            <span>·</span>
-                            <span className="text-purple-400">{character.itemLevel} iLvl</span>
+                            <span className="shrink-0">·</span>
+                            <span className="shrink-0 text-purple-400">{character.itemLevel} iLvl</span>
                         </>
                     )}
                 </div>
@@ -419,7 +477,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
             {/* Role badge */}
             {role && (
                 <span
-                    className={`px-2 py-1 text-xs font-medium rounded border ${ROLE_COLORS[role]}`}
+                    className={`shrink-0 px-2 py-1 text-xs font-medium rounded border whitespace-nowrap ${ROLE_COLORS[role]}`}
                 >
                     <RoleIcon role={role} size="w-3.5 h-3.5" /> {role.charAt(0).toUpperCase() + role.slice(1)}
                 </span>
@@ -427,7 +485,7 @@ function CharacterCard({ character, isSelected, onSelect, isMain }: CharacterCar
 
             {/* Selection indicator */}
             {isSelected && (
-                <div className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
+                <div className="shrink-0 w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center">
                     <svg
                         className="w-3 h-3 text-foreground"
                         fill="none"

@@ -5,7 +5,7 @@ import { previewWowCharacter } from '../api-client';
 import { RealmAutocomplete } from './realm-autocomplete';
 
 interface WowArmoryImportFormProps {
-    onSuccess?: () => void;
+    onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
     isMain?: boolean;
     /** Game variant for Blizzard API namespace (retail, classic_era, classic) */
     gameVariant?: string;
@@ -111,12 +111,12 @@ export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, de
                 isMain: setAsMain,
             },
             {
-                onSuccess: () => {
+                onSuccess: (data) => {
                     setFormState('done');
                     setName('');
                     setRealm('');
                     setPreviewData(null);
-                    onSuccess?.();
+                    onSuccess?.(data);
                 },
                 onError: (err) => {
                     setError(err.message);

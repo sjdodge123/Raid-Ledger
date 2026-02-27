@@ -63,7 +63,7 @@ export function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[]
  * Build the full sections list (ROK-359 consolidated).
  *
  * Changes from pre-ROK-359:
- * - General: Site Settings now includes Branding; Demo Data conditionally hidden when not in DEMO_MODE
+ * - General: Site Settings now includes Branding; Demo Data always shown
  * - Integrations: Plugins (Manage Plugins) folded in at the end
  * - Appearance section removed (merged into General > Site Settings)
  * - Plugins section removed (moved into Integrations)
@@ -71,7 +71,6 @@ export function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[]
 export function buildNavSections(
     coreIntegrations: NavItem[],
     pluginIntegrations: NavItem[],
-    options?: { demoMode?: boolean },
 ): NavSection[] {
     const generalChildren: NavItem[] = [
         { to: '/admin/settings/general', label: 'Site Settings' },
@@ -80,10 +79,7 @@ export function buildNavSections(
         { to: '/admin/settings/general/backups', label: 'Backups' },
     ];
 
-    // Demo Data conditionally shown when DEMO_MODE is active
-    if (options?.demoMode) {
-        generalChildren.splice(2, 0, { to: '/admin/settings/general/data', label: 'Demo Data' });
-    }
+    generalChildren.splice(2, 0, { to: '/admin/settings/general/data', label: 'Demo Data' });
 
     return [
         {

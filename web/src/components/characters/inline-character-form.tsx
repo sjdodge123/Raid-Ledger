@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
 import { PluginSlot } from '../../plugins';
@@ -32,6 +32,12 @@ export function InlineCharacterForm({
     const [role, setRole] = useState<CharacterRole | ''>('');
     const [realm, setRealm] = useState('');
     const [error, setError] = useState('');
+    // Track plugin import mode — hide the manual form when plugin is in import mode
+    // Defaults to false so manual form shows for non-WoW games where the plugin returns null
+    const [pluginImportActive, setPluginImportActive] = useState(false);
+    const handleModeChange = useCallback((mode: 'import' | 'manual') => {
+        setPluginImportActive(mode === 'import');
+    }, []);
 
     const handleManualSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -72,10 +78,11 @@ export function InlineCharacterForm({
                     onSuccess: onCharacterCreated,
                     isMain: true,
                     gameSlug,
+                    onModeChange: handleModeChange,
                 }}
             />
 
-            <form onSubmit={handleManualSubmit} className="space-y-3">
+            {!pluginImportActive && <form onSubmit={handleManualSubmit} className="space-y-3">
                 <div>
                     <input
                         type="text"
@@ -150,7 +157,7 @@ export function InlineCharacterForm({
                         {createMutation.isPending ? 'Creating...' : 'Create Character'}
                     </button>
                 </div>
-            </form>
+            </form>}
         </div>
     );
 }

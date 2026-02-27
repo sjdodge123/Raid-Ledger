@@ -58,9 +58,12 @@ export function EventInviteActions({
         doSignup();
     };
 
-    const doSignup = async (characterId?: string) => {
+    const doSignup = async (characterId?: string, preferredRoles?: CharacterRole[]) => {
         try {
-            await signup.mutateAsync(characterId ? { characterId } : undefined);
+            const options: { characterId?: string; preferredRoles?: string[] } = {};
+            if (characterId) options.characterId = characterId;
+            if (preferredRoles && preferredRoles.length > 0) options.preferredRoles = preferredRoles;
+            await signup.mutateAsync(Object.keys(options).length > 0 ? options : undefined);
             toast.success('Signed up!');
             navigate(`/events/${eventId}`);
             onComplete?.();
@@ -76,8 +79,8 @@ export function EventInviteActions({
         setShowConfirmation(false);
     };
 
-    const handleSkip = async () => {
-        await doSignup();
+    const handleSkip = async (options?: { preferredRoles?: CharacterRole[] }) => {
+        await doSignup(undefined, options?.preferredRoles);
         setShowConfirmation(false);
     };
 

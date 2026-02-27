@@ -79,7 +79,9 @@ export interface TestApp {
 const INSTANCE_KEY = '__raid_ledger_test_app';
 
 function getInstance(): TestApp | null {
-  return (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] ?? null;
+  return (
+    (process as unknown as Record<string, TestApp | null>)[INSTANCE_KEY] ?? null
+  );
 }
 
 function setInstance(app: TestApp | null): void {
@@ -157,7 +159,7 @@ export async function getTestApp(): Promise<TestApp> {
 
 /**
  * Shut down the TestApp singleton.
- * Call this in globalTeardown or afterAll of the last suite.
+ * Called automatically by the global afterAll hook in integration-setup.ts.
  */
 export async function closeTestApp(): Promise<void> {
   const instance = getInstance();

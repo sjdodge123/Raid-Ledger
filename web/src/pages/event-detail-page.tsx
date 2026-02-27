@@ -111,9 +111,11 @@ export function EventDetailPage() {
     const canManageRoster = isEventCreator || canManageEvent;
     // ROK-374: Check if event is cancelled
     const isCancelled = !!event?.cancelledAt;
-    // ROK-208: Admins use assignment popup, not click-to-join
-    const canJoinSlot = isAuthenticated && !isSignedUp && !canManageRoster && !isCancelled;
     const { data: rosterAssignments } = useRoster(eventId);
+    // ROK-208: Admins use assignment popup, not click-to-join
+    // Allow signed-up users in the unassigned pool to click slots too
+    const isInPool = isSignedUp && rosterAssignments?.pool.some(p => p.userId === user?.id);
+    const canJoinSlot = isAuthenticated && (!isSignedUp || isInPool) && !canManageRoster && !isCancelled;
     const updateRoster = useUpdateRoster(eventId);
     const selfUnassign = useSelfUnassign(eventId);
     const updateAutoUnbench = useUpdateAutoUnbench(eventId);
@@ -215,13 +217,20 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-439: Called when user has no characters and skips character selection
-    const handleSelectionSkip = async () => {
+    // ROK-439/529: Called when user has no characters and skips character selection
+    const handleSelectionSkip = async (skipOptions?: { preferredRoles?: CharacterRole[] }) => {
         try {
-            const options: { slotRole?: string; slotPosition?: number } = {};
+            const options: { slotRole?: string; slotPosition?: number; preferredRoles?: string[] } = {};
             if (pendingSlot) {
                 options.slotRole = pendingSlot.role;
                 options.slotPosition = pendingSlot.position;
+            }
+            // ROK-529: Pass preferred roles from no-character role picker
+            if (skipOptions?.preferredRoles && skipOptions.preferredRoles.length > 0) {
+                options.preferredRoles = skipOptions.preferredRoles;
+                if (!options.slotRole && skipOptions.preferredRoles.length === 1) {
+                    options.slotRole = skipOptions.preferredRoles[0];
+                }
             }
             await signup.mutateAsync(Object.keys(options).length > 0 ? options : undefined);
             setShowConfirmModal(false);
@@ -252,8 +261,12 @@ export function EventDetailPage() {
 
     // ROK-226: Handle self-unassign from roster slot
     const handleSelfRemove = async () => {
+        if (selfUnassign.isPending) return; // Guard against double-clicks
         try {
             await selfUnassign.mutateAsync();
+            // Reset the signup mutation so its stale isSuccess doesn't
+            // immediately clear the "Join?" pending state in RosterBuilder.
+            signup.reset();
             toast.success('Left roster slot', {
                 description: 'You\'re still signed up but moved to unassigned.',
             });

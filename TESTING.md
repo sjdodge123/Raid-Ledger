@@ -247,7 +247,7 @@ describe('My Feature (integration)', () => {
 - **Baseline seed data:** An admin user with local credentials and a sample game. Access via `testApp.seed`.
 - **File naming:** `*.integration.spec.ts` — picked up by `jest.integration.config.js`, excluded from unit test runs.
 - **Timeout:** 120s per test (container startup takes ~10-20s on first run).
-- **Global teardown:** `closeTestApp()` runs automatically after all suites via `globalTeardown` in the Jest config. Do not call it in `afterAll`.
+- **Teardown:** `closeTestApp()` runs automatically via a global `afterAll` hook registered in `setupFilesAfterEnv`. Do not call it manually in your test files.
 
 ### HTTP endpoints vs direct DB operations
 

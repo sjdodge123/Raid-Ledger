@@ -191,11 +191,14 @@ export class EventsService {
       );
     }
 
-    // ROK-174: endBefore filter - events ending before this date
+    // ROK-174: endBefore filter - events starting before this date
+    // Uses lower() (start time) so events that start within the range but
+    // extend past it (e.g. 9 PM–midnight on the last day of the week) are
+    // still included in calendar views.
     if (query.endBefore) {
       conditions.push(
         lte(
-          sql`upper(${schema.events.duration})`,
+          sql`lower(${schema.events.duration})`,
           sql`${query.endBefore}::timestamp`,
         ),
       );
