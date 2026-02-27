@@ -6,6 +6,7 @@ interface CharacterCreateInlineImportProps {
     onSuccess?: (character?: CharacterDto) => void;
     isMain?: boolean;
     gameSlug?: string;
+    onModeChange?: (mode: 'import' | 'manual') => void;
 }
 
 const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
@@ -28,6 +29,7 @@ export function CharacterCreateInlineImport({
     onSuccess,
     isMain,
     gameSlug,
+    onModeChange,
 }: CharacterCreateInlineImportProps) {
     const [mode, setMode] = useState<'manual' | 'import'>('import');
     const isClassic = gameSlug === 'world-of-warcraft-classic';
@@ -43,7 +45,7 @@ export function CharacterCreateInlineImport({
             <div className="flex rounded-lg bg-panel/50 border border-edge p-1">
                 <button
                     type="button"
-                    onClick={() => setMode('import')}
+                    onClick={() => { setMode('import'); onModeChange?.('import'); }}
                     className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                         mode === 'import'
                             ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30'
@@ -54,7 +56,7 @@ export function CharacterCreateInlineImport({
                 </button>
                 <button
                     type="button"
-                    onClick={() => setMode('manual')}
+                    onClick={() => { setMode('manual'); onModeChange?.('manual'); }}
                     className={`flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
                         mode === 'manual'
                             ? 'bg-overlay text-foreground'
