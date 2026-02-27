@@ -169,7 +169,7 @@ export function EventDetailPage() {
     };
 
     // Perform the actual signup API call (instant path or after modal skip)
-    const doSignup = async (options?: { characterId?: string; slotRole?: string; slotPosition?: number }) => {
+    const doSignup = async (options?: { characterId?: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] }) => {
         try {
             await signup.mutateAsync(options);
             toast.success('Successfully signed up!', {
@@ -363,7 +363,8 @@ export function EventDetailPage() {
         }
 
         // No game / no character support → instant slot join
-        doSignup({ slotRole: role, slotPosition: position });
+        // ROK-506: Default role preference to the clicked slot's role
+        doSignup({ slotRole: role, slotPosition: position, preferredRoles: [role] });
     };
 
     if (eventError) {
