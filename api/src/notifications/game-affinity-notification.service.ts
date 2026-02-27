@@ -18,6 +18,12 @@ export interface GameAffinityNotificationInput {
   startTime: string;
   creatorId: number;
   clientUrl?: string | null;
+  /** ROK-504: Discord message info for "View in Discord" button */
+  discordMessage?: {
+    guildId: string;
+    channelId: string;
+    messageId: string;
+  } | null;
 }
 
 /**
@@ -56,16 +62,31 @@ export class GameAffinityNotificationService {
     }
 
     // Find recipients: users who hearted the game OR attended past events for this game
-    const recipientIds = await this.findRecipients(
-      input.gameId,
-      input.creatorId,
-    );
+    let recipientIds = await this.findRecipients(input.gameId, input.creatorId);
 
     if (recipientIds.length === 0) {
       this.logger.debug(
         `No game affinity recipients for event ${input.eventId} (game ${input.gameId})`,
       );
       return;
+    }
+
+    // ROK-503: Skip users who have an active absence covering the event's start date
+    const absentUserIds = await this.findAbsentUsers(
+      recipientIds,
+      input.startTime,
+    );
+    if (absentUserIds.size > 0) {
+      recipientIds = recipientIds.filter((id) => !absentUserIds.has(id));
+      this.logger.debug(
+        `Excluded ${absentUserIds.size} absent users from game affinity alerts for event ${input.eventId}`,
+      );
+      if (recipientIds.length === 0) {
+        this.logger.debug(
+          `All recipients absent for event ${input.eventId}, skipping`,
+        );
+        return;
+      }
     }
 
     // Mark as sent before dispatching to prevent duplicates on retries
@@ -83,6 +104,11 @@ export class GameAffinityNotificationService {
       ? `${input.clientUrl}/events/${input.eventId}`
       : null;
 
+    // ROK-504: Build Discord channel URL if message info is available
+    const discordUrl = input.discordMessage
+      ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
+      : null;
+
     // Dispatch notifications in parallel (NotificationService handles prefs + Discord DM)
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
@@ -95,6 +121,7 @@ export class GameAffinityNotificationService {
             eventId: input.eventId,
             gameId: input.gameId,
             ...(eventUrl ? { url: eventUrl } : {}),
+            ...(discordUrl ? { discordUrl } : {}),
           },
         }),
       ),
@@ -137,5 +164,27 @@ export class GameAffinityNotificationService {
     `);
 
     return rows.map((r) => r.id);
+  }
+
+  /**
+   * ROK-503: Find users from the candidate list who have an absence covering the event date.
+   * Checks game_time_absences where the event's start date falls within [start_date, end_date].
+   */
+  private async findAbsentUsers(
+    userIds: number[],
+    startTime: string,
+  ): Promise<Set<number>> {
+    if (userIds.length === 0) return new Set();
+
+    const eventDate = new Date(startTime).toISOString().split('T')[0];
+    const rows = await this.db.execute<{ user_id: number }>(sql`
+      SELECT DISTINCT a.user_id
+      FROM game_time_absences a
+      WHERE a.user_id = ANY(${userIds})
+        AND ${eventDate} >= a.start_date
+        AND ${eventDate} <= a.end_date
+    `);
+
+    return new Set(rows.map((r) => r.user_id));
   }
 }
