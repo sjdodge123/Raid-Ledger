@@ -12,8 +12,8 @@ interface SignupConfirmationModalProps {
     onClose: () => void;
     /** ROK-439/452: Called when user confirms character/role selection BEFORE signup */
     onConfirm: (selection: { characterId: string; role?: CharacterRole; preferredRoles?: CharacterRole[] }) => void;
-    /** ROK-439: Called when user has no characters and wants to sign up without one */
-    onSkip: () => void;
+    /** ROK-439/529: Called when user has no characters and wants to sign up without one */
+    onSkip: (options?: { preferredRoles?: CharacterRole[] }) => void;
     /** Whether the confirm action is in progress (signup mutation pending) */
     isConfirming?: boolean;
     gameId?: number;
@@ -158,13 +158,57 @@ export function SignupConfirmationModal({
 
             {/* No characters state — sign up instantly or create one (ROK-439/234) */}
             {!isLoadingCharacters && !isError && characters.length === 0 && !showCreateForm && (
-                <div className="text-center py-6 text-muted">
-                    <p className="mb-3">
+                <div className="space-y-4">
+                    <p className="text-center text-muted">
                         No characters found{gameName ? ` for ${gameName}` : ' for this game'}.
                     </p>
+
+                    {/* ROK-529: Show role picker even without characters for MMO events */}
+                    {hasRoles && (
+                        <div>
+                            <h3 className="text-xs font-medium text-dim uppercase tracking-wide mb-2">
+                                Preferred Roles
+                                <span className="ml-1 text-muted font-normal normal-case">(select all you can play)</span>
+                            </h3>
+                            <div className="flex gap-2">
+                                {ROLES.map((role) => {
+                                    const isSelected = selectedRoles.includes(role);
+                                    return (
+                                        <button
+                                            key={role}
+                                            onClick={() => {
+                                                let next: CharacterRole[];
+                                                if (isSelected) {
+                                                    next = selectedRoles.filter((r) => r !== role);
+                                                } else {
+                                                    next = [...selectedRoles, role];
+                                                }
+                                                setSelectedRoles(next);
+                                                setSelectedRole(next[0] ?? null);
+                                            }}
+                                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border-2 transition-all text-sm font-medium ${
+                                                isSelected
+                                                    ? `${ROLE_COLORS[role]} border-current`
+                                                    : 'border-edge bg-panel/50 text-muted hover:border-edge-strong hover:bg-panel'
+                                            }`}
+                                        >
+                                            <RoleIcon role={role} size="w-5 h-5" />
+                                            <span>{role.charAt(0).toUpperCase() + role.slice(1)}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                            {selectedRoles.length > 1 && (
+                                <p className="text-xs text-emerald-400/80 mt-1.5">
+                                    You'll be auto-assigned to the best available slot.
+                                </p>
+                            )}
+                        </div>
+                    )}
+
                     <div className="flex flex-col gap-2">
                         <button
-                            onClick={onSkip}
+                            onClick={() => onSkip(hasRoles && selectedRoles.length > 0 ? { preferredRoles: selectedRoles } : undefined)}
                             disabled={isConfirming}
                             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-overlay disabled:text-dim text-foreground font-medium rounded-lg transition-colors"
                         >
