@@ -156,7 +156,19 @@ export class SignupInteractionListener {
     // Defer immediately to capture the interaction token before it expires.
     // This prevents 10062 (Unknown interaction) from slow async operations
     // and 40060 (already acknowledged) from concurrent rapid clicks.
-    await interaction.deferReply({ ephemeral: true });
+    // Wrapped in try-catch because the interaction token may already be expired
+    // by the time this handler fires (e.g., during bot reconnects or event loop delays).
+    try {
+      await interaction.deferReply({ ephemeral: true });
+    } catch (error: unknown) {
+      if (this.isDiscordInteractionError(error)) {
+        this.logger.debug(
+          `Interaction expired before deferReply (code ${(error as { code: number }).code}): ${(error as Error).message}`,
+        );
+        return;
+      }
+      throw error;
+    }
 
     // Lazy cleanup of expired cooldown entries to prevent unbounded map growth
     cleanupCooldowns();
