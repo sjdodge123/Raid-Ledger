@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 
 interface CharacterCreateInlineImportProps {
-    onSuccess?: (character?: CharacterDto) => void;
+    onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
     isMain?: boolean;
     gameSlug?: string;
     onModeChange?: (mode: 'import' | 'manual') => void;
@@ -84,8 +83,8 @@ export function CharacterCreateInlineImport({
                 <WowArmoryImportForm
                     isMain={isMain}
                     gameVariant={gameVariant}
-                    onSuccess={() => {
-                        onSuccess?.(undefined as unknown as CharacterDto);
+                    onSuccess={(character) => {
+                        onSuccess?.(character);
                     }}
                 />
             )}
