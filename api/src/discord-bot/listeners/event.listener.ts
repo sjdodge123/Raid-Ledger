@@ -91,7 +91,7 @@ export class DiscordEventListener {
     }
 
     // Within the posting window — post immediately via shared service
-    await this.embedPoster.postEmbed(
+    const posted = await this.embedPoster.postEmbed(
       payload.eventId,
       payload.event,
       payload.gameId,
@@ -105,6 +105,27 @@ export class DiscordEventListener {
       payload.event.game?.name &&
       payload.creatorId
     ) {
+      // ROK-504: Look up Discord message record for "View in Discord" link
+      let discordMessage: {
+        guildId: string;
+        channelId: string;
+        messageId: string;
+      } | null = null;
+      if (posted) {
+        const [msgRecord] = await this.db
+          .select({
+            guildId: schema.discordEventMessages.guildId,
+            channelId: schema.discordEventMessages.channelId,
+            messageId: schema.discordEventMessages.messageId,
+          })
+          .from(schema.discordEventMessages)
+          .where(eq(schema.discordEventMessages.eventId, payload.eventId))
+          .limit(1);
+        if (msgRecord) {
+          discordMessage = msgRecord;
+        }
+      }
+
       const context = await this.buildContext();
       this.gameAffinityNotificationService
         .notifyGameAffinity({
@@ -115,6 +136,7 @@ export class DiscordEventListener {
           startTime: payload.event.startTime,
           creatorId: payload.creatorId,
           clientUrl: context.clientUrl,
+          discordMessage,
         })
         .catch((err: unknown) => {
           this.logger.warn(

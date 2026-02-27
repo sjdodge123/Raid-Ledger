@@ -385,6 +385,12 @@ export class DiscordNotificationEmbedService {
       buttons.push(primaryButton);
     }
 
+    // ROK-504: "View in Discord" button when Discord channel link is available
+    const discordButton = this.buildDiscordLinkButton(input);
+    if (discordButton) {
+      buttons.push(discordButton);
+    }
+
     // "Adjust Notifications" button on every DM (AC-8)
     buttons.push(
       new ButtonBuilder()
@@ -406,6 +412,7 @@ export class DiscordNotificationEmbedService {
     switch (input.type) {
       case 'event_reminder':
       case 'new_event':
+      case 'subscribed_game':
       case 'event_rescheduled':
       case 'event_cancelled':
         if (eventId) {
@@ -433,5 +440,21 @@ export class DiscordNotificationEmbedService {
     }
 
     return null;
+  }
+
+  /**
+   * ROK-504: Build an optional "View in Discord" button when the payload
+   * contains a Discord channel URL.
+   */
+  private buildDiscordLinkButton(
+    input: NotificationEmbedInput,
+  ): ButtonBuilder | null {
+    const discordUrl = input.payload?.discordUrl;
+    if (typeof discordUrl !== 'string' || !discordUrl) return null;
+
+    return new ButtonBuilder()
+      .setLabel('View in Discord')
+      .setStyle(ButtonStyle.Link)
+      .setURL(discordUrl);
   }
 }
