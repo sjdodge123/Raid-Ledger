@@ -336,6 +336,26 @@ export class NotificationService {
   }
 
   /**
+   * ROK-538: Look up the Discord embed URL for an event.
+   * Queries discord_event_messages for the event and returns the first match.
+   */
+  async getDiscordEmbedUrl(eventId: number): Promise<string | null> {
+    const [row] = await this.db
+      .select({
+        guildId: schema.discordEventMessages.guildId,
+        channelId: schema.discordEventMessages.channelId,
+        messageId: schema.discordEventMessages.messageId,
+      })
+      .from(schema.discordEventMessages)
+      .where(eq(schema.discordEventMessages.eventId, eventId))
+      .limit(1);
+
+    if (!row) return null;
+
+    return `https://discord.com/channels/${row.guildId}/${row.channelId}/${row.messageId}`;
+  }
+
+  /**
    * Delete expired notifications (for cleanup jobs).
    * @returns Number of deleted notifications
    */
