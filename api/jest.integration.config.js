@@ -27,8 +27,9 @@ module.exports = {
   testTimeout: 120_000,
   // Run sequentially — tests share a single Testcontainers instance
   maxWorkers: 1,
-  // Graceful shutdown — closes NestJS app and Testcontainers PostgreSQL
-  globalTeardown: '<rootDir>/common/testing/global-teardown.ts',
+  // Runs in the worker process (where the TestApp singleton lives) so
+  // afterAll can actually close the app and Testcontainers instance.
+  setupFilesAfterEnv: ['<rootDir>/common/testing/integration-setup.ts'],
   // Safety net for open handles (postgres-js connection pool)
   forceExit: true,
 };
