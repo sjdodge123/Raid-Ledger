@@ -219,8 +219,10 @@ export class SignupInteractionListener {
     );
 
     if (existingSignup) {
-      if (existingSignup.status !== 'signed_up') {
-        // User has a tentative/declined signup — change to signed_up
+      // ROK-529: If user was tentative/declined, re-activate first — then
+      // fall through to character/role selection so they aren't dead-ended.
+      const wasReactivated = existingSignup.status !== 'signed_up';
+      if (wasReactivated) {
         await this.signupsService.updateStatus(
           eventId,
           existingSignup.discordUserId
@@ -228,12 +230,7 @@ export class SignupInteractionListener {
             : { userId: existingSignup.user.id },
           { status: 'signed_up' },
         );
-
-        await interaction.editReply({
-          content: 'Your status has been changed to **signed up**!',
-        });
         await this.updateEmbedSignupCount(eventId);
-        return;
       }
 
       // ROK-438: Already signed up — allow character/role change instead of dead-end
@@ -278,10 +275,7 @@ export class SignupInteractionListener {
           );
           const characters = characterList.data;
 
-          const slotConfig = event.slotConfig as Record<
-            string,
-            unknown
-          > | null;
+          const slotConfig = event.slotConfig as Record<string, unknown> | null;
           const isMMO = slotConfig?.type === 'mmo';
 
           if (characters.length >= 1) {
@@ -335,10 +329,11 @@ export class SignupInteractionListener {
         }
       }
 
-      // No game, no characters, or no character support — simple message
+      // No game, no characters, or no character support
       await interaction.editReply({
-        content:
-          "You're already signed up! Use the Tentative or Decline buttons to change your status.",
+        content: wasReactivated
+          ? 'Your status has been changed to **signed up**!'
+          : "You're already signed up! Use the Tentative or Decline buttons to change your status.",
       });
       return;
     }
@@ -438,7 +433,7 @@ export class SignupInteractionListener {
           const clientUrl = process.env.CLIENT_URL ?? '';
           let nudge = '';
           if (game.hasRoles && clientUrl) {
-            nudge = `\nTip: Create a character at ${clientUrl}/characters to get assigned to a role next time.`;
+            nudge = `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`;
           }
 
           await interaction.editReply({
@@ -950,7 +945,7 @@ export class SignupInteractionListener {
         const clientUrl = process.env.CLIENT_URL ?? '';
         let nudge = '';
         if (clientUrl) {
-          nudge = `\nTip: Create a character at ${clientUrl}/characters to get assigned to a role next time.`;
+          nudge = `\nTip: Create a character at ${clientUrl}/profile to get assigned to a role next time.`;
         }
 
         await interaction.editReply({
