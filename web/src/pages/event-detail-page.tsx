@@ -264,6 +264,9 @@ export function EventDetailPage() {
         if (selfUnassign.isPending) return; // Guard against double-clicks
         try {
             await selfUnassign.mutateAsync();
+            // Reset the signup mutation so its stale isSuccess doesn't
+            // immediately clear the "Join?" pending state in RosterBuilder.
+            signup.reset();
             toast.success('Left roster slot', {
                 description: 'You\'re still signed up but moved to unassigned.',
             });
