@@ -278,13 +278,13 @@ export class SignupInteractionListener {
           );
           const characters = characterList.data;
 
-          if (characters.length >= 1) {
-            const slotConfig = event.slotConfig as Record<
-              string,
-              unknown
-            > | null;
-            const isMMO = slotConfig?.type === 'mmo';
+          const slotConfig = event.slotConfig as Record<
+            string,
+            unknown
+          > | null;
+          const isMMO = slotConfig?.type === 'mmo';
 
+          if (characters.length >= 1) {
             // No character yet — show character select
             if (!existingSignup.characterId) {
               await this.showCharacterSelect(
@@ -323,6 +323,13 @@ export class SignupInteractionListener {
               event.title,
               characters,
             );
+            return;
+          }
+
+          // ROK-529: No characters but MMO event — show role select so user
+          // can still set preferred roles without a character
+          if (isMMO) {
+            await this.showRoleSelect(interaction, eventId);
             return;
           }
         }
@@ -418,7 +425,14 @@ export class SignupInteractionListener {
             return;
           }
 
-          // No characters for this game — instant signup with nudge if hasRoles
+          // ROK-529: No characters — for MMO events, show role select so
+          // the user can still pick preferred roles before signing up
+          if (slotConfig?.type === 'mmo') {
+            await this.showRoleSelect(interaction, eventId);
+            return;
+          }
+
+          // Non-MMO, no characters — instant signup with nudge
           await this.signupsService.signup(eventId, linkedUser.id);
 
           const clientUrl = process.env.CLIENT_URL ?? '';
@@ -908,10 +922,50 @@ export class SignupInteractionListener {
         return;
       }
 
+      // ROK-529: No characterId — check if user is linked (no-character linked
+      // user path) before falling back to anonymous signup
+      const discordUserIdForRole = interaction.user.id;
+      const [linkedUserForRole] = await this.db
+        .select()
+        .from(schema.users)
+        .where(eq(schema.users.discordId, discordUserIdForRole))
+        .limit(1);
+
+      if (linkedUserForRole) {
+        // Linked user without character — create linked signup with roles
+        await this.signupsService.signup(
+          eventId,
+          linkedUserForRole.id,
+          selectedRoles.length === 1
+            ? { slotRole: primaryRole, preferredRoles: selectedRoles }
+            : { preferredRoles: selectedRoles },
+        );
+
+        const [event] = await this.db
+          .select()
+          .from(schema.events)
+          .where(eq(schema.events.id, eventId))
+          .limit(1);
+
+        const clientUrl = process.env.CLIENT_URL ?? '';
+        let nudge = '';
+        if (clientUrl) {
+          nudge = `\nTip: Create a character at ${clientUrl}/characters to get assigned to a role next time.`;
+        }
+
+        await interaction.editReply({
+          content: `You're signed up for **${event?.title ?? 'the event'}** (${rolesLabel})!${nudge}`,
+          components: [],
+        });
+
+        await this.updateEmbedSignupCount(eventId);
+        return;
+      }
+
       // Anonymous (unlinked) user — existing Path B behavior
       // ROK-452: Pass preferred roles for auto-allocation
       await this.signupsService.signupDiscord(eventId, {
-        discordUserId: interaction.user.id,
+        discordUserId: discordUserIdForRole,
         discordUsername: interaction.user.username,
         discordAvatarHash: interaction.user.avatar,
         role: selectedRoles.length === 1 ? primaryRole : undefined,
