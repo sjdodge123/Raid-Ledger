@@ -10,8 +10,9 @@ interface ConnectivityState {
     startPolling: () => () => void;
 }
 
-const POLL_ONLINE_MS = 30_000;
-const POLL_OFFLINE_MS = 3_000;
+const POLL_ONLINE_MS = 60_000;
+const POLL_OFFLINE_BASE_MS = 3_000;
+const POLL_OFFLINE_MAX_MS = 30_000;
 const HEALTH_TIMEOUT_MS = 5_000;
 const FAILURES_BEFORE_OFFLINE = 2;
 
@@ -56,10 +57,22 @@ export const useConnectivityStore = create<ConnectivityState>((set, get) => ({
 
     startPolling() {
         let timerId: ReturnType<typeof setTimeout>;
+        let offlineAttempt = 0;
+
+        const getOfflineInterval = () =>
+            Math.min(POLL_OFFLINE_BASE_MS * 2 ** offlineAttempt, POLL_OFFLINE_MAX_MS);
 
         const poll = () => {
             const state = get();
-            const interval = state.status === 'online' ? POLL_ONLINE_MS : POLL_OFFLINE_MS;
+            let interval: number;
+
+            if (state.status === 'online') {
+                offlineAttempt = 0;
+                interval = POLL_ONLINE_MS;
+            } else {
+                interval = getOfflineInterval();
+                offlineAttempt++;
+            }
 
             timerId = setTimeout(async () => {
                 await get().check();
