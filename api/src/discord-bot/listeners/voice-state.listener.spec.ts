@@ -59,7 +59,9 @@ describe('VoiceStateListener', () => {
 
     mockPresenceDetector = {
       detectGameForMember: jest.fn().mockResolvedValue(null),
-      detectGames: jest.fn().mockResolvedValue({ primary: null, groups: new Map() }),
+      detectGames: jest
+        .fn()
+        .mockResolvedValue({ primary: null, groups: new Map() }),
       setManualOverride: jest.fn(),
     };
 
@@ -198,7 +200,7 @@ describe('VoiceStateListener', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.VoiceStateUpdate) {
+          if (event === (Events.VoiceStateUpdate as string)) {
             voiceHandler = handler;
           }
         },

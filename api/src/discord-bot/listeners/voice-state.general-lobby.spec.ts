@@ -60,9 +60,10 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
     };
 
     mockPresenceDetector = {
-      detectGameForMember: jest
-        .fn()
-        .mockResolvedValue({ gameId: null, gameName: 'Untitled Gaming Session' }),
+      detectGameForMember: jest.fn().mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      }),
       detectGames: jest.fn().mockResolvedValue([]),
     };
 
@@ -75,7 +76,10 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
         VoiceStateListener,
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: AdHocEventService, useValue: mockAdHocEventService },
-        { provide: ChannelBindingsService, useValue: mockChannelBindingsService },
+        {
+          provide: ChannelBindingsService,
+          useValue: mockChannelBindingsService,
+        },
         {
           provide: PresenceGameDetectorService,
           useValue: mockPresenceDetector,
@@ -92,9 +96,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
     jest.useRealTimers();
   });
 
-  function createMockClient(
-    guildChannels: Map<string, unknown> = new Map(),
-  ) {
+  function createMockClient(guildChannels: Map<string, unknown> = new Map()) {
     const guild = {
       channels: {
         cache: makeCollection(
@@ -201,7 +203,8 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.VoiceStateUpdate) voiceHandler = handler;
+          if (event === (Events.VoiceStateUpdate as string))
+            voiceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);
@@ -245,7 +248,8 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.VoiceStateUpdate) voiceHandler = handler;
+          if (event === (Events.VoiceStateUpdate as string))
+            voiceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);
@@ -375,7 +379,8 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.PresenceUpdate) presenceHandler = handler;
+          if (event === (Events.PresenceUpdate as string))
+            presenceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);
@@ -394,6 +399,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
 
       // Manually set the user's channel in the listener's internal map
       // (simulates the user having already joined and the listener tracking them)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       (listener as any).userChannelMap.set('u-switch', 'presence-ch');
 
       // Active state for WoW (gameId=1) exists and already has 'u-switch'
@@ -458,7 +464,8 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.PresenceUpdate) presenceHandler = handler;
+          if (event === (Events.PresenceUpdate as string))
+            presenceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);
@@ -485,8 +492,10 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.VoiceStateUpdate) voiceHandler = handler;
-          if (event === Events.PresenceUpdate) presenceHandler = handler;
+          if (event === (Events.VoiceStateUpdate as string))
+            voiceHandler = handler;
+          if (event === (Events.PresenceUpdate as string))
+            presenceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);
@@ -560,7 +569,8 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
         (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === Events.PresenceUpdate) presenceHandler = handler;
+          if (event === (Events.PresenceUpdate as string))
+            presenceHandler = handler;
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);

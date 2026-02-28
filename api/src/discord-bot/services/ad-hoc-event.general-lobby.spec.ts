@@ -23,8 +23,6 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
-import { SETTING_KEYS } from '../../drizzle/schema';
-
 describe('AdHocEventService — general lobby (ROK-515)', () => {
   let service: AdHocEventService;
   let mockDb: MockDb;
@@ -144,7 +142,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
       // getEvent for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 10, title: 'WoW — Ad-Hoc Session', gameId: 1, channelBindingId: 'bind-game' },
+        {
+          id: 10,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'bind-game',
+        },
       ]);
       // game name for notify
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
@@ -168,7 +171,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.returning.mockResolvedValueOnce([{ id: 20 }]);
       // getEvent for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 20, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-lobby' },
+        {
+          id: 20,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-lobby',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -193,7 +201,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.returning.mockResolvedValueOnce([{ id: 30 }]);
       // getEvent for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 30, title: 'Untitled Gaming Session — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-lobby-null' },
+        {
+          id: 30,
+          title: 'Untitled Gaming Session — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-lobby-null',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -215,7 +228,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event
       mockDb.returning.mockResolvedValueOnce([{ id: 40 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 40, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-multi' },
+        {
+          id: 40,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-multi',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -230,7 +248,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event (different key)
       mockDb.returning.mockResolvedValueOnce([{ id: 41 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 41, title: 'FFXIV — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-multi' },
+        {
+          id: 41,
+          title: 'FFXIV — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-multi',
+        },
       ]);
 
       const member2 = { ...baseMember, discordUserId: 'discord-200' };
@@ -263,11 +286,19 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 50 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 50, title: 'WoW — Ad-Hoc Session', gameId: 1, channelBindingId: 'bind-has' },
+        {
+          id: 50,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'bind-has',
+        },
       ]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
-      await service.handleVoiceJoin('bind-has', baseMember, { gameId: 1, config: null });
+      await service.handleVoiceJoin('bind-has', baseMember, {
+        gameId: 1,
+        config: null,
+      });
 
       expect(service.hasAnyActiveEvent('bind-has')).toBe(true);
     });
@@ -277,7 +308,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: 60 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 60, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-has-lobby' },
+        {
+          id: 60,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-has-lobby',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -296,7 +332,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: 70 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 70, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-cleanup-has' },
+        {
+          id: 70,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-cleanup-has',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -325,7 +366,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event
       mockDb.returning.mockResolvedValueOnce([{ id: 80 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 80, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-leave-gl' },
+        {
+          id: 80,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-leave-gl',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -361,7 +407,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([]); // no scheduled event
       mockDb.returning.mockResolvedValueOnce([{ id: 81 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 81, title: 'WoW — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-scan' },
+        {
+          id: 81,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-scan',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -443,7 +494,12 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       // no game name lookup — resolvedGameName is provided
       mockDb.returning.mockResolvedValueOnce([{ id: 300 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 300, title: 'Path of Exile — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-title' },
+        {
+          id: 300,
+          title: 'Path of Exile — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-title',
+        },
       ]);
 
       await service.handleVoiceJoin(
@@ -467,10 +523,19 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       // No game name provided, no gameId
       mockDb.returning.mockResolvedValueOnce([{ id: 301 }]);
       mockDb.limit.mockResolvedValueOnce([
-        { id: 301, title: 'Gaming — Ad-Hoc Session', gameId: null, channelBindingId: 'bind-gaming' },
+        {
+          id: 301,
+          title: 'Gaming — Ad-Hoc Session',
+          gameId: null,
+          channelBindingId: 'bind-gaming',
+        },
       ]);
 
-      await service.handleVoiceJoin('bind-gaming', baseMember, generalLobbyBinding);
+      await service.handleVoiceJoin(
+        'bind-gaming',
+        baseMember,
+        generalLobbyBinding,
+      );
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
