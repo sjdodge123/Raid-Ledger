@@ -531,7 +531,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin('binding-cleanup', baseMember, baseBinding);
 
-      expect(service.getActiveState('binding-cleanup')).toBeDefined();
+      expect(service.getActiveState('binding-cleanup', 1)).toBeDefined();
 
       // Now finalize: update().set().where().returning() (atomic claim)
       mockDb.returning.mockResolvedValueOnce([
@@ -548,7 +548,7 @@ describe('AdHocEventService', () => {
 
       await service.finalizeEvent(600);
 
-      expect(service.getActiveState('binding-cleanup')).toBeUndefined();
+      expect(service.getActiveState('binding-cleanup', 1)).toBeUndefined();
     });
   });
 
@@ -607,7 +607,7 @@ describe('AdHocEventService', () => {
 
       await service.handleVoiceJoin('binding-state', baseMember, baseBinding);
 
-      const state = service.getActiveState('binding-state');
+      const state = service.getActiveState('binding-state', 1);
       expect(state).toBeDefined();
       expect(state?.eventId).toBe(700);
       expect(state?.memberSet.has('discord-123')).toBe(true);
@@ -644,7 +644,7 @@ describe('AdHocEventService', () => {
       await service.onModuleInit();
 
       // Force the throttle to be expired for the next extend call
-      const state = service.getActiveState('binding-periodic');
+      const state = service.getActiveState('binding-periodic', 1);
       expect(state).toBeDefined();
       state!.lastExtendedAt = Date.now() - 6 * 60 * 1000;
 
@@ -688,7 +688,7 @@ describe('AdHocEventService', () => {
       await service.handleVoiceJoin('binding-empty', baseMember, baseBinding);
 
       // Remove the member
-      const state = service.getActiveState('binding-empty');
+      const state = service.getActiveState('binding-empty', 1);
       state!.memberSet.clear();
 
       // Start the interval
@@ -798,13 +798,13 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-cancel', baseMember, baseBinding);
-      expect(service.getActiveState('binding-cancel')).toBeDefined();
+      expect(service.getActiveState('binding-cancel', 1)).toBeDefined();
 
       // Cancel the event
       await service.onEventCancelled({ eventId: 800 });
 
       // Active state should be cleared, allowing recreation
-      expect(service.getActiveState('binding-cancel')).toBeUndefined();
+      expect(service.getActiveState('binding-cancel', 1)).toBeUndefined();
       expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(800);
     });
 
@@ -833,12 +833,12 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-delete', baseMember, baseBinding);
-      expect(service.getActiveState('binding-delete')).toBeDefined();
+      expect(service.getActiveState('binding-delete', 1)).toBeDefined();
 
       // Delete the event
       await service.onEventDeleted({ eventId: 850 });
 
-      expect(service.getActiveState('binding-delete')).toBeUndefined();
+      expect(service.getActiveState('binding-delete', 1)).toBeUndefined();
       expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(850);
     });
   });

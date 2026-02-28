@@ -10,6 +10,7 @@ import { UnbindCommand } from '../commands/unbind.command';
 import { BindingsCommand } from '../commands/bindings.command';
 import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
+import { PlayingCommand } from '../commands/playing.command';
 import { Events } from 'discord.js';
 
 describe('InteractionListener', () => {
@@ -101,6 +102,14 @@ describe('InteractionListener', () => {
           useValue: {
             commandName: 'help',
             handleInteraction: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: PlayingCommand,
+          useValue: {
+            commandName: 'playing',
+            handleInteraction: jest.fn().mockResolvedValue(undefined),
+            handleAutocomplete: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],

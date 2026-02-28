@@ -255,7 +255,7 @@ describe('BindingConfigForm', () => {
     ).toBeInTheDocument();
   });
 
-  it('does not show voice fields for general-lobby', () => {
+  it('shows voice fields for general-lobby (ROK-515)', () => {
     render(
       <BindingConfigForm
         binding={makeBinding({ bindingPurpose: 'general-lobby' })}
@@ -265,7 +265,7 @@ describe('BindingConfigForm', () => {
       />,
     );
 
-    expect(screen.queryByText(/Minimum Players/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Minimum Players/)).toBeInTheDocument();
   });
 
   // ── Form submission ───────────────────────────────────────────
