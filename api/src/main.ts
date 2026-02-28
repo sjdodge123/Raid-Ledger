@@ -5,6 +5,7 @@ import './sentry/instrument';
 import { NestFactory } from '@nestjs/core';
 import type { LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import compression from 'compression';
 import helmet from 'helmet';
 import * as path from 'path';
 import { AppModule } from './app.module';
@@ -28,6 +29,9 @@ async function bootstrap() {
 
   // Security headers (X-Content-Type-Options, X-Frame-Options, HSTS, etc.)
   app.use(helmet());
+
+  // Compress responses > 1KB (~70% reduction for JSON payloads)
+  app.use(compression({ threshold: 1024 }));
 
   // CORS configuration with environment validation
   const isProduction = process.env.NODE_ENV === 'production';
