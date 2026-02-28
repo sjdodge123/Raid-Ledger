@@ -634,8 +634,10 @@ export function useAdminSettings() {
     // Discord Bot Voice Channel Selection (ROK-471)
     // ============================================================
 
+    const botConnected = !!discordBotStatus.data?.connected;
+
     const discordVoiceChannels = useQuery<{ id: string; name: string }[]>({
-        queryKey: ['admin', 'settings', 'discord-bot', 'voice-channels'],
+        queryKey: ['admin', 'settings', 'discord-bot', 'voice-channels', { botConnected }],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/voice-channels`, {
                 headers: getHeaders(),
@@ -643,7 +645,7 @@ export function useAdminSettings() {
             if (!response.ok) throw new Error('Failed to fetch Discord voice channels');
             return response.json();
         },
-        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+        enabled: !!getAuthToken() && botConnected,
         staleTime: 30_000,
     });
 

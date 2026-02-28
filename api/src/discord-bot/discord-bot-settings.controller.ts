@@ -32,7 +32,12 @@ import {
   type DiscordBotTestResult,
   type CharacterDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
+import { z, ZodError } from 'zod';
+
+/** Inline Zod schema for voice-channel PUT body. */
+const VoiceChannelBodySchema = z.object({
+  channelId: z.string().min(1),
+});
 
 /**
  * Handle Zod validation errors by converting to BadRequestException.
@@ -316,28 +321,20 @@ export class DiscordBotSettingsController {
   async setDefaultVoiceChannel(
     @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    if (
-      !body ||
-      typeof body !== 'object' ||
-      !('channelId' in body) ||
-      typeof (body as Record<string, unknown>).channelId !== 'string' ||
-      !(body as Record<string, unknown>).channelId
-    ) {
-      throw new BadRequestException(
-        'channelId is required and must be a non-empty string',
-      );
+    try {
+      const { channelId } = VoiceChannelBodySchema.parse(body);
+
+      await this.settingsService.setDiscordBotDefaultVoiceChannel(channelId);
+
+      this.logger.log('Discord bot default voice channel updated via admin UI');
+
+      return {
+        success: true,
+        message: 'Default voice channel updated.',
+      };
+    } catch (error) {
+      handleValidationError(error);
     }
-
-    await this.settingsService.setDiscordBotDefaultVoiceChannel(
-      (body as Record<string, unknown>).channelId as string,
-    );
-
-    this.logger.log('Discord bot default voice channel updated via admin UI');
-
-    return {
-      success: true,
-      message: 'Default voice channel updated.',
-    };
   }
 
   /**

@@ -83,7 +83,7 @@ export class ScheduledEventService {
         return;
       }
 
-      const guild = this.clientService.getClient()?.guilds.cache.first();
+      const guild = this.clientService.getGuild();
       if (!guild) {
         this.logger.warn(
           `No guild available, skipping scheduled event for event ${eventId}`,
@@ -142,7 +142,7 @@ export class ScheduledEventService {
 
       if (!this.clientService.isConnected()) return;
 
-      const guild = this.clientService.getClient()?.guilds.cache.first();
+      const guild = this.clientService.getGuild();
       if (!guild) return;
 
       // Get stored scheduled event ID
@@ -207,7 +207,7 @@ export class ScheduledEventService {
     try {
       if (!this.clientService.isConnected()) return;
 
-      const guild = this.clientService.getClient()?.guilds.cache.first();
+      const guild = this.clientService.getGuild();
       if (!guild) return;
 
       const [event] = await this.db
@@ -259,7 +259,7 @@ export class ScheduledEventService {
     try {
       if (!this.clientService.isConnected()) return;
 
-      const guild = this.clientService.getClient()?.guilds.cache.first();
+      const guild = this.clientService.getGuild();
       if (!guild) return;
 
       const [event] = await this.db

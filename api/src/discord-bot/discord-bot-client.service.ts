@@ -5,6 +5,7 @@ import {
   GatewayIntentBits,
   Events,
   PermissionsBitField,
+  type Guild,
   type EmbedBuilder,
   type ActionRowBuilder,
   type ButtonBuilder,
@@ -183,6 +184,15 @@ export class DiscordBotClientService {
 
   isConnecting(): boolean {
     return this.connecting;
+  }
+
+  /**
+   * Get the first (primary) guild the bot is connected to.
+   * Returns null if the bot is not ready or no guild is cached.
+   */
+  getGuild(): Guild | null {
+    if (!this.client?.isReady()) return null;
+    return this.client.guilds.cache.first() ?? null;
   }
 
   getGuildInfo(): GuildInfo | null {
