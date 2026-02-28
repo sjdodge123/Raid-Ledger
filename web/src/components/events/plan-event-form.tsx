@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { IgdbGameDto, SlotConfigDto, CreateEventPlanDto, PollOption } from '@raid-ledger/contract';
 import { useTimeSuggestions, useCreateEventPlan } from '../../hooks/use-event-plans';
+import { useAdminSettings } from '../../hooks/use-admin-settings';
 import '../../pages/event-detail-page.css';
 import { MMO_DEFAULTS, GENERIC_DEFAULTS, type SlotState } from './shared/event-form-constants';
 import { GameDetailsSection } from './shared/game-details-section';
@@ -62,6 +63,8 @@ interface FormState {
 export function PlanEventForm() {
     const navigate = useNavigate();
     const createPlanMutation = useCreateEventPlan();
+    const { defaultTimezone } = useAdminSettings();
+    const communityTimezone = defaultTimezone.data?.timezone ?? undefined;
 
     const [form, setForm] = useState<FormState>({
         title: '',
@@ -140,6 +143,7 @@ export function PlanEventForm() {
             minute: '2-digit',
             hour12: true,
             timeZoneName: 'short',
+            ...(communityTimezone ? { timeZone: communityTimezone } : {}),
         });
 
         addTimeSlot({ date: dateObj.toISOString(), label });

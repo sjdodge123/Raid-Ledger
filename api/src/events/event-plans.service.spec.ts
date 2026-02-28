@@ -11,6 +11,7 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
+import { SettingsService } from '../settings/settings.service';
 import { getQueueToken } from '@nestjs/bullmq';
 
 // ─── Shared fixtures ──────────────────────────────────────────────────────────
@@ -179,6 +180,7 @@ describe('EventPlansService', () => {
   let discordClient: ReturnType<typeof makeDiscordMock>;
   let queue: ReturnType<typeof makeQueueMock>;
   let channelResolver: { resolveChannelForEvent: jest.Mock };
+  let settingsService: { getDefaultTimezone: jest.Mock };
   let eventsService: { create: jest.Mock };
   let signupsService: { signup: jest.Mock };
 
@@ -188,6 +190,9 @@ describe('EventPlansService', () => {
     queue = makeQueueMock();
     channelResolver = {
       resolveChannelForEvent: jest.fn().mockResolvedValue(CHANNEL_ID),
+    };
+    settingsService = {
+      getDefaultTimezone: jest.fn().mockResolvedValue(null),
     };
     eventsService = {
       create: jest.fn().mockResolvedValue({ id: 99 }),
@@ -203,6 +208,7 @@ describe('EventPlansService', () => {
         { provide: getQueueToken(EVENT_PLANS_QUEUE), useValue: queue },
         { provide: DiscordBotClientService, useValue: discordClient },
         { provide: ChannelResolverService, useValue: channelResolver },
+        { provide: SettingsService, useValue: settingsService },
         { provide: EventsService, useValue: eventsService },
         { provide: SignupsService, useValue: signupsService },
       ],
@@ -212,6 +218,7 @@ describe('EventPlansService', () => {
     jest.clearAllMocks();
 
     // Re-apply mocks after clearAllMocks
+    settingsService.getDefaultTimezone.mockResolvedValue(null);
     channelResolver.resolveChannelForEvent.mockResolvedValue(CHANNEL_ID);
     discordClient.getClient.mockReturnValue(discordClient._mockClient);
     discordClient._mockClient.isReady.mockReturnValue(true);
