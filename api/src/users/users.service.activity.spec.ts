@@ -45,10 +45,12 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
   describe('privacy filtering', () => {
     it('should return empty array when show_activity is false and requester is different user', async () => {
       // Simulate user preference: show_activity = false
-      mockDb.query.userPreferences = {
-        findFirst: jest.fn().mockResolvedValue({ key: 'show_activity', value: false }),
+      (mockDb.query as any).userPreferences = {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ key: 'show_activity', value: false }),
         findMany: jest.fn(),
-      } as never;
+      };
 
       const result = await service.getUserActivity(1, 'week', 2);
 
@@ -57,10 +59,12 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
     it('should return activity when show_activity is false but requester is the same user', async () => {
       // When requester === userId, privacy is bypassed
-      mockDb.query.userPreferences = {
-        findFirst: jest.fn().mockResolvedValue({ key: 'show_activity', value: false }),
+      (mockDb.query as any).userPreferences = {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ key: 'show_activity', value: false }),
         findMany: jest.fn(),
-      } as never;
+      };
 
       mockDb.limit.mockResolvedValue(mockActivityRows);
 
@@ -74,10 +78,10 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
     it('should return activity when show_activity preference does not exist', async () => {
       // Null pref means default = true (show activity)
-      mockDb.query.userPreferences = {
+      (mockDb.query as any).userPreferences = {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn(),
-      } as never;
+      };
 
       mockDb.limit.mockResolvedValue(mockActivityRows);
 
@@ -87,10 +91,12 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
     });
 
     it('should return activity when show_activity is true', async () => {
-      mockDb.query.userPreferences = {
-        findFirst: jest.fn().mockResolvedValue({ key: 'show_activity', value: true }),
+      (mockDb.query as any).userPreferences = {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ key: 'show_activity', value: true }),
         findMany: jest.fn(),
-      } as never;
+      };
 
       mockDb.limit.mockResolvedValue(mockActivityRows);
 
@@ -100,10 +106,12 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
     });
 
     it('should skip privacy check when no requesterId is provided', async () => {
-      mockDb.query.userPreferences = {
-        findFirst: jest.fn().mockResolvedValue({ key: 'show_activity', value: false }),
+      (mockDb.query as any).userPreferences = {
+        findFirst: jest
+          .fn()
+          .mockResolvedValue({ key: 'show_activity', value: false }),
         findMany: jest.fn(),
-      } as never;
+      };
 
       mockDb.limit.mockResolvedValue(mockActivityRows);
 
@@ -118,10 +126,10 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
   describe('period filtering', () => {
     beforeEach(() => {
-      mockDb.query.userPreferences = {
+      (mockDb.query as any).userPreferences = {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn(),
-      } as never;
+      };
     });
 
     it('should query with limit=20 for period=week', async () => {
@@ -167,10 +175,10 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
   describe('result transformation', () => {
     beforeEach(() => {
-      mockDb.query.userPreferences = {
+      (mockDb.query as any).userPreferences = {
         findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn(),
-      } as never;
+      };
     });
 
     it('should mark first entry as isMostPlayed=true', async () => {
@@ -206,7 +214,12 @@ describe('UsersService.getUserActivity (ROK-443)', () => {
 
     it('should preserve null coverUrl', async () => {
       mockDb.limit.mockResolvedValue([
-        { gameId: 2, gameName: 'No Cover Game', coverUrl: null, totalSeconds: 1800 },
+        {
+          gameId: 2,
+          gameName: 'No Cover Game',
+          coverUrl: null,
+          totalSeconds: 1800,
+        },
       ]);
 
       const result = await service.getUserActivity(1, 'all', 1);

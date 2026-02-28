@@ -101,6 +101,13 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             isLoading: false,
             error: null,
         } as any);
+
+        // Default mock for user activity (ROK-443)
+        vi.spyOn(useUserProfileHook, 'useUserActivity').mockReturnValue({
+            data: { data: [], period: 'week' },
+            isLoading: false,
+            error: null,
+        } as any);
     });
 
     describe('AC1: Characters grouped by game with section headers', () => {
