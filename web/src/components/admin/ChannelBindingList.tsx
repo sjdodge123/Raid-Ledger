@@ -4,7 +4,7 @@ import { BindingConfigForm } from './BindingConfigForm';
 
 const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
-  'game-voice-monitor': 'Ad-hoc Events (Activity Monitoring) & Game Event Announcements',
+  'game-voice-monitor': 'Quick Play Events (Activity Monitoring) & Game Event Announcements',
   'general-lobby': 'General Lobby',
 };
 

@@ -3,6 +3,7 @@ import { VoiceStateListener } from './voice-state.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
 
@@ -29,6 +30,11 @@ describe('VoiceStateListener', () => {
   let mockChannelBindingsService: {
     getBindings: jest.Mock;
   };
+  let mockPresenceDetector: {
+    detectGameForMember: jest.Mock;
+    detectGames: jest.Mock;
+    setManualOverride: jest.Mock;
+  };
   let mockUsersService: {
     findByDiscordId: jest.Mock;
   };
@@ -51,6 +57,14 @@ describe('VoiceStateListener', () => {
       getBindings: jest.fn().mockResolvedValue([]),
     };
 
+    mockPresenceDetector = {
+      detectGameForMember: jest.fn().mockResolvedValue(null),
+      detectGames: jest
+        .fn()
+        .mockResolvedValue({ primary: null, groups: new Map() }),
+      setManualOverride: jest.fn(),
+    };
+
     mockUsersService = {
       findByDiscordId: jest.fn().mockResolvedValue(null),
     };
@@ -63,6 +77,10 @@ describe('VoiceStateListener', () => {
         {
           provide: ChannelBindingsService,
           useValue: mockChannelBindingsService,
+        },
+        {
+          provide: PresenceGameDetectorService,
+          useValue: mockPresenceDetector,
         },
         { provide: UsersService, useValue: mockUsersService },
       ],
@@ -181,8 +199,10 @@ describe('VoiceStateListener', () => {
     beforeEach(async () => {
       const mockClient = createMockClient();
       mockClient.on.mockImplementation(
-        (_event: string, handler: (...args: unknown[]) => void) => {
-          voiceHandler = handler;
+        (event: string, handler: (...args: unknown[]) => void) => {
+          if (event === (Events.VoiceStateUpdate as string)) {
+            voiceHandler = handler;
+          }
         },
       );
       mockClientService.getClient.mockReturnValue(mockClient);

@@ -13,6 +13,7 @@ export const ChannelBindingConfigSchema = z.object({
   autoClose: z.boolean().optional(),
   gracePeriod: z.number().int().min(0).optional(),
   notificationChannelId: z.string().optional(),
+  allowJustChatting: z.boolean().optional(),
 });
 
 export const ChannelBindingSchema = z.object({

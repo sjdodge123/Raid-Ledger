@@ -55,6 +55,8 @@ import { DiscordEmojiService } from './services/discord-emoji.service';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
 import { ScheduledEventService } from './services/scheduled-event.service';
+import { PresenceGameDetectorService } from './services/presence-game-detector.service';
+import { PlayingCommand } from './commands/playing.command';
 
 @Module({
   imports: [
@@ -100,6 +102,7 @@ import { ScheduledEventService } from './services/scheduled-event.service';
     ActivityListener,
     VoiceStateListener,
     GameActivityService,
+    PresenceGameDetectorService,
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,
@@ -113,6 +116,7 @@ import { ScheduledEventService } from './services/scheduled-event.service';
     BindingsCommand,
     InviteCommand,
     HelpCommand,
+    PlayingCommand,
   ],
   exports: [
     DiscordBotService,

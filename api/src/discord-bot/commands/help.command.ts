@@ -32,6 +32,10 @@ const COMMANDS: { name: string; description: string }[] = [
   },
   { name: '/unbind', description: 'Remove a channel binding' },
   { name: '/bindings', description: 'List all active channel bindings' },
+  {
+    name: '/playing',
+    description: 'Set your current game for general lobby channels',
+  },
   { name: '/help', description: 'Show this help message' },
 ];
 

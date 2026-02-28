@@ -54,8 +54,13 @@ describe('ChannelBindingsService', () => {
       expect(service.detectBehavior('text')).toBe('game-announcements');
     });
 
-    it('should detect voice channels as game-voice-monitor', () => {
-      expect(service.detectBehavior('voice')).toBe('game-voice-monitor');
+    it('should detect voice channels with game as game-voice-monitor', () => {
+      expect(service.detectBehavior('voice', 1)).toBe('game-voice-monitor');
+    });
+
+    it('should detect voice channels without game as general-lobby', () => {
+      expect(service.detectBehavior('voice')).toBe('general-lobby');
+      expect(service.detectBehavior('voice', null)).toBe('general-lobby');
     });
   });
 

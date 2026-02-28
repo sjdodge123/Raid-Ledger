@@ -66,7 +66,7 @@ describe('Ad-Hoc Events (integration)', () => {
     const [event] = await db
       .insert(schema.events)
       .values({
-        title: 'Test Game — Ad-Hoc Session',
+        title: 'Test Game — Quick Play',
         creatorId: testApp.seed.adminUser.id,
         duration: [now, endTime],
         isAdHoc: true,
@@ -116,7 +116,7 @@ describe('Ad-Hoc Events (integration)', () => {
     const [event] = await db
       .insert(schema.events)
       .values({
-        title: 'Ad-Hoc Session',
+        title: 'Quick Play',
         creatorId: testApp.seed.adminUser.id,
         duration: [now, new Date(now.getTime() + 3600000)],
         isAdHoc: true,
@@ -150,7 +150,7 @@ describe('Ad-Hoc Events (integration)', () => {
       const [event] = await testApp.db
         .insert(schema.events)
         .values({
-          title: 'Test Ad-Hoc Session',
+          title: 'Test Quick Play',
           creatorId: testApp.seed.adminUser.id,
           duration: [now, new Date(now.getTime() + 3600000)],
           isAdHoc: true,
@@ -374,7 +374,7 @@ describe('Ad-Hoc Events (integration)', () => {
       const [event] = await db
         .insert(schema.events)
         .values({
-          title: 'Empty Ad-Hoc Session',
+          title: 'Empty Quick Play',
           creatorId: testApp.seed.adminUser.id,
           duration: [now, new Date(now.getTime() + 3600000)],
           isAdHoc: true,
@@ -539,7 +539,7 @@ describe('Ad-Hoc Events (integration)', () => {
 
     // Create an ad-hoc event via direct DB (system-created)
     await db.insert(schema.events).values({
-      title: 'Ad-Hoc Session',
+      title: 'Quick Play',
       creatorId: testApp.seed.adminUser.id,
       duration: [now, new Date(now.getTime() + 3600000)],
       isAdHoc: true,
@@ -554,7 +554,7 @@ describe('Ad-Hoc Events (integration)', () => {
       (e) => e.title,
     );
     expect(titles).toContain('Regular Event');
-    expect(titles).toContain('Ad-Hoc Session');
+    expect(titles).toContain('Quick Play');
   });
 
   it('should exclude ad-hoc events when includeAdHoc=false', async () => {

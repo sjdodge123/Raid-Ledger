@@ -27,6 +27,9 @@ export function BindingConfigForm({
   const [gracePeriod, setGracePeriod] = useState(
     binding.config?.gracePeriod ?? 5,
   );
+  const [allowJustChatting, setAllowJustChatting] = useState(
+    binding.config?.allowJustChatting ?? false,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,11 +38,14 @@ export function BindingConfigForm({
         minPlayers,
         autoClose,
         gracePeriod,
+        ...(binding.bindingPurpose === 'general-lobby' && { allowJustChatting }),
       },
     });
   };
 
-  const isVoiceMonitor = binding.bindingPurpose === 'game-voice-monitor';
+  const isVoiceMonitor =
+    binding.bindingPurpose === 'game-voice-monitor' ||
+    binding.bindingPurpose === 'general-lobby';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-overlay/30 rounded-lg border border-border">
@@ -47,11 +53,32 @@ export function BindingConfigForm({
         Edit Config: #{binding.channelName ?? binding.channelId}
       </h4>
 
+      {binding.bindingPurpose === 'general-lobby' && (
+        <div className="space-y-2">
+          <p className="text-xs text-muted">
+            General Lobby: games are auto-detected from Discord Rich Presence.
+            Players can use <code className="text-foreground bg-overlay px-1 py-0.5 rounded">/playing</code> as a manual fallback.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="allowJustChatting"
+              checked={allowJustChatting}
+              onChange={(e) => setAllowJustChatting(e.target.checked)}
+              className="rounded border-border bg-panel text-emerald-500 focus:ring-emerald-500/40"
+            />
+            <label htmlFor="allowJustChatting" className="text-sm text-foreground">
+              Allow &quot;Just Chatting&quot; events (no game required)
+            </label>
+          </div>
+        </div>
+      )}
+
       {isVoiceMonitor && (
         <>
           <div>
             <label className="block text-xs text-muted mb-1">
-              Minimum Players (to spawn ad-hoc event)
+              Minimum Players (to spawn Quick Play event)
             </label>
             <input
               type="number"

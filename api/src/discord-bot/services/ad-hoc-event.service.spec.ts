@@ -209,7 +209,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 100,
-          title: 'World of Warcraft — Ad-Hoc Session',
+          title: 'World of Warcraft — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-1',
         },
@@ -236,7 +236,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 101,
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
           gameId: null,
           channelBindingId: 'binding-2',
         },
@@ -246,7 +246,7 @@ describe('AdHocEventService', () => {
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
         }),
       );
     });
@@ -266,7 +266,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 102,
-          title: 'FFXIV — Ad-Hoc Session',
+          title: 'FFXIV — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-3',
         },
@@ -307,7 +307,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 200,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-5',
         },
@@ -349,7 +349,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 300,
-          title: 'Game — Ad-Hoc Session',
+          title: 'Game — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-6',
         },
@@ -388,7 +388,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 400,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-leave',
         },
@@ -429,7 +429,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 401,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-default-grace',
         },
@@ -522,7 +522,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 600,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-cleanup',
         },
@@ -531,7 +531,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       await service.handleVoiceJoin('binding-cleanup', baseMember, baseBinding);
 
-      expect(service.getActiveState('binding-cleanup')).toBeDefined();
+      expect(service.getActiveState('binding-cleanup', 1)).toBeDefined();
 
       // Now finalize: update().set().where().returning() (atomic claim)
       mockDb.returning.mockResolvedValueOnce([
@@ -548,7 +548,7 @@ describe('AdHocEventService', () => {
 
       await service.finalizeEvent(600);
 
-      expect(service.getActiveState('binding-cleanup')).toBeUndefined();
+      expect(service.getActiveState('binding-cleanup', 1)).toBeUndefined();
     });
   });
 
@@ -597,7 +597,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 700,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-state',
         },
@@ -607,7 +607,7 @@ describe('AdHocEventService', () => {
 
       await service.handleVoiceJoin('binding-state', baseMember, baseBinding);
 
-      const state = service.getActiveState('binding-state');
+      const state = service.getActiveState('binding-state', 1);
       expect(state).toBeDefined();
       expect(state?.eventId).toBe(700);
       expect(state?.memberSet.has('discord-123')).toBe(true);
@@ -626,7 +626,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 900,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-periodic',
         },
@@ -644,7 +644,7 @@ describe('AdHocEventService', () => {
       await service.onModuleInit();
 
       // Force the throttle to be expired for the next extend call
-      const state = service.getActiveState('binding-periodic');
+      const state = service.getActiveState('binding-periodic', 1);
       expect(state).toBeDefined();
       state!.lastExtendedAt = Date.now() - 6 * 60 * 1000;
 
@@ -678,7 +678,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 901,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-empty',
         },
@@ -688,7 +688,7 @@ describe('AdHocEventService', () => {
       await service.handleVoiceJoin('binding-empty', baseMember, baseBinding);
 
       // Remove the member
-      const state = service.getActiveState('binding-empty');
+      const state = service.getActiveState('binding-empty', 1);
       state!.memberSet.clear();
 
       // Start the interval
@@ -790,7 +790,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 800,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-cancel',
         },
@@ -798,13 +798,13 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-cancel', baseMember, baseBinding);
-      expect(service.getActiveState('binding-cancel')).toBeDefined();
+      expect(service.getActiveState('binding-cancel', 1)).toBeDefined();
 
       // Cancel the event
       await service.onEventCancelled({ eventId: 800 });
 
       // Active state should be cleared, allowing recreation
-      expect(service.getActiveState('binding-cancel')).toBeUndefined();
+      expect(service.getActiveState('binding-cancel', 1)).toBeUndefined();
       expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(800);
     });
 
@@ -825,7 +825,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 850,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-delete',
         },
@@ -833,12 +833,12 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-delete', baseMember, baseBinding);
-      expect(service.getActiveState('binding-delete')).toBeDefined();
+      expect(service.getActiveState('binding-delete', 1)).toBeDefined();
 
       // Delete the event
       await service.onEventDeleted({ eventId: 850 });
 
-      expect(service.getActiveState('binding-delete')).toBeUndefined();
+      expect(service.getActiveState('binding-delete', 1)).toBeUndefined();
       expect(mockGracePeriodQueue.cancel).toHaveBeenCalledWith(850);
     });
   });
@@ -879,7 +879,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 999,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-new',
         },

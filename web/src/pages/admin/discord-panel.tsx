@@ -174,7 +174,7 @@ export function DiscordPanel() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h3 className="text-base font-semibold text-foreground">
-                                                Ad-Hoc Voice Events
+                                                Quick Play Events
                                             </h3>
                                             <p className="text-sm text-muted mt-1">
                                                 Automatically create events when members join bound voice channels.
@@ -193,12 +193,12 @@ export function DiscordPanel() {
                                                             onSuccess: () => {
                                                                 toast.success(
                                                                     newEnabled
-                                                                        ? 'Ad-hoc events enabled'
-                                                                        : 'Ad-hoc events disabled',
+                                                                        ? 'Quick Play events enabled'
+                                                                        : 'Quick Play events disabled',
                                                                 );
                                                             },
                                                             onError: () => {
-                                                                toast.error('Failed to update ad-hoc events setting');
+                                                                toast.error('Failed to update Quick Play events setting');
                                                             },
                                                         },
                                                     );
