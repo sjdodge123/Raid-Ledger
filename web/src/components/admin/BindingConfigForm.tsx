@@ -27,6 +27,9 @@ export function BindingConfigForm({
   const [gracePeriod, setGracePeriod] = useState(
     binding.config?.gracePeriod ?? 5,
   );
+  const [allowJustChatting, setAllowJustChatting] = useState(
+    binding.config?.allowJustChatting ?? false,
+  );
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,6 +38,7 @@ export function BindingConfigForm({
         minPlayers,
         autoClose,
         gracePeriod,
+        ...(binding.bindingPurpose === 'general-lobby' && { allowJustChatting }),
       },
     });
   };
@@ -50,10 +54,24 @@ export function BindingConfigForm({
       </h4>
 
       {binding.bindingPurpose === 'general-lobby' && (
-        <p className="text-xs text-muted">
-          General Lobby: games are auto-detected from Discord Rich Presence.
-          Players can use <code className="text-foreground bg-overlay px-1 py-0.5 rounded">/playing</code> as a manual fallback.
-        </p>
+        <div className="space-y-2">
+          <p className="text-xs text-muted">
+            General Lobby: games are auto-detected from Discord Rich Presence.
+            Players can use <code className="text-foreground bg-overlay px-1 py-0.5 rounded">/playing</code> as a manual fallback.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="allowJustChatting"
+              checked={allowJustChatting}
+              onChange={(e) => setAllowJustChatting(e.target.checked)}
+              className="rounded border-border bg-panel text-emerald-500 focus:ring-emerald-500/40"
+            />
+            <label htmlFor="allowJustChatting" className="text-sm text-foreground">
+              Allow &quot;Just Chatting&quot; events (no game required)
+            </label>
+          </div>
+        </div>
       )}
 
       {isVoiceMonitor && (

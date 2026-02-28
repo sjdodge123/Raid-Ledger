@@ -308,7 +308,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       );
     });
 
-    it('falls back to Untitled Gaming Session when member has no presence', async () => {
+    it('does NOT create event when no game detected and allowJustChatting is off', async () => {
       mockAdHocEventService.getActiveState.mockReturnValue({
         eventId: 2,
         memberSet: new Set(['u-existing']),
@@ -336,12 +336,66 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
 
       await jest.advanceTimersByTimeAsync(2100);
 
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+
+    it('creates "Just Chatting" event when allowJustChatting is enabled and no game detected', async () => {
+      // Reconfigure bindings with allowJustChatting: true
+      mockChannelBindingsService.getBindings.mockResolvedValue([
+        {
+          id: 'bind-gl',
+          channelId: 'gl-ch',
+          bindingPurpose: 'general-lobby',
+          gameId: null,
+          config: { minPlayers: 2, allowJustChatting: true },
+        },
+      ]);
+      // Clear binding cache by reconnecting
+      listener.onBotDisconnected();
+
+      const mockClient = createMockClient();
+      mockClient.on.mockImplementation(
+        (event: string, handler: (...args: unknown[]) => void) => {
+          if (event === (Events.VoiceStateUpdate as string))
+            voiceHandler = handler;
+        },
+      );
+      mockClientService.getClient.mockReturnValue(mockClient);
+      await listener.onBotConnected();
+
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 3,
+        memberSet: new Set(['u-existing']),
+        lastExtendedAt: 0,
+      });
+
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+
+      voiceHandler!(
+        { channelId: null, id: 'u-chatting' },
+        {
+          channelId: 'gl-ch',
+          id: 'u-chatting',
+          member: {
+            id: 'u-chatting',
+            displayName: 'Chatter',
+            user: { username: 'Chatter', avatar: null },
+            presence: null,
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
       expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalledWith(
         'bind-gl',
         expect.any(Object),
         expect.any(Object),
         null,
-        'Untitled Gaming Session',
+        'Just Chatting',
       );
     });
 

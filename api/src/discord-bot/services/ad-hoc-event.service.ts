@@ -172,7 +172,14 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     resolvedGameName?: string,
   ): Promise<void> {
     const enabled = await this.isEnabled();
-    if (!enabled) return;
+    if (!enabled) {
+      this.logger.debug('handleVoiceJoin: ad-hoc events DISABLED, skipping');
+      return;
+    }
+
+    this.logger.debug(
+      `handleVoiceJoin: bindingId=${bindingId} user=${member.discordUserId} resolvedGameId=${resolvedGameId} resolvedGameName=${resolvedGameName}`,
+    );
 
     // For general-lobby, use resolved game; for game-specific, use binding game
     const effectiveGameId =

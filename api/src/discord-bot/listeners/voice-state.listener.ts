@@ -23,6 +23,7 @@ interface ResolvedBinding {
     minPlayers?: number;
     gracePeriod?: number;
     notificationChannelId?: string;
+    allowJustChatting?: boolean;
   } | null;
 }
 
@@ -170,6 +171,10 @@ export class VoiceStateListener {
     const oldChannelId = oldState.channelId;
     const newChannelId = newState.channelId;
 
+    this.logger.debug(
+      `voiceStateUpdate: user=${userId} old=${oldChannelId} new=${newChannelId}`,
+    );
+
     // Same channel — ignore (mute/deafen/etc.)
     if (oldChannelId === newChannelId) return;
 
@@ -237,8 +242,26 @@ export class VoiceStateListener {
     const guildMember = newPresence.guild?.members?.cache?.get(userId);
     if (!guildMember) return;
 
-    const detected =
+    let detected =
       await this.presenceDetector.detectGameForMember(guildMember);
+
+    // If user stopped playing a game, handle based on "Just Chatting" toggle
+    if (detected.gameId === null) {
+      const allowJustChatting = binding.config?.allowJustChatting ?? false;
+      if (!allowJustChatting) {
+        // Just leave the event — don't create a null-game event
+        await this.adHocEventService.handleVoiceLeave(
+          binding.bindingId,
+          userId,
+        );
+        this.logger.debug(
+          `Presence change: ${userId} stopped playing, removed from event in general-lobby ${channelId}`,
+        );
+        return;
+      }
+      // "Just Chatting" enabled — rename and fall through to move them
+      detected = { gameId: null, gameName: 'Just Chatting' };
+    }
 
     // Check if user is already in an event for this game
     const currentState = this.adHocEventService.getActiveState(
@@ -282,6 +305,9 @@ export class VoiceStateListener {
     guildMember?: GuildMember,
   ): Promise<void> {
     const binding = await this.resolveBinding(channelId);
+    this.logger.debug(
+      `handleChannelJoin: channel=${channelId} binding=${binding ? `${binding.bindingPurpose} (${binding.bindingId})` : 'NONE'}`,
+    );
     if (!binding) return;
 
     // Track member in channel
@@ -348,15 +374,32 @@ export class VoiceStateListener {
 
     if (guildMember) {
       detected = await this.presenceDetector.detectGameForMember(guildMember);
+      this.logger.debug(
+        `General lobby game detection: user=${discordMember.discordUserId} game="${detected.gameName}" gameId=${detected.gameId}`,
+      );
     } else {
       detected = { gameId: null, gameName: 'Untitled Gaming Session' };
+    }
+
+    // General-lobby requires an actual game unless "Just Chatting" is enabled.
+    // No game means the member is just hanging out — track for presence changes only.
+    if (detected.gameId === null) {
+      const allowJustChatting = binding.config?.allowJustChatting ?? false;
+      if (!allowJustChatting) {
+        this.logger.debug(
+          `General lobby: no game detected for ${discordMember.discordUserId}, tracking for presence changes only`,
+        );
+        return;
+      }
+      // Rename to "Just Chatting" for clarity
+      detected = { gameId: null, gameName: 'Just Chatting' };
     }
 
     const minPlayers = binding.config?.minPlayers ?? 2;
     const members = this.channelMembers.get(channelId);
     const memberCount = members?.size ?? 0;
 
-    // Check if event exists for this game or any event exists for this binding
+    // Check if event exists for this game
     const state = this.adHocEventService.getActiveState(
       binding.bindingId,
       detected.gameId,
@@ -364,13 +407,17 @@ export class VoiceStateListener {
 
     // If no event exists and below threshold, wait
     if (!state && memberCount < minPlayers) {
-      // But if we've just hit the threshold, do a group detection
-      // to see if we should create events based on consensus
+      this.logger.debug(
+        `General lobby: below threshold (${memberCount}/${minPlayers}), waiting`,
+      );
       return;
     }
 
     // When we hit the threshold and no event exists, do group detection
     if (!state && memberCount >= minPlayers && guildMember) {
+      this.logger.debug(
+        `General lobby: threshold met (${memberCount}/${minPlayers}), running group detection`,
+      );
       await this.handleGeneralLobbyGroupDetection(channelId, binding);
       return;
     }
@@ -412,10 +459,32 @@ export class VoiceStateListener {
     if (!channel || !channel.isVoiceBased()) return;
 
     const voiceMembers = [...channel.members.values()];
+    this.logger.debug(
+      `Group detection: ${voiceMembers.length} voice members, activities: ${voiceMembers.map((m) => `${m.id}=[${m.presence?.activities?.map((a) => `${a.type}:${a.name}`).join(',') ?? 'no-presence'}]`).join(', ')}`,
+    );
     if (voiceMembers.length === 0) return;
 
     // Detect games for all members
-    const groups = await this.presenceDetector.detectGames(voiceMembers);
+    const allGroups = await this.presenceDetector.detectGames(voiceMembers);
+    const allowJustChatting =
+      (binding.config as { allowJustChatting?: boolean } | null)
+        ?.allowJustChatting ?? false;
+
+    // Filter out no-game groups unless "Just Chatting" is enabled
+    const groups = allowJustChatting
+      ? allGroups.map((g) =>
+          g.gameId === null
+            ? { ...g, gameName: 'Just Chatting' }
+            : g,
+        )
+      : allGroups.filter((g) => g.gameId !== null);
+
+    if (groups.length === 0) {
+      this.logger.debug(
+        'Group detection: no games detected among members, no events created',
+      );
+      return;
+    }
 
     for (const group of groups) {
       for (const memberId of group.memberIds) {
