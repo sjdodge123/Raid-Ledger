@@ -130,6 +130,7 @@ export class GameAffinityNotificationService {
           payload: {
             eventId: input.eventId,
             gameId: input.gameId,
+            startTime: input.startTime,
             ...(eventUrl ? { url: eventUrl } : {}),
             ...(discordUrl ? { discordUrl } : {}),
             ...(voiceChannelId ? { voiceChannelId } : {}),
