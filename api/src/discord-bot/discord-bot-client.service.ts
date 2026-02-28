@@ -82,6 +82,7 @@ export class DiscordBotClientService {
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildPresences,
+        GatewayIntentBits.GuildScheduledEvents,
         GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
       ],
