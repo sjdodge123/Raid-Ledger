@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Events, type GuildMember, type VoiceState } from 'discord.js';
+import {
+  Events,
+  type GuildMember,
+  type Presence,
+  type VoiceState,
+} from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -50,7 +55,9 @@ export class VoiceStateListener {
     | null = null;
 
   /** Presence update handler for mid-session game switching */
-  private presenceHandler: ((...args: unknown[]) => void) | null = null;
+  private presenceHandler:
+    | ((oldPresence: Presence | null, newPresence: Presence) => void)
+    | null = null;
 
   /** Debounce timers per user to avoid rapid join/leave noise */
   private debounceTimers = new Map<string, NodeJS.Timeout>();
@@ -101,13 +108,11 @@ export class VoiceStateListener {
     client.on(Events.VoiceStateUpdate, this.boundHandler);
 
     // Listen for presence changes to handle mid-session game switching
-    this.presenceHandler = (...args: unknown[]) => {
-      this.handlePresenceChange(
-        args[1] as {
-          userId: string;
-          guild?: { members: { cache: Map<string, GuildMember> } };
-        },
-      ).catch((err) =>
+    this.presenceHandler = (
+      _oldPresence: Presence | null,
+      newPresence: Presence,
+    ) => {
+      this.handlePresenceChange(newPresence).catch((err) =>
         this.logger.error(`Error handling presence change: ${err}`),
       );
     };
@@ -225,12 +230,7 @@ export class VoiceStateListener {
    * Handle presence changes for users in general-lobby channels.
    * If a user switches games mid-session, move them between events.
    */
-  private async handlePresenceChange(newPresence: {
-    userId: string;
-    guild?: { members: { cache: Map<string, GuildMember> } };
-  }): Promise<void> {
-    if (!newPresence) return;
-
+  private async handlePresenceChange(newPresence: Presence): Promise<void> {
     const userId = newPresence.userId;
     const channelId = this.userChannelMap.get(userId);
     if (!channelId) return;
@@ -239,11 +239,10 @@ export class VoiceStateListener {
     if (!binding || binding.bindingPurpose !== 'general-lobby') return;
 
     // Get the GuildMember to read presence
-    const guildMember = newPresence.guild?.members?.cache?.get(userId);
+    const guildMember = newPresence.member;
     if (!guildMember) return;
 
-    let detected =
-      await this.presenceDetector.detectGameForMember(guildMember);
+    let detected = await this.presenceDetector.detectGameForMember(guildMember);
 
     // If user stopped playing a game, handle based on "Just Chatting" toggle
     if (detected.gameId === null) {
@@ -466,16 +465,12 @@ export class VoiceStateListener {
 
     // Detect games for all members
     const allGroups = await this.presenceDetector.detectGames(voiceMembers);
-    const allowJustChatting =
-      (binding.config as { allowJustChatting?: boolean } | null)
-        ?.allowJustChatting ?? false;
+    const allowJustChatting = binding.config?.allowJustChatting ?? false;
 
     // Filter out no-game groups unless "Just Chatting" is enabled
     const groups = allowJustChatting
       ? allGroups.map((g) =>
-          g.gameId === null
-            ? { ...g, gameName: 'Just Chatting' }
-            : g,
+          g.gameId === null ? { ...g, gameName: 'Just Chatting' } : g,
         )
       : allGroups.filter((g) => g.gameId !== null);
 

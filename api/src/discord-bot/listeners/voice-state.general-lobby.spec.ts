@@ -488,11 +488,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
 
       presenceHandler!(null, {
         userId: 'u-switch',
-        guild: {
-          members: {
-            cache: makeCollection([['u-switch', guildMember]]),
-          },
-        },
+        member: guildMember,
       });
 
       // Allow async processing
@@ -529,7 +525,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       // User is not in userChannelMap (never joined a tracked channel)
       presenceHandler!(null, {
         userId: 'user-not-in-channel',
-        guild: { members: { cache: new Map() } },
+        member: null,
       });
 
       await jest.advanceTimersByTimeAsync(100);
@@ -594,19 +590,10 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       // Now simulate a presence update
       presenceHandler!(null, {
         userId: 'u-nogame',
-        guild: {
-          members: {
-            cache: makeCollection([
-              [
-                'u-nogame',
-                {
-                  id: 'u-nogame',
-                  displayName: 'NoSwitch',
-                  user: { username: 'NoSwitch', avatar: null },
-                },
-              ],
-            ]),
-          },
+        member: {
+          id: 'u-nogame',
+          displayName: 'NoSwitch',
+          user: { username: 'NoSwitch', avatar: null },
         },
       });
 
@@ -617,7 +604,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       expect(mockAdHocEventService.handleVoiceLeave).not.toHaveBeenCalled();
     });
 
-    it('does nothing on presence update when null presence passed', async () => {
+    it('does nothing on presence update when member is not in a tracked channel', async () => {
       let presenceHandler: (...args: unknown[]) => void;
 
       const mockClient = createMockClient();
@@ -630,10 +617,12 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       mockClientService.getClient.mockReturnValue(mockClient);
       await listener.onBotConnected();
 
-      // Should not throw when newPresence is null
-      expect(() => {
-        presenceHandler!(null, null);
-      }).not.toThrow();
+      // User not in userChannelMap — should silently return
+      presenceHandler!(null, { userId: 'unknown-user', member: null });
+
+      await jest.advanceTimersByTimeAsync(100);
+
+      expect(mockPresenceDetector.detectGameForMember).not.toHaveBeenCalled();
     });
   });
 });
