@@ -61,7 +61,7 @@ function buildAutoHeartMockDb({
 
   // Add 'having' — not in base mock but needed for the candidates query
   const havingMock = jest.fn().mockResolvedValue(candidates);
-  (mockDb as Record<string, jest.Mock>).having = havingMock;
+  mockDb.having = havingMock;
 
   // Opted-out query terminates at .where()
   // Interests and suppressions terminate at .from()
@@ -128,8 +128,8 @@ async function createService(mockDb: MockDb) {
   const mockCronJobService = {
     executeWithTracking: jest
       .fn()
-      .mockImplementation(
-        async (_name: string, fn: () => Promise<void>) => fn(),
+      .mockImplementation(async (_name: string, fn: () => Promise<void>) =>
+        fn(),
       ),
   };
 
@@ -377,9 +377,7 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
   describe('early return when no candidates', () => {
     it('returns early and makes no further queries when candidates list is empty', async () => {
       const mockDb = createDrizzleMock();
-      (mockDb as Record<string, jest.Mock>).having = jest
-        .fn()
-        .mockResolvedValue([]);
+      mockDb.having = jest.fn().mockResolvedValue([]);
 
       const service = await createService(mockDb);
 
@@ -431,9 +429,9 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
 describe('GameActivityService — flush', () => {
   let mockDb: MockDb;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     mockDb = createDrizzleMock();
-    (mockDb as Record<string, jest.Mock>).having = jest.fn().mockReturnThis();
+    mockDb.having = jest.fn().mockReturnThis();
   });
 
   afterEach(() => {
@@ -444,8 +442,8 @@ describe('GameActivityService — flush', () => {
     const mockCronJobService = {
       executeWithTracking: jest
         .fn()
-        .mockImplementation(
-          async (_name: string, fn: () => Promise<void>) => fn(),
+        .mockImplementation(async (_name: string, fn: () => Promise<void>) =>
+          fn(),
         ),
     };
 
@@ -483,7 +481,7 @@ describe('GameActivityService — flush', () => {
     await service.flush();
 
     // Reset mocks to verify second flush is empty
-    (mockDb.insert as jest.Mock).mockClear();
+    mockDb.insert.mockClear();
     await service.flush();
 
     expect(mockDb.insert).not.toHaveBeenCalled();

@@ -362,7 +362,9 @@ describe('IgdbController.removeWantToPlay — suppression on discord source (ROK
     db.limit = jest.fn().mockImplementation(() => {
       limitCallCount++;
       if (limitCallCount === 1) {
-        return Promise.resolve(existingSource ? [{ source: existingSource }] : []);
+        return Promise.resolve(
+          existingSource ? [{ source: existingSource }] : [],
+        );
       }
       return Promise.resolve([]);
     });
