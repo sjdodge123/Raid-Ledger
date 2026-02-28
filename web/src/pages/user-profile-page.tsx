@@ -8,6 +8,7 @@ import { useBranding } from '../hooks/use-branding';
 import { formatDistanceToNow } from 'date-fns';
 import type { CharacterDto, UserHeartedGameDto, ActivityPeriod, GameActivityEntryDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../lib/avatar';
+import { formatPlaytime, PERIOD_LABELS } from '../lib/activity-utils';
 import { getMyPreferences, updatePreference } from '../lib/api-client';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
@@ -100,22 +101,6 @@ function GroupedCharacters({
         </div>
     );
 }
-
-/** Format seconds as "Xh Ym" or "Xm" */
-function formatPlaytime(totalSeconds: number): string {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    if (hours > 0) {
-        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-    }
-    return `${minutes}m`;
-}
-
-const PERIOD_LABELS: { value: ActivityPeriod; label: string }[] = [
-    { value: 'week', label: 'This Week' },
-    { value: 'month', label: 'This Month' },
-    { value: 'all', label: 'All Time' },
-];
 
 /** ROK-443: Game activity section for user profiles */
 function ActivitySection({ userId, isOwnProfile }: { userId: number; isOwnProfile: boolean }) {

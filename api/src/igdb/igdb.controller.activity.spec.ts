@@ -42,59 +42,15 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
   ];
 
   describe('getGameActivity (GET /games/:id/activity)', () => {
-    it('should return game activity with valid period=week', async () => {
-      // We need to provide a mock IgdbService that has the correct database mock
-      // that handles the three sequential queries in getGameActivity:
-      // 1. game exists check
-      // 2. top players query
-      // 3. total seconds query
-      const gameRows = [{ id: 42 }];
-
-      // Build a mock database that returns different values per call
-      let callCount = 0;
-      const mockDb: Record<string, jest.Mock> = {};
-      const chainMethods = [
-        'from',
-        'where',
-        'innerJoin',
-        'leftJoin',
-        'groupBy',
-        'orderBy',
-        'limit',
-      ];
-      for (const m of chainMethods) {
-        mockDb[m] = jest.fn().mockReturnThis();
-      }
-      // Make it thenable so that awaiting the chain gives results
-      Object.defineProperty(mockDb, 'then', {
-        get: () => undefined, // not directly thenable
-      });
-
-      // Use limit as the terminal mock
-      mockDb.limit = jest.fn().mockImplementation(() => {
-        callCount++;
-        if (callCount === 1) return Promise.resolve(gameRows);
-        return mockDb; // chain continues
-      });
-
-      // For select calls, we chain
-      mockDb.select = jest.fn().mockReturnThis();
-
-      // Better approach: mock the whole controller using spies on real NestJS module
-      // Since the controller directly accesses this.igdbService.database,
-      // we create a module with a partial mock that exposes our custom db.
-
+    it('should throw BadRequestException for invalid period (via service mock)', async () => {
+      // The controller validates the period before delegating to the service.
+      // An invalid period throws before any DB or service call.
       const mockService: Partial<IgdbService> = {
-        searchGames: jest.fn(),
-        database: mockDb as never,
-        redisClient: {
-          get: jest.fn().mockResolvedValue(null),
-          setex: jest.fn(),
-        } as never,
+        database: {} as never,
+        redisClient: {} as never,
         config: {} as never,
-        mapDbRowToDetail: jest.fn((g: unknown) => g) as never,
-        getGameDetailById: jest.fn() as never,
-        enqueueSync: jest.fn() as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn(),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -104,18 +60,53 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
 
       const ctrl = module.get<IgdbController>(IgdbController);
 
-      // Test that invalid period throws
       await expect(ctrl.getGameActivity(42, 'invalid')).rejects.toThrow(
         BadRequestException,
       );
     });
 
+    it('should delegate to igdbService.getGameActivity when game exists', async () => {
+      // Game exists check returns a row, then delegates to service
+      const mockDb: Record<string, jest.Mock> = {};
+      for (const m of ['select', 'from', 'where']) {
+        mockDb[m] = jest.fn().mockReturnThis();
+      }
+      mockDb.limit = jest.fn().mockResolvedValue([{ id: 42 }]);
+
+      const mockActivityResult = {
+        topPlayers: mockTopPlayers,
+        totalSeconds: 10800,
+        period: 'week' as const,
+      };
+
+      const mockService: Partial<IgdbService> = {
+        database: mockDb as never,
+        redisClient: {} as never,
+        config: {} as never,
+        getGameActivity: jest.fn().mockResolvedValue(mockActivityResult),
+        getGameNowPlaying: jest.fn(),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        controllers: [IgdbController],
+        providers: [{ provide: IgdbService, useValue: mockService }],
+      }).compile();
+
+      const ctrl = module.get<IgdbController>(IgdbController);
+
+      const result = await ctrl.getGameActivity(42, 'week');
+
+      expect(result).toEqual(mockActivityResult);
+      expect(mockService.getGameActivity).toHaveBeenCalledWith(42, 'week');
+    });
+
     it('should throw BadRequestException for invalid period', async () => {
       const mockService: Partial<IgdbService> = {
-        searchGames: jest.fn(),
         database: {} as never,
         redisClient: {} as never,
         config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn(),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -135,6 +126,8 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
         database: {} as never,
         redisClient: {} as never,
         config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn(),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -151,26 +144,18 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
 
     it('should throw NotFoundException when game does not exist', async () => {
       // Game exists check returns empty
-      const mockLimit = jest.fn().mockResolvedValue([]);
       const mockDbNoGame: Record<string, jest.Mock> = {};
-      const chainMethods = [
-        'select',
-        'from',
-        'where',
-        'innerJoin',
-        'leftJoin',
-        'groupBy',
-        'orderBy',
-      ];
-      for (const m of chainMethods) {
+      for (const m of ['select', 'from', 'where']) {
         mockDbNoGame[m] = jest.fn().mockReturnThis();
       }
-      mockDbNoGame.limit = mockLimit;
+      mockDbNoGame.limit = jest.fn().mockResolvedValue([]);
 
       const mockService: Partial<IgdbService> = {
         database: mockDbNoGame as never,
         redisClient: {} as never,
         config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn(),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -191,16 +176,7 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
 
     it('should default period to week when not provided', async () => {
       const mockDbNoGame: Record<string, jest.Mock> = {};
-      const chainMethods = [
-        'select',
-        'from',
-        'where',
-        'innerJoin',
-        'leftJoin',
-        'groupBy',
-        'orderBy',
-      ];
-      for (const m of chainMethods) {
+      for (const m of ['select', 'from', 'where']) {
         mockDbNoGame[m] = jest.fn().mockReturnThis();
       }
       // Return empty for game exists (so we get NotFoundException, which validates that the code ran)
@@ -210,6 +186,8 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
         database: mockDbNoGame as never,
         redisClient: {} as never,
         config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn(),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -261,21 +239,18 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
   });
 
   describe('getGameNowPlaying (GET /games/:id/now-playing)', () => {
-    it('should throw NotFoundException when game session returns empty due to missing game', async () => {
-      // The now-playing endpoint doesn't check game existence — it queries sessions directly
-      // So it will return an empty players list, not 404
-      const mockDbEmpty: Record<string, jest.Mock> = {};
-      const chainMethods = ['select', 'from', 'where', 'innerJoin', 'leftJoin'];
-      for (const m of chainMethods) {
-        mockDbEmpty[m] = jest.fn().mockReturnThis();
-      }
-      // Terminal: return empty array of players
-      mockDbEmpty.where = jest.fn().mockResolvedValue([]);
+    it('should delegate to igdbService.getGameNowPlaying and return result', async () => {
+      const mockNowPlayingResult = {
+        players: [],
+        count: 0,
+      };
 
       const mockService: Partial<IgdbService> = {
-        database: mockDbEmpty as never,
+        database: {} as never,
         redisClient: {} as never,
         config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn().mockResolvedValue(mockNowPlayingResult),
       };
 
       const module: TestingModule = await Test.createTestingModule({
@@ -291,6 +266,35 @@ describe('IgdbController — Activity Endpoints (ROK-443)', () => {
         players: [],
         count: 0,
       });
+      expect(mockService.getGameNowPlaying).toHaveBeenCalledWith(1);
+    });
+
+    it('should return players from the service', async () => {
+      const mockNowPlayingResult = {
+        players: mockNowPlayingPlayers,
+        count: 1,
+      };
+
+      const mockService: Partial<IgdbService> = {
+        database: {} as never,
+        redisClient: {} as never,
+        config: {} as never,
+        getGameActivity: jest.fn(),
+        getGameNowPlaying: jest.fn().mockResolvedValue(mockNowPlayingResult),
+      };
+
+      const module: TestingModule = await Test.createTestingModule({
+        controllers: [IgdbController],
+        providers: [{ provide: IgdbService, useValue: mockService }],
+      }).compile();
+
+      const ctrl = module.get<IgdbController>(IgdbController);
+
+      const result = await ctrl.getGameNowPlaying(42);
+
+      expect(result.players).toHaveLength(1);
+      expect(result.count).toBe(1);
+      expect(mockService.getGameNowPlaying).toHaveBeenCalledWith(42);
     });
 
     it('GameNowPlayingResponseSchema validates correct response shape', () => {
