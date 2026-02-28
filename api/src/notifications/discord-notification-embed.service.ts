@@ -317,12 +317,35 @@ export class DiscordNotificationEmbedService {
             inline: true,
           });
         }
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
+            inline: true,
+          });
+        }
         break;
       case 'new_event':
         if (payload.gameName) {
           embed.addFields({
             name: 'Game',
             value: toStr(payload.gameName),
+            inline: true,
+          });
+        }
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
+            inline: true,
+          });
+        }
+        break;
+      case 'subscribed_game':
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
             inline: true,
           });
         }
@@ -335,12 +358,28 @@ export class DiscordNotificationEmbedService {
             inline: true,
           });
         }
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
+            inline: true,
+          });
+        }
         break;
       case 'event_cancelled':
         if (payload.eventTitle) {
           embed.addFields({
             name: 'Event',
             value: toStr(payload.eventTitle),
+            inline: true,
+          });
+        }
+        break;
+      case 'event_rescheduled':
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
             inline: true,
           });
         }
@@ -357,6 +396,23 @@ export class DiscordNotificationEmbedService {
           embed.addFields({
             name: 'New Role',
             value: toStr(payload.newRole),
+            inline: true,
+          });
+        }
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
+            inline: true,
+          });
+        }
+        break;
+      case 'bench_promoted':
+      case 'tentative_displaced':
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
             inline: true,
           });
         }

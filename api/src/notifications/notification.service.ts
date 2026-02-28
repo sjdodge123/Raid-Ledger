@@ -17,6 +17,7 @@ import {
   type NotificationType,
 } from '../drizzle/schema/notification-preferences';
 import { DiscordNotificationService } from './discord-notification.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
 export type { ChannelPrefs, NotificationType };
@@ -70,6 +71,9 @@ export class NotificationService {
     @Optional()
     @Inject(DiscordNotificationService)
     private discordNotificationService: DiscordNotificationService | null,
+    @Optional()
+    @Inject(ChannelResolverService)
+    private channelResolver: ChannelResolverService | null,
     private readonly cronJobService: CronJobService,
   ) {}
 
@@ -332,6 +336,32 @@ export class NotificationService {
       async () => {
         await this.cleanupExpired();
       },
+    );
+  }
+
+  /**
+   * ROK-507: Resolve the voice channel ID for an event's game.
+   * Uses the same 3-tier fallback as Discord Scheduled Events (ROK-471):
+   * game-specific binding -> default binding -> app setting.
+   */
+  async resolveVoiceChannelId(gameId?: number | null): Promise<string | null> {
+    if (!this.channelResolver) return null;
+    return this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId);
+  }
+
+  /**
+   * ROK-507: Resolve the voice channel ID for an event by looking up the event's gameId first.
+   */
+  async resolveVoiceChannelForEvent(eventId: number): Promise<string | null> {
+    if (!this.channelResolver) return null;
+    const [event] = await this.db
+      .select({ gameId: schema.events.gameId })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (!event) return null;
+    return this.channelResolver.resolveVoiceChannelForScheduledEvent(
+      event.gameId,
     );
   }
 

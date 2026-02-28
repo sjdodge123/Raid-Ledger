@@ -140,7 +140,11 @@ describe('AdHocNotificationService', () => {
         id: 'binding-2',
         config: {},
       });
-      mockBuildEmbedData({ id: 43, title: 'Gaming — Ad-Hoc Session', gameId: null });
+      mockBuildEmbedData({
+        id: 43,
+        title: 'Gaming — Ad-Hoc Session',
+        gameId: null,
+      });
       // No game lookup needed since gameId is null — override the second limit
       // (won't be consumed since gameId is null)
 

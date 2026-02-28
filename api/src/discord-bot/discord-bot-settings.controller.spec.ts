@@ -506,9 +506,9 @@ describe('DiscordBotSettingsController', () => {
         channelId: 'voice-ch-456',
       });
 
-      expect(settingsService.setDiscordBotDefaultVoiceChannel).toHaveBeenCalledWith(
-        'voice-ch-456',
-      );
+      expect(
+        settingsService.setDiscordBotDefaultVoiceChannel,
+      ).toHaveBeenCalledWith('voice-ch-456');
       expect(result).toEqual({
         success: true,
         message: 'Default voice channel updated.',
@@ -516,9 +516,9 @@ describe('DiscordBotSettingsController', () => {
     });
 
     it('should throw BadRequestException when channelId is missing', async () => {
-      await expect(
-        controller.setDefaultVoiceChannel({}),
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.setDefaultVoiceChannel({})).rejects.toThrow(
+        BadRequestException,
+      );
       expect(
         settingsService.setDiscordBotDefaultVoiceChannel,
       ).not.toHaveBeenCalled();
@@ -543,9 +543,9 @@ describe('DiscordBotSettingsController', () => {
     });
 
     it('should throw BadRequestException when body is null', async () => {
-      await expect(
-        controller.setDefaultVoiceChannel(null),
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.setDefaultVoiceChannel(null)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when body is undefined', async () => {

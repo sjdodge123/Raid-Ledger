@@ -11,6 +11,7 @@ describe('EventReminderService', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
+    resolveVoiceChannelId: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -30,6 +31,7 @@ describe('EventReminderService', () => {
         createdAt: new Date().toISOString(),
       }),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+      resolveVoiceChannelId: jest.fn().mockResolvedValue(null),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -49,9 +51,7 @@ describe('EventReminderService', () => {
           provide: SettingsService,
           useValue: {
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-            getDefaultTimezone: jest
-              .fn()
-              .mockResolvedValue('America/New_York'),
+            getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
           },
         },
       ],
@@ -280,9 +280,9 @@ describe('EventReminderService', () => {
       // Fifth call: getUserTimezones (ROK-544)
       const tzSelectChain = {
         from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([
-            { userId: 1, value: 'America/New_York' },
-          ]),
+          where: jest
+            .fn()
+            .mockResolvedValue([{ userId: 1, value: 'America/New_York' }]),
         }),
       };
 

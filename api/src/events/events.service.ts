@@ -1127,6 +1127,11 @@ export class EventsService {
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
 
+    // ROK-507: Resolve voice channel for the event's game
+    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
+      existing[0].gameId,
+    );
+
     await Promise.all(
       usersToNotify.map((uid) =>
         this.notificationService.create({
@@ -1141,6 +1146,7 @@ export class EventsService {
             newStartTime: dto.startTime,
             newEndTime: dto.endTime,
             ...(discordUrl ? { discordUrl } : {}),
+            ...(voiceChannelId ? { voiceChannelId } : {}),
           },
         }),
       ),

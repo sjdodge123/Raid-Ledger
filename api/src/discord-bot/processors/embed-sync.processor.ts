@@ -12,6 +12,7 @@ import {
   type EmbedContext,
 } from '../services/discord-embed.factory';
 import { ScheduledEventService } from '../services/scheduled-event.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
@@ -40,6 +41,7 @@ export class EmbedSyncProcessor extends WorkerHost {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
+    private readonly channelResolver: ChannelResolverService,
   ) {
     super();
   }
@@ -255,6 +257,15 @@ export class EmbedSyncProcessor extends WorkerHost {
       if (game) {
         eventData.game = { name: game.name, coverUrl: game.coverUrl };
       }
+    }
+
+    // ROK-507: Resolve voice channel for the event's game
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        event.gameId,
+      );
+    if (voiceChannelId) {
+      eventData.voiceChannelId = voiceChannelId;
     }
 
     return eventData;

@@ -68,6 +68,14 @@ export class EmbedPosterService {
     try {
       // Enrich with live roster data so the embed reflects current signups
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
+
+      // ROK-507: Resolve voice channel for the event's game
+      const voiceChannelId =
+        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId);
+      if (voiceChannelId) {
+        enrichedEvent.voiceChannelId = voiceChannelId;
+      }
+
       const context = await this.buildContext();
       const { embed, row } = this.embedFactory.buildEventEmbed(
         enrichedEvent,

@@ -192,6 +192,9 @@ export class BenchPromotionProcessor extends WorkerHost {
       // ROK-538: Look up Discord embed URL for the event
       const discordUrl =
         await this.notificationService.getDiscordEmbedUrl(eventId);
+      // ROK-507: Resolve voice channel for the event
+      const voiceChannelId =
+        await this.notificationService.resolveVoiceChannelForEvent(eventId);
       await this.notificationService.create({
         userId: benchPlayer.userId,
         type: 'bench_promoted',
@@ -202,6 +205,7 @@ export class BenchPromotionProcessor extends WorkerHost {
           role: vacatedRole,
           position: vacatedPosition,
           ...(discordUrl ? { discordUrl } : {}),
+          ...(voiceChannelId ? { voiceChannelId } : {}),
         },
       });
     }

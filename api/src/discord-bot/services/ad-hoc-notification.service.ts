@@ -1,4 +1,9 @@
-import { Inject, Injectable, Logger, type OnModuleDestroy } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  type OnModuleDestroy,
+} from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -82,11 +87,14 @@ export class AdHocNotificationService implements OnModuleDestroy {
     if (!channelId) return;
 
     const context = await this.buildContext();
-    const embedData = await this.buildEmbedEventData(eventId, participants.map((p) => ({
-      discordUserId: p.discordUserId,
-      discordUsername: p.discordUsername,
-      isActive: true,
-    })));
+    const embedData = await this.buildEmbedEventData(
+      eventId,
+      participants.map((p) => ({
+        discordUserId: p.discordUserId,
+        discordUsername: p.discordUsername,
+        isActive: true,
+      })),
+    );
 
     if (!embedData) return;
 
@@ -145,11 +153,14 @@ export class AdHocNotificationService implements OnModuleDestroy {
     if (!channelId) return;
 
     const context = await this.buildContext();
-    const embedData = await this.buildEmbedEventData(eventId, participants.map((p) => ({
-      discordUserId: p.discordUserId,
-      discordUsername: p.discordUsername,
-      isActive: false,
-    })));
+    const embedData = await this.buildEmbedEventData(
+      eventId,
+      participants.map((p) => ({
+        discordUserId: p.discordUserId,
+        discordUsername: p.discordUsername,
+        isActive: false,
+      })),
+    );
 
     if (!embedData) return;
 
@@ -214,7 +225,10 @@ export class AdHocNotificationService implements OnModuleDestroy {
     }));
 
     const context = await this.buildContext();
-    const embedData = await this.buildEmbedEventData(update.eventId, participants);
+    const embedData = await this.buildEmbedEventData(
+      update.eventId,
+      participants,
+    );
 
     if (!embedData) return;
 
@@ -319,7 +333,9 @@ export class AdHocNotificationService implements OnModuleDestroy {
 
     // 2. Look for a game-announcements binding for the same game
     if (binding.gameId && binding.guildId) {
-      const bindings = await this.channelBindingsService.getBindings(binding.guildId);
+      const bindings = await this.channelBindingsService.getBindings(
+        binding.guildId,
+      );
       const announcementBinding = bindings.find(
         (b) =>
           b.bindingPurpose === 'game-announcements' &&

@@ -166,9 +166,7 @@ describe('PugInviteService', () => {
               communityAccentColor: null,
             }),
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
-            getDefaultTimezone: jest
-              .fn()
-              .mockResolvedValue('America/New_York'),
+            getDefaultTimezone: jest.fn().mockResolvedValue('America/New_York'),
           },
         },
       ],

@@ -124,7 +124,9 @@ describe('ChannelResolverService', () => {
 
       expect(result).toBe('game-voice-ch');
       // App setting (Tier 3) should NOT be consulted
-      expect(settingsService.getDiscordBotDefaultVoiceChannel).not.toHaveBeenCalled();
+      expect(
+        settingsService.getDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
     });
 
     it('falls back to app setting when no game voice binding exists (Tier 3)', async () => {
@@ -179,7 +181,9 @@ describe('ChannelResolverService', () => {
       const result = await service.resolveVoiceChannelForScheduledEvent(99);
 
       expect(result).toBe('game-voice');
-      expect(settingsService.getDiscordBotDefaultVoiceChannel).not.toHaveBeenCalled();
+      expect(
+        settingsService.getDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
     });
   });
 });

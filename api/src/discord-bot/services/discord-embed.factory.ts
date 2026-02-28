@@ -51,6 +51,8 @@ export interface EmbedEventData {
     name: string;
     coverUrl?: string | null;
   } | null;
+  /** Discord voice channel ID to display on the embed (ROK-507) */
+  voiceChannelId?: string | null;
 }
 
 export interface EmbedContext {
@@ -165,6 +167,9 @@ export class DiscordEmbedFactory {
       bodyLines.push(`🎮 **${event.game.name}**`);
     }
     bodyLines.push(`📆 ${timeDisplay}`);
+    if (event.voiceChannelId) {
+      bodyLines.push(`🔊 <#${event.voiceChannelId}>`);
+    }
     if (event.description) {
       const excerpt =
         event.description.length > 200
@@ -289,6 +294,9 @@ export class DiscordEmbedFactory {
       bodyLines.push(`🎮 **${event.game.name}**`);
     }
     bodyLines.push(`📆 ${timeDisplay} (${durationStr})`);
+    if (event.voiceChannelId) {
+      bodyLines.push(`🔊 <#${event.voiceChannelId}>`);
+    }
 
     // Roster breakdown
     const rosterLine = this.buildRosterLine(event);

@@ -16,6 +16,7 @@ describe('SignupsService', () => {
   let mockNotificationService: {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
   };
   let mockBenchPromotionService: {
     schedulePromotion: jest.Mock;
@@ -62,6 +63,7 @@ describe('SignupsService', () => {
     mockNotificationService = {
       create: jest.fn().mockResolvedValue(null),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     };
     mockBenchPromotionService = {
       schedulePromotion: jest.fn().mockResolvedValue(undefined),
