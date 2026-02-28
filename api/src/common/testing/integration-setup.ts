@@ -13,6 +13,13 @@ process.env.THROTTLE_DEFAULT_LIMIT = '999999';
 
 import { closeTestApp } from './test-app';
 
+// ConfigModule.forRoot() in AppModule reads api/.env during the import above,
+// setting process.env.DATABASE_URL to the dev DB. Delete it so getTestApp()
+// uses Testcontainers for a fresh database instead of hitting the dev DB.
+if (!process.env.CI) {
+  delete process.env.DATABASE_URL;
+}
+
 afterAll(async () => {
   await closeTestApp();
 });
