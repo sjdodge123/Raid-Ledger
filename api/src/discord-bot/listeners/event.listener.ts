@@ -12,6 +12,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
@@ -54,6 +55,7 @@ export class DiscordEventListener {
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly embedPoster: EmbedPosterService,
+    private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly scheduledEventService: ScheduledEventService,
     @Optional()
@@ -223,12 +225,22 @@ export class DiscordEventListener {
 
     const context = await this.buildContext();
 
+    // ROK-507: Resolve voice channel so embed updates retain the voice channel line
+    const eventData = { ...payload.event };
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        payload.gameId,
+      );
+    if (voiceChannelId) {
+      eventData.voiceChannelId = voiceChannelId;
+    }
+
     for (const record of records) {
       try {
         const currentState =
           record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
         const { embed, row } = this.embedFactory.buildEventEmbed(
-          payload.event,
+          eventData,
           context,
           { state: currentState },
         );

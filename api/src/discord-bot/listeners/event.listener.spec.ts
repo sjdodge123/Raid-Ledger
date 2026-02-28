@@ -5,6 +5,7 @@ import type { EventPayload } from './event.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
 import { ScheduledEventService } from '../services/scheduled-event.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -105,6 +106,14 @@ describe('DiscordEventListener', () => {
           provide: EmbedPosterService,
           useValue: {
             postEmbed: jest.fn().mockResolvedValue(true),
+          },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: {
+            resolveVoiceChannelForScheduledEvent: jest
+              .fn()
+              .mockResolvedValue(null),
           },
         },
         {
