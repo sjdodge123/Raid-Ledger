@@ -1,13 +1,13 @@
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
-import { API_BASE_URL } from '../../lib/config';
+import { useDiscordLink } from '../../hooks/use-discord-link';
 import { buildDiscordAvatarUrl, isDiscordLinked } from '../../lib/avatar';
-import { toast } from '../../lib/toast';
 
 export function ProfileDiscordPanel() {
     const { user } = useAuth();
     const { data: systemStatus } = useSystemStatus();
+    const handleLinkDiscord = useDiscordLink();
 
     if (!user) return null;
 
@@ -18,15 +18,6 @@ export function ProfileDiscordPanel() {
 
     const hasDiscordLinked = isDiscordLinked(user.discordId);
     const discordAvatarUrl = buildDiscordAvatarUrl(user.discordId, user.avatar);
-
-    const handleLinkDiscord = () => {
-        const token = localStorage.getItem('raid_ledger_token');
-        if (!token) {
-            toast.error('Please log in again to link Discord');
-            return;
-        }
-        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
-    };
 
     return (
         <div className="space-y-6">

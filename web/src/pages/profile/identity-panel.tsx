@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth, isImpersonating } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useSystemStatus } from '../../hooks/use-system-status';
-import { API_BASE_URL } from '../../lib/config';
+import { useDiscordLink } from '../../hooks/use-discord-link';
 import { buildDiscordAvatarUrl, isDiscordLinked, resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { AvatarType } from '../../lib/avatar';
 import { RoleBadge } from '../../components/ui/role-badge';
@@ -47,6 +47,7 @@ export function IdentityPanel() {
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [confirmName, setConfirmName] = useState('');
     const { upload: uploadAvatarFile, deleteAvatar, isUploading, uploadProgress } = useAvatarUpload();
+    const handleLinkDiscord = useDiscordLink();
 
     const handleUpload = useCallback((file: File) => {
         uploadAvatarFile(file, {
@@ -136,15 +137,6 @@ export function IdentityPanel() {
     const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
 
     const showDiscord = systemStatus?.discordConfigured;
-
-    const handleLinkDiscord = () => {
-        const token = localStorage.getItem('raid_ledger_token');
-        if (!token) {
-            toast.error('Please log in again to link Discord');
-            return;
-        }
-        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
-    };
 
     return (
         <div className="space-y-6">
