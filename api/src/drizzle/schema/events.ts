@@ -84,6 +84,10 @@ export const events = pgTable(
       () => channelBindings.id,
       { onDelete: 'set null' },
     ),
+    /** ROK-471: Discord Scheduled Event ID for server calendar visibility */
+    discordScheduledEventId: varchar('discord_scheduled_event_id', {
+      length: 255,
+    }),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */
@@ -96,6 +100,9 @@ export const events = pgTable(
     index('idx_events_creator_id').on(table.creatorId),
     index('idx_events_game_id').on(table.gameId),
     // ROK-293: Supports ad-hoc event lookup by binding + status
-    index('idx_events_ad_hoc_binding').on(table.channelBindingId, table.isAdHoc),
+    index('idx_events_ad_hoc_binding').on(
+      table.channelBindingId,
+      table.isAdHoc,
+    ),
   ],
 );

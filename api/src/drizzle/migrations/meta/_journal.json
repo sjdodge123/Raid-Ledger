@@ -498,6 +498,13 @@
       "when": 1772062588007,
       "tag": "0070_glorious_spiral",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1772247704900,
+      "tag": "0071_married_susan_delgado",
+      "breakpoints": true
     }
   ]
 }

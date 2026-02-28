@@ -619,6 +619,21 @@ export class SettingsService {
   }
 
   /**
+   * Get Discord bot default voice channel ID (ROK-471).
+   */
+  async getDiscordBotDefaultVoiceChannel(): Promise<string | null> {
+    return this.get(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL);
+  }
+
+  /**
+   * Set Discord bot default voice channel ID (ROK-471).
+   */
+  async setDiscordBotDefaultVoiceChannel(channelId: string): Promise<void> {
+    await this.set(SETTING_KEYS.DISCORD_BOT_DEFAULT_VOICE_CHANNEL, channelId);
+    this.logger.log('Discord bot default voice channel updated');
+  }
+
+  /**
    * Get ad-hoc events enabled status (ROK-293).
    */
   async getAdHocEventsEnabled(): Promise<boolean> {

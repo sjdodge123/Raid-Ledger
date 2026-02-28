@@ -630,6 +630,54 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Discord Bot Voice Channel Selection (ROK-471)
+    // ============================================================
+
+    const discordVoiceChannels = useQuery<{ id: string; name: string }[]>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'voice-channels'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/voice-channels`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch Discord voice channels');
+            return response.json();
+        },
+        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+        staleTime: 30_000,
+    });
+
+    const discordDefaultVoiceChannel = useQuery<{ channelId: string | null }>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'voice-channel'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/voice-channel`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch default voice channel');
+            return response.json();
+        },
+        enabled: !!getAuthToken() && !!discordBotStatus.data?.connected,
+        staleTime: 30_000,
+    });
+
+    const setDiscordVoiceChannel = useMutation<ApiResponse, Error, string>({
+        mutationFn: async (channelId) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/voice-channel`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify({ channelId }),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to set default voice channel' }));
+                throw new Error(error.message || 'Failed to set default voice channel');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot', 'voice-channel'] });
+        },
+    });
+
     // ROK-293: Ad-hoc events toggle
     const adHocEventsStatus = useQuery<{ enabled: boolean }>({
         queryKey: ['admin', 'settings', 'discord-bot', 'ad-hoc'],
@@ -689,6 +737,9 @@ export function useAdminSettings() {
         discordDefaultChannel,
         setDiscordChannel,
         resendSetupWizard,
+        discordVoiceChannels,
+        discordDefaultVoiceChannel,
+        setDiscordVoiceChannel,
         adHocEventsStatus,
         updateAdHocEvents,
     };

@@ -5,6 +5,7 @@ import type { EventPayload } from './event.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { ScheduledEventService } from '../services/scheduled-event.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
@@ -116,6 +117,15 @@ describe('DiscordEventListener', () => {
             }),
             getClientUrl: jest.fn().mockResolvedValue(null),
             getDefaultTimezone: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: ScheduledEventService,
+          useValue: {
+            createScheduledEvent: jest.fn().mockResolvedValue(undefined),
+            updateScheduledEvent: jest.fn().mockResolvedValue(undefined),
+            deleteScheduledEvent: jest.fn().mockResolvedValue(undefined),
+            updateDescription: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
