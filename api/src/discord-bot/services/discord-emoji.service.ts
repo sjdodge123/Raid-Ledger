@@ -3,7 +3,11 @@ import { OnEvent } from '@nestjs/event-emitter';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import { DiscordAPIError, GuildPremiumTier, PermissionsBitField } from 'discord.js';
+import {
+  DiscordAPIError,
+  GuildPremiumTier,
+  PermissionsBitField,
+} from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
@@ -293,7 +297,9 @@ export class DiscordEmojiService {
     try {
       await guild.members.fetchMe({ force: true });
     } catch {
-      this.logger.warn('Could not refresh bot member data, using cached permissions');
+      this.logger.warn(
+        'Could not refresh bot member data, using cached permissions',
+      );
     }
 
     // Diagnostic: log guild info and bot permissions at sync time (DEBUG only)

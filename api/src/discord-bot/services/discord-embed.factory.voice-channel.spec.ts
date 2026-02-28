@@ -225,7 +225,13 @@ describe('DiscordEmbedFactory — voice channel display (ROK-507)', () => {
     it('accepts undefined (omitted) voiceChannelId without type errors', () => {
       // voiceChannelId omitted — should compile and run fine
       const { id, title, startTime, endTime, signupCount } = baseEvent;
-      const event: EmbedEventData = { id, title, startTime, endTime, signupCount };
+      const event: EmbedEventData = {
+        id,
+        title,
+        startTime,
+        endTime,
+        signupCount,
+      };
 
       expect(() => factory.buildEventEmbed(event, baseContext)).not.toThrow();
     });

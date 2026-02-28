@@ -5,7 +5,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EmbedPosterService } from './embed-poster.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import { DiscordEmbedFactory, type EmbedEventData } from './discord-embed.factory';
+import {
+  DiscordEmbedFactory,
+  type EmbedEventData,
+} from './discord-embed.factory';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -89,7 +92,9 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
         {
           provide: SettingsService,
           useValue: {
-            getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
+            getBranding: jest
+              .fn()
+              .mockResolvedValue({ communityName: 'Test Guild' }),
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
             getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
           },
@@ -141,7 +146,9 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
   it('does NOT set voiceChannelId when resolver returns null', async () => {
     setupEmptyRoster();
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(null);
+    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      null,
+    );
 
     await service.postEmbed(42, baseEvent, 3);
 

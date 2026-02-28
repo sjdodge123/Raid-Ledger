@@ -53,7 +53,8 @@ export class ChannelBindingsController {
       return { data: [] };
     }
 
-    const bindings = await this.channelBindingsService.getBindingsWithGameNames(guildId);
+    const bindings =
+      await this.channelBindingsService.getBindingsWithGameNames(guildId);
 
     // Enrich with channel names from Discord
     const textChannels = this.clientService.getTextChannels();

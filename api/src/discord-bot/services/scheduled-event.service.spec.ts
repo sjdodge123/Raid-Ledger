@@ -16,8 +16,16 @@ import type { ScheduledEventData } from './scheduled-event.service';
 function makeDiscordApiError(code: number, message = 'Discord API error') {
   const err = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
   // Use defineProperty to avoid read-only getter conflicts on the prototype
-  Object.defineProperty(err, 'code', { value: code, writable: true, configurable: true });
-  Object.defineProperty(err, 'message', { value: message, writable: true, configurable: true });
+  Object.defineProperty(err, 'code', {
+    value: code,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(err, 'message', {
+    value: message,
+    writable: true,
+    configurable: true,
+  });
   return err;
 }
 
@@ -100,9 +108,11 @@ describe('ScheduledEventService', () => {
           provide: DiscordBotClientService,
           useValue: {
             isConnected: jest.fn().mockReturnValue(true),
-            getClient: jest
-              .fn()
-              .mockReturnValue({ guilds: { cache: { first: jest.fn().mockReturnValue(mockGuild) } } }),
+            getClient: jest.fn().mockReturnValue({
+              guilds: {
+                cache: { first: jest.fn().mockReturnValue(mockGuild) },
+              },
+            }),
           },
         },
         {
@@ -192,7 +202,9 @@ describe('ScheduledEventService', () => {
     });
 
     it('skips when no voice channel is resolved (AC-10)', async () => {
-      channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(null);
+      channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+        null,
+      );
 
       await service.createScheduledEvent(42, baseEventData, 1, false);
 
@@ -211,7 +223,9 @@ describe('ScheduledEventService', () => {
     });
 
     it('does not throw when Discord API returns an error — logs and swallows (AC-13)', async () => {
-      mockGuild.scheduledEvents.create.mockRejectedValue(new Error('Discord API is down'));
+      mockGuild.scheduledEvents.create.mockRejectedValue(
+        new Error('Discord API is down'),
+      );
 
       await expect(
         service.createScheduledEvent(42, baseEventData, 1, false),
@@ -226,7 +240,9 @@ describe('ScheduledEventService', () => {
         scheduledStartTime: Date;
       };
       expect(call.scheduledEndTime).toEqual(new Date(baseEventData.endTime));
-      expect(call.scheduledStartTime).toEqual(new Date(baseEventData.startTime));
+      expect(call.scheduledStartTime).toEqual(
+        new Date(baseEventData.startTime),
+      );
     });
 
     it('uses gameId to resolve the voice channel', async () => {
@@ -277,7 +293,9 @@ describe('ScheduledEventService', () => {
     });
 
     it('creates a new scheduled event when none exists in DB', async () => {
-      const selectChain = createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mockDb.select.mockReturnValue(selectChain);
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -324,7 +342,10 @@ describe('ScheduledEventService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mockGuild.scheduledEvents.edit.mockRejectedValue(unknownError);
 
       await service.updateScheduledEvent(42, baseEventData, 1, false);
@@ -387,7 +408,9 @@ describe('ScheduledEventService', () => {
     });
 
     it('skips when no discordScheduledEventId stored in DB', async () => {
-      const selectChain = createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mockDb.select.mockReturnValue(selectChain);
 
       await service.deleteScheduledEvent(42);
@@ -420,7 +443,10 @@ describe('ScheduledEventService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mockGuild.scheduledEvents.delete.mockRejectedValue(unknownError);
 
       await expect(service.deleteScheduledEvent(42)).resolves.not.toThrow();
@@ -462,13 +488,18 @@ describe('ScheduledEventService', () => {
         expect.objectContaining({ description: expect.any(String) }),
       );
       // Should NOT include name or scheduled times
-      const editArg = mockGuild.scheduledEvents.edit.mock.calls[0][1] as Record<string, unknown>;
+      const editArg = mockGuild.scheduledEvents.edit.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       expect(editArg).not.toHaveProperty('name');
       expect(editArg).not.toHaveProperty('scheduledStartTime');
     });
 
     it('skips when no discordScheduledEventId in DB', async () => {
-      const selectChain = createSelectChain([{ discordScheduledEventId: null }]);
+      const selectChain = createSelectChain([
+        { discordScheduledEventId: null },
+      ]);
       mockDb.select.mockReturnValue(selectChain);
 
       await service.updateDescription(42, baseEventData);
@@ -492,10 +523,15 @@ describe('ScheduledEventService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mockGuild.scheduledEvents.edit.mockRejectedValue(unknownError);
 
-      await expect(service.updateDescription(42, baseEventData)).resolves.not.toThrow();
+      await expect(
+        service.updateDescription(42, baseEventData),
+      ).resolves.not.toThrow();
 
       expect(updateChain.set).toHaveBeenCalledWith({
         discordScheduledEventId: null,
@@ -512,7 +548,9 @@ describe('ScheduledEventService', () => {
         new Error('Some other error'),
       );
 
-      await expect(service.updateDescription(42, baseEventData)).resolves.not.toThrow();
+      await expect(
+        service.updateDescription(42, baseEventData),
+      ).resolves.not.toThrow();
     });
   });
 
@@ -576,7 +614,10 @@ describe('ScheduledEventService', () => {
 
     it('truncates long descriptions to 1000 characters', async () => {
       const longDesc = 'a'.repeat(2000);
-      const data: ScheduledEventData = { ...baseEventData, description: longDesc };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: longDesc,
+      };
 
       await service.createScheduledEvent(42, data, 1, false);
 
@@ -588,7 +629,10 @@ describe('ScheduledEventService', () => {
 
     it('preserves header even when description is extremely long', async () => {
       const longDesc = 'x'.repeat(2000);
-      const data: ScheduledEventData = { ...baseEventData, description: longDesc };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: longDesc,
+      };
 
       await service.createScheduledEvent(42, data, 1, false);
 
@@ -601,7 +645,10 @@ describe('ScheduledEventService', () => {
 
     it('returns full description unchanged when it is under 1000 chars', async () => {
       const shortDesc = 'Short description.';
-      const data: ScheduledEventData = { ...baseEventData, description: shortDesc };
+      const data: ScheduledEventData = {
+        ...baseEventData,
+        description: shortDesc,
+      };
 
       await service.createScheduledEvent(42, data, 1, false);
 

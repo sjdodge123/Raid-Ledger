@@ -39,7 +39,10 @@ function makeValidInvite(
 describe('OgMetaService', () => {
   let service: OgMetaService;
   let inviteService: { resolveInvite: jest.Mock };
-  let settingsService: { getClientUrl: jest.Mock; getDefaultTimezone: jest.Mock };
+  let settingsService: {
+    getClientUrl: jest.Mock;
+    getDefaultTimezone: jest.Mock;
+  };
 
   beforeEach(async () => {
     inviteService = {

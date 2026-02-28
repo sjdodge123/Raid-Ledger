@@ -58,7 +58,7 @@ export class BackupService implements OnModuleInit {
     this.dbContainer = isProduction
       ? ''
       : (this.configService.get<string>('DB_CONTAINER_NAME') ??
-          DEFAULT_DB_CONTAINER);
+        DEFAULT_DB_CONTAINER);
     this.backupBase =
       this.configService.get<string>('BACKUP_DIR') || DEFAULT_BACKUP_BASE;
     this.dailyDir = path.join(this.backupBase, 'daily');

@@ -128,9 +128,8 @@ describe('DiscordNotificationEmbedService — voice channel fields (ROK-507)', (
   });
 
   // Helper to get the Voice Channel field from an embed
-  const getVoiceChannelField = (
-    fields: EmbedFields | undefined,
-  ) => fields?.find((f) => f.name === 'Voice Channel');
+  const getVoiceChannelField = (fields: EmbedFields | undefined) =>
+    fields?.find((f) => f.name === 'Voice Channel');
 
   // ─── event_reminder ──────────────────────────────────────────────────────
 
@@ -337,7 +336,11 @@ describe('DiscordNotificationEmbedService — voice channel fields (ROK-507)', (
           type: 'slot_vacated',
           title: 'Slot Available',
           message: 'A roster slot opened up',
-          payload: { slotName: 'Tank', eventId: 8, voiceChannelId: '321654987' },
+          payload: {
+            slotName: 'Tank',
+            eventId: 8,
+            voiceChannelId: '321654987',
+          },
         },
         'Community',
       );
@@ -435,7 +438,12 @@ describe('DiscordNotificationEmbedService — voice channel fields (ROK-507)', (
           type: 'roster_reassigned',
           title: 'Role Changed',
           message: 'Your role has been changed',
-          payload: { oldRole: 'dps', newRole: 'tank', eventId: 11, voiceChannelId: '999111222' },
+          payload: {
+            oldRole: 'dps',
+            newRole: 'tank',
+            eventId: 11,
+            voiceChannelId: '999111222',
+          },
         },
         'Community',
       );
@@ -470,13 +478,20 @@ describe('DiscordNotificationEmbedService — voice channel fields (ROK-507)', (
           type: 'roster_reassigned',
           title: 'Role Changed',
           message: 'Role changed',
-          payload: { oldRole: 'healer', newRole: 'tank', eventId: 11, voiceChannelId: '456' },
+          payload: {
+            oldRole: 'healer',
+            newRole: 'tank',
+            eventId: 11,
+            voiceChannelId: '456',
+          },
         },
         'Community',
       );
 
       const json = embed.toJSON() as { fields: EmbedFields };
-      const prevRoleField = json.fields?.find((f) => f.name === 'Previous Role');
+      const prevRoleField = json.fields?.find(
+        (f) => f.name === 'Previous Role',
+      );
       const newRoleField = json.fields?.find((f) => f.name === 'New Role');
       const vcField = getVoiceChannelField(json.fields);
 

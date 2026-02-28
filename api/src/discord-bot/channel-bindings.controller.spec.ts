@@ -139,7 +139,10 @@ describe('ChannelBindingsController', () => {
 
     it('should enrich voice channel names from voice channel list', async () => {
       bindingsService.getBindingsWithGameNames.mockResolvedValue([
-        { ...makeBinding({ channelId: 'voice-ch-1', channelType: 'voice' }), gameName: null },
+        {
+          ...makeBinding({ channelId: 'voice-ch-1', channelType: 'voice' }),
+          gameName: null,
+        },
       ]);
       clientService.getTextChannels.mockReturnValue([]);
       clientService.getVoiceChannels.mockReturnValue([

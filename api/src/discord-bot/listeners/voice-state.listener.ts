@@ -86,14 +86,17 @@ export class VoiceStateListener {
     await this.recoverFromVoiceChannels();
 
     // Periodic cache sweep — evict entries older than 10 minutes
-    this.cacheSweepTimer = setInterval(() => {
-      const now = Date.now();
-      for (const [key, entry] of this.channelBindingCache) {
-        if (now - entry.cachedAt > 10 * 60 * 1000) {
-          this.channelBindingCache.delete(key);
+    this.cacheSweepTimer = setInterval(
+      () => {
+        const now = Date.now();
+        for (const [key, entry] of this.channelBindingCache) {
+          if (now - entry.cachedAt > 10 * 60 * 1000) {
+            this.channelBindingCache.delete(key);
+          }
         }
-      }
-    }, 10 * 60 * 1000);
+      },
+      10 * 60 * 1000,
+    );
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
@@ -255,7 +258,10 @@ export class VoiceStateListener {
 
     const guildId = this.clientService.getGuildId();
     if (!guildId) {
-      this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: null });
+      this.channelBindingCache.set(channelId, {
+        cachedAt: Date.now(),
+        value: null,
+      });
       return null;
     }
 
@@ -267,7 +273,10 @@ export class VoiceStateListener {
     );
 
     if (!binding) {
-      this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: null });
+      this.channelBindingCache.set(channelId, {
+        cachedAt: Date.now(),
+        value: null,
+      });
       return null;
     }
 
@@ -281,7 +290,10 @@ export class VoiceStateListener {
       } | null,
     };
 
-    this.channelBindingCache.set(channelId, { cachedAt: Date.now(), value: result });
+    this.channelBindingCache.set(channelId, {
+      cachedAt: Date.now(),
+      value: result,
+    });
     return result;
   }
 
@@ -323,7 +335,9 @@ export class VoiceStateListener {
           await this.handleChannelJoin(channelId, {
             discordUserId: memberId,
             discordUsername:
-              guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+              guildMember.displayName ??
+              guildMember.user?.username ??
+              'Unknown',
             discordAvatarHash: guildMember.user?.avatar ?? null,
           });
         }

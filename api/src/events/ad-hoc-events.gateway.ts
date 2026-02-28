@@ -46,9 +46,7 @@ export class AdHocEventsGateway
       ?.token;
 
     if (!token || typeof token !== 'string') {
-      this.logger.debug(
-        `Client ${client.id} rejected: no auth token provided`,
-      );
+      this.logger.debug(`Client ${client.id} rejected: no auth token provided`);
       client.disconnect(true);
       return;
     }
@@ -57,9 +55,7 @@ export class AdHocEventsGateway
       this.jwtService.verify(token);
       this.logger.debug(`Client ${client.id} connected with valid token`);
     } catch {
-      this.logger.debug(
-        `Client ${client.id} rejected: invalid auth token`,
-      );
+      this.logger.debug(`Client ${client.id} rejected: invalid auth token`);
       client.disconnect(true);
     }
   }

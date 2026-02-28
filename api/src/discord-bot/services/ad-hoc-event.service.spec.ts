@@ -177,12 +177,18 @@ describe('AdHocEventService', () => {
       // Scheduled event overlap check returns a match (with duration for extension)
       const eventStart = new Date('2026-02-10T18:00:00Z');
       const eventEnd = new Date('2026-02-10T19:00:00Z');
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 42,
-        duration: [eventStart, eventEnd],
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 42,
+          duration: [eventStart, eventEnd],
+        },
+      ]);
 
-      await service.handleVoiceJoin('binding-suppress', baseMember, baseBinding);
+      await service.handleVoiceJoin(
+        'binding-suppress',
+        baseMember,
+        baseBinding,
+      );
 
       expect(mockDb.insert).not.toHaveBeenCalled();
       expect(mockParticipantService.addParticipant).not.toHaveBeenCalled();
@@ -438,7 +444,11 @@ describe('AdHocEventService', () => {
 
       // handleVoiceLeave: getEvent to verify event still active + for notification
       mockDb.limit.mockResolvedValueOnce([
-        { id: 401, adHocStatus: 'live', channelBindingId: 'binding-default-grace' },
+        {
+          id: 401,
+          adHocStatus: 'live',
+          channelBindingId: 'binding-default-grace',
+        },
       ]);
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-default-grace',
@@ -777,12 +787,14 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 800 }]);
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 800,
-        title: 'WoW — Ad-Hoc Session',
-        gameId: 1,
-        channelBindingId: 'binding-cancel',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 800,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-cancel',
+        },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-cancel', baseMember, baseBinding);
@@ -810,12 +822,14 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 850 }]);
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 850,
-        title: 'WoW — Ad-Hoc Session',
-        gameId: 1,
-        channelBindingId: 'binding-delete',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 850,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-delete',
+        },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-delete', baseMember, baseBinding);
@@ -835,10 +849,12 @@ describe('AdHocEventService', () => {
       // Return a scheduled event with an end time in the past
       const eventStart = new Date(Date.now() - 3600000);
       const eventEnd = new Date(Date.now() - 60000); // ended 1 min ago
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 42,
-        duration: [eventStart, eventEnd],
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 42,
+          duration: [eventStart, eventEnd],
+        },
+      ]);
 
       await service.handleVoiceJoin('binding-extend', baseMember, baseBinding);
 
@@ -860,12 +876,14 @@ describe('AdHocEventService', () => {
       // Game lookup + insert
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
       mockDb.returning.mockResolvedValueOnce([{ id: 999 }]);
-      mockDb.limit.mockResolvedValueOnce([{
-        id: 999,
-        title: 'WoW — Ad-Hoc Session',
-        gameId: 1,
-        channelBindingId: 'binding-new',
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: 999,
+          title: 'WoW — Ad-Hoc Session',
+          gameId: 1,
+          channelBindingId: 'binding-new',
+        },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
 
       await service.handleVoiceJoin('binding-new', baseMember, baseBinding);

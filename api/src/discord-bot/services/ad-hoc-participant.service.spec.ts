@@ -242,7 +242,10 @@ describe('AdHocParticipantService', () => {
   describe('finalizeAll', () => {
     it('marks all active participants as left in a single query', async () => {
       // Single update().set().where().returning() chain
-      mockDb.returning.mockResolvedValueOnce([{ id: 'uuid-1' }, { id: 'uuid-2' }]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: 'uuid-1' },
+        { id: 'uuid-2' },
+      ]);
 
       await service.finalizeAll(42);
 
