@@ -14,6 +14,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { BenchPromotionService } from './bench-promotion.service';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
@@ -46,6 +47,7 @@ export class SignupsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private notificationService: NotificationService,
+    private rosterNotificationBuffer: RosterNotificationBufferService,
     private benchPromotionService: BenchPromotionService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -377,6 +379,9 @@ export class SignupsService {
       signupId: result.signup.id,
       action: 'signup_created',
     });
+
+    // ROK-534: Notify buffer that user (re)joined — resets grace timer
+    this.rosterNotificationBuffer.bufferJoin(eventId, userId);
 
     // ROK-439: If character was provided upfront, include it in the response
     const character = dto?.characterId
@@ -983,25 +988,16 @@ export class SignupsService {
       action: 'signup_cancelled',
     });
 
-    // Notify organizer if the user held a roster slot
+    // Notify organizer if the user held a roster slot (ROK-534: debounced)
     if (notifyData) {
       const slotLabel = notifyData.role ?? 'assigned';
-      // ROK-538: Look up Discord embed URL for the event
-      const discordUrl =
-        await this.notificationService.getDiscordEmbedUrl(eventId);
-      // ROK-507: Resolve voice channel for the event
-      const voiceChannelId =
-        await this.notificationService.resolveVoiceChannelForEvent(eventId);
-      await this.notificationService.create({
-        userId: notifyData.creatorId,
-        type: 'slot_vacated',
-        title: 'Slot Vacated',
-        message: `${notifyData.displayName} left the ${slotLabel} slot for ${notifyData.eventTitle}`,
-        payload: {
-          eventId,
-          ...(discordUrl ? { discordUrl } : {}),
-          ...(voiceChannelId ? { voiceChannelId } : {}),
-        },
+      this.rosterNotificationBuffer.bufferLeave({
+        organizerId: notifyData.creatorId,
+        eventId,
+        eventTitle: notifyData.eventTitle,
+        userId,
+        displayName: notifyData.displayName,
+        vacatedRole: slotLabel,
       });
 
       // ROK-229: Schedule bench promotion for vacated non-bench slot
@@ -1287,24 +1283,15 @@ export class SignupsService {
       action: 'self_unassigned',
     });
 
-    // Notify organizer about the vacated slot
+    // Notify organizer about the vacated slot (ROK-534: debounced)
     const slotLabel = assignment.role ?? 'assigned';
-    // ROK-538: Look up Discord embed URL for the event
-    const discordUrl =
-      await this.notificationService.getDiscordEmbedUrl(eventId);
-    // ROK-507: Resolve voice channel for the event
-    const voiceChannelId =
-      await this.notificationService.resolveVoiceChannelForEvent(eventId);
-    await this.notificationService.create({
-      userId: event.creatorId,
-      type: 'slot_vacated',
-      title: 'Slot Vacated',
-      message: `${user?.username ?? 'Unknown'} left the ${slotLabel} slot for ${event.title}`,
-      payload: {
-        eventId,
-        ...(discordUrl ? { discordUrl } : {}),
-        ...(voiceChannelId ? { voiceChannelId } : {}),
-      },
+    this.rosterNotificationBuffer.bufferLeave({
+      organizerId: event.creatorId,
+      eventId,
+      eventTitle: event.title,
+      userId,
+      displayName: user?.username ?? 'Unknown',
+      vacatedRole: slotLabel,
     });
 
     // ROK-229: Schedule bench promotion for vacated non-bench slot
