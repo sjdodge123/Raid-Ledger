@@ -315,6 +315,7 @@ export class EventReminderService {
         eventId: input.eventId,
         reminderWindow: input.windowType,
         characterDisplay: input.characterDisplay,
+        startTime: input.startTime.toISOString(),
         ...(discordUrl ? { discordUrl } : {}),
         ...(voiceChannelId ? { voiceChannelId } : {}),
       },

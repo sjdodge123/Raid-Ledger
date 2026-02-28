@@ -900,6 +900,7 @@ export class EventsService {
           payload: {
             eventId,
             reason: dto.reason ?? null,
+            startTime: existing[0].duration[0].toISOString(),
             ...(discordUrl ? { discordUrl } : {}),
           },
         }),
@@ -1145,6 +1146,7 @@ export class EventsService {
             oldEndTime: existing[0].duration[1].toISOString(),
             newStartTime: dto.startTime,
             newEndTime: dto.endTime,
+            startTime: dto.startTime,
             ...(discordUrl ? { discordUrl } : {}),
             ...(voiceChannelId ? { voiceChannelId } : {}),
           },

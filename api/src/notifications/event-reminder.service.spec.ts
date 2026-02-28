@@ -96,11 +96,12 @@ describe('EventReminderService', () => {
           userId: 1,
           type: 'event_reminder',
           title: 'Event Starting in 15 Minutes!',
-          payload: {
+          payload: expect.objectContaining({
             eventId: 10,
             reminderWindow: '15min',
             characterDisplay: 'Thrall (Shaman)',
-          },
+            startTime: expect.any(String) as string,
+          }) as Record<string, unknown>,
         }),
       );
     });
