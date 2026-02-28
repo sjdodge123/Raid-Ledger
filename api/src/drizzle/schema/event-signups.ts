@@ -27,9 +27,14 @@ export type ConfirmationStatus = 'pending' | 'confirmed' | 'changed';
  * Signup status for tracking attendance intent.
  * - signed_up: User is attending
  * - tentative: User might attend
- * - declined: User won't attend
+ * - declined: User gracefully declined (≥23h before event start)
+ * - roached_out: User cancelled late (<23h before event start)
  */
-export type SignupStatus = 'signed_up' | 'tentative' | 'declined';
+export type SignupStatus =
+  | 'signed_up'
+  | 'tentative'
+  | 'declined'
+  | 'roached_out';
 
 /**
  * Event signups table for tracking user participation in events.
