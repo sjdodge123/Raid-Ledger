@@ -288,17 +288,34 @@ export class DiscordBotSettingsController {
 
     try {
       const { EmbedBuilder } = await import('discord.js');
+      const [branding, clientUrl] = await Promise.all([
+        this.settingsService.getBranding(),
+        this.settingsService.getClientUrl(),
+      ]);
+      const name = branding.communityName || 'Raid Ledger';
+
+      const description = [
+        `**${name}** is now online and ready to go!`,
+        '',
+        '📅 Schedule raids, track attendance, and manage your roster — all from one place.',
+      ];
+      if (clientUrl) {
+        description.push('', `🔗 [Open ${name}](${clientUrl})`);
+      }
+
       const embed = new EmbedBuilder()
-        .setTitle('Test Message')
-        .setDescription(
-          'This is a test message from Raid Ledger. If you can see this, the bot is configured correctly!',
-        )
+        .setTitle(`${name} is Online`)
+        .setDescription(description.join('\n'))
         .setColor(0x10b981)
+        .setFooter({ text: 'Powered by Raid Ledger' })
         .setTimestamp();
 
       await this.discordBotClientService.sendEmbed(channelId, embed);
       this.logger.log('Test message sent via admin UI');
-      return { success: true, message: 'Test message sent to default channel.' };
+      return {
+        success: true,
+        message: 'Test message sent to default channel.',
+      };
     } catch (error) {
       this.logger.error(
         'Test message failed:',
