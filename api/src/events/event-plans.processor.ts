@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import {
   EventPlansService,
   EVENT_PLANS_QUEUE,
@@ -23,10 +24,13 @@ export class EventPlansProcessor extends WorkerHost {
 
   async process(job: Job<PollClosedJobData>): Promise<void> {
     const { planId } = job.data;
+    const start = isPerfEnabled() ? performance.now() : 0;
     this.logger.log(`Processing poll-closed job for plan ${planId}`);
 
     try {
       await this.eventPlansService.processPollClose(planId);
+      if (start)
+        perfLog('QUEUE', 'event-plans', performance.now() - start, { planId });
     } catch (error) {
       this.logger.error(
         `Error processing poll-closed for plan ${planId}:`,

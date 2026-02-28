@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationEmbedService } from './discord-notification-embed.service';
 import { DiscordNotificationService } from './discord-notification.service';
@@ -32,6 +33,7 @@ export class DiscordNotificationProcessor extends WorkerHost {
   async process(job: Job<DiscordNotificationJobData>): Promise<void> {
     const { notificationId, userId, discordId, type, title, message, payload } =
       job.data;
+    const start = isPerfEnabled() ? performance.now() : 0;
 
     this.logger.debug(
       `Processing Discord notification job ${job.id} for user ${userId} (${type})`,
@@ -66,6 +68,11 @@ export class DiscordNotificationProcessor extends WorkerHost {
       this.logger.log(
         `Sent Discord DM to user ${userId} (${type}, job ${job.id})`,
       );
+      if (start)
+        perfLog('QUEUE', 'discord-notification', performance.now() - start, {
+          type,
+          userId,
+        });
     } catch (error) {
       this.logger.warn(
         `Failed to send Discord DM to user ${userId} (attempt ${job.attemptsMade + 1}): ${error instanceof Error ? error.message : 'Unknown error'}`,

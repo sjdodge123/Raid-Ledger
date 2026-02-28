@@ -107,7 +107,7 @@ function CommunityActivitySection({ gameId }: { gameId: number }) {
                     <div className="flex items-center gap-3">
                         <div className="flex -space-x-2">
                             {nowPlaying.slice(0, 6).map((player) => (
-                                <Link key={player.userId} to={`/players/${player.userId}`}>
+                                <Link key={player.userId} to={`/users/${player.userId}`}>
                                     <PlayerAvatar player={player} size="md" />
                                 </Link>
                             ))}
@@ -138,7 +138,7 @@ function CommunityActivitySection({ gameId }: { gameId: number }) {
                     {topPlayers.map((player, idx) => (
                         <Link
                             key={player.userId}
-                            to={`/players/${player.userId}`}
+                            to={`/users/${player.userId}`}
                             className="flex items-center gap-3 bg-panel border border-edge rounded-lg p-3 hover:opacity-80 transition-opacity"
                         >
                             <span className="text-xs text-muted w-5 text-right">

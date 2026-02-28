@@ -114,6 +114,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
   const setupEmptyRoster = () => {
     mockDb.select
+      .mockReturnValueOnce(makeSelectChain([])) // ROK-551: idempotency check (no existing embed)
       .mockReturnValueOnce(makeSelectChain([])) // eventSignups
       .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
   };

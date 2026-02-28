@@ -1,4 +1,5 @@
 import { Inject, Logger } from '@nestjs/common';
+import { perfLog } from '../common/perf-logger';
 import { JwtService } from '@nestjs/jwt';
 import {
   WebSocketGateway,
@@ -99,9 +100,14 @@ export class AdHocEventsGateway
     participants: AdHocParticipantDto[],
     activeCount: number,
   ): void {
+    const start = performance.now();
     this.server.to(`event:${eventId}`).emit('roster:update', {
       eventId,
       participants,
+      activeCount,
+    });
+    perfLog('WS', 'roster:update', performance.now() - start, {
+      eventId,
       activeCount,
     });
   }
@@ -113,19 +119,25 @@ export class AdHocEventsGateway
     eventId: number,
     status: 'live' | 'grace_period' | 'ended',
   ): void {
+    const start = performance.now();
     this.server.to(`event:${eventId}`).emit('event:status', {
       eventId,
       status,
     });
+    perfLog('WS', 'event:status', performance.now() - start, { eventId });
   }
 
   /**
    * Emit end time extension.
    */
   emitEndTimeExtended(eventId: number, newEndTime: string): void {
+    const start = performance.now();
     this.server.to(`event:${eventId}`).emit('event:endTimeExtended', {
       eventId,
       newEndTime,
+    });
+    perfLog('WS', 'event:endTimeExtended', performance.now() - start, {
+      eventId,
     });
   }
 }

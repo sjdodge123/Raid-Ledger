@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import {
   Client,
   GatewayIntentBits,
@@ -223,9 +224,15 @@ export class DiscordBotClientService {
       throw new Error('Discord bot is not connected');
     }
 
+    const start = isPerfEnabled() ? performance.now() : 0;
+
     try {
       const user = await this.client.users.fetch(discordId);
       await user.send(content);
+      if (start)
+        perfLog('DISCORD', 'sendDirectMessage', performance.now() - start, {
+          discordId,
+        });
     } catch (error) {
       this.logger.error(`Failed to send DM to ${discordId}:`, error);
       throw error;
@@ -247,6 +254,8 @@ export class DiscordBotClientService {
       throw new Error('Discord bot is not connected');
     }
 
+    const start = isPerfEnabled() ? performance.now() : 0;
+
     try {
       const user = await this.client.users.fetch(discordId);
       const messagePayload: {
@@ -266,6 +275,10 @@ export class DiscordBotClientService {
       }
 
       await user.send(messagePayload);
+      if (start)
+        perfLog('DISCORD', 'sendEmbedDM', performance.now() - start, {
+          discordId,
+        });
     } catch (error) {
       this.logger.error(`Failed to send embed DM to ${discordId}:`, error);
       throw error;
@@ -303,6 +316,8 @@ export class DiscordBotClientService {
       throw new Error('Discord bot is not connected');
     }
 
+    const start = isPerfEnabled() ? performance.now() : 0;
+
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !('send' in channel)) {
       throw new Error(`Channel ${channelId} not found or not a text channel`);
@@ -318,7 +333,10 @@ export class DiscordBotClientService {
       messagePayload.components = [row];
     }
 
-    return textChannel.send(messagePayload);
+    const result = await textChannel.send(messagePayload);
+    if (start)
+      perfLog('DISCORD', 'sendEmbed', performance.now() - start, { channelId });
+    return result;
   }
 
   /**
@@ -333,6 +351,8 @@ export class DiscordBotClientService {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
     }
+
+    const start = isPerfEnabled() ? performance.now() : 0;
 
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !('messages' in channel)) {
@@ -350,7 +370,13 @@ export class DiscordBotClientService {
       components: row ? [row] : [],
     };
 
-    return message.edit(messagePayload);
+    const result = await message.edit(messagePayload);
+    if (start)
+      perfLog('DISCORD', 'editEmbed', performance.now() - start, {
+        channelId,
+        messageId,
+      });
+    return result;
   }
 
   /**
@@ -361,6 +387,8 @@ export class DiscordBotClientService {
       throw new Error('Discord bot is not connected');
     }
 
+    const start = isPerfEnabled() ? performance.now() : 0;
+
     const channel = await this.client.channels.fetch(channelId);
     if (!channel || !('messages' in channel)) {
       throw new Error(`Channel ${channelId} not found or not a text channel`);
@@ -369,6 +397,11 @@ export class DiscordBotClientService {
     const textChannel = channel as TextChannel;
     const message = await textChannel.messages.fetch(messageId);
     await message.delete();
+    if (start)
+      perfLog('DISCORD', 'deleteMessage', performance.now() - start, {
+        channelId,
+        messageId,
+      });
   }
 
   /**
@@ -409,11 +442,18 @@ export class DiscordBotClientService {
     const guild = this.client.guilds.cache.first();
     if (!guild) return [];
 
+    const start = isPerfEnabled() ? performance.now() : 0;
+
     try {
       const members = await guild.members.fetch({
         query,
         limit: 10,
       });
+
+      if (start)
+        perfLog('DISCORD', 'searchGuildMembers', performance.now() - start, {
+          query,
+        });
 
       return members.map((m) => ({
         discordId: m.user.id,

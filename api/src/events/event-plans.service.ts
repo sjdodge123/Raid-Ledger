@@ -24,6 +24,7 @@ import {
 } from '@raid-ledger/contract';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { SettingsService } from '../settings/settings.service';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 
@@ -50,6 +51,7 @@ export class EventPlansService {
     @InjectQueue(EVENT_PLANS_QUEUE) private queue: Queue,
     private readonly discordClient: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
+    private readonly settingsService: SettingsService,
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
   ) {}
@@ -828,6 +830,10 @@ export class EventPlansService {
     const offset = tzOffset ?? 0;
     const after = afterDate ? new Date(afterDate) : new Date();
 
+    // Fetch community IANA timezone for label formatting (ROK-561)
+    const timezone =
+      (await this.settingsService.getDefaultTimezone()) ?? undefined;
+
     if (gameId) {
       // Query game_interests for users who want to play this game
       const interests = await this.db
@@ -865,6 +871,7 @@ export class EventPlansService {
             offset,
             after,
             14,
+            timezone,
           );
 
           return {
@@ -880,7 +887,7 @@ export class EventPlansService {
     return {
       source: 'fallback',
       interestedPlayerCount: 0,
-      suggestions: this.generateFallbackSuggestions(offset, after),
+      suggestions: this.generateFallbackSuggestions(offset, after, timezone),
     };
   }
 
@@ -1381,6 +1388,7 @@ export class EventPlansService {
     tzOffset: number,
     after: Date,
     daysAhead: number,
+    timezone?: string,
   ): TimeSuggestion[] {
     const suggestions: TimeSuggestion[] = [];
     const endDate = new Date(after.getTime() + daysAhead * 24 * 3600 * 1000);
@@ -1412,6 +1420,7 @@ export class EventPlansService {
           minute: '2-digit',
           hour12: true,
           timeZoneName: 'short',
+          ...(timezone ? { timeZone: timezone } : {}),
         });
 
         suggestions.push({
@@ -1440,6 +1449,7 @@ export class EventPlansService {
   private generateFallbackSuggestions(
     tzOffset: number,
     after: Date,
+    timezone?: string,
   ): TimeSuggestion[] {
     const suggestions: TimeSuggestion[] = [];
     const eveningHours = [18, 19, 20, 21]; // 6 PM - 9 PM
@@ -1461,6 +1471,7 @@ export class EventPlansService {
           minute: '2-digit',
           hour12: true,
           timeZoneName: 'short',
+          ...(timezone ? { timeZone: timezone } : {}),
         });
 
         suggestions.push({

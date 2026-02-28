@@ -1,6 +1,7 @@
 import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
+import { isPerfEnabled, perfLog } from '../../common/perf-logger';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -48,6 +49,7 @@ export class EmbedSyncProcessor extends WorkerHost {
 
   async process(job: Job<EmbedSyncJobData>): Promise<void> {
     const { eventId, reason } = job.data;
+    const start = isPerfEnabled() ? performance.now() : 0;
 
     this.logger.debug(
       `Processing embed sync for event ${eventId} (reason: ${reason})`,
@@ -147,6 +149,11 @@ export class EmbedSyncProcessor extends WorkerHost {
       this.logger.log(
         `Synced embed for event ${eventId} (state: ${newState}, reason: ${reason})`,
       );
+      if (start)
+        perfLog('QUEUE', 'embed-sync', performance.now() - start, {
+          eventId,
+          reason,
+        });
 
       // ROK-471: Update Discord Scheduled Event description with new signup count
       this.scheduledEventService

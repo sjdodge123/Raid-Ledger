@@ -728,11 +728,14 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
 
   describe('cancelByDiscordUser', () => {
     it('should cancel anonymous signup by discordUserId', async () => {
+      const futureStart = new Date(Date.now() + 48 * 60 * 60 * 1000);
       mockDb.select
         // 1. no linked RL user
         .mockReturnValueOnce(makeSelectChain([]))
         // 2. find anonymous signup
-        .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]));
+        .mockReturnValueOnce(makeSelectChain([mockAnonymousSignup]))
+        // 3. fetch event duration (ROK-562)
+        .mockReturnValueOnce(makeSelectChain([{ duration: [futureStart, new Date(futureStart.getTime() + 2 * 60 * 60 * 1000)] }]));
 
       await service.cancelByDiscordUser(1, 'discord-anon-456');
 
