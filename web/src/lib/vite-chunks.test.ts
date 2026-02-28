@@ -13,11 +13,13 @@ const manualChunks: Record<string, string[]> = {
     'react-vendor': ['react', 'react-dom', 'react-router-dom'],
     'query-vendor': ['@tanstack/react-query', 'zustand'],
     'calendar-vendor': ['react-big-calendar', 'date-fns'],
+    'sentry': ['@sentry/react'],
+    'socket': ['socket.io-client'],
 };
 
 describe('vite manualChunks configuration (ROK-343)', () => {
-    it('defines exactly 3 vendor chunks', () => {
-        expect(Object.keys(manualChunks).length).toBe(3);
+    it('defines exactly 5 vendor chunks', () => {
+        expect(Object.keys(manualChunks).length).toBe(5);
     });
 
     it('defines react-vendor chunk', () => {
@@ -30,6 +32,14 @@ describe('vite manualChunks configuration (ROK-343)', () => {
 
     it('defines calendar-vendor chunk', () => {
         expect(manualChunks).toHaveProperty('calendar-vendor');
+    });
+
+    it('defines sentry chunk', () => {
+        expect(manualChunks).toHaveProperty('sentry');
+    });
+
+    it('defines socket chunk', () => {
+        expect(manualChunks).toHaveProperty('socket');
     });
 
     describe('react-vendor chunk', () => {
@@ -81,6 +91,30 @@ describe('vite manualChunks configuration (ROK-343)', () => {
 
         it('contains exactly 2 modules', () => {
             expect(chunk.length).toBe(2);
+        });
+    });
+
+    describe('sentry chunk', () => {
+        const chunk = manualChunks['sentry'];
+
+        it('includes @sentry/react', () => {
+            expect(chunk).toContain('@sentry/react');
+        });
+
+        it('contains exactly 1 module', () => {
+            expect(chunk.length).toBe(1);
+        });
+    });
+
+    describe('socket chunk', () => {
+        const chunk = manualChunks['socket'];
+
+        it('includes socket.io-client', () => {
+            expect(chunk).toContain('socket.io-client');
+        });
+
+        it('contains exactly 1 module', () => {
+            expect(chunk.length).toBe(1);
         });
     });
 
