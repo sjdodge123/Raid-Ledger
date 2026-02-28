@@ -108,6 +108,7 @@ const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').t
 
 // -- Lazy loaded Discord admin pages (ROK-430) --
 const DiscordOverviewPage = lazyWithRetry(() => import('./pages/admin/discord-overview-page').then(m => ({ default: m.DiscordOverviewPage })));
+const DiscordAuthPage = lazyWithRetry(() => import('./pages/admin/discord-auth-page').then(m => ({ default: m.DiscordAuthPage })));
 const DiscordConnectionPage = lazyWithRetry(() => import('./pages/admin/discord-connection-page').then(m => ({ default: m.DiscordConnectionPage })));
 const DiscordChannelsPage = lazyWithRetry(() => import('./pages/admin/discord-channels-page').then(m => ({ default: m.DiscordChannelsPage })));
 const DiscordFeaturesPage = lazyWithRetry(() => import('./pages/admin/discord-features-page').then(m => ({ default: m.DiscordFeaturesPage })));
@@ -241,6 +242,7 @@ function App() {
 
                   {/* ROK-430: Discord admin pages */}
                   <Route path="discord" element={<DiscordOverviewPage />} />
+                  <Route path="discord/auth" element={<DiscordAuthPage />} />
                   <Route path="discord/connection" element={<DiscordConnectionPage />} />
                   <Route path="discord/channels" element={<DiscordChannelsPage />} />
                   <Route path="discord/features" element={<DiscordFeaturesPage />} />

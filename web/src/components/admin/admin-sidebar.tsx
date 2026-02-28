@@ -23,7 +23,7 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { igdbStatus, discordBotStatus } = useAdminSettings();
+    const { igdbStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
@@ -33,10 +33,16 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive
-        ? buildDiscordNavItems({
-            connected: discordBotStatus.data?.connected ?? false,
-            connecting: discordBotStatus.data?.connecting ?? false,
-        })
+        ? buildDiscordNavItems(
+            {
+                connected: discordBotStatus.data?.connected ?? false,
+                connecting: discordBotStatus.data?.connecting ?? false,
+            },
+            {
+                configured: oauthStatus.data?.configured ?? false,
+                loading: oauthStatus.isLoading,
+            },
+        )
         : null;
     const sections = buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
 

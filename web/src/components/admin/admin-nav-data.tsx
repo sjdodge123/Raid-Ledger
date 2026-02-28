@@ -62,20 +62,32 @@ export function buildPluginIntegrationItems(plugins: PluginInfoDto[]): NavItem[]
 }
 
 /** ROK-430: Build Discord section nav items. Only called when Discord plugin is active. */
-export function buildDiscordNavItems(botStatus?: {
-    connected: boolean;
-    connecting: boolean;
-}): NavItem[] {
-    const connectionStatus: IntegrationStatus = botStatus
+export function buildDiscordNavItems(
+    botStatus?: { connected: boolean; connecting: boolean },
+    oauthStatus?: { configured: boolean; loading: boolean },
+): NavItem[] {
+    const authStatus: IntegrationStatus = oauthStatus
+        ? oauthStatus.loading ? 'loading' : oauthStatus.configured ? 'online' : 'offline'
+        : 'offline';
+    const botConnectionStatus: IntegrationStatus = botStatus
         ? botStatus.connecting ? 'loading' : botStatus.connected ? 'online' : 'offline'
         : 'offline';
+    const botConnected = botStatus?.connected ?? false;
 
-    return [
+    const items: NavItem[] = [
         { to: '/admin/settings/discord', label: 'Overview' },
-        { to: '/admin/settings/discord/connection', label: 'Connection', status: connectionStatus },
-        { to: '/admin/settings/discord/channels', label: 'Channels' },
-        { to: '/admin/settings/discord/features', label: 'Features' },
+        { to: '/admin/settings/discord/auth', label: 'Authentication', status: authStatus },
+        { to: '/admin/settings/discord/connection', label: 'Bot', status: botConnectionStatus },
     ];
+
+    if (botConnected) {
+        items.push(
+            { to: '/admin/settings/discord/channels', label: 'Channels' },
+            { to: '/admin/settings/discord/features', label: 'Features' },
+        );
+    }
+
+    return items;
 }
 
 /**

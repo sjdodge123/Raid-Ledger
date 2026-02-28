@@ -471,7 +471,7 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
  */
 function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const { plugins } = usePluginAdmin();
-    const { igdbStatus, discordBotStatus } = useAdminSettings();
+    const { igdbStatus, oauthStatus, discordBotStatus } = useAdminSettings();
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
@@ -481,10 +481,16 @@ function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose:
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
     const discordItems = isDiscordActive
-        ? buildDiscordNavItems({
-            connected: discordBotStatus.data?.connected ?? false,
-            connecting: discordBotStatus.data?.connecting ?? false,
-        })
+        ? buildDiscordNavItems(
+            {
+                connected: discordBotStatus.data?.connected ?? false,
+                connecting: discordBotStatus.data?.connecting ?? false,
+            },
+            {
+                configured: oauthStatus.data?.configured ?? false,
+                loading: oauthStatus.isLoading,
+            },
+        )
         : null;
     const sections = buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
 

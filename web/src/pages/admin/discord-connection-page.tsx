@@ -6,7 +6,6 @@ import { isDiscordLinked } from '../../lib/avatar';
 import { API_BASE_URL } from '../../lib/config';
 import { toast } from '../../lib/toast';
 import { IntegrationCard } from '../../components/admin/IntegrationCard';
-import { DiscordOAuthForm } from '../../components/admin/DiscordOAuthForm';
 import { DiscordBotForm } from '../../components/admin/DiscordBotForm';
 
 const DiscordIcon = (
@@ -59,22 +58,10 @@ function DiscordConnectionContent() {
     return (
         <div className="space-y-6">
             <div>
-                <h2 className="text-xl font-semibold text-foreground">Discord Connection</h2>
-                <p className="text-sm text-muted mt-1">Configure OAuth authentication and bot connection.</p>
+                <h2 className="text-xl font-semibold text-foreground">Discord Bot</h2>
+                <p className="text-sm text-muted mt-1">Configure and manage the Discord bot connection.</p>
             </div>
 
-            {/* OAuth Section */}
-            <IntegrationCard
-                title="Discord OAuth"
-                description="Enable Discord login for users"
-                icon={DiscordIcon}
-                isConfigured={oauthStatus.data?.configured ?? false}
-                isLoading={oauthStatus.isLoading}
-            >
-                <DiscordOAuthForm />
-            </IntegrationCard>
-
-            {/* Bot Section */}
             {!hasDiscord ? (
                 <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-6">
                     <div className="flex items-start gap-4">

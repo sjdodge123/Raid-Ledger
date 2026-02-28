@@ -157,28 +157,76 @@ describe('buildPluginIntegrationItems', () => {
 });
 
 describe('buildDiscordNavItems', () => {
-    it('returns 4 items: Overview, Connection, Channels, Features', () => {
-        const items = buildDiscordNavItems();
-        expect(items).toHaveLength(4);
-        expect(items.map((i) => i.label)).toEqual(['Overview', 'Connection', 'Channels', 'Features']);
+    it('returns 3 items when bot is offline: Overview, Authentication, Bot', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        expect(items).toHaveLength(3);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot']);
     });
 
-    it('Connection item shows online status when connected', () => {
-        const items = buildDiscordNavItems({ connected: true, connecting: false });
-        const conn = items.find((i) => i.label === 'Connection')!;
-        expect(conn.status).toBe('online');
+    it('returns 5 items when bot is connected: Overview, Authentication, Bot, Channels, Features', () => {
+        const items = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
+        expect(items).toHaveLength(5);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Authentication', 'Bot', 'Channels', 'Features']);
     });
 
-    it('Connection item shows offline status when not connected', () => {
-        const items = buildDiscordNavItems({ connected: false, connecting: false });
-        const conn = items.find((i) => i.label === 'Connection')!;
-        expect(conn.status).toBe('offline');
+    it('Authentication item shows online status when OAuth configured', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: true, loading: false },
+        );
+        const auth = items.find((i) => i.label === 'Authentication')!;
+        expect(auth.status).toBe('online');
     });
 
-    it('Connection item shows loading status when connecting', () => {
-        const items = buildDiscordNavItems({ connected: false, connecting: true });
-        const conn = items.find((i) => i.label === 'Connection')!;
-        expect(conn.status).toBe('loading');
+    it('Authentication item shows offline status when OAuth not configured', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        const auth = items.find((i) => i.label === 'Authentication')!;
+        expect(auth.status).toBe('offline');
+    });
+
+    it('Bot item shows online status when connected', () => {
+        const items = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('online');
+    });
+
+    it('Bot item shows offline status when not connected', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: false, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('offline');
+    });
+
+    it('Bot item shows loading status when connecting', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: true },
+            { configured: true, loading: false },
+        );
+        const bot = items.find((i) => i.label === 'Bot')!;
+        expect(bot.status).toBe('loading');
+    });
+
+    it('Channels and Features hidden when bot is offline', () => {
+        const items = buildDiscordNavItems(
+            { connected: false, connecting: false },
+            { configured: true, loading: false },
+        );
+        expect(items.find((i) => i.label === 'Channels')).toBeUndefined();
+        expect(items.find((i) => i.label === 'Features')).toBeUndefined();
     });
 });
 
@@ -191,7 +239,10 @@ describe('buildNavSections', () => {
     });
 
     it('returns 3 sections when Discord items provided', () => {
-        const discordItems = buildDiscordNavItems();
+        const discordItems = buildDiscordNavItems(
+            { connected: true, connecting: false },
+            { configured: true, loading: false },
+        );
         const sections = buildNavSections([], [], discordItems);
         expect(sections).toHaveLength(3);
         expect(sections[0].id).toBe('general');

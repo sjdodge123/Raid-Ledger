@@ -160,7 +160,7 @@ export class DiscordBotService
         key: 'oauth',
         label: 'Configure Discord OAuth',
         completed: oauthConfigured,
-        settingsPath: '/admin/settings/discord/connection',
+        settingsPath: '/admin/settings/discord/auth',
       },
       {
         key: 'bot-token',
