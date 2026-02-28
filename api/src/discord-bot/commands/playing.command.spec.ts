@@ -18,7 +18,9 @@ function makeChatInteraction(gameName: string | null = null) {
 function makeAutocompleteInteraction(focusedValue = '') {
   return {
     options: {
-      getFocused: jest.fn().mockReturnValue({ name: 'game', value: focusedValue }),
+      getFocused: jest
+        .fn()
+        .mockReturnValue({ name: 'game', value: focusedValue }),
     },
     respond: jest.fn().mockResolvedValue(undefined),
   };
@@ -56,7 +58,10 @@ describe('PlayingCommand', () => {
       providers: [
         PlayingCommand,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
-        { provide: PresenceGameDetectorService, useValue: mockPresenceDetector },
+        {
+          provide: PresenceGameDetectorService,
+          useValue: mockPresenceDetector,
+        },
       ],
     }).compile();
 

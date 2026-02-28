@@ -209,7 +209,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 100,
-          title: 'World of Warcraft — Ad-Hoc Session',
+          title: 'World of Warcraft — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-1',
         },
@@ -236,7 +236,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 101,
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
           gameId: null,
           channelBindingId: 'binding-2',
         },
@@ -246,7 +246,7 @@ describe('AdHocEventService', () => {
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
         }),
       );
     });
@@ -266,7 +266,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 102,
-          title: 'FFXIV — Ad-Hoc Session',
+          title: 'FFXIV — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-3',
         },
@@ -307,7 +307,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 200,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-5',
         },
@@ -349,7 +349,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 300,
-          title: 'Game — Ad-Hoc Session',
+          title: 'Game — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-6',
         },
@@ -388,7 +388,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 400,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-leave',
         },
@@ -429,7 +429,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 401,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-default-grace',
         },
@@ -522,7 +522,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 600,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-cleanup',
         },
@@ -597,7 +597,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 700,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-state',
         },
@@ -626,7 +626,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 900,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-periodic',
         },
@@ -678,7 +678,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 901,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-empty',
         },
@@ -790,7 +790,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 800,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-cancel',
         },
@@ -825,7 +825,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 850,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-delete',
         },
@@ -879,7 +879,7 @@ describe('AdHocEventService', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 999,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'binding-new',
         },

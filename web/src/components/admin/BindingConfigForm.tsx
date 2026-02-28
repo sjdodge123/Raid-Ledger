@@ -78,7 +78,7 @@ export function BindingConfigForm({
         <>
           <div>
             <label className="block text-xs text-muted mb-1">
-              Minimum Players (to spawn ad-hoc event)
+              Minimum Players (to spawn Quick Play event)
             </label>
             <input
               type="number"

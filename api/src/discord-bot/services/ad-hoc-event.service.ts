@@ -650,7 +650,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         .limit(1);
       if (game) gameName = game.name;
     }
-    const title = `${gameName} — Ad-Hoc Session`;
+    const title = `${gameName} — Quick Play`;
 
     const now = new Date();
     // Initial end time: 1 hour from now (will be extended)

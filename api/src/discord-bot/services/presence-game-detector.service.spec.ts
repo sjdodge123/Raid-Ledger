@@ -378,9 +378,7 @@ describe('PresenceGameDetectorService', () => {
       service.setManualOverride('u1', 'Minecraft');
 
       // u1 manual override: Minecraft. u2 has no activity.
-      mockLimitFn.mockResolvedValueOnce([
-        { gameId: 5, gameName: 'Minecraft' },
-      ]); // resolve 'Minecraft' for u1
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 5, gameName: 'Minecraft' }]); // resolve 'Minecraft' for u1
 
       const members = [
         makeMember('u1', 'WoW'), // presence says WoW but manual override wins

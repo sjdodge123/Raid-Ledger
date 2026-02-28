@@ -144,7 +144,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 10,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'bind-game',
         },
@@ -173,7 +173,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 20,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-lobby',
         },
@@ -203,7 +203,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 30,
-          title: 'Untitled Gaming Session — Ad-Hoc Session',
+          title: 'Untitled Gaming Session — Quick Play',
           gameId: null,
           channelBindingId: 'bind-lobby-null',
         },
@@ -230,7 +230,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 40,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-multi',
         },
@@ -250,7 +250,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 41,
-          title: 'FFXIV — Ad-Hoc Session',
+          title: 'FFXIV — Quick Play',
           gameId: null,
           channelBindingId: 'bind-multi',
         },
@@ -288,7 +288,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 50,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: 1,
           channelBindingId: 'bind-has',
         },
@@ -310,7 +310,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 60,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-has-lobby',
         },
@@ -334,7 +334,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 70,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-cleanup-has',
         },
@@ -368,7 +368,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 80,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-leave-gl',
         },
@@ -409,7 +409,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 81,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameId: null,
           channelBindingId: 'bind-scan',
         },
@@ -496,7 +496,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 300,
-          title: 'Path of Exile — Ad-Hoc Session',
+          title: 'Path of Exile — Quick Play',
           gameId: null,
           channelBindingId: 'bind-title',
         },
@@ -512,7 +512,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Path of Exile — Ad-Hoc Session',
+          title: 'Path of Exile — Quick Play',
         }),
       );
     });
@@ -525,7 +525,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: 301,
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
           gameId: null,
           channelBindingId: 'bind-gaming',
         },
@@ -539,7 +539,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
 
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({
-          title: 'Gaming — Ad-Hoc Session',
+          title: 'Gaming — Quick Play',
         }),
       );
     });

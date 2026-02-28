@@ -38,7 +38,7 @@ describe('AdHocNotificationService', () => {
     mockDb.limit.mockResolvedValueOnce([
       {
         id: event?.id ?? 42,
-        title: event?.title ?? 'WoW — Ad-Hoc Session',
+        title: event?.title ?? 'WoW — Quick Play',
         gameId: event?.gameId ?? 1,
         duration: event?.duration ?? [new Date(), new Date()],
         maxAttendees: null,
@@ -115,14 +115,14 @@ describe('AdHocNotificationService', () => {
       await service.notifySpawn(
         42,
         'binding-1',
-        { id: 42, title: 'WoW — Ad-Hoc Session', gameName: 'WoW' },
+        { id: 42, title: 'WoW — Quick Play', gameName: 'WoW' },
         [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
       );
 
       expect(mockEmbedFactory.buildEventEmbed).toHaveBeenCalledWith(
         expect.objectContaining({
           id: 42,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           game: expect.objectContaining({ name: 'World of Warcraft' }),
         }),
         expect.any(Object),
@@ -142,7 +142,7 @@ describe('AdHocNotificationService', () => {
       });
       mockBuildEmbedData({
         id: 43,
-        title: 'Gaming — Ad-Hoc Session',
+        title: 'Gaming — Quick Play',
         gameId: null,
       });
       // No game lookup needed since gameId is null — override the second limit
@@ -151,7 +151,7 @@ describe('AdHocNotificationService', () => {
       await service.notifySpawn(
         43,
         'binding-2',
-        { id: 43, title: 'Gaming — Ad-Hoc Session' },
+        { id: 43, title: 'Gaming — Quick Play' },
         [],
       );
 
@@ -207,7 +207,7 @@ describe('AdHocNotificationService', () => {
         'binding-complete',
         {
           id: 60,
-          title: 'WoW — Ad-Hoc Session',
+          title: 'WoW — Quick Play',
           gameName: 'WoW',
           startTime: '2026-02-10T18:00:00Z',
           endTime: '2026-02-10T20:00:00Z',
