@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -71,6 +71,16 @@ vi.mock('../../lib/toast', () => ({
     },
 }));
 
+// ─── Admin settings mock ──────────────────────────────────────────────────────
+// Prevents useAdminSettings from spawning many background queries (OAuth, IGDB,
+// Discord bot, etc.) that create pending promises and cause timeouts under load.
+
+vi.mock('../../hooks/use-admin-settings', () => ({
+    useAdminSettings: vi.fn(() => ({
+        defaultTimezone: { data: { timezone: 'UTC' }, isLoading: false },
+    })),
+}));
+
 // ─── Child component mocks ────────────────────────────────────────────────────
 
 vi.mock('./game-search-input', () => ({
@@ -84,10 +94,13 @@ import { useCreateEventPlan, useTimeSuggestions } from '../../hooks/use-event-pl
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
+let activeQueryClient: QueryClient;
+
 function createQueryClient() {
-    return new QueryClient({
+    activeQueryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     });
+    return activeQueryClient;
 }
 
 function renderForm() {
@@ -113,6 +126,10 @@ describe('PlanEventForm — rendering', () => {
             data: mockTimeSuggestions,
             isLoading: false,
         });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('should render the form', () => {
@@ -176,6 +193,10 @@ describe('PlanEventForm — poll mode selector', () => {
         });
     });
 
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     it('should show standard mode description text when standard is selected', () => {
         renderForm();
         expect(
@@ -205,6 +226,10 @@ describe('PlanEventForm — time slot selection', () => {
             data: mockTimeSuggestions,
             isLoading: false,
         });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('should add a time slot when a suggestion is clicked', () => {
@@ -268,6 +293,10 @@ describe('PlanEventForm — validation', () => {
             data: mockTimeSuggestions,
             isLoading: false,
         });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('should show validation error when title is empty on submit', () => {
@@ -346,6 +375,10 @@ describe('PlanEventForm — submit behavior', () => {
             data: mockTimeSuggestions,
             isLoading: false,
         });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('should show "Posting Poll..." when isPending is true', () => {
@@ -441,6 +474,10 @@ describe('PlanEventForm — custom time entry', () => {
             data: { source: 'fallback', interestedPlayerCount: 0, suggestions: [] },
             isLoading: false,
         });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('should render the custom date and time inputs', () => {
