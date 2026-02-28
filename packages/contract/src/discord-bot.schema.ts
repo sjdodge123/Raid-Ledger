@@ -70,3 +70,21 @@ export const DiscordSetupStatusSchema = z.object({
 
 export type DiscordSetupStep = z.infer<typeof DiscordSetupStepSchema>;
 export type DiscordSetupStatus = z.infer<typeof DiscordSetupStatusSchema>;
+
+/** ROK-547: Body for PUT /admin/settings/discord-bot/channel */
+export const DiscordBotSetDefaultChannelSchema = z.object({
+    channelId: z.string().min(1),
+});
+export type DiscordBotSetDefaultChannelDto = z.infer<typeof DiscordBotSetDefaultChannelSchema>;
+
+/** ROK-547: Body for PUT /admin/settings/discord-bot/voice-channel */
+export const DiscordBotSetVoiceChannelSchema = z.object({
+    channelId: z.string().min(1),
+});
+export type DiscordBotSetVoiceChannelDto = z.infer<typeof DiscordBotSetVoiceChannelSchema>;
+
+/** ROK-547: Body for PUT /admin/settings/discord-bot/ad-hoc */
+export const DiscordBotSetAdHocStatusSchema = z.object({
+    enabled: z.boolean(),
+});
+export type DiscordBotSetAdHocStatusDto = z.infer<typeof DiscordBotSetAdHocStatusSchema>;
