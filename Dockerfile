@@ -117,7 +117,7 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
 
 # Set environment defaults
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=512"
+ENV NODE_OPTIONS="--max-old-space-size=768"
 
 # Start supervisor (manages nginx + node)
 CMD ["supervisord", "-c", "/etc/supervisord.conf"]
