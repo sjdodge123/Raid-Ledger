@@ -78,7 +78,7 @@ export class ScheduledEventService {
       const startTime = new Date(eventData.startTime);
       if (startTime.getTime() <= Date.now()) {
         this.logger.debug(
-          `Start time in past, skipping scheduled event for event ${eventId}`,
+          `Start time in past (${eventData.startTime}), skipping scheduled event for event ${eventId}`,
         );
         return;
       }
@@ -138,12 +138,27 @@ export class ScheduledEventService {
     isAdHoc?: boolean,
   ): Promise<void> {
     try {
-      if (isAdHoc) return;
+      if (isAdHoc) {
+        this.logger.debug(
+          `Skipping scheduled event update for ad-hoc event ${eventId}`,
+        );
+        return;
+      }
 
-      if (!this.clientService.isConnected()) return;
+      if (!this.clientService.isConnected()) {
+        this.logger.debug(
+          `Bot not connected, skipping scheduled event update for event ${eventId}`,
+        );
+        return;
+      }
 
       const guild = this.clientService.getGuild();
-      if (!guild) return;
+      if (!guild) {
+        this.logger.debug(
+          `No guild available, skipping scheduled event update for event ${eventId}`,
+        );
+        return;
+      }
 
       // Get stored scheduled event ID
       const [event] = await this.db
@@ -156,6 +171,9 @@ export class ScheduledEventService {
 
       if (!event?.discordScheduledEventId) {
         // No scheduled event yet — create one
+        this.logger.debug(
+          `No existing scheduled event for event ${eventId}, creating new one`,
+        );
         await this.createScheduledEvent(eventId, eventData, gameId, isAdHoc);
         return;
       }

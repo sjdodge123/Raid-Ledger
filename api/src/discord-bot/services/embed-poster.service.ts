@@ -123,7 +123,7 @@ export class EmbedPosterService {
    * hardcodes signupCount: 0). This queries the current state so the embed
    * is accurate at post time.
    */
-  private async enrichWithLiveRoster(
+  async enrichWithLiveRoster(
     eventId: number,
     event: EmbedEventData,
   ): Promise<EmbedEventData> {
