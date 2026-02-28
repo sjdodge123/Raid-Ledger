@@ -27,7 +27,8 @@ jest.mock('discord.js', () => {
       this.data.footer = footer;
       return this;
     }
-    setTimestamp() {
+    setTimestamp(ts?: Date) {
+      this.data.timestamp = ts ?? new Date();
       return this;
     }
     addFields(...fields: unknown[]) {
@@ -446,6 +447,75 @@ describe('DiscordNotificationEmbedService', () => {
       const slotField = json.fields?.find((f) => f.name === 'Slot');
       expect(slotField).toBeDefined();
       expect(slotField?.value).toBe('Healer');
+    });
+
+    it('should use event start time as timestamp for event_reminder (ROK-545)', async () => {
+      const eventStart = new Date('2026-02-28T21:00:00Z');
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-ts-1',
+          type: 'event_reminder',
+          title: 'Reminder',
+          message: 'Your event is soon',
+          payload: { eventId: 42, startTime: eventStart.toISOString() },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBe(eventStart.getTime());
+    });
+
+    it('should use event start time for event_cancelled (ROK-545)', async () => {
+      const eventStart = new Date('2026-02-28T21:00:00Z');
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-ts-2',
+          type: 'event_cancelled',
+          title: 'Event Cancelled',
+          message: 'Cancelled',
+          payload: { eventId: 42, startTime: eventStart.toISOString() },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBe(eventStart.getTime());
+    });
+
+    it('should use current time as timestamp for non-event types (ROK-545)', async () => {
+      const before = Date.now();
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-ts-3',
+          type: 'achievement_unlocked',
+          title: 'Achievement!',
+          message: 'You got it',
+        },
+        'Community',
+      );
+      const after = Date.now();
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBeGreaterThanOrEqual(before);
+      expect(json.timestamp.getTime()).toBeLessThanOrEqual(after);
+    });
+
+    it('should use newStartTime for event_rescheduled when startTime is absent (ROK-545)', async () => {
+      const newStart = new Date('2026-03-01T19:00:00Z');
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-ts-4',
+          type: 'event_rescheduled',
+          title: 'Rescheduled',
+          message: 'Event moved',
+          payload: { eventId: 42, newStartTime: newStart.toISOString() },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBe(newStart.getTime());
     });
 
     it('should not add fields when payload is not provided', async () => {

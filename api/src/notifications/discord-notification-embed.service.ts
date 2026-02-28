@@ -62,7 +62,7 @@ export class DiscordNotificationEmbedService {
       .setFooter({
         text: `${communityName || 'Raid Ledger'} \u00B7 ${categoryLabel}`,
       })
-      .setTimestamp();
+      .setTimestamp(this.resolveTimestamp(input));
 
     // Add type-specific fields
     this.addTypeSpecificFields(embed, input);
@@ -427,6 +427,32 @@ export class DiscordNotificationEmbedService {
     return (
       (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173'
     );
+  }
+
+  /**
+   * Resolve the timestamp for the embed footer (ROK-545).
+   * Event-related notifications use the event start time from the payload;
+   * all other types fall back to the current time.
+   */
+  private resolveTimestamp(input: NotificationEmbedInput): Date {
+    const eventTypes: NotificationType[] = [
+      'event_reminder',
+      'new_event',
+      'event_rescheduled',
+      'event_cancelled',
+      'subscribed_game',
+    ];
+
+    if (eventTypes.includes(input.type) && input.payload?.startTime) {
+      return new Date(input.payload.startTime as string);
+    }
+
+    // event_rescheduled may store the new time as newStartTime instead
+    if (input.type === 'event_rescheduled' && input.payload?.newStartTime) {
+      return new Date(input.payload.newStartTime as string);
+    }
+
+    return new Date();
   }
 
   private buildActionRow(

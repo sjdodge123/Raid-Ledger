@@ -108,11 +108,7 @@ describe('ScheduledEventService', () => {
           provide: DiscordBotClientService,
           useValue: {
             isConnected: jest.fn().mockReturnValue(true),
-            getClient: jest.fn().mockReturnValue({
-              guilds: {
-                cache: { first: jest.fn().mockReturnValue(mockGuild) },
-              },
-            }),
+            getGuild: jest.fn().mockReturnValue(mockGuild),
           },
         },
         {
@@ -192,9 +188,7 @@ describe('ScheduledEventService', () => {
     });
 
     it('skips when no guild is available', async () => {
-      clientService.getClient.mockReturnValue({
-        guilds: { cache: { first: jest.fn().mockReturnValue(null) } },
-      } as unknown as ReturnType<typeof clientService.getClient>);
+      clientService.getGuild.mockReturnValue(null);
 
       await service.createScheduledEvent(42, baseEventData, 1, false);
 
