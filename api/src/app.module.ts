@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DrizzleModule } from './drizzle/drizzle.module';
 import { ConfigModule } from '@nestjs/config';
+import { PerfLoggingInterceptor } from './common/perf-logging.interceptor';
+import { PerfMemoryMonitor } from './common/perf-memory-monitor';
 
 import { UsersModule } from './users/users.module';
 import { AuthModule } from './auth/auth.module';
@@ -66,6 +69,10 @@ import { BackupModule } from './backup/backup.module';
     BackupModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    { provide: APP_INTERCEPTOR, useClass: PerfLoggingInterceptor },
+    PerfMemoryMonitor,
+  ],
 })
 export class AppModule {}

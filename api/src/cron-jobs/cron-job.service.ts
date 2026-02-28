@@ -6,6 +6,7 @@ import {
   OnApplicationBootstrap,
   Optional,
 } from '@nestjs/common';
+import { perfLog } from '../common/perf-logger';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { CronTime } from 'cron';
@@ -265,6 +266,7 @@ export class CronJobService implements OnApplicationBootstrap {
         finishedAt: new Date(),
         durationMs: 0,
       });
+      perfLog('CRON', jobName, 0, { status: 'skipped' });
       return;
     }
 
@@ -282,6 +284,7 @@ export class CronJobService implements OnApplicationBootstrap {
         finishedAt,
         durationMs,
       });
+      perfLog('CRON', jobName, durationMs, { status: 'completed' });
 
       // Update last_run_at + next_run_at
       const nextRunAt = this.computeNextRun(job.cronExpression);
@@ -303,6 +306,7 @@ export class CronJobService implements OnApplicationBootstrap {
         durationMs,
         error: errorMessage,
       });
+      perfLog('CRON', jobName, durationMs, { status: 'failed' });
 
       // Update last_run_at + next_run_at even on failure
       const nextRunAt = this.computeNextRun(job.cronExpression);
