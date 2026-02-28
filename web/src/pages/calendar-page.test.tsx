@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -65,6 +65,11 @@ vi.mock('../constants/game-colors', () => ({
 // Suppress CSS import
 vi.mock('../components/calendar/calendar-styles.css', () => ({}));
 
+// Mock useFocusTrap to eliminate requestAnimationFrame timing issues
+vi.mock('../hooks/use-focus-trap', () => ({
+    useFocusTrap: () => ({ current: null }),
+}));
+
 // ---------------------------------------------------------------------------
 // Component under test (imported after mocks are in place)
 // ---------------------------------------------------------------------------
@@ -77,11 +82,13 @@ import { useGameFilterStore } from '../stores/game-filter-store';
 
 const makeGame = (slug: string, name: string) => ({ slug, name, coverUrl: null });
 
+let activeQueryClient: QueryClient;
+
 function renderPage() {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    activeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     capturedOnGamesAvailable = null;
     return render(
-        <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={activeQueryClient}>
             <MemoryRouter>
                 <CalendarPage />
             </MemoryRouter>
@@ -104,6 +111,10 @@ describe('CalendarPage — allKnownGames accumulator', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('renders the calendar view', () => {
@@ -176,6 +187,10 @@ describe('CalendarPage — auto-select behaviour', () => {
         useGameFilterStore.getState()._reset();
     });
 
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     it('auto-selects all games on first delivery', () => {
         renderPage();
         deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
@@ -210,6 +225,10 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('shows all games inline when count <= maxVisible (5)', () => {
@@ -280,6 +299,10 @@ describe('CalendarPage — filter modal (overflow)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     function setupWithOverflow() {
@@ -382,6 +405,10 @@ describe('CalendarPage — game toggle', () => {
         useGameFilterStore.getState()._reset();
     });
 
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     it('unchecking a game deselects it (checkbox becomes unchecked)', () => {
         renderPage();
         deliverGames([makeGame('wow', 'World of Warcraft')]);
@@ -456,6 +483,10 @@ describe('CalendarPage — All / None buttons', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('"All" button selects all known games (inline area)', () => {
@@ -535,6 +566,10 @@ describe('CalendarPage — filter persistence when view changes', () => {
         useGameFilterStore.getState()._reset();
     });
 
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
     it('filter selections persist across re-renders with same games (no new games delivered)', () => {
         const { rerender } = renderPage();
         deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
@@ -552,9 +587,9 @@ describe('CalendarPage — filter persistence when view changes', () => {
         expect(wowCb).not.toBeChecked();
 
         // Simulate external prop change (not re-delivering games) — component re-renders
-        const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const rerenderQc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         rerender(
-            <QueryClientProvider client={queryClient}>
+            <QueryClientProvider client={rerenderQc}>
                 <MemoryRouter>
                     <CalendarPage />
                 </MemoryRouter>
@@ -660,6 +695,10 @@ describe('CalendarPage — FAB and BottomSheet', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('FAB is not visible before any games arrive', () => {
