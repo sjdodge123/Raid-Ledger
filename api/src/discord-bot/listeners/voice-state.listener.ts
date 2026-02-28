@@ -575,6 +575,7 @@ export class VoiceStateListener {
         minPlayers?: number;
         gracePeriod?: number;
         notificationChannelId?: string;
+        allowJustChatting?: boolean;
       } | null,
     };
 
