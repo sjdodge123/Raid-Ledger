@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger, OnModuleInit } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -43,10 +43,10 @@ export const SETTINGS_EVENTS = {
 } as const;
 
 /** How long the in-memory cache is considered fresh (ms). */
-const CACHE_TTL_MS = 60_000;
+const CACHE_TTL_MS = 5 * 60_000; // 5 minutes — settings are essentially static
 
 @Injectable()
-export class SettingsService {
+export class SettingsService implements OnModuleInit {
   private readonly logger = new Logger(SettingsService.name);
 
   /** In-memory cache: setting key -> decrypted value. */
@@ -63,6 +63,11 @@ export class SettingsService {
     private db: PostgresJsDatabase<typeof schema>,
     private eventEmitter: EventEmitter2,
   ) {}
+
+  /** Eagerly warm the cache so the first HTTP request is never cold. */
+  async onModuleInit(): Promise<void> {
+    await this.loadCache();
+  }
 
   /**
    * Load all settings into the in-memory cache if stale or empty.
@@ -132,6 +137,7 @@ export class SettingsService {
       });
 
     this.cache.set(key, value);
+    this.cacheLoadedAt = Date.now(); // reset TTL — cache is consistent
     this.logger.debug(`Setting ${key} updated`);
   }
 
@@ -142,6 +148,7 @@ export class SettingsService {
   async delete(key: SettingKey): Promise<void> {
     await this.db.delete(appSettings).where(eq(appSettings.key, key));
     this.cache.delete(key);
+    this.cacheLoadedAt = Date.now(); // reset TTL — cache is consistent
     this.logger.debug(`Setting ${key} deleted`);
   }
 
