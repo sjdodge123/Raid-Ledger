@@ -102,6 +102,10 @@ export class ScheduledEventService {
 
       const description = await this.buildDescription(eventId, eventData);
 
+      this.logger.debug(
+        `Creating scheduled event for event ${eventId}: channel=${voiceChannelId}, start=${eventData.startTime}, end=${eventData.endTime}`,
+      );
+
       const scheduledEvent = await guild.scheduledEvents.create({
         name: eventData.title,
         scheduledStartTime: startTime,
@@ -121,8 +125,12 @@ export class ScheduledEventService {
         `Created Discord Scheduled Event ${scheduledEvent.id} for event ${eventId}`,
       );
     } catch (error) {
+      const details =
+        error instanceof DiscordAPIError
+          ? `code=${error.code}, status=${error.status}, method=${error.method}, url=${error.url}`
+          : '';
       this.logger.error(
-        `Failed to create scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        `Failed to create scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}${details ? ` [${details}]` : ''}`,
       );
     }
   }
