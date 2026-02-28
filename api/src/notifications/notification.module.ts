@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
+import { RosterNotificationBufferService } from './roster-notification-buffer.service';
 import { EventReminderService } from './event-reminder.service';
 import { PostEventReminderService } from './post-event-reminder.service';
 import { DiscordNotificationService } from './discord-notification.service';
@@ -25,6 +26,7 @@ import { SettingsModule } from '../settings/settings.module';
   controllers: [NotificationController],
   providers: [
     NotificationService,
+    RosterNotificationBufferService,
     EventReminderService,
     PostEventReminderService,
     DiscordNotificationService,
@@ -34,6 +36,7 @@ import { SettingsModule } from '../settings/settings.module';
   ],
   exports: [
     NotificationService,
+    RosterNotificationBufferService,
     DiscordNotificationService,
     GameAffinityNotificationService,
   ],

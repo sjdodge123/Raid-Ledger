@@ -8,6 +8,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { BenchPromotionService } from './bench-promotion.service';
 
 describe('SignupsService', () => {
@@ -17,6 +18,10 @@ describe('SignupsService', () => {
     create: jest.Mock;
     getDiscordEmbedUrl: jest.Mock;
     resolveVoiceChannelForEvent: jest.Mock;
+  };
+  let mockRosterNotificationBuffer: {
+    bufferLeave: jest.Mock;
+    bufferJoin: jest.Mock;
   };
   let mockBenchPromotionService: {
     schedulePromotion: jest.Mock;
@@ -64,6 +69,10 @@ describe('SignupsService', () => {
       create: jest.fn().mockResolvedValue(null),
       getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
       resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+    };
+    mockRosterNotificationBuffer = {
+      bufferLeave: jest.fn(),
+      bufferJoin: jest.fn(),
     };
     mockBenchPromotionService = {
       schedulePromotion: jest.fn().mockResolvedValue(undefined),
@@ -138,6 +147,10 @@ describe('SignupsService', () => {
         SignupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
+        {
+          provide: RosterNotificationBufferService,
+          useValue: mockRosterNotificationBuffer,
+        },
         {
           provide: BenchPromotionService,
           useValue: mockBenchPromotionService,
@@ -568,7 +581,12 @@ describe('SignupsService', () => {
   describe('cancel', () => {
     // ROK-562: cancel() now fetches event duration to determine cancel status
     const futureStart = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h from now → 'declined'
-    const mockEventDuration = { duration: [futureStart, new Date(futureStart.getTime() + 2 * 60 * 60 * 1000)] };
+    const mockEventDuration = {
+      duration: [
+        futureStart,
+        new Date(futureStart.getTime() + 2 * 60 * 60 * 1000),
+      ],
+    };
 
     const mockSelectEventDuration = () => ({
       from: jest.fn().mockReturnValue({
@@ -671,12 +689,14 @@ describe('SignupsService', () => {
       // ROK-421: cancel now deletes roster assignment + soft-deletes signup
       expect(mockDb.delete).toHaveBeenCalled(); // roster assignment delete
       expect(mockDb.update).toHaveBeenCalled(); // soft-delete signup
-      expect(mockNotificationService.create).toHaveBeenCalledWith({
-        userId: 5,
-        type: 'slot_vacated',
-        title: 'Slot Vacated',
-        message: 'Frostmage left the healer slot for Raid Night',
-        payload: { eventId: 1 },
+      // ROK-534: organizer notification is now debounced via buffer
+      expect(mockRosterNotificationBuffer.bufferLeave).toHaveBeenCalledWith({
+        organizerId: 5,
+        eventId: 1,
+        eventTitle: 'Raid Night',
+        userId: 1,
+        displayName: 'Frostmage',
+        vacatedRole: 'healer',
       });
     });
 
@@ -727,8 +747,9 @@ describe('SignupsService', () => {
 
       await service.cancel(42, 1);
 
-      expect(mockNotificationService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ payload: { eventId: 42 } }),
+      // ROK-534: organizer notification is now debounced via buffer
+      expect(mockRosterNotificationBuffer.bufferLeave).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: 42 }),
       );
     });
   });
@@ -846,13 +867,14 @@ describe('SignupsService', () => {
 
       // Assignment was deleted
       expect(mockDb.delete).toHaveBeenCalled();
-      // Notification dispatched to organizer
-      expect(mockNotificationService.create).toHaveBeenCalledWith({
-        userId: 5,
-        type: 'slot_vacated',
-        title: 'Slot Vacated',
-        message: 'Frostmage left the healer slot for Raid Night',
-        payload: { eventId: 1 },
+      // ROK-534: organizer notification is now debounced via buffer
+      expect(mockRosterNotificationBuffer.bufferLeave).toHaveBeenCalledWith({
+        organizerId: 5,
+        eventId: 1,
+        eventTitle: 'Raid Night',
+        userId: 1,
+        displayName: 'Frostmage',
+        vacatedRole: 'healer',
       });
       // Returns updated roster
       expect(result.pool).toHaveLength(1);
