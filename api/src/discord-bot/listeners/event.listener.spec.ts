@@ -106,6 +106,11 @@ describe('DiscordEventListener', () => {
           provide: EmbedPosterService,
           useValue: {
             postEmbed: jest.fn().mockResolvedValue(true),
+            enrichWithLiveRoster: jest
+              .fn()
+              .mockImplementation((_id: number, event: unknown) =>
+                Promise.resolve(event),
+              ),
           },
         },
         {

@@ -225,8 +225,13 @@ export class DiscordEventListener {
 
     const context = await this.buildContext();
 
+    // Enrich with live roster data so the embed reflects current signups
+    const eventData = await this.embedPoster.enrichWithLiveRoster(
+      payload.eventId,
+      payload.event,
+    );
+
     // ROK-507: Resolve voice channel so embed updates retain the voice channel line
-    const eventData = { ...payload.event };
     const voiceChannelId =
       await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         payload.gameId,
