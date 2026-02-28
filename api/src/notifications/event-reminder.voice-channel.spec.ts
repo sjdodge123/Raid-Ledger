@@ -104,7 +104,9 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
 
       await service.sendReminder(baseReminder);
 
-      expect(mockNotificationService.resolveVoiceChannelId).toHaveBeenCalledWith(5);
+      expect(
+        mockNotificationService.resolveVoiceChannelId,
+      ).toHaveBeenCalledWith(5);
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
@@ -130,17 +132,22 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
 
       await service.sendReminder({ ...baseReminder, gameId: 99 });
 
-      expect(mockNotificationService.resolveVoiceChannelId).toHaveBeenCalledWith(99);
+      expect(
+        mockNotificationService.resolveVoiceChannelId,
+      ).toHaveBeenCalledWith(99);
     });
 
     it('calls resolveVoiceChannelId with undefined when gameId is not provided', async () => {
       mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
       mockNotificationService.resolveVoiceChannelId.mockResolvedValue(null);
 
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { gameId: _omit, ...reminderWithoutGame } = baseReminder;
       await service.sendReminder(reminderWithoutGame);
 
-      expect(mockNotificationService.resolveVoiceChannelId).toHaveBeenCalledWith(undefined);
+      expect(
+        mockNotificationService.resolveVoiceChannelId,
+      ).toHaveBeenCalledWith(undefined);
     });
 
     it('does not call resolveVoiceChannelId when reminder is a duplicate (returns false)', async () => {
@@ -150,7 +157,9 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
       const result = await service.sendReminder(baseReminder);
 
       expect(result).toBe(false);
-      expect(mockNotificationService.resolveVoiceChannelId).not.toHaveBeenCalled();
+      expect(
+        mockNotificationService.resolveVoiceChannelId,
+      ).not.toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -168,9 +177,7 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
 
     it('payload contains eventId, reminderWindow, and voiceChannelId together', async () => {
       mockDb.insert.mockReturnValue(makeInsertChain([trackingRow]));
-      mockNotificationService.resolveVoiceChannelId.mockResolvedValue(
-        'vc-456',
-      );
+      mockNotificationService.resolveVoiceChannelId.mockResolvedValue('vc-456');
 
       await service.sendReminder(baseReminder);
 

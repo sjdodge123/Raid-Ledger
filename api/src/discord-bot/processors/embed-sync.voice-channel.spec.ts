@@ -75,9 +75,9 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
   const setupDbForSuccessfulSync = () => {
     mockDb.select
       .mockReturnValueOnce(makeSelectChain([mockRecord])) // discordEventMessages
-      .mockReturnValueOnce(makeSelectChain([mockEvent]))  // events
-      .mockReturnValueOnce(makeSelectChain([]))            // eventSignups
-      .mockReturnValueOnce(makeSelectChain([]))            // rosterAssignments
+      .mockReturnValueOnce(makeSelectChain([mockEvent])) // events
+      .mockReturnValueOnce(makeSelectChain([])) // eventSignups
+      .mockReturnValueOnce(makeSelectChain([])) // rosterAssignments
       .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }])); // games
   };
 
@@ -148,7 +148,9 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
     jest.clearAllMocks();
   });
 
-  const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+  const job = {
+    data: { eventId: 42, reason: 'signup' },
+  } as Job<EmbedSyncJobData>;
 
   it('calls resolveVoiceChannelForScheduledEvent with the event gameId', async () => {
     setupDbForSuccessfulSync();
@@ -182,7 +184,9 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
     setupDbForSuccessfulSync();
     mockDb.update.mockReturnValue(makeUpdateChain());
 
-    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(null);
+    channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+      null,
+    );
 
     await processor.process(job);
 
@@ -197,9 +201,8 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
       .mockReturnValueOnce(makeSelectChain([mockRecord]))
       .mockReturnValueOnce(makeSelectChain([eventWithNoGame]))
       .mockReturnValueOnce(makeSelectChain([]))
-      .mockReturnValueOnce(makeSelectChain([]))
-      // no games fetch since gameId is null
-      ;
+      .mockReturnValueOnce(makeSelectChain([]));
+    // no games fetch since gameId is null
     mockDb.update.mockReturnValue(makeUpdateChain());
 
     await processor.process(job);
@@ -210,10 +213,14 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
   });
 
   it('does not call resolveVoiceChannelForScheduledEvent when bot is not connected', async () => {
-    const clientService = processor['clientService'] as { isConnected: jest.Mock };
+    const clientService = processor['clientService'] as unknown as {
+      isConnected: jest.Mock;
+    };
     clientService.isConnected.mockReturnValue(false);
 
-    await expect(processor.process(job)).rejects.toThrow('Discord bot not connected');
+    await expect(processor.process(job)).rejects.toThrow(
+      'Discord bot not connected',
+    );
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
