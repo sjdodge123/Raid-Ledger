@@ -117,8 +117,8 @@ export class DiscordBotClientService {
           );
         }
 
-        // Use emitAsync so async @OnEvent(CONNECTED) handlers (setup wizard,
-        // command registration, etc.) are properly awaited before connect()
+        // Use emitAsync so async @OnEvent(CONNECTED) handlers (command
+        // registration, etc.) are properly awaited before connect()
         // resolves.  Errors in handlers are logged but do not reject connect().
         if (typeof this.eventEmitter.emitAsync === 'function') {
           this.eventEmitter

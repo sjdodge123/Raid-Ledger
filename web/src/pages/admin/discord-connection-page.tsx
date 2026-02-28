@@ -46,6 +46,8 @@ function DiscordConnectionContent() {
     const hasDiscord = isDiscordLinked(user?.discordId);
     const isBotConfigured = discordBotStatus.data?.configured ?? false;
 
+    // TODO: Replace JWT-in-query-param with a short-lived one-time code exchange
+    // to avoid token exposure in server logs and browser history (ROK-560).
     const handleLinkDiscord = () => {
         const token = localStorage.getItem('raid_ledger_token');
         if (!token) {
