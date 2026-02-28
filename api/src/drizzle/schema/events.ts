@@ -104,5 +104,10 @@ export const events = pgTable(
       table.channelBindingId,
       table.isAdHoc,
     ),
+    index('idx_events_recurrence_group_id').on(table.recurrenceGroupId),
+    index('idx_events_cancelled_at').on(table.cancelledAt),
+    index('idx_events_discord_scheduled_event_id').on(
+      table.discordScheduledEventId,
+    ),
   ],
 );
