@@ -39,13 +39,22 @@ export function BindingConfigForm({
     });
   };
 
-  const isVoiceMonitor = binding.bindingPurpose === 'game-voice-monitor';
+  const isVoiceMonitor =
+    binding.bindingPurpose === 'game-voice-monitor' ||
+    binding.bindingPurpose === 'general-lobby';
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4 p-4 bg-overlay/30 rounded-lg border border-border">
       <h4 className="text-sm font-medium text-foreground">
         Edit Config: #{binding.channelName ?? binding.channelId}
       </h4>
+
+      {binding.bindingPurpose === 'general-lobby' && (
+        <p className="text-xs text-muted">
+          General Lobby: games are auto-detected from Discord Rich Presence.
+          Players can use <code className="text-foreground bg-overlay px-1 py-0.5 rounded">/playing</code> as a manual fallback.
+        </p>
+      )}
 
       {isVoiceMonitor && (
         <>

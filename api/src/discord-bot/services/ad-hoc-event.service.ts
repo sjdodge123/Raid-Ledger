@@ -35,13 +35,20 @@ interface ActiveAdHocState {
   eventId: number;
   memberSet: Set<string>; // Discord user IDs currently in the channel
   lastExtendedAt: number; // epoch ms
+  gameId?: number | null; // For general-lobby composite key recovery
 }
 
 @Injectable()
 export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AdHocEventService.name);
 
-  /** Map of channelBindingId -> active ad-hoc state */
+  /**
+   * Map of active event key -> state.
+   * Key format:
+   * - Game-specific bindings: `{bindingId}`
+   * - General-lobby bindings: `{bindingId}:{gameId}` (composite key)
+   *   This allows multiple concurrent events per general-lobby channel.
+   */
   private activeEvents = new Map<string, ActiveAdHocState>();
 
   /** Periodic timer for extending end times of occupied events. */
@@ -77,15 +84,18 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     for (const event of liveEvents) {
       if (!event.channelBindingId) continue;
 
-      this.activeEvents.set(event.channelBindingId, {
+      // Check if this binding is a general-lobby (has gameId on the event)
+      // to reconstruct the composite key
+      const key = this.buildEventKey(event.channelBindingId, event.gameId);
+
+      this.activeEvents.set(key, {
         eventId: event.id,
         memberSet: new Set(),
         lastExtendedAt: Date.now(),
+        gameId: event.gameId,
       });
 
-      this.logger.log(
-        `Recovered live ad-hoc event ${event.id} for binding ${event.channelBindingId}`,
-      );
+      this.logger.log(`Recovered live ad-hoc event ${event.id} for key ${key}`);
     }
 
     if (liveEvents.length > 0) {
@@ -144,6 +154,8 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Handle a member joining a bound voice channel.
+   * For general-lobby bindings, resolvedGameId/resolvedGameName are provided
+   * by the VoiceStateListener after presence detection.
    */
   async handleVoiceJoin(
     bindingId: string,
@@ -156,11 +168,19 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         notificationChannelId?: string;
       } | null;
     },
+    resolvedGameId?: number | null,
+    resolvedGameName?: string,
   ): Promise<void> {
     const enabled = await this.isEnabled();
     if (!enabled) return;
 
-    const state = this.activeEvents.get(bindingId);
+    // For general-lobby, use resolved game; for game-specific, use binding game
+    const effectiveGameId =
+      resolvedGameId !== undefined ? resolvedGameId : binding.gameId;
+    const effectiveBinding = { ...binding, gameId: effectiveGameId };
+
+    const eventKey = this.buildEventKey(bindingId, effectiveGameId);
+    const state = this.activeEvents.get(eventKey);
 
     if (state) {
       // Verify event still exists and is active in DB (may have been
@@ -171,7 +191,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         existing.adHocStatus === 'ended' ||
         existing.cancelledAt
       ) {
-        this.activeEvents.delete(bindingId);
+        this.activeEvents.delete(eventKey);
         this.logger.warn(
           `Removed stale active state for event ${state.eventId} (status: ${existing?.adHocStatus ?? 'deleted'})`,
         );
@@ -234,8 +254,8 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       .where(
         and(
           // Match by binding (ad-hoc→ad-hoc) OR by game (scheduled events)
-          binding.gameId
-            ? sql`(${schema.events.channelBindingId} = ${bindingId} OR ${schema.events.gameId} = ${binding.gameId})`
+          effectiveGameId
+            ? sql`(${schema.events.channelBindingId} = ${bindingId} OR ${schema.events.gameId} = ${effectiveGameId})`
             : eq(schema.events.channelBindingId, bindingId),
           eq(schema.events.isAdHoc, false),
           sql`${schema.events.cancelledAt} IS NULL`,
@@ -273,14 +293,20 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     const tempMembers = new Set<string>();
     tempMembers.add(member.discordUserId);
 
-    // Create a new ad-hoc event
-    const eventId = await this.createAdHocEvent(bindingId, binding, member);
+    // Create a new ad-hoc event — use resolved game name for title if available
+    const eventId = await this.createAdHocEvent(
+      bindingId,
+      effectiveBinding,
+      member,
+      resolvedGameName,
+    );
     if (!eventId) return;
 
-    this.activeEvents.set(bindingId, {
+    this.activeEvents.set(eventKey, {
       eventId,
       memberSet: tempMembers,
       lastExtendedAt: Date.now(),
+      gameId: effectiveGameId,
     });
 
     // Add the first participant + auto-signup for slot grid
@@ -290,12 +316,12 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     // Notify Discord embed (spawn) + WebSocket clients
     const event = await this.getEvent(eventId);
     if (event) {
-      let gameName: string | undefined;
-      if (binding.gameId) {
+      let gameName: string | undefined = resolvedGameName;
+      if (!gameName && effectiveGameId) {
         const [game] = await this.db
           .select({ name: schema.games.name })
           .from(schema.games)
-          .where(eq(schema.games.id, binding.gameId))
+          .where(eq(schema.games.id, effectiveGameId))
           .limit(1);
         if (game) gameName = game.name;
       }
@@ -320,17 +346,28 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     this.gateway.emitStatusChange(eventId, 'live');
     await this.emitRosterToClients(eventId);
 
-    this.logger.log(`Ad-hoc event ${eventId} created for binding ${bindingId}`);
+    this.logger.log(`Ad-hoc event ${eventId} created for key ${eventKey}`);
   }
 
   /**
    * Handle a member leaving a bound voice channel.
+   * For general-lobby bindings, gameId is used to find the correct active event.
+   * If gameId is not provided, searches all active events for the binding.
    */
   async handleVoiceLeave(
     bindingId: string,
     discordUserId: string,
+    gameId?: number | null,
   ): Promise<void> {
-    const state = this.activeEvents.get(bindingId);
+    // Find the correct event key — for general lobby, try composite first
+    const eventKey = this.findEventKeyForMember(
+      bindingId,
+      discordUserId,
+      gameId,
+    );
+    if (!eventKey) return;
+
+    const state = this.activeEvents.get(eventKey);
     if (!state) return;
 
     state.memberSet.delete(discordUserId);
@@ -338,7 +375,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     // Verify event still exists and is active
     const event = await this.getEvent(state.eventId);
     if (!event || event.adHocStatus === 'ended' || event.cancelledAt) {
-      this.activeEvents.delete(bindingId);
+      this.activeEvents.delete(eventKey);
       this.logger.warn(
         `Removed stale active state on leave for event ${state.eventId}`,
       );
@@ -464,16 +501,12 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
     this.gateway.emitStatusChange(eventId, 'ended');
 
-    // Remove from active events map
-    if (event.channelBindingId) {
-      this.activeEvents.delete(event.channelBindingId);
-    } else {
-      // Fallback: scan map for this eventId (shouldn't happen, but be safe)
-      for (const [bId, s] of this.activeEvents) {
-        if (s.eventId === eventId) {
-          this.activeEvents.delete(bId);
-          break;
-        }
+    // Remove from active events map — scan for this eventId
+    // since we may have composite keys for general-lobby events
+    for (const [key, s] of this.activeEvents) {
+      if (s.eventId === eventId) {
+        this.activeEvents.delete(key);
+        break;
       }
     }
 
@@ -496,9 +529,28 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Get active state for a binding (used by VoiceStateListener).
+   * For game-specific bindings, uses bindingId as key.
+   * For general-lobby bindings, pass gameId to construct composite key.
    */
-  getActiveState(bindingId: string): ActiveAdHocState | undefined {
-    return this.activeEvents.get(bindingId);
+  getActiveState(
+    bindingId: string,
+    gameId?: number | null,
+  ): ActiveAdHocState | undefined {
+    const key = this.buildEventKey(bindingId, gameId);
+    return this.activeEvents.get(key);
+  }
+
+  /**
+   * Check if any active event exists for a binding (any game).
+   * Used by VoiceStateListener to check if the channel has any active events.
+   */
+  hasAnyActiveEvent(bindingId: string): boolean {
+    for (const key of this.activeEvents.keys()) {
+      if (key === bindingId || key.startsWith(`${bindingId}:`)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -545,6 +597,8 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Create a new ad-hoc event in the database.
+   * resolvedGameName is used for general-lobby events where the game was
+   * detected from presence rather than from the binding.
    */
   private async createAdHocEvent(
     bindingId: string,
@@ -557,6 +611,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       } | null;
     },
     triggerMember: VoiceMemberInfo,
+    resolvedGameName?: string,
   ): Promise<number | null> {
     // Determine creator — linked user or fallback
     let creatorId = triggerMember.userId;
@@ -578,9 +633,9 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       creatorId = admin.id;
     }
 
-    // Build title
-    let gameName = 'Gaming';
-    if (binding.gameId) {
+    // Build title — prefer resolved game name (from presence detection)
+    let gameName = resolvedGameName ?? 'Gaming';
+    if (!resolvedGameName && binding.gameId) {
       const [game] = await this.db
         .select({ name: schema.games.name })
         .from(schema.games)
@@ -788,5 +843,55 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       .limit(1);
 
     return event ?? null;
+  }
+
+  /**
+   * Build the active events map key.
+   * Game-specific bindings: `{bindingId}`
+   * General-lobby bindings (with gameId): `{bindingId}:{gameId}`
+   * General-lobby bindings (no game detected): `{bindingId}:null`
+   */
+  private buildEventKey(bindingId: string, gameId?: number | null): string {
+    if (gameId !== undefined && gameId !== null) {
+      return `${bindingId}:${gameId}`;
+    }
+    // For game-specific bindings, gameId is undefined (not passed)
+    // For general-lobby with no game, gameId is null
+    if (gameId === null) {
+      return `${bindingId}:null`;
+    }
+    return bindingId;
+  }
+
+  /**
+   * Find the event key for a member leaving a channel.
+   * For general-lobby, searches composite keys for the binding that contains
+   * this member. Falls back to simple key for game-specific bindings.
+   */
+  private findEventKeyForMember(
+    bindingId: string,
+    discordUserId: string,
+    gameId?: number | null,
+  ): string | null {
+    // If gameId is provided, try composite key directly
+    if (gameId !== undefined) {
+      const key = this.buildEventKey(bindingId, gameId);
+      if (this.activeEvents.has(key)) return key;
+    }
+
+    // Try simple key (game-specific binding)
+    if (this.activeEvents.has(bindingId)) return bindingId;
+
+    // Search composite keys for this binding that contain this member
+    for (const [key, state] of this.activeEvents) {
+      if (
+        (key === bindingId || key.startsWith(`${bindingId}:`)) &&
+        state.memberSet.has(discordUserId)
+      ) {
+        return key;
+      }
+    }
+
+    return null;
   }
 }

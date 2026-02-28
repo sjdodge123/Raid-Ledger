@@ -140,9 +140,11 @@ export class BindCommand
       }
     }
 
-    // Detect behavior based on channel type
-    const behavior =
-      this.channelBindingsService.detectBehavior(bindingChannelType);
+    // Detect behavior based on channel type and game
+    const behavior = this.channelBindingsService.detectBehavior(
+      bindingChannelType,
+      gameId,
+    );
 
     // Create/update the binding
     try {
@@ -156,10 +158,12 @@ export class BindCommand
         recurrenceGroupId,
       );
 
-      const behaviorLabel =
-        behavior === 'game-announcements'
-          ? 'Event Announcements'
-          : 'Activity Monitor';
+      const behaviorLabels: Record<string, string> = {
+        'game-announcements': 'Event Announcements',
+        'game-voice-monitor': 'Activity Monitor',
+        'general-lobby': 'General Lobby (auto-detect games)',
+      };
+      const behaviorLabel = behaviorLabels[behavior] ?? 'Activity Monitor';
 
       const description = [
         `**#${channelName}** bound for **${behaviorLabel}**`,

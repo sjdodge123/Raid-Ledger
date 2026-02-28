@@ -1,9 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Events, type VoiceState } from 'discord.js';
+import { Events, type GuildMember, type VoiceState } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
@@ -14,9 +15,24 @@ const DEBOUNCE_MS = 2000;
 /** TTL for channel binding cache entries (ms). */
 const CACHE_TTL_MS = 60 * 1000;
 
+interface ResolvedBinding {
+  bindingId: string;
+  gameId: number | null;
+  bindingPurpose: string;
+  config: {
+    minPlayers?: number;
+    gracePeriod?: number;
+    notificationChannelId?: string;
+  } | null;
+}
+
 /**
  * VoiceStateListener — listens for Discord `voiceStateUpdate` events and
  * delegates ad-hoc event management to AdHocEventService (ROK-293).
+ *
+ * ROK-515: Extended to support general-lobby bindings. When a channel has
+ * bindingPurpose 'general-lobby', the listener uses PresenceGameDetectorService
+ * to detect what game members are playing via Discord Rich Presence.
  *
  * Follows the same pattern as ActivityListener:
  * - Registers on bot connect, unregisters on disconnect.
@@ -32,36 +48,35 @@ export class VoiceStateListener {
     | ((oldState: VoiceState, newState: VoiceState) => void)
     | null = null;
 
+  /** Presence update handler for mid-session game switching */
+  private presenceHandler: ((...args: unknown[]) => void) | null = null;
+
   /** Debounce timers per user to avoid rapid join/leave noise */
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
   /** Periodic sweep timer to evict stale cache entries */
   private cacheSweepTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Cache: channelId -> bindingId + config (avoids repeated DB lookups) */
+  /** Cache: channelId -> binding info (avoids repeated DB lookups) */
   private channelBindingCache = new Map<
     string,
     {
       cachedAt: number;
-      value: {
-        bindingId: string;
-        gameId: number | null;
-        config: {
-          minPlayers?: number;
-          gracePeriod?: number;
-          notificationChannelId?: string;
-        } | null;
-      } | null;
+      value: ResolvedBinding | null;
     }
   >();
 
   /** Tracks members per channel for threshold checking */
   private channelMembers = new Map<string, Set<string>>();
 
+  /** Tracks which channel each user is in (for presence change handling) */
+  private userChannelMap = new Map<string, string>();
+
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
     private readonly channelBindingsService: ChannelBindingsService,
+    private readonly presenceDetector: PresenceGameDetectorService,
     private readonly usersService: UsersService,
   ) {}
 
@@ -74,12 +89,29 @@ export class VoiceStateListener {
     if (this.boundHandler) {
       client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
     }
+    if (this.presenceHandler) {
+      client.removeListener(Events.PresenceUpdate, this.presenceHandler);
+    }
 
     this.boundHandler = (oldState: VoiceState, newState: VoiceState) => {
       this.handleVoiceStateUpdate(oldState, newState);
     };
 
     client.on(Events.VoiceStateUpdate, this.boundHandler);
+
+    // Listen for presence changes to handle mid-session game switching
+    this.presenceHandler = (...args: unknown[]) => {
+      this.handlePresenceChange(
+        args[1] as {
+          userId: string;
+          guild?: { members: { cache: Map<string, GuildMember> } };
+        },
+      ).catch((err) =>
+        this.logger.error(`Error handling presence change: ${err}`),
+      );
+    };
+    client.on(Events.PresenceUpdate, this.presenceHandler);
+
     this.logger.log('Registered voiceStateUpdate listener for ad-hoc events');
 
     // Startup recovery: scan voice channels for current members
@@ -102,12 +134,19 @@ export class VoiceStateListener {
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   onBotDisconnected(): void {
     const client = this.clientService.getClient();
-    if (client && this.boundHandler) {
-      client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
+    if (client) {
+      if (this.boundHandler) {
+        client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
+      }
+      if (this.presenceHandler) {
+        client.removeListener(Events.PresenceUpdate, this.presenceHandler);
+      }
     }
     this.boundHandler = null;
+    this.presenceHandler = null;
     this.channelBindingCache.clear();
     this.channelMembers.clear();
+    this.userChannelMap.clear();
 
     // Clear all debounce timers
     for (const timer of this.debounceTimers.values()) {
@@ -146,18 +185,24 @@ export class VoiceStateListener {
       const process = async () => {
         // Handle leave from old channel
         if (oldChannelId) {
+          this.userChannelMap.delete(userId);
           await this.handleChannelLeave(oldChannelId, userId);
         }
 
         // Handle join to new channel
         if (newChannelId) {
+          this.userChannelMap.set(userId, newChannelId);
           const member = newState.member;
-          await this.handleChannelJoin(newChannelId, {
-            discordUserId: userId,
-            discordUsername:
-              member?.displayName ?? member?.user?.username ?? 'Unknown',
-            discordAvatarHash: member?.user?.avatar ?? null,
-          });
+          await this.handleChannelJoin(
+            newChannelId,
+            {
+              discordUserId: userId,
+              discordUsername:
+                member?.displayName ?? member?.user?.username ?? 'Unknown',
+              discordAvatarHash: member?.user?.avatar ?? null,
+            },
+            member ?? undefined,
+          );
         }
       };
 
@@ -171,6 +216,62 @@ export class VoiceStateListener {
     this.debounceTimers.set(userId, timer);
   }
 
+  /**
+   * Handle presence changes for users in general-lobby channels.
+   * If a user switches games mid-session, move them between events.
+   */
+  private async handlePresenceChange(newPresence: {
+    userId: string;
+    guild?: { members: { cache: Map<string, GuildMember> } };
+  }): Promise<void> {
+    if (!newPresence) return;
+
+    const userId = newPresence.userId;
+    const channelId = this.userChannelMap.get(userId);
+    if (!channelId) return;
+
+    const binding = await this.resolveBinding(channelId);
+    if (!binding || binding.bindingPurpose !== 'general-lobby') return;
+
+    // Get the GuildMember to read presence
+    const guildMember = newPresence.guild?.members?.cache?.get(userId);
+    if (!guildMember) return;
+
+    const detected =
+      await this.presenceDetector.detectGameForMember(guildMember);
+
+    // Check if user is already in an event for this game
+    const currentState = this.adHocEventService.getActiveState(
+      binding.bindingId,
+      detected.gameId,
+    );
+    if (currentState?.memberSet.has(userId)) return;
+
+    // User is playing a different game — leave old event, join new
+    await this.adHocEventService.handleVoiceLeave(binding.bindingId, userId);
+
+    const rlUser = await this.usersService.findByDiscordId(userId);
+    const memberInfo: VoiceMemberInfo = {
+      discordUserId: userId,
+      discordUsername:
+        guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+      discordAvatarHash: guildMember.user?.avatar ?? null,
+      userId: rlUser?.id ?? null,
+    };
+
+    await this.adHocEventService.handleVoiceJoin(
+      binding.bindingId,
+      memberInfo,
+      binding,
+      detected.gameId,
+      detected.gameName,
+    );
+
+    this.logger.debug(
+      `Presence change: moved ${userId} to game "${detected.gameName}" in general-lobby ${channelId}`,
+    );
+  }
+
   private async handleChannelJoin(
     channelId: string,
     discordMember: {
@@ -178,6 +279,7 @@ export class VoiceStateListener {
       discordUsername: string;
       discordAvatarHash: string | null;
     },
+    guildMember?: GuildMember,
   ): Promise<void> {
     const binding = await this.resolveBinding(channelId);
     if (!binding) return;
@@ -190,7 +292,18 @@ export class VoiceStateListener {
     }
     members.add(discordMember.discordUserId);
 
-    // Check threshold
+    // For general-lobby bindings, detect the game via presence
+    if (binding.bindingPurpose === 'general-lobby') {
+      await this.handleGeneralLobbyJoin(
+        channelId,
+        binding,
+        discordMember,
+        guildMember,
+      );
+      return;
+    }
+
+    // Game-specific binding — original behavior
     const minPlayers = binding.config?.minPlayers ?? 2;
     const state = this.adHocEventService.getActiveState(binding.bindingId);
 
@@ -217,6 +330,118 @@ export class VoiceStateListener {
     );
   }
 
+  /**
+   * Handle a join to a general-lobby channel.
+   * Detects game via presence and passes it to AdHocEventService.
+   */
+  private async handleGeneralLobbyJoin(
+    channelId: string,
+    binding: ResolvedBinding,
+    discordMember: {
+      discordUserId: string;
+      discordUsername: string;
+      discordAvatarHash: string | null;
+    },
+    guildMember?: GuildMember,
+  ): Promise<void> {
+    let detected: { gameId: number | null; gameName: string };
+
+    if (guildMember) {
+      detected = await this.presenceDetector.detectGameForMember(guildMember);
+    } else {
+      detected = { gameId: null, gameName: 'Untitled Gaming Session' };
+    }
+
+    const minPlayers = binding.config?.minPlayers ?? 2;
+    const members = this.channelMembers.get(channelId);
+    const memberCount = members?.size ?? 0;
+
+    // Check if event exists for this game or any event exists for this binding
+    const state = this.adHocEventService.getActiveState(
+      binding.bindingId,
+      detected.gameId,
+    );
+
+    // If no event exists and below threshold, wait
+    if (!state && memberCount < minPlayers) {
+      // But if we've just hit the threshold, do a group detection
+      // to see if we should create events based on consensus
+      return;
+    }
+
+    // When we hit the threshold and no event exists, do group detection
+    if (!state && memberCount >= minPlayers && guildMember) {
+      await this.handleGeneralLobbyGroupDetection(channelId, binding);
+      return;
+    }
+
+    // Resolve RL user
+    const rlUser = await this.usersService.findByDiscordId(
+      discordMember.discordUserId,
+    );
+
+    const memberInfo: VoiceMemberInfo = {
+      ...discordMember,
+      userId: rlUser?.id ?? null,
+    };
+
+    await this.adHocEventService.handleVoiceJoin(
+      binding.bindingId,
+      memberInfo,
+      binding,
+      detected.gameId,
+      detected.gameName,
+    );
+  }
+
+  /**
+   * When a general-lobby channel hits the threshold, detect games for all
+   * members and create events based on consensus logic.
+   */
+  private async handleGeneralLobbyGroupDetection(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): Promise<void> {
+    const client = this.clientService.getClient();
+    if (!client) return;
+
+    const guild = client.guilds.cache.first();
+    if (!guild) return;
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased()) return;
+
+    const voiceMembers = [...channel.members.values()];
+    if (voiceMembers.length === 0) return;
+
+    // Detect games for all members
+    const groups = await this.presenceDetector.detectGames(voiceMembers);
+
+    for (const group of groups) {
+      for (const memberId of group.memberIds) {
+        const guildMember = channel.members.get(memberId);
+        if (!guildMember) continue;
+
+        const rlUser = await this.usersService.findByDiscordId(memberId);
+        const memberInfo: VoiceMemberInfo = {
+          discordUserId: memberId,
+          discordUsername:
+            guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+          discordAvatarHash: guildMember.user?.avatar ?? null,
+          userId: rlUser?.id ?? null,
+        };
+
+        await this.adHocEventService.handleVoiceJoin(
+          binding.bindingId,
+          memberInfo,
+          binding,
+          group.gameId,
+          group.gameName,
+        );
+      }
+    }
+  }
+
   private async handleChannelLeave(
     channelId: string,
     discordUserId: string,
@@ -241,16 +466,11 @@ export class VoiceStateListener {
 
   /**
    * Resolve a channel ID to a binding (cached with TTL).
+   * ROK-515: Also matches 'general-lobby' binding purpose.
    */
-  private async resolveBinding(channelId: string): Promise<{
-    bindingId: string;
-    gameId: number | null;
-    config: {
-      minPlayers?: number;
-      gracePeriod?: number;
-      notificationChannelId?: string;
-    } | null;
-  } | null> {
+  private async resolveBinding(
+    channelId: string,
+  ): Promise<ResolvedBinding | null> {
     const cached = this.channelBindingCache.get(channelId);
     if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
       return cached.value;
@@ -265,11 +485,14 @@ export class VoiceStateListener {
       return null;
     }
 
-    // Look up binding for this voice channel
+    // Look up binding for this voice channel — match both game-voice-monitor
+    // and general-lobby binding purposes
     const bindings = await this.channelBindingsService.getBindings(guildId);
     const binding = bindings.find(
       (b) =>
-        b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
+        b.channelId === channelId &&
+        (b.bindingPurpose === 'game-voice-monitor' ||
+          b.bindingPurpose === 'general-lobby'),
     );
 
     if (!binding) {
@@ -280,9 +503,10 @@ export class VoiceStateListener {
       return null;
     }
 
-    const result = {
+    const result: ResolvedBinding = {
       bindingId: binding.id,
       gameId: binding.gameId,
+      bindingPurpose: binding.bindingPurpose,
       config: binding.config as {
         minPlayers?: number;
         gracePeriod?: number;
@@ -326,20 +550,25 @@ export class VoiceStateListener {
         const memberSet = new Set<string>();
         for (const [memberId] of members) {
           memberSet.add(memberId);
+          this.userChannelMap.set(memberId, channelId);
         }
         this.channelMembers.set(channelId, memberSet);
 
         // Trigger handleChannelJoin for each member so the ad-hoc service
         // can reconcile or create events for channels occupied at startup
         for (const [memberId, guildMember] of members) {
-          await this.handleChannelJoin(channelId, {
-            discordUserId: memberId,
-            discordUsername:
-              guildMember.displayName ??
-              guildMember.user?.username ??
-              'Unknown',
-            discordAvatarHash: guildMember.user?.avatar ?? null,
-          });
+          await this.handleChannelJoin(
+            channelId,
+            {
+              discordUserId: memberId,
+              discordUsername:
+                guildMember.displayName ??
+                guildMember.user?.username ??
+                'Unknown',
+              discordAvatarHash: guildMember.user?.avatar ?? null,
+            },
+            guildMember,
+          );
         }
 
         this.logger.log(

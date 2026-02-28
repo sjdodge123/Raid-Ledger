@@ -316,12 +316,16 @@ export class ChannelBindingsService {
 
   /**
    * Smart behavior detection based on channel type and binding context.
-   * Text channels default to game-announcements, voice channels to game-voice-monitor.
+   * Text channels default to game-announcements.
+   * Voice channels: game-voice-monitor if a game is specified, general-lobby if not.
    */
-  detectBehavior(channelType: ChannelType): BindingPurpose {
+  detectBehavior(
+    channelType: ChannelType,
+    gameId?: number | null,
+  ): BindingPurpose {
     switch (channelType) {
       case 'voice':
-        return 'game-voice-monitor';
+        return gameId ? 'game-voice-monitor' : 'general-lobby';
       case 'text':
       default:
         return 'game-announcements';
