@@ -12,7 +12,10 @@ import {
   SETTINGS_EVENTS,
 } from '../settings/settings.service';
 import { friendlyDiscordErrorMessage } from './discord-bot.constants';
-import type { DiscordBotStatusResponse } from '@raid-ledger/contract';
+import type {
+  DiscordBotStatusResponse,
+  DiscordSetupStatus,
+} from '@raid-ledger/contract';
 
 @Injectable()
 export class DiscordBotService
@@ -138,6 +141,60 @@ export class DiscordBotService
       memberCount: guildInfo?.memberCount,
       setupCompleted,
       adHocEventsEnabled,
+    };
+  }
+
+  /**
+   * ROK-430: Aggregated setup status for the Discord Overview dashboard.
+   */
+  async getSetupStatus(): Promise<DiscordSetupStatus> {
+    const oauthConfigured = await this.settingsService.isDiscordConfigured();
+    const botConfigured = await this.settingsService.isDiscordBotConfigured();
+    const botConnected = this.clientService.isConnected();
+    const defaultChannel =
+      await this.settingsService.getDiscordBotDefaultChannel();
+    const timezone = await this.settingsService.getDiscordBotTimezone();
+
+    const steps = [
+      {
+        key: 'oauth',
+        label: 'Configure Discord OAuth',
+        completed: oauthConfigured,
+        settingsPath: '/admin/settings/discord/connection',
+      },
+      {
+        key: 'bot-token',
+        label: 'Set bot token',
+        completed: botConfigured,
+        settingsPath: '/admin/settings/discord/connection',
+      },
+      {
+        key: 'bot-connected',
+        label: 'Bot connected to server',
+        completed: botConnected,
+        settingsPath: '/admin/settings/discord/connection',
+      },
+      {
+        key: 'default-channel',
+        label: 'Set default notification channel',
+        completed: defaultChannel !== null,
+        settingsPath: '/admin/settings/discord/channels',
+      },
+      {
+        key: 'timezone',
+        label: 'Configure timezone',
+        completed: timezone !== null,
+        settingsPath: '/admin/settings/general',
+      },
+    ];
+
+    const completedCount = steps.filter((s) => s.completed).length;
+
+    return {
+      steps,
+      overallComplete: completedCount === steps.length,
+      completedCount,
+      totalCount: steps.length,
     };
   }
 

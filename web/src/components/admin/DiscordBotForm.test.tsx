@@ -36,7 +36,6 @@ const mockTestDiscordBot = { mutateAsync: vi.fn(), isPending: false };
 const mockClearDiscordBot = { mutateAsync: vi.fn(), isPending: false };
 const mockCheckDiscordBotPermissions = { mutateAsync: vi.fn(), isPending: false };
 const mockSetDiscordChannel = { mutateAsync: vi.fn(), isPending: false };
-const mockResendSetupWizard = { mutateAsync: vi.fn(), isPending: false };
 
 vi.mock('../../hooks/use-admin-settings', () => ({
     useAdminSettings: () => ({
@@ -48,7 +47,6 @@ vi.mock('../../hooks/use-admin-settings', () => ({
         discordChannels: mockDiscordChannels,
         discordDefaultChannel: mockDiscordDefaultChannel,
         setDiscordChannel: mockSetDiscordChannel,
-        resendSetupWizard: mockResendSetupWizard,
         // Other fields used by sibling components — provide safe defaults
         oauthStatus: { data: null },
         updateOAuth: { mutateAsync: vi.fn(), isPending: false },
@@ -88,8 +86,6 @@ describe('DiscordBotForm', () => {
         mockCheckDiscordBotPermissions.mutateAsync = vi.fn();
         mockSetDiscordChannel.isPending = false;
         mockSetDiscordChannel.mutateAsync = vi.fn();
-        mockResendSetupWizard.isPending = false;
-        mockResendSetupWizard.mutateAsync = vi.fn();
     });
 
     // ── Basic rendering ───────────────────────────────────────────────────
@@ -334,109 +330,6 @@ describe('DiscordBotForm', () => {
         mockDiscordBotStatus.data = { configured: true, connected: false };
         render(<DiscordBotForm />);
         expect(screen.queryByRole('button', { name: 'Test Permissions' })).not.toBeInTheDocument();
-    });
-
-    // ── Setup Wizard Reminder Banner (ROK-349) ─────────────────────────────
-
-    it('does not show setup reminder banner when setupCompleted is true', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: true,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.queryByText('Complete Discord Setup')).not.toBeInTheDocument();
-    });
-
-    it('does not show setup reminder banner when bot is not connected', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: false,
-            setupCompleted: false,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.queryByText('Complete Discord Setup')).not.toBeInTheDocument();
-    });
-
-    it('does not show setup reminder banner when not configured', () => {
-        mockDiscordBotStatus.data = {
-            configured: false,
-            connected: false,
-            setupCompleted: false,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.queryByText('Complete Discord Setup')).not.toBeInTheDocument();
-    });
-
-    it('shows setup reminder banner when configured, connected, and setupCompleted=false', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.getByText('Complete Discord Setup')).toBeInTheDocument();
-    });
-
-    it('shows description text in reminder banner', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.getByText(/setup wizard has not been completed/i)).toBeInTheDocument();
-    });
-
-    it('shows "Complete Setup" button in reminder banner', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        render(<DiscordBotForm />);
-        expect(screen.getByRole('button', { name: 'Complete Setup' })).toBeInTheDocument();
-    });
-
-    it('"Complete Setup" button calls resendSetupWizard.mutateAsync', async () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        mockResendSetupWizard.mutateAsync.mockResolvedValueOnce({
-            success: true,
-            message: 'Wizard sent.',
-        });
-
-        render(<DiscordBotForm />);
-        fireEvent.click(screen.getByRole('button', { name: 'Complete Setup' }));
-
-        await waitFor(() => {
-            expect(mockResendSetupWizard.mutateAsync).toHaveBeenCalledTimes(1);
-        });
-    });
-
-    it('"Complete Setup" button is disabled when resendSetupWizard is pending', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        mockResendSetupWizard.isPending = true;
-        render(<DiscordBotForm />);
-        expect(screen.getByRole('button', { name: 'Sending...' })).toBeDisabled();
-    });
-
-    it('shows "Sending..." label while resendSetupWizard is pending', () => {
-        mockDiscordBotStatus.data = {
-            configured: true,
-            connected: true,
-            setupCompleted: false,
-        };
-        mockResendSetupWizard.isPending = true;
-        render(<DiscordBotForm />);
-        expect(screen.getByText('Sending...')).toBeInTheDocument();
     });
 
     // ── Channel selector ──────────────────────────────────────────────────

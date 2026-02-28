@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
+import { usePluginStore } from '../../stores/plugin-store';
 
 import { useNewBadge } from '../../hooks/use-new-badge';
 import { useSeenAdminSections } from '../../hooks/use-seen-admin-sections';
@@ -8,7 +9,7 @@ import { NewBadge } from '../ui/new-badge';
 import { PluginBadge } from '../ui/plugin-badge';
 import { getPluginBadge } from '../../plugins/plugin-registry';
 import type { IntegrationStatus, NavItem, NavSection } from './admin-nav-data';
-import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildNavSections } from './admin-nav-data';
+import { buildCoreIntegrationItems, buildPluginIntegrationItems, buildDiscordNavItems, buildNavSections } from './admin-nav-data';
 
 interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 
@@ -22,7 +23,8 @@ interface AdminSidebarProps { isOpen?: boolean; onNavigate?: () => void; }
 export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
     const location = useLocation();
     const { plugins } = usePluginAdmin();
-    const { igdbStatus } = useAdminSettings();
+    const { igdbStatus, discordBotStatus } = useAdminSettings();
+    const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
@@ -30,7 +32,13 @@ export function AdminSidebar({ isOpen = true, onNavigate }: AdminSidebarProps) {
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
+    const discordItems = isDiscordActive
+        ? buildDiscordNavItems({
+            connected: discordBotStatus.data?.connected ?? false,
+            connecting: discordBotStatus.data?.connecting ?? false,
+        })
+        : null;
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
 
     if (!isOpen) return null;
 

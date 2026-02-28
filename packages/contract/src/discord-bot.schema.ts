@@ -52,3 +52,21 @@ export type DiscordBotStatusResponse = z.infer<typeof DiscordBotStatusSchema>;
 export type DiscordBotTestResult = z.infer<typeof DiscordBotTestResultSchema>;
 export type ServerInviteResponseDto = z.infer<typeof ServerInviteResponseSchema>;
 export type GuildMembershipResponseDto = z.infer<typeof GuildMembershipResponseSchema>;
+
+/** ROK-430: Setup status for the Discord Overview dashboard */
+export const DiscordSetupStepSchema = z.object({
+    key: z.string(),
+    label: z.string(),
+    completed: z.boolean(),
+    settingsPath: z.string(),
+});
+
+export const DiscordSetupStatusSchema = z.object({
+    steps: z.array(DiscordSetupStepSchema),
+    overallComplete: z.boolean(),
+    completedCount: z.number(),
+    totalCount: z.number(),
+});
+
+export type DiscordSetupStep = z.infer<typeof DiscordSetupStepSchema>;
+export type DiscordSetupStatus = z.infer<typeof DiscordSetupStatusSchema>;

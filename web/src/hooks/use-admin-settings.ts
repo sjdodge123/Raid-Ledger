@@ -610,23 +610,56 @@ export function useAdminSettings() {
     });
 
     // ============================================================
-    // Discord Bot Setup Wizard (ROK-349)
+    // Discord Bot Setup Status + Quick Actions (ROK-430)
     // ============================================================
 
-    const resendSetupWizard = useMutation<ApiResponse, Error>({
+    const setupStatus = useQuery<{
+        steps: { key: string; label: string; completed: boolean; settingsPath: string }[];
+        overallComplete: boolean;
+        completedCount: number;
+        totalCount: number;
+    }>({
+        queryKey: ['admin', 'settings', 'discord-bot', 'setup-status'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/setup-status`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch setup status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    const reconnectBot = useMutation<ApiResponse, Error>({
         mutationFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/resend-setup`, {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/reconnect`, {
                 method: 'POST',
                 headers: getHeaders(),
             });
             if (!response.ok) {
-                const error = await response.json().catch(() => ({ message: 'Failed to send setup wizard' }));
-                throw new Error(error.message || 'Failed to send setup wizard');
+                const error = await response.json().catch(() => ({ message: 'Failed to reconnect' }));
+                throw new Error(error.message || 'Failed to reconnect');
             }
             return response.json();
         },
         onSuccess: () => {
+            botConfigSavedAt.current = Date.now();
             queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'discord-bot'] });
+        },
+    });
+
+    const sendTestMessage = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/test-message`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to send test message' }));
+                throw new Error(error.message || 'Failed to send test message');
+            }
+            return response.json();
         },
     });
 
@@ -738,7 +771,9 @@ export function useAdminSettings() {
         discordChannels,
         discordDefaultChannel,
         setDiscordChannel,
-        resendSetupWizard,
+        setupStatus,
+        reconnectBot,
+        sendTestMessage,
         discordVoiceChannels,
         discordDefaultVoiceChannel,
         setDiscordVoiceChannel,

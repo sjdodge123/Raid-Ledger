@@ -5,7 +5,6 @@ import { DiscordBotSettingsController } from './discord-bot-settings.controller'
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordEmojiService } from './services/discord-emoji.service';
-import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -41,12 +40,6 @@ describe('DiscordBotSettingsController', () => {
           useValue: {
             syncAllEmojis: jest.fn().mockResolvedValue(undefined),
             isUsingCustomEmojis: jest.fn().mockReturnValue(false),
-          },
-        },
-        {
-          provide: SetupWizardService,
-          useValue: {
-            sendSetupWizardToAdmin: jest.fn().mockResolvedValue({ sent: true }),
           },
         },
         {

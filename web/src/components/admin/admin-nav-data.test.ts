@@ -7,6 +7,7 @@ import { describe, it, expect } from 'vitest';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
+    buildDiscordNavItems,
     buildNavSections,
 } from './admin-nav-data';
 import type { PluginInfoDto } from '@raid-ledger/contract';
@@ -99,7 +100,7 @@ describe('buildPluginIntegrationItems', () => {
         expect(items[0].pluginSlug).toBe('wow');
     });
 
-    it('returns items for Discord plugin integration', () => {
+    it('excludes Discord plugin from integration items (ROK-430: Discord has its own section)', () => {
         const plugins: PluginInfoDto[] = [
             makePlugin({
                 slug: 'discord',
@@ -109,10 +110,7 @@ describe('buildPluginIntegrationItems', () => {
             }),
         ];
         const items = buildPluginIntegrationItems(plugins);
-        expect(items).toHaveLength(1);
-        expect(items[0].label).toBe('Discord');
-        expect(items[0].to).toBe('/admin/settings/integrations/plugin/discord/discord-oauth');
-        expect(items[0].status).toBe('online');
+        expect(items).toHaveLength(0);
     });
 
     it('sets newBadgeKey for plugin integration items', () => {
@@ -158,12 +156,47 @@ describe('buildPluginIntegrationItems', () => {
     });
 });
 
+describe('buildDiscordNavItems', () => {
+    it('returns 4 items: Overview, Connection, Channels, Features', () => {
+        const items = buildDiscordNavItems();
+        expect(items).toHaveLength(4);
+        expect(items.map((i) => i.label)).toEqual(['Overview', 'Connection', 'Channels', 'Features']);
+    });
+
+    it('Connection item shows online status when connected', () => {
+        const items = buildDiscordNavItems({ connected: true, connecting: false });
+        const conn = items.find((i) => i.label === 'Connection')!;
+        expect(conn.status).toBe('online');
+    });
+
+    it('Connection item shows offline status when not connected', () => {
+        const items = buildDiscordNavItems({ connected: false, connecting: false });
+        const conn = items.find((i) => i.label === 'Connection')!;
+        expect(conn.status).toBe('offline');
+    });
+
+    it('Connection item shows loading status when connecting', () => {
+        const items = buildDiscordNavItems({ connected: false, connecting: true });
+        const conn = items.find((i) => i.label === 'Connection')!;
+        expect(conn.status).toBe('loading');
+    });
+});
+
 describe('buildNavSections', () => {
-    it('returns exactly 2 sections: General and Integrations', () => {
+    it('returns exactly 2 sections when no Discord items: General and Integrations', () => {
         const sections = buildNavSections([], []);
         expect(sections).toHaveLength(2);
         expect(sections[0].id).toBe('general');
         expect(sections[1].id).toBe('integrations');
+    });
+
+    it('returns 3 sections when Discord items provided', () => {
+        const discordItems = buildDiscordNavItems();
+        const sections = buildNavSections([], [], discordItems);
+        expect(sections).toHaveLength(3);
+        expect(sections[0].id).toBe('general');
+        expect(sections[1].id).toBe('discord');
+        expect(sections[2].id).toBe('integrations');
     });
 
     it('General section has 5 items (including Demo Data)', () => {

@@ -16,7 +16,6 @@ import { DiscordUserController } from './discord-user.controller';
 import { ChannelBindingsController } from './channel-bindings.controller';
 import { DiscordEmbedFactory } from './services/discord-embed.factory';
 import { ChannelResolverService } from './services/channel-resolver.service';
-import { SetupWizardService } from './services/setup-wizard.service';
 import { ChannelBindingsService } from './services/channel-bindings.service';
 import { PugInviteService } from './services/pug-invite.service';
 import { GameActivityService } from './services/game-activity.service';
@@ -83,7 +82,6 @@ import { PlayingCommand } from './commands/playing.command';
     DiscordEmbedFactory,
     DiscordEmojiService,
     ChannelResolverService,
-    SetupWizardService,
     ChannelBindingsService,
     PugInviteService,
     AdHocEventService,
@@ -124,7 +122,6 @@ import { PlayingCommand } from './commands/playing.command';
     DiscordEmbedFactory,
     DiscordEmojiService,
     DiscordEventListener,
-    SetupWizardService,
     ChannelBindingsService,
     ChannelResolverService,
     PugInviteService,

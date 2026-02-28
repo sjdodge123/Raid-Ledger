@@ -106,6 +106,12 @@ const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-
 const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
 const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
 
+// -- Lazy loaded Discord admin pages (ROK-430) --
+const DiscordOverviewPage = lazyWithRetry(() => import('./pages/admin/discord-overview-page').then(m => ({ default: m.DiscordOverviewPage })));
+const DiscordConnectionPage = lazyWithRetry(() => import('./pages/admin/discord-connection-page').then(m => ({ default: m.DiscordConnectionPage })));
+const DiscordChannelsPage = lazyWithRetry(() => import('./pages/admin/discord-channels-page').then(m => ({ default: m.DiscordChannelsPage })));
+const DiscordFeaturesPage = lazyWithRetry(() => import('./pages/admin/discord-features-page').then(m => ({ default: m.DiscordFeaturesPage })));
+
 
 import './plugins/wow/register';
 import './plugins/discord/register';
@@ -233,11 +239,18 @@ function App() {
                   <Route path="general/backups" element={<BackupsPanel />} />
                   <Route path="integrations/igdb" element={<IgdbPanel />} />
 
-                  {/* Redirects for old Discord routes → plugin-managed panel */}
-                  <Route path="integrations" element={<Navigate to="/admin/settings/integrations/plugin/discord/discord-oauth" replace />} />
-                  <Route path="integrations/discord" element={<Navigate to="/admin/settings/integrations/plugin/discord/discord-oauth" replace />} />
-                  <Route path="integrations/discord-bot" element={<Navigate to="/admin/settings/integrations/plugin/discord/discord-oauth" replace />} />
-                  <Route path="integrations/channel-bindings" element={<Navigate to="/admin/settings/integrations/plugin/discord/discord-oauth" replace />} />
+                  {/* ROK-430: Discord admin pages */}
+                  <Route path="discord" element={<DiscordOverviewPage />} />
+                  <Route path="discord/connection" element={<DiscordConnectionPage />} />
+                  <Route path="discord/channels" element={<DiscordChannelsPage />} />
+                  <Route path="discord/features" element={<DiscordFeaturesPage />} />
+
+                  {/* Redirects for old Discord routes → new Discord pages */}
+                  <Route path="integrations" element={<Navigate to="/admin/settings/discord" replace />} />
+                  <Route path="integrations/discord" element={<Navigate to="/admin/settings/discord" replace />} />
+                  <Route path="integrations/discord-bot" element={<Navigate to="/admin/settings/discord/connection" replace />} />
+                  <Route path="integrations/channel-bindings" element={<Navigate to="/admin/settings/discord/channels" replace />} />
+                  <Route path="integrations/plugin/discord/*" element={<Navigate to="/admin/settings/discord" replace />} />
                   <Route path="integrations/plugin/:pluginSlug/:integrationKey" element={<PluginIntegrationPanel />} />
                   <Route path="plugins" element={<PluginsPanel />} />
 
