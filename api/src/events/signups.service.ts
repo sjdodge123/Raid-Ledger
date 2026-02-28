@@ -947,12 +947,19 @@ export class SignupsService {
       // ROK-538: Look up Discord embed URL for the event
       const discordUrl =
         await this.notificationService.getDiscordEmbedUrl(eventId);
+      // ROK-507: Resolve voice channel for the event
+      const voiceChannelId =
+        await this.notificationService.resolveVoiceChannelForEvent(eventId);
       await this.notificationService.create({
         userId: notifyData.creatorId,
         type: 'slot_vacated',
         title: 'Slot Vacated',
         message: `${notifyData.displayName} left the ${slotLabel} slot for ${notifyData.eventTitle}`,
-        payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
+        payload: {
+          eventId,
+          ...(discordUrl ? { discordUrl } : {}),
+          ...(voiceChannelId ? { voiceChannelId } : {}),
+        },
       });
 
       // ROK-229: Schedule bench promotion for vacated non-bench slot
@@ -1242,12 +1249,19 @@ export class SignupsService {
     // ROK-538: Look up Discord embed URL for the event
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
+    // ROK-507: Resolve voice channel for the event
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(eventId);
     await this.notificationService.create({
       userId: event.creatorId,
       type: 'slot_vacated',
       title: 'Slot Vacated',
       message: `${user?.username ?? 'Unknown'} left the ${slotLabel} slot for ${event.title}`,
-      payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
+      payload: {
+        eventId,
+        ...(discordUrl ? { discordUrl } : {}),
+        ...(voiceChannelId ? { voiceChannelId } : {}),
+      },
     });
 
     // ROK-229: Schedule bench promotion for vacated non-bench slot
@@ -1357,12 +1371,19 @@ export class SignupsService {
       // ROK-538: Look up Discord embed URL for the event
       const discordUrl =
         await this.notificationService.getDiscordEmbedUrl(eventId);
+      // ROK-507: Resolve voice channel for the event
+      const voiceChannelId =
+        await this.notificationService.resolveVoiceChannelForEvent(eventId);
       await this.notificationService.create({
         userId: signup.userId,
         type: 'slot_vacated',
         title: 'Removed from Event',
         message: `You were removed from ${event.title}`,
-        payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
+        payload: {
+          eventId,
+          ...(discordUrl ? { discordUrl } : {}),
+          ...(voiceChannelId ? { voiceChannelId } : {}),
+        },
       });
     }
 
@@ -1757,6 +1778,9 @@ export class SignupsService {
     // ROK-538: Look up Discord embed URL once for all notifications in this method
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
+    // ROK-507: Resolve voice channel once for all notifications
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(eventId);
 
     for (const assignment of newAssignments) {
       // Skip anonymous participants (no RL user to notify)
@@ -1787,7 +1811,11 @@ export class SignupsService {
           type: 'bench_promoted',
           title: 'Promoted from Bench',
           message: `You've been moved from bench to ${formatLabel(newRole)} for ${eventTitle}`,
-          payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
+          payload: {
+            eventId,
+            ...(discordUrl ? { discordUrl } : {}),
+            ...(voiceChannelId ? { voiceChannelId } : {}),
+          },
         });
       } else {
         // Role change or moved to bench → roster_reassigned
@@ -1802,7 +1830,13 @@ export class SignupsService {
           message: isBenched
             ? `You've been moved from ${oldLabel} to bench for ${eventTitle}`
             : `Your role changed from ${oldLabel} to ${newLabel} for ${eventTitle}`,
-          payload: { eventId, oldRole, newRole, ...(discordUrl ? { discordUrl } : {}) },
+          payload: {
+            eventId,
+            oldRole,
+            newRole,
+            ...(discordUrl ? { discordUrl } : {}),
+            ...(voiceChannelId ? { voiceChannelId } : {}),
+          },
         });
       }
     }
@@ -1822,6 +1856,9 @@ export class SignupsService {
     // ROK-538: Look up Discord embed URL once for all notifications in this method
     const discordUrl =
       await this.notificationService.getDiscordEmbedUrl(eventId);
+    // ROK-507: Resolve voice channel once for all notifications
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(eventId);
 
     for (const assignment of newAssignments) {
       if (!assignment.userId) continue;
@@ -1847,7 +1884,12 @@ export class SignupsService {
         message: isGeneric
           ? `You've been assigned to the roster for ${eventTitle}`
           : `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
-        payload: { eventId, newRole, ...(discordUrl ? { discordUrl } : {}) },
+        payload: {
+          eventId,
+          newRole,
+          ...(discordUrl ? { discordUrl } : {}),
+          ...(voiceChannelId ? { voiceChannelId } : {}),
+        },
       });
     }
   }
@@ -2318,13 +2360,20 @@ export class SignupsService {
           // ROK-538: Look up Discord embed URL for the event
           const discordUrl =
             await this.notificationService.getDiscordEmbedUrl(eventId);
+          // ROK-507: Resolve voice channel for the event
+          const voiceChannelId =
+            await this.notificationService.resolveVoiceChannelForEvent(eventId);
           this.notificationService
             .create({
               userId: signup.userId,
               type: 'tentative_displaced',
               title: 'Roster update',
               message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
-              payload: { eventId, ...(discordUrl ? { discordUrl } : {}) },
+              payload: {
+                eventId,
+                ...(discordUrl ? { discordUrl } : {}),
+                ...(voiceChannelId ? { voiceChannelId } : {}),
+              },
             })
             .catch((err: unknown) => {
               this.logger.warn(

@@ -4,6 +4,7 @@ import { EmbedSyncProcessor } from './embed-sync.processor';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from '../services/discord-embed.factory';
 import { ScheduledEventService } from '../services/scheduled-event.service';
+import { ChannelResolverService } from '../services/channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { EMBED_STATES } from '../discord-bot.constants';
@@ -121,6 +122,14 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
             updateDescription: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: ChannelResolverService,
+          useValue: {
+            resolveVoiceChannelForScheduledEvent: jest
+              .fn()
+              .mockResolvedValue(null),
+          },
+        },
       ],
     }).compile();
 
@@ -143,9 +152,9 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
   const setupDbForSuccessfulSync = () => {
     mockDb.select
       .mockReturnValueOnce(makeSelectChain([mockRecord])) // discordEventMessages
-      .mockReturnValueOnce(makeSelectChain([mockEvent]))  // events
-      .mockReturnValueOnce(makeSelectChain([]))            // eventSignups
-      .mockReturnValueOnce(makeSelectChain([]))            // rosterAssignments
+      .mockReturnValueOnce(makeSelectChain([mockEvent])) // events
+      .mockReturnValueOnce(makeSelectChain([])) // eventSignups
+      .mockReturnValueOnce(makeSelectChain([])) // rosterAssignments
       .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }])); // games
   };
 
@@ -173,7 +182,9 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
 
-    await expect(processor.process(job)).rejects.toThrow('Discord bot not connected');
+    await expect(processor.process(job)).rejects.toThrow(
+      'Discord bot not connected',
+    );
 
     expect(scheduledEventService.updateDescription).not.toHaveBeenCalled();
   });
@@ -191,7 +202,10 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
   });
 
   it('does not call updateDescription when the embed is cancelled', async () => {
-    const cancelledRecord = { ...mockRecord, embedState: EMBED_STATES.CANCELLED };
+    const cancelledRecord = {
+      ...mockRecord,
+      embedState: EMBED_STATES.CANCELLED,
+    };
     mockDb.select.mockReturnValue(makeSelectChain([cancelledRecord]));
 
     const job = {

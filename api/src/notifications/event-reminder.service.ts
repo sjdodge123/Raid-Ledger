@@ -229,6 +229,7 @@ export class EventReminderService {
           minutesUntil,
           characterDisplay: charDisplay,
           timezone: tzMap.get(userId),
+          gameId: event.gameId,
         });
       }
     }
@@ -249,6 +250,7 @@ export class EventReminderService {
     minutesUntil: number;
     characterDisplay: string | null;
     timezone?: string;
+    gameId?: number | null;
   }): Promise<boolean> {
     const result = await this.db
       .insert(schema.eventRemindersSent)
@@ -298,6 +300,11 @@ export class EventReminderService {
       input.eventId,
     );
 
+    // ROK-507: Resolve voice channel for the event's game
+    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
+      input.gameId,
+    );
+
     // Create in-app notification (this also dispatches to Discord DM via the standard pipeline)
     await this.notificationService.create({
       userId: input.userId,
@@ -309,6 +316,7 @@ export class EventReminderService {
         reminderWindow: input.windowType,
         characterDisplay: input.characterDisplay,
         ...(discordUrl ? { discordUrl } : {}),
+        ...(voiceChannelId ? { voiceChannelId } : {}),
       },
     });
 

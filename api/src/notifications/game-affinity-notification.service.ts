@@ -114,6 +114,11 @@ export class GameAffinityNotificationService {
       ? `https://discord.com/channels/${input.discordMessage.guildId}/${input.discordMessage.channelId}/${input.discordMessage.messageId}`
       : null;
 
+    // ROK-507: Resolve voice channel for the event's game
+    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
+      input.gameId,
+    );
+
     // Dispatch notifications in parallel (NotificationService handles prefs + Discord DM)
     const results = await Promise.allSettled(
       recipientIds.map((userId) =>
@@ -127,6 +132,7 @@ export class GameAffinityNotificationService {
             gameId: input.gameId,
             ...(eventUrl ? { url: eventUrl } : {}),
             ...(discordUrl ? { discordUrl } : {}),
+            ...(voiceChannelId ? { voiceChannelId } : {}),
           },
         }),
       ),
