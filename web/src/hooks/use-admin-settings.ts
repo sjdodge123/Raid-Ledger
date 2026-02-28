@@ -2,6 +2,7 @@ import { useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import type { DiscordSetupStatus } from '@raid-ledger/contract';
 
 interface OAuthStatusResponse {
     configured: boolean;
@@ -613,12 +614,7 @@ export function useAdminSettings() {
     // Discord Bot Setup Status + Quick Actions (ROK-430)
     // ============================================================
 
-    const setupStatus = useQuery<{
-        steps: { key: string; label: string; completed: boolean; settingsPath: string }[];
-        overallComplete: boolean;
-        completedCount: number;
-        totalCount: number;
-    }>({
+    const setupStatus = useQuery<DiscordSetupStatus>({
         queryKey: ['admin', 'settings', 'discord-bot', 'setup-status'],
         queryFn: async () => {
             const response = await fetch(`${API_BASE_URL}/admin/settings/discord-bot/setup-status`, {
