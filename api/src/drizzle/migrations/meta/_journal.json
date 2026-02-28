@@ -519,6 +519,13 @@
       "when": 1772299206404,
       "tag": "0073_true_sentry",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1772330400000,
+      "tag": "0074_check_game_interests_source",
+      "breakpoints": true
     }
   ]
 }
