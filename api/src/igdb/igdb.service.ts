@@ -4,7 +4,18 @@ import { OnEvent } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
-import { and, eq, ilike, inArray, not, or, sql } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  not,
+  or,
+  sql,
+} from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import Redis from 'ioredis';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -19,6 +30,9 @@ import {
   GameDetailDto,
   IgdbSyncStatusDto,
   IgdbHealthStatusDto,
+  GameActivityResponseDto,
+  GameNowPlayingResponseDto,
+  type ActivityPeriod,
 } from '@raid-ledger/contract';
 import { SettingsService, SETTINGS_EVENTS } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
@@ -959,6 +973,150 @@ export class IgdbService {
       tokenExpiresAt: this.tokenExpiry?.toISOString() ?? null,
       lastApiCallAt: this._lastApiCallAt?.toISOString() ?? null,
       lastApiCallSuccess: this._lastApiCallSuccess,
+    };
+  }
+
+  // ============================================================
+  // ROK-443 / ROK-549: Game activity queries
+  // ============================================================
+
+  /**
+   * Get community activity for a game — top players and total hours.
+   * Respects show_activity privacy preference.
+   */
+  async getGameActivity(
+    gameId: number,
+    period: ActivityPeriod,
+  ): Promise<GameActivityResponseDto> {
+    // Build the base conditions for rollup query
+    const baseConditions = [eq(schema.gameActivityRollups.gameId, gameId)];
+    if (period !== 'all') {
+      const periodFilter = period === 'week' ? 'week' : 'month';
+      const truncFn = period === 'week' ? 'week' : 'month';
+      baseConditions.push(eq(schema.gameActivityRollups.period, periodFilter));
+      baseConditions.push(
+        gte(
+          schema.gameActivityRollups.periodStart,
+          sql`date_trunc(${truncFn}, now())::date`,
+        ),
+      );
+    }
+
+    // Query top players with privacy filtering
+    // LEFT JOIN user_preferences to exclude users with show_activity=false
+    const topPlayers = await this.db
+      .select({
+        userId: schema.gameActivityRollups.userId,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        discordId: schema.users.discordId,
+        totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
+      })
+      .from(schema.gameActivityRollups)
+      .innerJoin(
+        schema.users,
+        eq(schema.gameActivityRollups.userId, schema.users.id),
+      )
+      .leftJoin(
+        schema.userPreferences,
+        and(
+          eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
+          eq(schema.userPreferences.key, 'show_activity'),
+        ),
+      )
+      .where(
+        and(
+          ...baseConditions,
+          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
+        ),
+      )
+      .groupBy(
+        schema.gameActivityRollups.userId,
+        schema.users.username,
+        schema.users.avatar,
+        schema.users.customAvatarUrl,
+        schema.users.discordId,
+      )
+      .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
+      .limit(10);
+
+    // Calculate total community seconds (same privacy filter)
+    const [totalResult] = await this.db
+      .select({
+        totalSeconds: sql<number>`coalesce(sum(${schema.gameActivityRollups.totalSeconds})::int, 0)`,
+      })
+      .from(schema.gameActivityRollups)
+      .leftJoin(
+        schema.userPreferences,
+        and(
+          eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
+          eq(schema.userPreferences.key, 'show_activity'),
+        ),
+      )
+      .where(
+        and(
+          ...baseConditions,
+          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
+        ),
+      );
+
+    return {
+      topPlayers: topPlayers.map((p) => ({
+        userId: p.userId,
+        username: p.username,
+        avatar: p.avatar,
+        customAvatarUrl: p.customAvatarUrl,
+        discordId: p.discordId,
+        totalSeconds: p.totalSeconds,
+      })),
+      totalSeconds: totalResult?.totalSeconds ?? 0,
+      period,
+    };
+  }
+
+  /**
+   * Get users currently playing a game (open sessions).
+   * Respects show_activity privacy preference.
+   */
+  async getGameNowPlaying(gameId: number): Promise<GameNowPlayingResponseDto> {
+    const players = await this.db
+      .select({
+        userId: schema.gameActivitySessions.userId,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        discordId: schema.users.discordId,
+      })
+      .from(schema.gameActivitySessions)
+      .innerJoin(
+        schema.users,
+        eq(schema.gameActivitySessions.userId, schema.users.id),
+      )
+      .leftJoin(
+        schema.userPreferences,
+        and(
+          eq(schema.userPreferences.userId, schema.gameActivitySessions.userId),
+          eq(schema.userPreferences.key, 'show_activity'),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.gameActivitySessions.gameId, gameId),
+          isNull(schema.gameActivitySessions.endedAt),
+          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
+        ),
+      );
+
+    return {
+      players: players.map((p) => ({
+        userId: p.userId,
+        username: p.username,
+        avatar: p.avatar,
+        customAvatarUrl: p.customAvatarUrl,
+        discordId: p.discordId,
+      })),
+      count: players.length,
     };
   }
 
