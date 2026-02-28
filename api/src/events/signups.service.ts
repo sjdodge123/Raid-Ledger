@@ -160,8 +160,8 @@ export class SignupsService {
           )
           .limit(1);
 
-        // ROK-421: Reactivate roached_out signup (re-signup after cancel)
-        if (existing.status === 'roached_out') {
+        // ROK-421/ROK-562: Reactivate cancelled signup (re-signup after cancel/decline)
+        if (existing.status === 'roached_out' || existing.status === 'declined') {
           const reactivated = hasCharacter ? 'confirmed' : 'pending';
           await tx
             .update(schema.eventSignups)
@@ -173,6 +173,7 @@ export class SignupsService {
               preferredRoles: dto?.preferredRoles ?? null,
               attendanceStatus: null,
               attendanceRecordedAt: null,
+              roachedOutAt: null,
             })
             .where(eq(schema.eventSignups.id, existing.id));
           existing.status = 'signed_up';
@@ -182,10 +183,11 @@ export class SignupsService {
           existing.preferredRoles = dto?.preferredRoles ?? null;
           existing.attendanceStatus = null;
           existing.attendanceRecordedAt = null;
+          existing.roachedOutAt = null;
         }
 
         // ROK-452: Update preferred roles on existing signup if provided
-        if (existing.status !== 'roached_out' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
+        if (existing.status !== 'roached_out' && existing.status !== 'declined' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
           await tx
             .update(schema.eventSignups)
             .set({ preferredRoles: dto.preferredRoles })
@@ -672,7 +674,7 @@ export class SignupsService {
       return this.cancel(eventId, linkedUser.id);
     }
 
-    // Cancel anonymous signup (ROK-421: soft-delete)
+    // Cancel anonymous signup (soft-delete, exclude already cancelled)
     const [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -681,6 +683,7 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.discordUserId, discordUserId),
           ne(schema.eventSignups.status, 'roached_out'),
+          ne(schema.eventSignups.status, 'declined'),
         ),
       )
       .limit(1);
@@ -691,6 +694,21 @@ export class SignupsService {
       );
     }
 
+    // ROK-562: Determine cancel status based on time until event start
+    const [event] = await this.db
+      .select({ duration: schema.events.duration })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    const now = new Date();
+    const eventStartTime = event?.duration?.[0];
+    const hoursUntilEvent = eventStartTime
+      ? (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+      : 0;
+    const isGracefulDecline = hoursUntilEvent >= 23;
+    const cancelStatus = isGracefulDecline ? 'declined' : 'roached_out';
+
     // Remove roster assignment if any
     await this.db
       .delete(schema.rosterAssignments)
@@ -698,11 +716,14 @@ export class SignupsService {
 
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'roached_out', roachedOutAt: new Date() })
+      .set({
+        status: cancelStatus,
+        roachedOutAt: isGracefulDecline ? null : now,
+      })
       .where(eq(schema.eventSignups.id, signup.id));
 
     this.logger.log(
-      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId} (roached_out)`,
+      `Anonymous Discord user ${discordUserId} canceled signup for event ${eventId} (${cancelStatus})`,
     );
 
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
@@ -839,7 +860,7 @@ export class SignupsService {
    * @throws NotFoundException if signup doesn't exist
    */
   async cancel(eventId: number, userId: number): Promise<void> {
-    // Find the signup first to get its ID (ROK-421: exclude already roached_out)
+    // Find the signup first to get its ID (exclude already cancelled statuses)
     let [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -848,6 +869,7 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.userId, userId),
           ne(schema.eventSignups.status, 'roached_out'),
+          ne(schema.eventSignups.status, 'declined'),
         ),
       )
       .limit(1);
@@ -870,6 +892,7 @@ export class SignupsService {
               eq(schema.eventSignups.eventId, eventId),
               eq(schema.eventSignups.discordUserId, user.discordId),
               ne(schema.eventSignups.status, 'roached_out'),
+              ne(schema.eventSignups.status, 'declined'),
             ),
           )
           .limit(1);
@@ -881,6 +904,23 @@ export class SignupsService {
         `Signup not found for user ${userId} on event ${eventId}`,
       );
     }
+
+    // ROK-562: Determine cancel status based on time until event start.
+    // ≥23h before → 'declined' (graceful); <23h before → 'roached_out' (late cancel).
+    // The 23h threshold (vs 24h) gives a 1-hour grace window after the 24h reminder fires.
+    const [event] = await this.db
+      .select({ duration: schema.events.duration })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+
+    const now = new Date();
+    const eventStartTime = event?.duration?.[0];
+    const hoursUntilEvent = eventStartTime
+      ? (eventStartTime.getTime() - now.getTime()) / (1000 * 60 * 60)
+      : 0;
+    const isGracefulDecline = hoursUntilEvent >= 23;
+    const cancelStatus = isGracefulDecline ? 'declined' : 'roached_out';
 
     // Check if user held a roster assignment
     const [assignment] = await this.db
@@ -897,7 +937,7 @@ export class SignupsService {
       displayName: string;
     } | null = null;
     if (assignment) {
-      const [[event], [user]] = await Promise.all([
+      const [[evt], [user]] = await Promise.all([
         this.db
           .select({
             creatorId: schema.events.creatorId,
@@ -913,15 +953,14 @@ export class SignupsService {
           .limit(1),
       ]);
       notifyData = {
-        creatorId: event.creatorId,
-        eventTitle: event.title,
+        creatorId: evt.creatorId,
+        eventTitle: evt.title,
         role: assignment.role,
         displayName: user?.username ?? 'Unknown',
       };
     }
 
-    // ROK-421: Soft-delete — set status to 'roached_out' instead of hard DELETE.
-    // Also remove roster assignment explicitly since cascade won't fire on UPDATE.
+    // Soft-delete: set appropriate status. Remove roster assignment since cascade won't fire on UPDATE.
     if (assignment) {
       await this.db
         .delete(schema.rosterAssignments)
@@ -929,10 +968,13 @@ export class SignupsService {
     }
     await this.db
       .update(schema.eventSignups)
-      .set({ status: 'roached_out', roachedOutAt: new Date() })
+      .set({
+        status: cancelStatus,
+        roachedOutAt: isGracefulDecline ? null : now,
+      })
       .where(eq(schema.eventSignups.id, signup.id));
 
-    this.logger.log(`User ${userId} canceled signup for event ${eventId} (roached_out)`);
+    this.logger.log(`User ${userId} canceled signup for event ${eventId} (${cancelStatus})`);
 
     this.emitSignupEvent(SIGNUP_EVENTS.DELETED, {
       eventId,
@@ -1010,7 +1052,7 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get signups with user and character info (single query with joins, ROK-421: exclude roached_out)
+    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1023,6 +1065,7 @@ export class SignupsService {
         and(
           eq(schema.eventSignups.eventId, eventId),
           ne(schema.eventSignups.status, 'roached_out'),
+          ne(schema.eventSignups.status, 'declined'),
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);
@@ -1586,7 +1629,7 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get all signups with user and character data
+    // Get all signups with user and character data (exclude soft-deleted statuses)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1595,7 +1638,13 @@ export class SignupsService {
         schema.characters,
         eq(schema.eventSignups.characterId, schema.characters.id),
       )
-      .where(eq(schema.eventSignups.eventId, eventId))
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          ne(schema.eventSignups.status, 'roached_out'),
+          ne(schema.eventSignups.status, 'declined'),
+        ),
+      )
       .orderBy(schema.eventSignups.signedUpAt);
 
     // Get all assignments

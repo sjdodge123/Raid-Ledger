@@ -163,13 +163,17 @@ export class AttendanceService {
     const signupResponses: SignupResponseDto[] = signups.map((row) => {
       const isAnonymous = !row.event_signups.userId;
       const isRoachedOut = row.event_signups.status === 'roached_out';
+      const isDeclined = row.event_signups.status === 'declined';
 
-      // Roached-out signups: auto-classify based on timing if not manually overridden
-      // AC#8: <24h before event → no_show | AC#9: ≥24h before event → excused
+      // Cancelled signups: auto-classify based on status/timing if not manually overridden
+      // ROK-562: 'declined' signups are inherently excused (declined ≥23h before event)
+      // 'roached_out': AC#8 <24h → no_show | AC#9 ≥24h → excused
       let resolvedAttendance: AttendanceStatus | null =
         (row.event_signups.attendanceStatus as AttendanceStatus) ?? null;
 
-      if (isRoachedOut && !resolvedAttendance) {
+      if (isDeclined && !resolvedAttendance) {
+        resolvedAttendance = 'excused';
+      } else if (isRoachedOut && !resolvedAttendance) {
         const roachedAt = row.event_signups.roachedOutAt;
         if (roachedAt && eventStartTime) {
           const hoursBeforeEvent =

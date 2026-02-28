@@ -566,6 +566,18 @@ describe('SignupsService', () => {
   });
 
   describe('cancel', () => {
+    // ROK-562: cancel() now fetches event duration to determine cancel status
+    const futureStart = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h from now → 'declined'
+    const mockEventDuration = { duration: [futureStart, new Date(futureStart.getTime() + 2 * 60 * 60 * 1000)] };
+
+    const mockSelectEventDuration = () => ({
+      from: jest.fn().mockReturnValue({
+        where: jest.fn().mockReturnValue({
+          limit: jest.fn().mockResolvedValue([mockEventDuration]),
+        }),
+      }),
+    });
+
     it('should cancel unassigned signup without notification', async () => {
       // 1. Find signup
       mockDb.select
@@ -576,7 +588,9 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 2. Check roster assignment — none
+        // 2. Fetch event duration (ROK-562)
+        .mockReturnValueOnce(mockSelectEventDuration())
+        // 3. Check roster assignment — none
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -587,7 +601,7 @@ describe('SignupsService', () => {
 
       await service.cancel(1, 1);
 
-      // ROK-421: cancel now soft-deletes by setting status to 'roached_out'
+      // ROK-562: cancel now soft-deletes with time-based status
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
@@ -623,7 +637,9 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 2. Check roster assignment — found
+        // 2. Fetch event duration (ROK-562)
+        .mockReturnValueOnce(mockSelectEventDuration())
+        // 3. Check roster assignment — found
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -631,7 +647,7 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 3. Fetch event (for creatorId + title)
+        // 4. Fetch event (for creatorId + title)
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -641,7 +657,7 @@ describe('SignupsService', () => {
             }),
           }),
         })
-        // 4. Fetch user (for display name)
+        // 5. Fetch user (for display name)
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
@@ -683,6 +699,8 @@ describe('SignupsService', () => {
             }),
           }),
         })
+        // Fetch event duration (ROK-562)
+        .mockReturnValueOnce(mockSelectEventDuration())
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockReturnValue({
