@@ -109,5 +109,6 @@ export const eventSignups = pgTable(
     // Performance indexes for common query patterns
     index('idx_event_signups_event_id').on(table.eventId),
     index('idx_event_signups_discord_user_id').on(table.discordUserId),
+    index('idx_event_signups_user_id').on(table.userId),
   ],
 );

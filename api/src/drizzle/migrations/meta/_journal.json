@@ -512,6 +512,13 @@
       "when": 1772259991982,
       "tag": "0072_narrow_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1772299206404,
+      "tag": "0073_true_sentry",
+      "breakpoints": true
     }
   ]
 }
