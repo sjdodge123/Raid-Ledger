@@ -1,6 +1,5 @@
 import type { User } from '../../hooks/use-auth';
-import { API_BASE_URL } from '../../lib/config';
-import { toast } from '../../lib/toast';
+import { useDiscordLink } from '../../hooks/use-discord-link';
 import { resolveAvatar, toAvatarUser, isDiscordLinked } from '../../lib/avatar';
 import { RoleBadge } from '../ui/role-badge';
 
@@ -16,20 +15,11 @@ interface UserInfoCardProps {
  */
 export function UserInfoCard({ user }: UserInfoCardProps) {
     const hasDiscordLinked = isDiscordLinked(user.discordId);
+    const handleLinkDiscord = useDiscordLink();
 
     // ROK-222: Use resolveAvatar for unified avatar resolution
     const avatarResolved = resolveAvatar(toAvatarUser(user));
     const avatarUrl = avatarResolved.url;
-
-    const handleLinkDiscord = () => {
-        // Get auth token from localStorage and pass as query param (browser redirects can't send headers)
-        const token = localStorage.getItem('raid_ledger_token');
-        if (!token) {
-            toast.error('Please log in again to link Discord');
-            return;
-        }
-        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
-    };
 
     return (
         <div className="bg-surface border border-edge-subtle rounded-xl p-6">

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GamesStep } from './games-step';
@@ -81,14 +81,23 @@ vi.mock('../../hooks/use-auth', () => ({
     getAuthToken: () => 'test-token',
 }));
 
+// Mock WantToPlayProvider to eliminate async batch queries during render
+vi.mock('../../hooks/use-want-to-play-batch', () => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    WantToPlayProvider: ({ children }: any) => children,
+}));
+
 import { useGameSearch } from '../../hooks/use-game-search';
 import { useGamesDiscover } from '../../hooks/use-games-discover';
 
 const mockUseGameSearch = useGameSearch as unknown as ReturnType<typeof vi.fn>;
 const mockUseGamesDiscover = useGamesDiscover as unknown as ReturnType<typeof vi.fn>;
 
+let activeQueryClient: QueryClient;
+
 function createQueryClient() {
-    return new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    activeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    return activeQueryClient;
 }
 
 function renderWithProviders(ui: React.ReactElement) {
@@ -158,6 +167,10 @@ describe('GamesStep', () => {
         // Restore default mock implementations after each test
         mockUseGamesDiscover.mockReturnValue(DEFAULT_DISCOVER_DATA);
         mockUseGameSearch.mockReturnValue({ data: null, isLoading: false });
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('Rendering', () => {

@@ -71,6 +71,7 @@ export class DiscordBotClientService {
   private readonly logger = new Logger(DiscordBotClientService.name);
   private client: Client | null = null;
   private connecting = false;
+  private connectTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
@@ -98,13 +99,15 @@ export class DiscordBotClientService {
     return new Promise<void>((resolve, reject) => {
       const client = this.client!;
 
-      const timeout = setTimeout(() => {
+      this.connectTimeout = setTimeout(() => {
+        this.connectTimeout = null;
         this.connecting = false;
         reject(new Error('Discord bot connection timed out after 15s'));
       }, 15_000);
 
       client.once(Events.ClientReady, () => {
-        clearTimeout(timeout);
+        clearTimeout(this.connectTimeout!);
+        this.connectTimeout = null;
         this.connecting = false;
         this.logger.log(`Discord bot connected as ${client.user?.tag}`);
 
@@ -142,7 +145,8 @@ export class DiscordBotClientService {
       });
 
       client.once(Events.Error, (error: Error) => {
-        clearTimeout(timeout);
+        clearTimeout(this.connectTimeout!);
+        this.connectTimeout = null;
         this.connecting = false;
         const message = friendlyDiscordErrorMessage(error);
         this.logger.error('Discord bot connection error:', message);
@@ -151,7 +155,8 @@ export class DiscordBotClientService {
       });
 
       client.login(token).catch((err: unknown) => {
-        clearTimeout(timeout);
+        clearTimeout(this.connectTimeout!);
+        this.connectTimeout = null;
         this.connecting = false;
         const message = friendlyDiscordErrorMessage(err);
         this.logger.error('Discord bot login failed:', message);
@@ -163,6 +168,11 @@ export class DiscordBotClientService {
 
   async disconnect(): Promise<void> {
     this.connecting = false;
+
+    if (this.connectTimeout) {
+      clearTimeout(this.connectTimeout);
+      this.connectTimeout = null;
+    }
 
     if (!this.client) return;
 

@@ -2,9 +2,8 @@ import { Link } from 'react-router-dom';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { useAuth } from '../../hooks/use-auth';
 import { usePluginStore } from '../../stores/plugin-store';
+import { useDiscordLink } from '../../hooks/use-discord-link';
 import { isDiscordLinked } from '../../lib/avatar';
-import { API_BASE_URL } from '../../lib/config';
-import { toast } from '../../lib/toast';
 import { IntegrationCard } from '../../components/admin/IntegrationCard';
 import { DiscordBotForm } from '../../components/admin/DiscordBotForm';
 
@@ -45,17 +44,7 @@ function DiscordConnectionContent() {
 
     const hasDiscord = isDiscordLinked(user?.discordId);
     const isBotConfigured = discordBotStatus.data?.configured ?? false;
-
-    // TODO: Replace JWT-in-query-param with a short-lived one-time code exchange
-    // to avoid token exposure in server logs and browser history (ROK-560).
-    const handleLinkDiscord = () => {
-        const token = localStorage.getItem('raid_ledger_token');
-        if (!token) {
-            toast.error('Please log in again to link Discord');
-            return;
-        }
-        window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
-    };
+    const handleLinkDiscord = useDiscordLink();
 
     return (
         <div className="space-y-6">

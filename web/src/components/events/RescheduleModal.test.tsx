@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RescheduleModal } from './RescheduleModal';
@@ -49,13 +49,20 @@ vi.mock('../../lib/toast', () => ({
     },
 }));
 
+// Mock useFocusTrap to eliminate requestAnimationFrame timing issues
+vi.mock('../../hooks/use-focus-trap', () => ({
+    useFocusTrap: () => ({ current: null }),
+}));
+
+let activeQueryClient: QueryClient;
+
 function createWrapper() {
-    const queryClient = new QueryClient({
+    activeQueryClient = new QueryClient({
         defaultOptions: { queries: { retry: false } },
     });
     return function Wrapper({ children }: { children: React.ReactNode }) {
         return (
-            <QueryClientProvider client={queryClient}>
+            <QueryClientProvider client={activeQueryClient}>
                 {children}
             </QueryClientProvider>
         );
@@ -81,6 +88,10 @@ function renderModal(overrides: Partial<RescheduleModalProps> = {}) {
 describe('RescheduleModal', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     describe('rendering', () => {
@@ -321,6 +332,10 @@ import { useAggregateGameTime } from '../../hooks/use-reschedule';
 describe('ROK-475: full 24h scrollable grid', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
     });
 
     it('renders all 24 hours regardless of availability data range', () => {

@@ -16,6 +16,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SignupsService } from './signups.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { NotificationService } from '../notifications/notification.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
 import { BenchPromotionService } from './bench-promotion.service';
 
 describe('SignupsService — ROK-137 Discord signup methods', () => {
@@ -159,6 +160,10 @@ describe('SignupsService — ROK-137 Discord signup methods', () => {
         SignupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
+        {
+          provide: RosterNotificationBufferService,
+          useValue: { bufferLeave: jest.fn(), bufferJoin: jest.fn() },
+        },
         { provide: BenchPromotionService, useValue: mockBenchPromotionService },
         { provide: EventEmitter2, useValue: { emit: jest.fn() } },
       ],
