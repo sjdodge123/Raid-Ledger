@@ -56,6 +56,9 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/contract/dist ./node_modules/@raid-ledger/contract/dist
 COPY --from=builder /app/packages/contract/package.json ./node_modules/@raid-ledger/contract/package.json
 
+# Prune dev dependencies from production image
+RUN npm prune --production
+
 # Copy seed scripts and data
 COPY --from=builder /app/api/dist/scripts ./dist/scripts
 COPY --from=builder /app/api/seeds ./dist/seeds
