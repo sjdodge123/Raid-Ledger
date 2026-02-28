@@ -695,7 +695,7 @@ export class IgdbController {
         .from(schema.gameInterests)
         .where(eq(schema.gameInterests.gameId, id)),
       db
-        .select()
+        .select({ source: schema.gameInterests.source })
         .from(schema.gameInterests)
         .where(
           and(
@@ -707,10 +707,14 @@ export class IgdbController {
       this.getInterestedPlayers(id),
     ]);
 
+    const hasInterest = userInterest.length > 0;
     return {
-      wantToPlay: userInterest.length > 0,
+      wantToPlay: hasInterest,
       count: countResult[0]?.count ?? 0,
       players: playerPreviews,
+      source: hasInterest
+        ? (userInterest[0].source as 'manual' | 'steam' | 'discord')
+        : undefined,
     };
   }
 
@@ -762,12 +766,14 @@ export class IgdbController {
       wantToPlay: true,
       count: countResult[0]?.count ?? 0,
       players: playerPreviews,
+      source: 'manual' as const,
     };
   }
 
   /**
    * DELETE /games/:id/want-to-play
-   * Remove want-to-play.
+   * Remove want-to-play. If the interest was auto-hearted (source: 'discord'),
+   * record a suppression so auto-heart doesn't re-trigger (ROK-444).
    */
   @Delete(':id/want-to-play')
   @UseGuards(AuthGuard('jwt'))
@@ -778,6 +784,26 @@ export class IgdbController {
   ): Promise<GameInterestResponseDto> {
     const db = this.igdbService.database;
     const userId = req.user.id;
+
+    // Check if this was an auto-hearted interest before deleting
+    const [existing] = await db
+      .select({ source: schema.gameInterests.source })
+      .from(schema.gameInterests)
+      .where(
+        and(
+          eq(schema.gameInterests.gameId, id),
+          eq(schema.gameInterests.userId, userId),
+        ),
+      )
+      .limit(1);
+
+    // If the interest was auto-hearted, suppress future auto-hearts for this game
+    if (existing?.source === 'discord') {
+      await db
+        .insert(schema.gameInterestSuppressions)
+        .values({ userId, gameId: id })
+        .onConflictDoNothing();
+    }
 
     await db
       .delete(schema.gameInterests)

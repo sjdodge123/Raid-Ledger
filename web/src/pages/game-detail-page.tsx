@@ -167,7 +167,7 @@ export function GameDetailPage() {
     const { data: game, isLoading, error } = useGameDetail(gameId);
     const { data: streamsData } = useGameStreams(gameId);
     const { isAuthenticated } = useAuth();
-    const { wantToPlay, count, players, toggle, isToggling } = useWantToPlay(
+    const { wantToPlay, count, source, players, toggle, isToggling } = useWantToPlay(
         isAuthenticated ? gameId : undefined,
     );
 
@@ -336,6 +336,7 @@ export function GameDetailPage() {
                     <button
                         onClick={() => !isToggling && toggle(!wantToPlay)}
                         disabled={isToggling}
+                        title={source === 'discord' ? 'Auto-hearted based on your playtime' : undefined}
                         className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-colors ${wantToPlay
                                 ? 'bg-red-500/20 text-red-400 border border-red-500/50 hover:bg-red-500/30'
                                 : 'bg-emerald-600 text-white hover:bg-emerald-500'

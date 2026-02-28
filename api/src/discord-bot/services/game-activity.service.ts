@@ -6,7 +6,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, and, isNull, lt, sql, isNotNull, gte } from 'drizzle-orm';
+import { eq, and, isNull, lt, sql, isNotNull, gte, sum } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -322,6 +322,7 @@ export class GameActivityService
       'GameActivityService_dailyRollup',
       async () => {
         await this.aggregateRollups();
+        await this.autoHeartCheck();
       },
     );
   }
@@ -488,6 +489,108 @@ export class GameActivityService
         `Closed ${total} orphaned session(s) from prior restart (${staleResult.length} stale, ${recentResult.length} recent)`,
       );
     }
+  }
+
+  // ─── Auto-heart check (ROK-444) ──────────────────────────────
+
+  /** Minimum cumulative playtime (seconds) to trigger auto-heart */
+  private static readonly AUTO_HEART_THRESHOLD_SECONDS = 18_000; // 5 hours
+
+  /**
+   * Auto-heart games where a user's total playtime crosses the 5-hour threshold.
+   * Skips users who disabled auto-heart, already-hearted games, and suppressed pairs.
+   */
+  async autoHeartCheck(): Promise<void> {
+    // 1. Find (user, game) pairs with >= 5h total duration
+    const candidates = await this.db
+      .select({
+        userId: schema.gameActivitySessions.userId,
+        gameId: schema.gameActivitySessions.gameId,
+      })
+      .from(schema.gameActivitySessions)
+      .where(
+        and(
+          isNotNull(schema.gameActivitySessions.gameId),
+          isNotNull(schema.gameActivitySessions.endedAt),
+        ),
+      )
+      .groupBy(
+        schema.gameActivitySessions.userId,
+        schema.gameActivitySessions.gameId,
+      )
+      .having(
+        gte(
+          sum(schema.gameActivitySessions.durationSeconds),
+          String(GameActivityService.AUTO_HEART_THRESHOLD_SECONDS),
+        ),
+      );
+
+    if (candidates.length === 0) {
+      this.logger.debug('Auto-heart: no candidates above threshold');
+      return;
+    }
+
+    // 2. Get users who have opted out (autoHeartGames = false)
+    const optedOut = await this.db
+      .select({ userId: schema.userPreferences.userId })
+      .from(schema.userPreferences)
+      .where(
+        and(
+          eq(schema.userPreferences.key, 'autoHeartGames'),
+          sql`${schema.userPreferences.value}::text = 'false'`,
+        ),
+      );
+    const optedOutSet = new Set(optedOut.map((r) => r.userId));
+
+    // 3. Get existing interests
+    const existingInterests = await this.db
+      .select({
+        userId: schema.gameInterests.userId,
+        gameId: schema.gameInterests.gameId,
+      })
+      .from(schema.gameInterests);
+    const existingSet = new Set(
+      existingInterests.map((r) => `${r.userId}:${r.gameId}`),
+    );
+
+    // 4. Get suppressions
+    const suppressions = await this.db
+      .select({
+        userId: schema.gameInterestSuppressions.userId,
+        gameId: schema.gameInterestSuppressions.gameId,
+      })
+      .from(schema.gameInterestSuppressions);
+    const suppressedSet = new Set(
+      suppressions.map((r) => `${r.userId}:${r.gameId}`),
+    );
+
+    // 5. Filter and insert
+    const toInsert = candidates.filter((c) => {
+      if (!c.gameId) return false;
+      if (optedOutSet.has(c.userId)) return false;
+      const key = `${c.userId}:${c.gameId}`;
+      if (existingSet.has(key)) return false;
+      if (suppressedSet.has(key)) return false;
+      return true;
+    });
+
+    if (toInsert.length === 0) {
+      this.logger.debug('Auto-heart: no new hearts to insert');
+      return;
+    }
+
+    for (const row of toInsert) {
+      await this.db
+        .insert(schema.gameInterests)
+        .values({
+          userId: row.userId,
+          gameId: row.gameId!,
+          source: 'discord',
+        })
+        .onConflictDoNothing();
+    }
+
+    this.logger.log(`Auto-hearted ${toInsert.length} game(s) for users`);
   }
 
   // ─── Helpers ──────────────────────────────────────────────────

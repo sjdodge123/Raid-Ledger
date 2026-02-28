@@ -29,6 +29,7 @@ export function useWantToPlay(gameId: number | undefined) {
         return {
             wantToPlay: interest.wantToPlay,
             count: interest.count,
+            source: interest.source,
             players: [],
             isLoading: false,
             toggle: (wantToPlay: boolean) => ctx.toggle(gameId, wantToPlay),
@@ -105,6 +106,7 @@ function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
     return {
         wantToPlay: interest.data?.wantToPlay ?? false,
         count: interest.data?.count ?? 0,
+        source: interest.data?.source,
         players: interest.data?.players ?? [],
         isLoading: interest.isLoading,
         toggle: (wantToPlay: boolean) => toggle.mutate(wantToPlay),

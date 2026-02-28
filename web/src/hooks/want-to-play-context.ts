@@ -3,6 +3,7 @@ import { createContext } from 'react';
 export interface InterestEntry {
     wantToPlay: boolean;
     count: number;
+    source?: string;
 }
 
 export interface WantToPlayContextValue {

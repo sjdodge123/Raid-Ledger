@@ -64,6 +64,7 @@ vi.mock('../../lib/avatar', () => ({
 vi.mock('../../lib/api-client', () => ({
     updatePreference: vi.fn(() => Promise.resolve()),
     deleteMyAccount: vi.fn(() => Promise.resolve()),
+    getMyPreferences: vi.fn(() => Promise.resolve({ autoHeartGames: true })),
 }));
 
 // Mock AvatarSelectorModal — render a simplified version to expose interactions

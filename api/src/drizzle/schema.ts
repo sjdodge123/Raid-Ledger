@@ -32,3 +32,4 @@ export * from './schema/game-activity-sessions';
 export * from './schema/game-activity-rollups';
 export * from './schema/discord-game-mappings';
 export * from './schema/ad-hoc-participants';
+export * from './schema/game-interest-suppressions';
