@@ -27,15 +27,19 @@ describe('DiscordBotService', () => {
             isConnecting: jest.fn(),
             getGuildInfo: jest.fn(),
             sendDirectMessage: jest.fn(),
+            checkPermissions: jest.fn(),
           },
         },
         {
           provide: SettingsService,
           useValue: {
             getDiscordBotConfig: jest.fn(),
+            isDiscordConfigured: jest.fn(),
             isDiscordBotConfigured: jest.fn(),
             isDiscordBotSetupCompleted: jest.fn().mockResolvedValue(false),
             getAdHocEventsEnabled: jest.fn().mockResolvedValue(false),
+            getDiscordBotDefaultChannel: jest.fn(),
+            getDiscordBotTimezone: jest.fn(),
           },
         },
       ],
@@ -370,6 +374,115 @@ describe('DiscordBotService', () => {
         setupCompleted: false,
         adHocEventsEnabled: false,
       });
+    });
+  });
+
+  describe('getSetupStatus', () => {
+    it('should return all steps completed when everything is configured', async () => {
+      jest
+        .spyOn(settingsService, 'isDiscordConfigured')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(settingsService, 'isDiscordBotConfigured')
+        .mockResolvedValue(true);
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(true);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue('channel-123');
+      jest
+        .spyOn(settingsService, 'getDiscordBotTimezone')
+        .mockResolvedValue('America/New_York');
+
+      const result = await service.getSetupStatus();
+
+      expect(result.overallComplete).toBe(true);
+      expect(result.completedCount).toBe(5);
+      expect(result.totalCount).toBe(5);
+      expect(result.steps).toHaveLength(5);
+      expect(result.steps.every((s) => s.completed)).toBe(true);
+    });
+
+    it('should return all steps incomplete when nothing is configured', async () => {
+      jest
+        .spyOn(settingsService, 'isDiscordConfigured')
+        .mockResolvedValue(false);
+      jest
+        .spyOn(settingsService, 'isDiscordBotConfigured')
+        .mockResolvedValue(false);
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(settingsService, 'getDiscordBotTimezone')
+        .mockResolvedValue(null);
+
+      const result = await service.getSetupStatus();
+
+      expect(result.overallComplete).toBe(false);
+      expect(result.completedCount).toBe(0);
+      expect(result.totalCount).toBe(5);
+      expect(result.steps.every((s) => !s.completed)).toBe(true);
+    });
+
+    it('should return correct step keys and labels', async () => {
+      jest
+        .spyOn(settingsService, 'isDiscordConfigured')
+        .mockResolvedValue(false);
+      jest
+        .spyOn(settingsService, 'isDiscordBotConfigured')
+        .mockResolvedValue(false);
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(settingsService, 'getDiscordBotTimezone')
+        .mockResolvedValue(null);
+
+      const result = await service.getSetupStatus();
+
+      const keys = result.steps.map((s) => s.key);
+      expect(keys).toEqual([
+        'oauth',
+        'bot-token',
+        'bot-connected',
+        'default-channel',
+        'timezone',
+      ]);
+    });
+
+    it('should handle partial completion', async () => {
+      jest
+        .spyOn(settingsService, 'isDiscordConfigured')
+        .mockResolvedValue(true);
+      jest
+        .spyOn(settingsService, 'isDiscordBotConfigured')
+        .mockResolvedValue(true);
+      jest.spyOn(clientService, 'isConnected').mockReturnValue(false);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(settingsService, 'getDiscordBotTimezone')
+        .mockResolvedValue(null);
+
+      const result = await service.getSetupStatus();
+
+      expect(result.overallComplete).toBe(false);
+      expect(result.completedCount).toBe(2);
+      expect(result.totalCount).toBe(5);
+
+      const oauthStep = result.steps.find((s) => s.key === 'oauth');
+      expect(oauthStep?.completed).toBe(true);
+
+      const botTokenStep = result.steps.find((s) => s.key === 'bot-token');
+      expect(botTokenStep?.completed).toBe(true);
+
+      const botConnectedStep = result.steps.find(
+        (s) => s.key === 'bot-connected',
+      );
+      expect(botConnectedStep?.completed).toBe(false);
     });
   });
 

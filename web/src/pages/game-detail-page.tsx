@@ -10,6 +10,7 @@ import { EventCard } from '../components/events/event-card';
 import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars';
 import { GENRE_MAP } from '../lib/game-utils';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import { formatPlaytime, PERIOD_LABELS } from '../lib/activity-utils';
 import type { ActivityPeriod, GameTopPlayerDto, NowPlayingPlayerDto } from '@raid-ledger/contract';
 
 /** IGDB platform ID → display name (common ones) */
@@ -24,22 +25,6 @@ const MODE_MAP: Record<number, string> = {
     1: 'Single Player', 2: 'Multiplayer', 3: 'Co-op',
     4: 'Split Screen', 5: 'MMO',
 };
-
-/** Format seconds as "Xh Ym" or "Xm" */
-function formatPlaytime(totalSeconds: number): string {
-    const hours = Math.floor(totalSeconds / 3600);
-    const minutes = Math.floor((totalSeconds % 3600) / 60);
-    if (hours > 0) {
-        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-    }
-    return `${minutes}m`;
-}
-
-const PERIOD_LABELS: { value: ActivityPeriod; label: string }[] = [
-    { value: 'week', label: 'This Week' },
-    { value: 'month', label: 'This Month' },
-    { value: 'all', label: 'All Time' },
-];
 
 /** Player avatar helper */
 function PlayerAvatar({ player, size = 'sm' }: { player: NowPlayingPlayerDto | GameTopPlayerDto; size?: 'sm' | 'md' }) {

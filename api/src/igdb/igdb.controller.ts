@@ -33,7 +33,7 @@ import {
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 import { RateLimit } from '../throttler/rate-limit.decorator';
-import { eq, sql, and, inArray, isNull, desc, gte } from 'drizzle-orm';
+import { eq, sql, and, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
 import type { UserRole } from '@raid-ledger/contract';
@@ -391,7 +391,12 @@ export class IgdbController {
   /**
    * GET /games/:id/activity
    * ROK-443: Community activity for a game — top players and total hours.
-   * Public endpoint. Respects show_activity privacy preference.
+   *
+   * Public endpoint (no auth guard). Unlike GET /users/:id/activity, this does
+   * not require authentication or check the requester's identity. Users with
+   * show_activity=false are still filtered out via the service-layer privacy
+   * query, but the endpoint itself is intentionally unauthenticated because it
+   * serves aggregated community data, not individual user data.
    */
   @Get(':id/activity')
   async getGameActivity(
@@ -417,144 +422,22 @@ export class IgdbController {
       throw new NotFoundException('Game not found');
     }
 
-    // Build the base conditions for rollup query
-    const baseConditions = [eq(schema.gameActivityRollups.gameId, id)];
-    if (period.data !== 'all') {
-      const periodFilter = period.data === 'week' ? 'week' : 'month';
-      const truncFn = period.data === 'week' ? 'week' : 'month';
-      baseConditions.push(eq(schema.gameActivityRollups.period, periodFilter));
-      baseConditions.push(
-        gte(
-          schema.gameActivityRollups.periodStart,
-          sql`date_trunc(${truncFn}, now())::date`,
-        ),
-      );
-    }
-
-    // Query top players with privacy filtering
-    // LEFT JOIN user_preferences to exclude users with show_activity=false
-    const topPlayers = await db
-      .select({
-        userId: schema.gameActivityRollups.userId,
-        username: schema.users.username,
-        avatar: schema.users.avatar,
-        customAvatarUrl: schema.users.customAvatarUrl,
-        discordId: schema.users.discordId,
-        totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
-      })
-      .from(schema.gameActivityRollups)
-      .innerJoin(
-        schema.users,
-        eq(schema.gameActivityRollups.userId, schema.users.id),
-      )
-      .leftJoin(
-        schema.userPreferences,
-        and(
-          eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
-          eq(schema.userPreferences.key, 'show_activity'),
-        ),
-      )
-      .where(
-        and(
-          ...baseConditions,
-          // Include users who don't have the preference set (default true)
-          // or whose preference is not explicitly false
-          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
-        ),
-      )
-      .groupBy(
-        schema.gameActivityRollups.userId,
-        schema.users.username,
-        schema.users.avatar,
-        schema.users.customAvatarUrl,
-        schema.users.discordId,
-      )
-      .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
-      .limit(10);
-
-    // Calculate total community seconds (same privacy filter)
-    const [totalResult] = await db
-      .select({
-        totalSeconds: sql<number>`coalesce(sum(${schema.gameActivityRollups.totalSeconds})::int, 0)`,
-      })
-      .from(schema.gameActivityRollups)
-      .leftJoin(
-        schema.userPreferences,
-        and(
-          eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
-          eq(schema.userPreferences.key, 'show_activity'),
-        ),
-      )
-      .where(
-        and(
-          ...baseConditions,
-          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
-        ),
-      );
-
-    return {
-      topPlayers: topPlayers.map((p) => ({
-        userId: p.userId,
-        username: p.username,
-        avatar: p.avatar,
-        customAvatarUrl: p.customAvatarUrl,
-        discordId: p.discordId,
-        totalSeconds: p.totalSeconds,
-      })),
-      totalSeconds: totalResult?.totalSeconds ?? 0,
-      period: period.data,
-    };
+    return this.igdbService.getGameActivity(id, period.data);
   }
 
   /**
    * GET /games/:id/now-playing
    * ROK-443: Users currently playing this game (open sessions).
-   * Public endpoint. Respects show_activity privacy preference.
+   *
+   * Public endpoint (no auth guard). See GET /games/:id/activity comment for
+   * rationale — this serves aggregated community presence data. The
+   * show_activity privacy preference is still respected at the query level.
    */
   @Get(':id/now-playing')
   async getGameNowPlaying(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GameNowPlayingResponseDto> {
-    const db = this.igdbService.database;
-
-    const players = await db
-      .select({
-        userId: schema.gameActivitySessions.userId,
-        username: schema.users.username,
-        avatar: schema.users.avatar,
-        customAvatarUrl: schema.users.customAvatarUrl,
-        discordId: schema.users.discordId,
-      })
-      .from(schema.gameActivitySessions)
-      .innerJoin(
-        schema.users,
-        eq(schema.gameActivitySessions.userId, schema.users.id),
-      )
-      .leftJoin(
-        schema.userPreferences,
-        and(
-          eq(schema.userPreferences.userId, schema.gameActivitySessions.userId),
-          eq(schema.userPreferences.key, 'show_activity'),
-        ),
-      )
-      .where(
-        and(
-          eq(schema.gameActivitySessions.gameId, id),
-          isNull(schema.gameActivitySessions.endedAt),
-          sql`(${schema.userPreferences.value} IS NULL OR ${schema.userPreferences.value}::text != 'false')`,
-        ),
-      );
-
-    return {
-      players: players.map((p) => ({
-        userId: p.userId,
-        username: p.username,
-        avatar: p.avatar,
-        customAvatarUrl: p.customAvatarUrl,
-        discordId: p.discordId,
-      })),
-      count: players.length,
-    };
+    return this.igdbService.getGameNowPlaying(id);
   }
 
   /**

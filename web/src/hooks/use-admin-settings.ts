@@ -2,8 +2,15 @@ import { useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
-import type { DiscordSetupStatus } from '@raid-ledger/contract';
+import { usePluginStore } from '../stores/plugin-store';
+import type {
+    DiscordSetupStatus,
+    DiscordBotStatusResponse,
+    DiscordBotConfigDto,
+    DiscordBotTestResult,
+} from '@raid-ledger/contract';
 
+// TODO(ROK-560): Move these local interfaces to @raid-ledger/contract and import them.
 interface OAuthStatusResponse {
     configured: boolean;
     callbackUrl: string | null;
@@ -52,27 +59,6 @@ interface BlizzardConfigDto {
     clientSecret: string;
 }
 
-interface DiscordBotStatusResponse {
-    configured: boolean;
-    connected: boolean;
-    enabled?: boolean;
-    connecting?: boolean;
-    guildName?: string;
-    memberCount?: number;
-    setupCompleted?: boolean;
-}
-
-interface DiscordBotConfigDto {
-    botToken: string;
-    enabled: boolean;
-}
-
-interface DiscordBotTestResult {
-    success: boolean;
-    guildName?: string;
-    message: string;
-}
-
 interface DiscordBotPermissionsResult {
     allGranted: boolean;
     permissions: { name: string; granted: boolean }[];
@@ -108,6 +94,7 @@ export interface DemoDataResult {
  */
 export function useAdminSettings() {
     const queryClient = useQueryClient();
+    const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
 
     // Helper to get fresh headers with current token
     const getHeaders = () => ({
@@ -623,7 +610,7 @@ export function useAdminSettings() {
             if (!response.ok) throw new Error('Failed to fetch setup status');
             return response.json();
         },
-        enabled: !!getAuthToken(),
+        enabled: !!getAuthToken() && isDiscordActive,
         staleTime: 30_000,
     });
 
