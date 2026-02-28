@@ -1,6 +1,11 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  type EmbedBuilder,
+  type ActionRowBuilder,
+  type ButtonBuilder,
+} from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -37,6 +42,10 @@ export class EmbedPosterService {
    * Resolves the channel, builds the embed, sends it, and inserts the
    * tracking row into discord_event_messages.
    *
+   * ROK-551: Idempotent — if a discord_event_messages row already exists,
+   * edits the existing Discord message instead of posting a duplicate.
+   * Falls back to posting a new message if the original was deleted.
+   *
    * @param eventId - The event ID
    * @param event - Event data for embed construction
    * @param gameId - Optional game ID for channel resolution
@@ -66,6 +75,22 @@ export class EmbedPosterService {
     }
 
     try {
+      // ROK-551: Check for existing embed row (idempotency guard)
+      const [existingRecord] = await this.db
+        .select({
+          id: schema.discordEventMessages.id,
+          channelId: schema.discordEventMessages.channelId,
+          messageId: schema.discordEventMessages.messageId,
+        })
+        .from(schema.discordEventMessages)
+        .where(
+          and(
+            eq(schema.discordEventMessages.eventId, eventId),
+            eq(schema.discordEventMessages.guildId, guildId),
+          ),
+        )
+        .limit(1);
+
       // Enrich with live roster data so the embed reflects current signups
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
 
@@ -81,6 +106,16 @@ export class EmbedPosterService {
         enrichedEvent,
         context,
       );
+
+      if (existingRecord) {
+        // ROK-551: Embed already posted — edit in place instead of duplicating
+        return await this.editExistingEmbed(
+          eventId,
+          existingRecord,
+          embed,
+          row,
+        );
+      }
 
       const message = await this.clientService.sendEmbed(channelId, embed, row);
 
@@ -102,6 +137,72 @@ export class EmbedPosterService {
         error,
       );
       return false;
+    }
+  }
+
+  /**
+   * ROK-551: Edit an existing Discord embed message. If the message was
+   * deleted from Discord, falls back to posting a new one and updating the
+   * stored message ID.
+   */
+  private async editExistingEmbed(
+    eventId: number,
+    record: { id: string; channelId: string; messageId: string },
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<boolean> {
+    try {
+      await this.clientService.editEmbed(
+        record.channelId,
+        record.messageId,
+        embed,
+        row,
+      );
+      this.logger.log(
+        `Edited existing embed for event ${eventId} (msg: ${record.messageId})`,
+      );
+      return true;
+    } catch (editError) {
+      // Discord API error 10008 = Unknown Message (deleted)
+      const isUnknownMessage =
+        editError instanceof Error &&
+        (editError.message.includes('Unknown Message') ||
+          (editError as Error & { code?: number }).code === 10008);
+
+      if (!isUnknownMessage) {
+        this.logger.error(
+          `Failed to edit existing embed for event ${eventId} (msg: ${record.messageId}):`,
+          editError,
+        );
+        return false;
+      }
+
+      // Message was deleted — post a new one and update the record
+      this.logger.warn(
+        `Existing embed for event ${eventId} was deleted (msg: ${record.messageId}), posting replacement`,
+      );
+
+      const guildId = this.clientService.getGuildId();
+      if (!guildId) return false;
+
+      const channelId = await this.channelResolver.resolveChannelForEvent();
+      if (!channelId) return false;
+
+      const message = await this.clientService.sendEmbed(channelId, embed, row);
+
+      await this.db
+        .update(schema.discordEventMessages)
+        .set({
+          channelId,
+          messageId: message.id,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.discordEventMessages.id, record.id));
+
+      this.logger.log(
+        `Posted replacement embed for event ${eventId} (msg: ${message.id})`,
+      );
+      return true;
     }
   }
 
