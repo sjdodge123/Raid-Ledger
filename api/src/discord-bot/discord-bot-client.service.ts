@@ -58,6 +58,10 @@ const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
     label: 'Manage Events',
     flag: PermissionsBitField.Flags.ManageEvents,
   },
+  {
+    label: 'Create Events',
+    flag: PermissionsBitField.Flags.CreateEvents,
+  },
   { label: 'Connect', flag: PermissionsBitField.Flags.Connect },
 ];
 
