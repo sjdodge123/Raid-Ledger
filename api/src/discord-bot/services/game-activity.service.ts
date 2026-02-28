@@ -6,7 +6,17 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, and, isNull, lt, sql, isNotNull, gte, sum } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  isNull,
+  lt,
+  sql,
+  isNotNull,
+  gte,
+  sum,
+  inArray,
+} from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -500,6 +510,7 @@ export class GameActivityService
    * Auto-heart games where a user's total playtime crosses the 5-hour threshold.
    * Skips users who disabled auto-heart, already-hearted games, and suppressed pairs.
    */
+  // @VisibleForTesting
   async autoHeartCheck(): Promise<void> {
     // 1. Find (user, game) pairs with >= 5h total duration
     const candidates = await this.db
@@ -530,6 +541,9 @@ export class GameActivityService
       return;
     }
 
+    // Extract unique candidate user IDs for scoped queries
+    const candidateUserIds = [...new Set(candidates.map((c) => c.userId))];
+
     // 2. Get users who have opted out (autoHeartGames = false)
     const optedOut = await this.db
       .select({ userId: schema.userPreferences.userId })
@@ -542,29 +556,31 @@ export class GameActivityService
       );
     const optedOutSet = new Set(optedOut.map((r) => r.userId));
 
-    // 3. Get existing interests
+    // 3. Get existing interests (scoped to candidate users)
     const existingInterests = await this.db
       .select({
         userId: schema.gameInterests.userId,
         gameId: schema.gameInterests.gameId,
       })
-      .from(schema.gameInterests);
+      .from(schema.gameInterests)
+      .where(inArray(schema.gameInterests.userId, candidateUserIds));
     const existingSet = new Set(
       existingInterests.map((r) => `${r.userId}:${r.gameId}`),
     );
 
-    // 4. Get suppressions
+    // 4. Get suppressions (scoped to candidate users)
     const suppressions = await this.db
       .select({
         userId: schema.gameInterestSuppressions.userId,
         gameId: schema.gameInterestSuppressions.gameId,
       })
-      .from(schema.gameInterestSuppressions);
+      .from(schema.gameInterestSuppressions)
+      .where(inArray(schema.gameInterestSuppressions.userId, candidateUserIds));
     const suppressedSet = new Set(
       suppressions.map((r) => `${r.userId}:${r.gameId}`),
     );
 
-    // 5. Filter and insert
+    // 5. Filter and batch insert
     const toInsert = candidates.filter((c) => {
       if (!c.gameId) return false;
       if (optedOutSet.has(c.userId)) return false;
@@ -579,16 +595,16 @@ export class GameActivityService
       return;
     }
 
-    for (const row of toInsert) {
-      await this.db
-        .insert(schema.gameInterests)
-        .values({
+    await this.db
+      .insert(schema.gameInterests)
+      .values(
+        toInsert.map((row) => ({
           userId: row.userId,
           gameId: row.gameId!,
           source: 'discord',
-        })
-        .onConflictDoNothing();
-    }
+        })),
+      )
+      .onConflictDoNothing();
 
     this.logger.log(`Auto-hearted ${toInsert.length} game(s) for users`);
   }
