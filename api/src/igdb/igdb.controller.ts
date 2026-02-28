@@ -451,7 +451,7 @@ export class IgdbController {
         schema.userPreferences,
         and(
           eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
-          eq(schema.userPreferences.key, sql`'show_activity'`),
+          eq(schema.userPreferences.key, 'show_activity'),
         ),
       )
       .where(
@@ -482,7 +482,7 @@ export class IgdbController {
         schema.userPreferences,
         and(
           eq(schema.userPreferences.userId, schema.gameActivityRollups.userId),
-          eq(schema.userPreferences.key, sql`'show_activity'`),
+          eq(schema.userPreferences.key, 'show_activity'),
         ),
       )
       .where(
@@ -534,7 +534,7 @@ export class IgdbController {
         schema.userPreferences,
         and(
           eq(schema.userPreferences.userId, schema.gameActivitySessions.userId),
-          eq(schema.userPreferences.key, sql`'show_activity'`),
+          eq(schema.userPreferences.key, 'show_activity'),
         ),
       )
       .where(
