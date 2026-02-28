@@ -5,7 +5,6 @@ import { DiscordBotSettingsController } from './discord-bot-settings.controller'
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordEmojiService } from './services/discord-emoji.service';
-import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -26,6 +25,7 @@ describe('DiscordBotSettingsController', () => {
             getStatus: jest.fn(),
             testToken: jest.fn(),
             ensureConnected: jest.fn().mockResolvedValue(undefined),
+            getSetupStatus: jest.fn(),
           },
         },
         {
@@ -34,6 +34,9 @@ describe('DiscordBotSettingsController', () => {
             getTextChannels: jest.fn(),
             getVoiceChannels: jest.fn(),
             isConnected: jest.fn().mockReturnValue(true),
+            disconnect: jest.fn().mockResolvedValue(undefined),
+            connect: jest.fn().mockResolvedValue(undefined),
+            sendEmbed: jest.fn().mockResolvedValue(undefined),
           },
         },
         {
@@ -41,12 +44,6 @@ describe('DiscordBotSettingsController', () => {
           useValue: {
             syncAllEmojis: jest.fn().mockResolvedValue(undefined),
             isUsingCustomEmojis: jest.fn().mockReturnValue(false),
-          },
-        },
-        {
-          provide: SetupWizardService,
-          useValue: {
-            sendSetupWizardToAdmin: jest.fn().mockResolvedValue({ sent: true }),
           },
         },
         {
@@ -61,6 +58,8 @@ describe('DiscordBotSettingsController', () => {
             setDiscordBotDefaultVoiceChannel: jest.fn(),
             getAdHocEventsEnabled: jest.fn(),
             setAdHocEventsEnabled: jest.fn(),
+            getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Community', communityLogoPath: null, communityAccentColor: null }),
+            getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
           },
         },
         {
@@ -552,6 +551,132 @@ describe('DiscordBotSettingsController', () => {
       await expect(
         controller.setDefaultVoiceChannel(undefined),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ROK-430: New endpoints — setup-status, reconnect, test-message
+  // ---------------------------------------------------------------------------
+
+  describe('getSetupStatus', () => {
+    it('should delegate to discordBotService.getSetupStatus', async () => {
+      const mockStatus = {
+        steps: [
+          { key: 'oauth', label: 'Configure Discord OAuth', completed: true, settingsPath: '/admin/settings/discord/auth' },
+        ],
+        overallComplete: false,
+        completedCount: 1,
+        totalCount: 5,
+      };
+      jest.spyOn(discordBotService, 'getSetupStatus').mockResolvedValue(mockStatus);
+
+      const result = await controller.getSetupStatus();
+
+      expect(discordBotService.getSetupStatus).toHaveBeenCalled();
+      expect(result).toMatchObject({
+        completedCount: expect.any(Number),
+        totalCount: expect.any(Number),
+        overallComplete: expect.any(Boolean),
+        steps: expect.any(Array),
+      });
+    });
+  });
+
+  describe('reconnect', () => {
+    it('should disconnect and reconnect the bot when config exists', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'bot-token-123', enabled: true });
+
+      const result = await controller.reconnect();
+
+      expect(discordBotClientService.disconnect).toHaveBeenCalled();
+      expect(discordBotClientService.connect).toHaveBeenCalledWith('bot-token-123');
+      expect(result).toMatchObject({ success: true });
+    });
+
+    it('should throw BadRequestException when no bot token is configured', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue(null);
+
+      await expect(controller.reconnect()).rejects.toThrow(BadRequestException);
+      expect(discordBotClientService.disconnect).not.toHaveBeenCalled();
+    });
+
+    it('should return success=false when reconnect throws', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotConfig')
+        .mockResolvedValue({ token: 'bot-token-123', enabled: true });
+      jest
+        .spyOn(discordBotClientService, 'connect')
+        .mockRejectedValue(new Error('Connection refused'));
+
+      const result = await controller.reconnect();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Connection refused');
+    });
+  });
+
+  describe('sendTestMessage', () => {
+    it('should throw BadRequestException when bot is not connected', async () => {
+      jest
+        .spyOn(discordBotClientService, 'isConnected')
+        .mockReturnValue(false);
+
+      await expect(controller.sendTestMessage()).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when no default channel is set', async () => {
+      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue(null);
+
+      await expect(controller.sendTestMessage()).rejects.toThrow(BadRequestException);
+    });
+
+    it('should send embed to default channel and return success', async () => {
+      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue('channel-123');
+      jest
+        .spyOn(settingsService, 'getBranding')
+        .mockResolvedValue({ communityName: 'My Guild', communityLogoPath: null, communityAccentColor: null });
+      jest
+        .spyOn(settingsService, 'getClientUrl')
+        .mockResolvedValue('https://myguild.example.com');
+
+      const result = await controller.sendTestMessage();
+
+      expect(discordBotClientService.sendEmbed).toHaveBeenCalledWith(
+        'channel-123',
+        expect.anything(),
+      );
+      expect(result).toMatchObject({ success: true });
+    });
+
+    it('should return success=false when sendEmbed throws', async () => {
+      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(true);
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultChannel')
+        .mockResolvedValue('channel-123');
+      jest
+        .spyOn(settingsService, 'getBranding')
+        .mockResolvedValue({ communityName: 'My Guild', communityLogoPath: null, communityAccentColor: null });
+      jest
+        .spyOn(settingsService, 'getClientUrl')
+        .mockResolvedValue(null);
+      jest
+        .spyOn(discordBotClientService, 'sendEmbed')
+        .mockRejectedValue(new Error('Channel not found'));
+
+      const result = await controller.sendTestMessage();
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Channel not found');
     });
   });
 });

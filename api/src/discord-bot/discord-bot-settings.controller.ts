@@ -17,7 +17,6 @@ import { AdminGuard } from '../auth/admin.guard';
 import { DiscordBotService } from './discord-bot.service';
 import { DiscordBotClientService } from './discord-bot-client.service';
 import { DiscordEmojiService } from './services/discord-emoji.service';
-import { SetupWizardService } from './services/setup-wizard.service';
 import { SettingsService } from '../settings/settings.service';
 import { CharactersService } from '../characters/characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -30,6 +29,7 @@ import {
   DiscordMemberCharactersQuerySchema,
   type DiscordBotStatusResponse,
   type DiscordBotTestResult,
+  type DiscordSetupStatus,
   type CharacterDto,
 } from '@raid-ledger/contract';
 import { z, ZodError } from 'zod';
@@ -62,7 +62,6 @@ export class DiscordBotSettingsController {
     private readonly discordBotService: DiscordBotService,
     private readonly discordBotClientService: DiscordBotClientService,
     private readonly discordEmojiService: DiscordEmojiService,
-    private readonly setupWizardService: SetupWizardService,
     private readonly settingsService: SettingsService,
     private readonly charactersService: CharactersService,
     @Inject(DrizzleAsyncProvider)
@@ -234,32 +233,99 @@ export class DiscordBotSettingsController {
     };
   }
 
-  @Post('resend-setup')
+  /**
+   * ROK-430: Aggregated setup completion status for the Discord Overview dashboard.
+   */
+  @Get('setup-status')
+  async getSetupStatus(): Promise<DiscordSetupStatus> {
+    return this.discordBotService.getSetupStatus();
+  }
+
+  /**
+   * ROK-430: Force disconnect + reconnect the bot.
+   */
+  @Post('reconnect')
   @HttpCode(HttpStatus.OK)
-  async resendSetupWizard(): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+  async reconnect(): Promise<{ success: boolean; message: string }> {
+    const config = await this.settingsService.getDiscordBotConfig();
+    if (!config) {
+      throw new BadRequestException('No bot token configured');
+    }
+
+    try {
+      await this.discordBotClientService.disconnect();
+      await this.discordBotClientService.connect(config.token);
+      this.logger.log('Discord bot reconnected via admin UI');
+      return { success: true, message: 'Bot reconnected successfully.' };
+    } catch (error) {
+      this.logger.error(
+        'Reconnect failed:',
+        error instanceof Error ? error.message : error,
+      );
+      return {
+        success: false,
+        message: `Reconnect failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  }
+
+  /**
+   * ROK-430: Send a test embed to the default notification channel.
+   */
+  @Post('test-message')
+  @HttpCode(HttpStatus.OK)
+  async sendTestMessage(): Promise<{ success: boolean; message: string }> {
     if (!this.discordBotClientService.isConnected()) {
+      throw new BadRequestException('Discord bot must be connected');
+    }
+
+    const channelId = await this.settingsService.getDiscordBotDefaultChannel();
+    if (!channelId) {
       throw new BadRequestException(
-        'Discord bot must be connected to send the setup wizard',
+        'No default notification channel configured',
       );
     }
 
-    const result = await this.setupWizardService.sendSetupWizardToAdmin();
+    try {
+      const { EmbedBuilder } = await import('discord.js');
+      const [branding, clientUrl] = await Promise.all([
+        this.settingsService.getBranding(),
+        this.settingsService.getClientUrl(),
+      ]);
+      const name = branding.communityName || 'Raid Ledger';
 
-    if (!result.sent) {
-      throw new BadRequestException(
-        result.reason ?? 'Failed to send setup wizard DM',
+      const description = [
+        `**${name}** is now online and ready to go!`,
+        '',
+        '📅 Schedule raids, track attendance, and manage your roster — all from one place.',
+      ];
+      if (clientUrl) {
+        description.push('', `🔗 [Open ${name}](${clientUrl})`);
+      }
+
+      const embed = new EmbedBuilder()
+        .setTitle(`${name} is Online`)
+        .setDescription(description.join('\n'))
+        .setColor(0x10b981)
+        .setFooter({ text: 'Powered by Raid Ledger' })
+        .setTimestamp();
+
+      await this.discordBotClientService.sendEmbed(channelId, embed);
+      this.logger.log('Test message sent via admin UI');
+      return {
+        success: true,
+        message: 'Test message sent to default channel.',
+      };
+    } catch (error) {
+      this.logger.error(
+        'Test message failed:',
+        error instanceof Error ? error.message : error,
       );
+      return {
+        success: false,
+        message: `Failed to send test message: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
     }
-
-    this.logger.log('Setup wizard DM re-sent via admin UI');
-
-    return {
-      success: true,
-      message: 'Setup wizard DM sent to admin.',
-    };
   }
 
   /**

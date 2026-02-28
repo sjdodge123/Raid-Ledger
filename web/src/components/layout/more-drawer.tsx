@@ -15,9 +15,11 @@ import { useAdminSettings } from '../../hooks/use-admin-settings';
 import {
     buildCoreIntegrationItems,
     buildPluginIntegrationItems,
+    buildDiscordNavItems,
     buildNavSections,
 } from '../admin/admin-nav-data';
 import { SidebarNavItem } from '../admin/admin-sidebar';
+import { usePluginStore } from '../../stores/plugin-store';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 
 interface MoreDrawerProps {
@@ -469,7 +471,8 @@ function ProfileSubmenuContent({ pathname, onClose }: { pathname: string; onClos
  */
 function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose: () => void }) {
     const { plugins } = usePluginAdmin();
-    const { igdbStatus } = useAdminSettings();
+    const { igdbStatus, oauthStatus, discordBotStatus } = useAdminSettings();
+    const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
     const coreIntegrations = buildCoreIntegrationItems({
         igdb: {
             configured: igdbStatus.data?.configured ?? false,
@@ -477,7 +480,19 @@ function AdminSubmenuContent({ pathname, onClose }: { pathname: string; onClose:
         },
     });
     const pluginIntegrations = buildPluginIntegrationItems(plugins.data ?? []);
-    const sections = buildNavSections(coreIntegrations, pluginIntegrations);
+    const discordItems = isDiscordActive
+        ? buildDiscordNavItems(
+            {
+                connected: discordBotStatus.data?.connected ?? false,
+                connecting: discordBotStatus.data?.connecting ?? false,
+            },
+            {
+                configured: oauthStatus.data?.configured ?? false,
+                loading: oauthStatus.isLoading,
+            },
+        )
+        : null;
+    const sections = buildNavSections(coreIntegrations, pluginIntegrations, discordItems);
 
     return (
         <div className="px-4 pb-3 space-y-3" data-testid="admin-submenu">
