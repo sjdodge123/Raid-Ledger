@@ -451,7 +451,10 @@ export class VoiceStateListener {
     const client = this.clientService.getClient();
     if (!client) return;
 
-    const guild = client.guilds.cache.first();
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return;
+
+    const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
     const channel = guild.channels.cache.get(channelId);
@@ -594,7 +597,10 @@ export class VoiceStateListener {
     const client = this.clientService.getClient();
     if (!client) return;
 
-    const guild = client.guilds.cache.first();
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return;
+
+    const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
     try {

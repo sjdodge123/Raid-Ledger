@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { eq, ilike, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActivityType, type GuildMember } from 'discord.js';
@@ -41,14 +41,20 @@ interface ManualOverride {
  * 5. Fallback: "Untitled Gaming Session" with gameId: null
  *
  * Consensus logic:
- * - If 50%+ of members play the same game, that game wins
+ * - If a strict majority (>50%) of members play the same game, that game wins
  * - Otherwise, split into separate groups per game
  */
 @Injectable()
-export class PresenceGameDetectorService {
+export class PresenceGameDetectorService implements OnModuleInit {
   private readonly logger = new Logger(PresenceGameDetectorService.name);
 
-  /** Manual /playing overrides: discordUserId -> override */
+  /**
+   * Manual /playing overrides: discordUserId -> override.
+   *
+   * TODO: These in-memory Maps (manualOverrides, gameCache) are singletons that
+   * will diverge across replicas in a multi-instance deployment. When scaling
+   * beyond a single server, move to Redis or a shared DB-backed cache.
+   */
   private manualOverrides = new Map<string, ManualOverride>();
 
   /** Cache: activityName -> resolved game info */
@@ -58,6 +64,28 @@ export class PresenceGameDetectorService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      const result = await this.db.execute(
+        sql`SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm'`,
+      );
+      if (result.length === 0) {
+        this.logger.warn(
+          'pg_trgm extension is not installed — fuzzy game matching (trigram similarity) will be unavailable. ' +
+            'Install with: CREATE EXTENSION IF NOT EXISTS pg_trgm;',
+        );
+      } else {
+        this.logger.log(
+          'pg_trgm extension detected — fuzzy game matching enabled',
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to check for pg_trgm extension: ${err instanceof Error ? err.message : err}`,
+      );
+    }
+  }
 
   /**
    * Set a manual game override for a user (via /playing command).
@@ -156,9 +184,9 @@ export class PresenceGameDetectorService {
     const totalMembers = members.length;
     const groupArray = [...groups.values()];
 
-    // Check if any single game has 50%+ majority
+    // Check if any single game has a strict majority (>50%)
     const majorityGroup = groupArray.find(
-      (g) => g.memberIds.length >= totalMembers / 2 && g.gameId !== null,
+      (g) => g.memberIds.length > totalMembers / 2 && g.gameId !== null,
     );
 
     if (majorityGroup) {

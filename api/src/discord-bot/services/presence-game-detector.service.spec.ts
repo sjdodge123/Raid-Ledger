@@ -24,10 +24,12 @@ describe('PresenceGameDetectorService', () => {
 
   // Use a custom mock to control .limit() return values per query step
   let mockLimitFn: jest.Mock;
+  let mockExecuteFn: jest.Mock;
   let mockDb: object;
 
   beforeEach(async () => {
     mockLimitFn = jest.fn();
+    mockExecuteFn = jest.fn().mockResolvedValue([{ '?column?': 1 }]);
 
     // All select queries resolve through .limit()
     const selectChain = {
@@ -40,6 +42,7 @@ describe('PresenceGameDetectorService', () => {
 
     mockDb = {
       select: jest.fn().mockReturnValue(selectChain),
+      execute: mockExecuteFn,
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -50,6 +53,43 @@ describe('PresenceGameDetectorService', () => {
     }).compile();
 
     service = module.get(PresenceGameDetectorService);
+  });
+
+  // ─── onModuleInit: pg_trgm check ─────────────────────────────────────────
+
+  describe('onModuleInit', () => {
+    it('logs success when pg_trgm extension is installed', async () => {
+      mockExecuteFn.mockResolvedValueOnce([{ '?column?': 1 }]);
+
+      const logSpy = jest.spyOn(service['logger'], 'log');
+      await service.onModuleInit();
+
+      expect(logSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pg_trgm extension detected'),
+      );
+    });
+
+    it('logs warning when pg_trgm extension is not installed', async () => {
+      mockExecuteFn.mockResolvedValueOnce([]);
+
+      const warnSpy = jest.spyOn(service['logger'], 'warn');
+      await service.onModuleInit();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('pg_trgm extension is not installed'),
+      );
+    });
+
+    it('logs warning when pg_trgm check query fails', async () => {
+      mockExecuteFn.mockRejectedValueOnce(new Error('connection refused'));
+
+      const warnSpy = jest.spyOn(service['logger'], 'warn');
+      await service.onModuleInit();
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to check for pg_trgm extension'),
+      );
+    });
   });
 
   // ─── Manual Override ───────────────────────────────────────────────────────
@@ -301,8 +341,8 @@ describe('PresenceGameDetectorService', () => {
       });
     });
 
-    it('returns majority game when 50%+ play the same game', async () => {
-      // u1, u2 play WoW, u3 plays Minecraft → WoW has majority (2/3 >= 50%)
+    it('returns majority game when >50% play the same game', async () => {
+      // u1, u2 play WoW, u3 plays Minecraft → WoW has strict majority (2/3 > 50%)
       // resolveGame calls: u1-WoW (mapping hit), u2-WoW (cache), u3-Minecraft (mapping)
       mockLimitFn
         .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }]) // u1 mapping
@@ -376,23 +416,42 @@ describe('PresenceGameDetectorService', () => {
 
     it('respects manual overrides during group detection', async () => {
       service.setManualOverride('u1', 'Minecraft');
+      service.setManualOverride('u2', 'Minecraft');
 
-      // u1 manual override: Minecraft. u2 has no activity.
-      mockLimitFn.mockResolvedValueOnce([{ gameId: 5, gameName: 'Minecraft' }]); // resolve 'Minecraft' for u1
+      // u1 + u2 manual override: Minecraft. u3 has no activity.
+      mockLimitFn.mockResolvedValueOnce([{ gameId: 5, gameName: 'Minecraft' }]); // resolve 'Minecraft' for u1 (u2 cached)
 
       const members = [
         makeMember('u1', 'WoW'), // presence says WoW but manual override wins
-        makeMember('u2'), // no game
+        makeMember('u2', 'WoW'), // presence says WoW but manual override wins
+        makeMember('u3'), // no game
       ];
 
       const result = await service.detectGames(members as any[]);
 
-      // u1 has Minecraft override (gameId 5), u2 has null → Minecraft is majority (1/2 = 50%)
+      // u1+u2 have Minecraft override (gameId 5), u3 has null → Minecraft is strict majority (2/3 > 50%)
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({ gameId: 5, gameName: 'Minecraft' });
     });
 
-    it('majority check requires 50%+ AND a non-null gameId', async () => {
+    it('splits when exactly 50% play the same game (no strict majority)', async () => {
+      // 2 members: u1 plays WoW, u2 plays FFXIV → each has 1/2 = 50%, no strict majority
+      mockLimitFn
+        .mockResolvedValueOnce([{ gameId: 1, gameName: 'WoW' }])
+        .mockResolvedValueOnce([{ gameId: 2, gameName: 'FFXIV' }]);
+
+      const members = [makeMember('u1', 'WoW'), makeMember('u2', 'FFXIV')];
+
+      const result = await service.detectGames(members as any[]);
+
+      // Neither game has >50% — should split into 2 groups
+      expect(result).toHaveLength(2);
+      const gameIds = result.map((g) => g.gameId);
+      expect(gameIds).toContain(1);
+      expect(gameIds).toContain(2);
+    });
+
+    it('majority check requires >50% AND a non-null gameId', async () => {
       // Even if 100% of members have null gameId, it should return Untitled
       // (not a "majority game" since gameId is null)
       const members = [makeMember('u1'), makeMember('u2'), makeMember('u3')];
