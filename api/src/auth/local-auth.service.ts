@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { eq, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { DrizzleAsyncProvider } from '../drizzle/drizzle.provider';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { localCredentials, users } from '../drizzle/schema';
 import * as schema from '../drizzle/schema';
 import type { UserRole } from '@raid-ledger/contract';
