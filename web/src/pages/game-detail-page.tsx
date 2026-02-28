@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { useGameDetail, useGameStreams } from '../hooks/use-games-discover';
+import { useGameDetail, useGameStreams, useGameActivity, useGameNowPlaying } from '../hooks/use-games-discover';
 import { useEvents } from '../hooks/use-events';
 import { useWantToPlay } from '../hooks/use-want-to-play';
 import { useAuth } from '../hooks/use-auth';
@@ -8,6 +9,8 @@ import { TwitchStreamEmbed } from '../components/games/TwitchStreamEmbed';
 import { EventCard } from '../components/events/event-card';
 import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars';
 import { GENRE_MAP } from '../lib/game-utils';
+import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import type { ActivityPeriod, GameTopPlayerDto, NowPlayingPlayerDto } from '@raid-ledger/contract';
 
 /** IGDB platform ID → display name (common ones) */
 const PLATFORM_MAP: Record<number, string> = {
@@ -21,6 +24,140 @@ const MODE_MAP: Record<number, string> = {
     1: 'Single Player', 2: 'Multiplayer', 3: 'Co-op',
     4: 'Split Screen', 5: 'MMO',
 };
+
+/** Format seconds as "Xh Ym" or "Xm" */
+function formatPlaytime(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) {
+        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+}
+
+const PERIOD_LABELS: { value: ActivityPeriod; label: string }[] = [
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' },
+    { value: 'all', label: 'All Time' },
+];
+
+/** Player avatar helper */
+function PlayerAvatar({ player, size = 'sm' }: { player: NowPlayingPlayerDto | GameTopPlayerDto; size?: 'sm' | 'md' }) {
+    const avatarInfo = resolveAvatar(toAvatarUser(player as { avatar: string | null; customAvatarUrl: string | null; discordId: string | null; username: string }));
+    const sizeClass = size === 'md' ? 'w-8 h-8' : 'w-6 h-6';
+    if (avatarInfo.url) {
+        return (
+            <img
+                src={avatarInfo.url}
+                alt={player.username}
+                className={`${sizeClass} rounded-full object-cover`}
+            />
+        );
+    }
+    return (
+        <div className={`${sizeClass} rounded-full bg-overlay flex items-center justify-center text-xs text-muted`}>
+            {player.username.charAt(0).toUpperCase()}
+        </div>
+    );
+}
+
+/** ROK-443: Community activity section for game detail page */
+function CommunityActivitySection({ gameId }: { gameId: number }) {
+    const [period, setPeriod] = useState<ActivityPeriod>('week');
+    const { data: activityData, isLoading: activityLoading } = useGameActivity(gameId, period);
+    const { data: nowPlayingData } = useGameNowPlaying(gameId);
+
+    const topPlayers = activityData?.topPlayers ?? [];
+    const totalSeconds = activityData?.totalSeconds ?? 0;
+    const nowPlaying = nowPlayingData?.players ?? [];
+    const nowPlayingCount = nowPlayingData?.count ?? 0;
+
+    const hasAnyData = topPlayers.length > 0 || nowPlayingCount > 0;
+
+    if (!hasAnyData && !activityLoading) {
+        return null;
+    }
+
+    return (
+        <section className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold text-foreground">
+                    Community Activity
+                </h2>
+                <div className="flex gap-1">
+                    {PERIOD_LABELS.map((p) => (
+                        <button
+                            key={p.value}
+                            onClick={() => setPeriod(p.value)}
+                            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                                period === p.value
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-overlay text-muted hover:text-foreground'
+                            }`}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {/* Now Playing */}
+            {nowPlayingCount > 0 && (
+                <div className="bg-panel border border-edge rounded-lg p-4 mb-4">
+                    <div className="flex items-center gap-3">
+                        <div className="flex -space-x-2">
+                            {nowPlaying.slice(0, 6).map((player) => (
+                                <Link key={player.userId} to={`/players/${player.userId}`}>
+                                    <PlayerAvatar player={player} size="md" />
+                                </Link>
+                            ))}
+                        </div>
+                        <span className="text-sm text-emerald-400 font-medium">
+                            {nowPlayingCount} playing now
+                        </span>
+                    </div>
+                </div>
+            )}
+
+            {/* Total community hours */}
+            {totalSeconds > 0 && (
+                <div className="text-sm text-muted mb-3">
+                    {formatPlaytime(totalSeconds)} total community playtime
+                </div>
+            )}
+
+            {/* Top Players */}
+            {activityLoading ? (
+                <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-12 bg-overlay rounded-lg animate-pulse" />
+                    ))}
+                </div>
+            ) : topPlayers.length > 0 ? (
+                <div className="space-y-2">
+                    {topPlayers.map((player, idx) => (
+                        <Link
+                            key={player.userId}
+                            to={`/players/${player.userId}`}
+                            className="flex items-center gap-3 bg-panel border border-edge rounded-lg p-3 hover:opacity-80 transition-opacity"
+                        >
+                            <span className="text-xs text-muted w-5 text-right">
+                                #{idx + 1}
+                            </span>
+                            <PlayerAvatar player={player} size="md" />
+                            <span className="font-medium text-foreground flex-1 truncate">
+                                {player.username}
+                            </span>
+                            <span className="text-sm text-muted">
+                                {formatPlaytime(player.totalSeconds)}
+                            </span>
+                        </Link>
+                    ))}
+                </div>
+            ) : null}
+        </section>
+    );
+}
 
 export function GameDetailPage() {
     const { id } = useParams<{ id: string }>();
@@ -224,6 +361,9 @@ export function GameDetailPage() {
                     )}
                 </div>
             )}
+
+            {/* Community Activity (ROK-443) */}
+            {gameId && <CommunityActivitySection gameId={gameId} />}
 
             {/* Upcoming Events */}
             {gameEvents && gameEvents.length > 0 && (

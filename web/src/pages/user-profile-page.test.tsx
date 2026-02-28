@@ -11,6 +11,9 @@ import type { UserProfileDto, CharacterDto, UserHeartedGameDto } from '@raid-led
 // Mock the hooks
 vi.mock('../hooks/use-user-profile');
 vi.mock('../hooks/use-game-registry');
+vi.mock('../hooks/use-auth', () => ({
+    useAuth: () => ({ user: null, isLoading: false, isAuthenticated: false }),
+}));
 
 const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-1',
@@ -98,6 +101,13 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
         // Default mock for event signups
         vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
             data: { data: [], total: 0 },
+            isLoading: false,
+            error: null,
+        } as any);
+
+        // Default mock for user activity (ROK-443)
+        vi.spyOn(useUserProfileHook, 'useUserActivity').mockReturnValue({
+            data: { data: [], period: 'week' },
             isLoading: false,
             error: null,
         } as any);

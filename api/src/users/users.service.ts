@@ -3,7 +3,11 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { eq, sql, ilike, asc, and, gte, desc, ne } from 'drizzle-orm';
-import type { UserRole } from '@raid-ledger/contract';
+import type {
+  UserRole,
+  ActivityPeriod,
+  GameActivityEntryDto,
+} from '@raid-ledger/contract';
 import { buildWordMatchFilters } from '../common/search.util';
 
 /** Number of days to look back for "recently joined" users. */
@@ -470,6 +474,101 @@ export class UsersService {
       .orderBy(asc(schema.games.name));
 
     return rows;
+  }
+
+  /**
+   * ROK-443: Fetch a user's game activity (recently played games).
+   * Respects show_activity privacy preference.
+   */
+  async getUserActivity(
+    userId: number,
+    period: ActivityPeriod,
+    requesterId?: number,
+  ): Promise<GameActivityEntryDto[]> {
+    // Check privacy — if show_activity is false and requester is not the user, return empty
+    if (requesterId !== userId) {
+      const pref = await this.db.query.userPreferences.findFirst({
+        where: and(
+          eq(schema.userPreferences.userId, userId),
+          eq(schema.userPreferences.key, 'show_activity'),
+        ),
+      });
+      if (pref && pref.value === false) {
+        return [];
+      }
+    }
+
+    let rows: {
+      gameId: number;
+      gameName: string;
+      coverUrl: string | null;
+      totalSeconds: number;
+    }[];
+
+    if (period === 'all') {
+      // Sum across all rollup rows grouped by game
+      rows = await this.db
+        .select({
+          gameId: schema.gameActivityRollups.gameId,
+          gameName: schema.games.name,
+          coverUrl: schema.games.coverUrl,
+          totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
+        })
+        .from(schema.gameActivityRollups)
+        .innerJoin(
+          schema.games,
+          eq(schema.gameActivityRollups.gameId, schema.games.id),
+        )
+        .where(eq(schema.gameActivityRollups.userId, userId))
+        .groupBy(
+          schema.gameActivityRollups.gameId,
+          schema.games.name,
+          schema.games.coverUrl,
+        )
+        .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
+        .limit(20);
+    } else {
+      // Filter by period and current period start
+      const periodFilter = period === 'week' ? 'week' : 'month';
+      const truncFn = period === 'week' ? 'week' : 'month';
+      rows = await this.db
+        .select({
+          gameId: schema.gameActivityRollups.gameId,
+          gameName: schema.games.name,
+          coverUrl: schema.games.coverUrl,
+          totalSeconds: sql<number>`sum(${schema.gameActivityRollups.totalSeconds})::int`,
+        })
+        .from(schema.gameActivityRollups)
+        .innerJoin(
+          schema.games,
+          eq(schema.gameActivityRollups.gameId, schema.games.id),
+        )
+        .where(
+          and(
+            eq(schema.gameActivityRollups.userId, userId),
+            eq(schema.gameActivityRollups.period, periodFilter),
+            gte(
+              schema.gameActivityRollups.periodStart,
+              sql`date_trunc(${truncFn}, now())::date`,
+            ),
+          ),
+        )
+        .groupBy(
+          schema.gameActivityRollups.gameId,
+          schema.games.name,
+          schema.games.coverUrl,
+        )
+        .orderBy(desc(sql`sum(${schema.gameActivityRollups.totalSeconds})`))
+        .limit(20);
+    }
+
+    return rows.map((row, idx) => ({
+      gameId: row.gameId,
+      gameName: row.gameName,
+      coverUrl: row.coverUrl,
+      totalSeconds: row.totalSeconds,
+      isMostPlayed: idx === 0,
+    }));
   }
 
   /**
