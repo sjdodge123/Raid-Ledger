@@ -14,6 +14,7 @@ import { AvatarSelectorModal } from '../../components/profile/AvatarSelectorModa
 import { Modal } from '../../components/ui/modal';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
 import { getMyPreferences, updatePreference, deleteMyAccount } from '../../lib/api-client';
+import { API_BASE_URL } from '../../lib/config';
 
 function buildAvatarOptions(user: { discordId: string | null; avatar: string | null; customAvatarUrl: string | null }, characters: { avatarUrl: string | null; name: string }[]) {
     const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
