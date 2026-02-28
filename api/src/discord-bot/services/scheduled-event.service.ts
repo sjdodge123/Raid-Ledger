@@ -100,6 +100,29 @@ export class ScheduledEventService {
         return;
       }
 
+      // Diagnostic: check bot's effective permissions on the voice channel
+      try {
+        const voiceChannel = guild.channels?.cache?.get(voiceChannelId);
+        if (voiceChannel) {
+          const me = guild.members?.me;
+          if (me) {
+            const perms = voiceChannel.permissionsFor(me);
+            const hasManageEvents = perms?.has('ManageEvents') ?? false;
+            const hasConnect = perms?.has('Connect') ?? false;
+            const hasViewChannel = perms?.has('ViewChannel') ?? false;
+            this.logger.debug(
+              `Channel ${voiceChannelId} (${voiceChannel.name}) permissions: ManageEvents=${hasManageEvents}, Connect=${hasConnect}, ViewChannel=${hasViewChannel}`,
+            );
+          }
+        } else {
+          this.logger.debug(
+            `Voice channel ${voiceChannelId} not in cache — may be inaccessible`,
+          );
+        }
+      } catch {
+        // Non-critical diagnostic — don't block event creation
+      }
+
       const description = await this.buildDescription(eventId, eventData);
 
       this.logger.debug(
