@@ -291,6 +291,56 @@ export class DiscordBotSettingsController {
   }
 
   /**
+   * ROK-471: List voice channels available in the guild.
+   */
+  @Get('voice-channels')
+  getVoiceChannels(): { id: string; name: string }[] {
+    return this.discordBotClientService.getVoiceChannels();
+  }
+
+  /**
+   * ROK-471: Get default voice channel for Discord Scheduled Events.
+   */
+  @Get('voice-channel')
+  async getDefaultVoiceChannel(): Promise<{ channelId: string | null }> {
+    const channelId =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    return { channelId };
+  }
+
+  /**
+   * ROK-471: Set default voice channel for Discord Scheduled Events.
+   */
+  @Put('voice-channel')
+  @HttpCode(HttpStatus.OK)
+  async setDefaultVoiceChannel(
+    @Body() body: unknown,
+  ): Promise<{ success: boolean; message: string }> {
+    if (
+      !body ||
+      typeof body !== 'object' ||
+      !('channelId' in body) ||
+      typeof (body as Record<string, unknown>).channelId !== 'string' ||
+      !(body as Record<string, unknown>).channelId
+    ) {
+      throw new BadRequestException(
+        'channelId is required and must be a non-empty string',
+      );
+    }
+
+    await this.settingsService.setDiscordBotDefaultVoiceChannel(
+      (body as Record<string, unknown>).channelId as string,
+    );
+
+    this.logger.log('Discord bot default voice channel updated via admin UI');
+
+    return {
+      success: true,
+      message: 'Default voice channel updated.',
+    };
+  }
+
+  /**
    * ROK-293: Get ad-hoc events enabled status.
    */
   @Get('ad-hoc')

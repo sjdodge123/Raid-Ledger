@@ -54,6 +54,7 @@ import { EventLinkListener } from './listeners/event-link.listener';
 import { DiscordEmojiService } from './services/discord-emoji.service';
 import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
+import { ScheduledEventService } from './services/scheduled-event.service';
 
 @Module({
   imports: [
@@ -102,6 +103,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,
+    ScheduledEventService,
     RegisterCommandsService,
     EventCreateCommand,
     EventsListCommand,

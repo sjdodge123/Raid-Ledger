@@ -12,6 +12,7 @@ import {
 } from '../services/discord-embed.factory';
 import { SettingsService } from '../../settings/settings.service';
 import { EmbedPosterService } from '../services/embed-poster.service';
+import { ScheduledEventService } from '../services/scheduled-event.service';
 import { GameAffinityNotificationService } from '../../notifications/game-affinity-notification.service';
 import { APP_EVENT_EVENTS, EMBED_STATES } from '../discord-bot.constants';
 import {
@@ -54,6 +55,7 @@ export class DiscordEventListener {
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly embedPoster: EmbedPosterService,
     private readonly settingsService: SettingsService,
+    private readonly scheduledEventService: ScheduledEventService,
     @Optional()
     @Inject(GameAffinityNotificationService)
     private readonly gameAffinityNotificationService: GameAffinityNotificationService | null,
@@ -97,6 +99,20 @@ export class DiscordEventListener {
       payload.gameId,
       payload.recurrenceGroupId,
     );
+
+    // ROK-471: Create Discord Scheduled Event (fire-and-forget)
+    this.scheduledEventService
+      .createScheduledEvent(
+        payload.eventId,
+        payload.event,
+        payload.gameId,
+        payload.isAdHoc,
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to create scheduled event for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
 
     // ROK-440: Notify users with game affinity AFTER embed is successfully posted
     if (
@@ -148,6 +164,20 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.UPDATED)
   async handleEventUpdated(payload: EventPayload): Promise<void> {
+    // ROK-471: Update Discord Scheduled Event (fire-and-forget, runs in parallel with embed update)
+    this.scheduledEventService
+      .updateScheduledEvent(
+        payload.eventId,
+        payload.event,
+        payload.gameId,
+        payload.isAdHoc,
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to update scheduled event for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+
     if (!this.clientService.isConnected()) return;
 
     const guildId = this.clientService.getGuildId();
@@ -229,6 +259,15 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.CANCELLED)
   async handleEventCancelled(payload: EventPayload): Promise<void> {
+    // ROK-471: Delete Discord Scheduled Event on cancel (fire-and-forget)
+    this.scheduledEventService
+      .deleteScheduledEvent(payload.eventId)
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `Failed to delete scheduled event for cancelled event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
+
     if (!this.clientService.isConnected()) return;
 
     const guildId = this.clientService.getGuildId();
@@ -283,6 +322,10 @@ export class DiscordEventListener {
 
   @OnEvent(APP_EVENT_EVENTS.DELETED)
   async handleEventDeleted(payload: { eventId: number }): Promise<void> {
+    // ROK-471: Delete Discord Scheduled Event BEFORE DB delete
+    // (event.deleted is emitted before DB row removal — confirmed safe)
+    await this.scheduledEventService.deleteScheduledEvent(payload.eventId);
+
     if (!this.clientService.isConnected()) return;
 
     const guildId = this.clientService.getGuildId();

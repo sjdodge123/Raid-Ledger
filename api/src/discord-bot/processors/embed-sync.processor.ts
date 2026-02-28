@@ -11,6 +11,7 @@ import {
   type EmbedEventData,
   type EmbedContext,
 } from '../services/discord-embed.factory';
+import { ScheduledEventService } from '../services/scheduled-event.service';
 import { SettingsService } from '../../settings/settings.service';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import {
@@ -38,6 +39,7 @@ export class EmbedSyncProcessor extends WorkerHost {
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly settingsService: SettingsService,
+    private readonly scheduledEventService: ScheduledEventService,
   ) {
     super();
   }
@@ -143,6 +145,15 @@ export class EmbedSyncProcessor extends WorkerHost {
       this.logger.log(
         `Synced embed for event ${eventId} (state: ${newState}, reason: ${reason})`,
       );
+
+      // ROK-471: Update Discord Scheduled Event description with new signup count
+      this.scheduledEventService
+        .updateDescription(eventId, eventData)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to update scheduled event description for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          );
+        });
     } catch (error) {
       this.logger.error(
         `Failed to sync embed for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,

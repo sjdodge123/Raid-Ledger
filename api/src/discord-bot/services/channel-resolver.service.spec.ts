@@ -19,12 +19,15 @@ describe('ChannelResolverService', () => {
           provide: SettingsService,
           useValue: {
             getDiscordBotDefaultChannel: jest.fn(),
+            getDiscordBotDefaultVoiceChannel: jest.fn().mockResolvedValue(null),
           },
         },
         {
           provide: ChannelBindingsService,
           useValue: {
             getChannelForGame: jest.fn(),
+            getChannelForSeries: jest.fn().mockResolvedValue(null),
+            getVoiceChannelForGame: jest.fn().mockResolvedValue(null),
           },
         },
         {
@@ -107,5 +110,76 @@ describe('ChannelResolverService', () => {
 
     expect(result).toBe('default-channel');
     expect(bindingsService.getChannelForGame).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // ROK-471: resolveVoiceChannelForScheduledEvent — 3-tier fallback
+  // ---------------------------------------------------------------------------
+  describe('resolveVoiceChannelForScheduledEvent', () => {
+    it('returns game-specific voice binding when one is configured (Tier 1/2)', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice-ch');
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(99);
+
+      expect(result).toBe('game-voice-ch');
+      // App setting (Tier 3) should NOT be consulted
+      expect(settingsService.getDiscordBotDefaultVoiceChannel).not.toHaveBeenCalled();
+    });
+
+    it('falls back to app setting when no game voice binding exists (Tier 3)', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue(null);
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(
+        'app-default-voice',
+      );
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(99);
+
+      expect(result).toBe('app-default-voice');
+    });
+
+    it('returns null when no voice channel is configured at any tier', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue(null);
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(null);
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(99);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when no guild ID is available', async () => {
+      clientService.getGuildId.mockReturnValue(null);
+      bindingsService.getVoiceChannelForGame.mockResolvedValue(null);
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(null);
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(99);
+
+      expect(result).toBeNull();
+    });
+
+    it('returns null when gameId is null and no app setting configured', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue(null);
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(null);
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(null);
+
+      expect(result).toBeNull();
+    });
+
+    it('prefers game binding over app setting when both exist', async () => {
+      clientService.getGuildId.mockReturnValue('guild-123');
+      bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice');
+      settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(
+        'app-default-voice',
+      );
+
+      const result = await service.resolveVoiceChannelForScheduledEvent(99);
+
+      expect(result).toBe('game-voice');
+      expect(settingsService.getDiscordBotDefaultVoiceChannel).not.toHaveBeenCalled();
+    });
   });
 });

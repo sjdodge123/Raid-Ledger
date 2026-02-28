@@ -32,6 +32,7 @@ describe('DiscordBotSettingsController', () => {
           provide: DiscordBotClientService,
           useValue: {
             getTextChannels: jest.fn(),
+            getVoiceChannels: jest.fn(),
             isConnected: jest.fn().mockReturnValue(true),
           },
         },
@@ -56,6 +57,10 @@ describe('DiscordBotSettingsController', () => {
             clearDiscordBotConfig: jest.fn(),
             getDiscordBotDefaultChannel: jest.fn(),
             setDiscordBotDefaultChannel: jest.fn(),
+            getDiscordBotDefaultVoiceChannel: jest.fn(),
+            setDiscordBotDefaultVoiceChannel: jest.fn(),
+            getAdHocEventsEnabled: jest.fn(),
+            setAdHocEventsEnabled: jest.fn(),
           },
         },
         {
@@ -436,6 +441,117 @@ describe('DiscordBotSettingsController', () => {
       await expect(controller.setDefaultChannel(null)).rejects.toThrow(
         BadRequestException,
       );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // ROK-471: Voice channel endpoints
+  // ---------------------------------------------------------------------------
+  describe('getVoiceChannels', () => {
+    it('should return voice channels from the client service (AC-8)', () => {
+      const mockVoiceChannels = [
+        { id: '111', name: 'General Voice' },
+        { id: '222', name: 'Raid Voice' },
+      ];
+      jest
+        .spyOn(discordBotClientService, 'getVoiceChannels')
+        .mockReturnValue(mockVoiceChannels);
+
+      const result = controller.getVoiceChannels();
+
+      expect(result).toEqual(mockVoiceChannels);
+      expect(discordBotClientService.getVoiceChannels).toHaveBeenCalled();
+    });
+
+    it('should return empty array when bot is not connected', () => {
+      jest
+        .spyOn(discordBotClientService, 'getVoiceChannels')
+        .mockReturnValue([]);
+
+      const result = controller.getVoiceChannels();
+
+      expect(result).toEqual([]);
+    });
+  });
+
+  describe('getDefaultVoiceChannel', () => {
+    it('should return the configured default voice channel ID (AC-8)', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
+        .mockResolvedValue('voice-ch-123');
+
+      const result = await controller.getDefaultVoiceChannel();
+
+      expect(result).toEqual({ channelId: 'voice-ch-123' });
+    });
+
+    it('should return null when no default voice channel is set', async () => {
+      jest
+        .spyOn(settingsService, 'getDiscordBotDefaultVoiceChannel')
+        .mockResolvedValue(null);
+
+      const result = await controller.getDefaultVoiceChannel();
+
+      expect(result).toEqual({ channelId: null });
+    });
+  });
+
+  describe('setDefaultVoiceChannel', () => {
+    it('should set the default voice channel and return success (AC-8)', async () => {
+      jest
+        .spyOn(settingsService, 'setDiscordBotDefaultVoiceChannel')
+        .mockResolvedValue(undefined);
+
+      const result = await controller.setDefaultVoiceChannel({
+        channelId: 'voice-ch-456',
+      });
+
+      expect(settingsService.setDiscordBotDefaultVoiceChannel).toHaveBeenCalledWith(
+        'voice-ch-456',
+      );
+      expect(result).toEqual({
+        success: true,
+        message: 'Default voice channel updated.',
+      });
+    });
+
+    it('should throw BadRequestException when channelId is missing', async () => {
+      await expect(
+        controller.setDefaultVoiceChannel({}),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        settingsService.setDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when channelId is empty string', async () => {
+      await expect(
+        controller.setDefaultVoiceChannel({ channelId: '' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        settingsService.setDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when channelId is not a string', async () => {
+      await expect(
+        controller.setDefaultVoiceChannel({ channelId: 123 }),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        settingsService.setDiscordBotDefaultVoiceChannel,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should throw BadRequestException when body is null', async () => {
+      await expect(
+        controller.setDefaultVoiceChannel(null),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when body is undefined', async () => {
+      await expect(
+        controller.setDefaultVoiceChannel(undefined),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

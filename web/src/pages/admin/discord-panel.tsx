@@ -35,7 +35,7 @@ interface TabDef {
  */
 export function DiscordPanel() {
     const [activeTab, setActiveTab] = useState<DiscordTab>('auth');
-    const { oauthStatus, discordBotStatus, discordChannels, discordDefaultChannel, setDiscordChannel, adHocEventsStatus, updateAdHocEvents } = useAdminSettings();
+    const { oauthStatus, discordBotStatus, discordChannels, discordDefaultChannel, setDiscordChannel, discordVoiceChannels, discordDefaultVoiceChannel, setDiscordVoiceChannel, adHocEventsStatus, updateAdHocEvents } = useAdminSettings();
     const { user } = useAuth();
     const { bindings, updateBinding, deleteBinding } = useChannelBindings();
 
@@ -262,6 +262,37 @@ export function DiscordPanel() {
                                 ))}
                             </select>
                             <p className="text-xs text-secondary mt-1.5">Fallback channel for event embeds when no game-specific binding is set</p>
+                        </div>
+                    )}
+
+                    {/* Default Voice Channel (ROK-471: Scheduled Events fallback) */}
+                    {isBotConnected && discordVoiceChannels.data && discordVoiceChannels.data.length > 0 && (
+                        <div className="bg-surface border border-edge-subtle rounded-xl p-6">
+                            <label htmlFor="discordVoiceChannel" className="block text-sm font-medium text-secondary mb-1.5">
+                                Default Voice Channel
+                            </label>
+                            <select
+                                id="discordVoiceChannel"
+                                value={discordDefaultVoiceChannel.data?.channelId ?? ''}
+                                onChange={async (e) => {
+                                    if (e.target.value) {
+                                        try {
+                                            await setDiscordVoiceChannel.mutateAsync(e.target.value);
+                                            toast.success('Default voice channel updated');
+                                        } catch {
+                                            toast.error('Failed to update default voice channel');
+                                        }
+                                    }
+                                }}
+                                disabled={setDiscordVoiceChannel.isPending}
+                                className="w-full px-4 py-3 bg-surface/50 border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                            >
+                                <option value="" disabled>Select a voice channel...</option>
+                                {discordVoiceChannels.data.map((ch: { id: string; name: string }) => (
+                                    <option key={ch.id} value={ch.id}>{ch.name}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-secondary mt-1.5">Fallback voice channel for Discord Scheduled Events when no game-specific voice binding is set</p>
                         </div>
                     )}
 

@@ -53,6 +53,10 @@ const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
     label: 'Create Guild Expressions',
     flag: PermissionsBitField.Flags.CreateGuildExpressions,
   },
+  {
+    label: 'Manage Events',
+    flag: PermissionsBitField.Flags.ManageEvents,
+  },
 ];
 
 @Injectable()

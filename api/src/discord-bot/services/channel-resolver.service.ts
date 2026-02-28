@@ -86,4 +86,29 @@ export class ChannelResolverService {
 
     return this.channelBindingsService.getVoiceChannelForGame(guildId, gameId);
   }
+
+  /**
+   * Resolve voice channel for Discord Scheduled Events (ROK-471).
+   * 3-tier fallback: game-specific binding -> default binding -> app setting.
+   * @param gameId - Games table PK (integer) for game-specific binding lookup
+   * @returns Voice channel ID string or null if none configured
+   */
+  async resolveVoiceChannelForScheduledEvent(
+    gameId?: number | null,
+  ): Promise<string | null> {
+    // Tier 1 + 2: Game-specific voice binding, then any voice monitor binding
+    const voiceChannel = await this.resolveVoiceChannelForEvent(gameId);
+    if (voiceChannel) return voiceChannel;
+
+    // Tier 3: App setting fallback
+    const defaultVoice =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    if (defaultVoice) return defaultVoice;
+
+    this.logger.warn(
+      'No voice channel configured for Discord Scheduled Event. ' +
+        'Set a default voice channel in the Discord bot settings or bind a voice channel with /bind.',
+    );
+    return null;
+  }
 }
