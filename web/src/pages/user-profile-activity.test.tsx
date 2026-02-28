@@ -16,6 +16,9 @@ import type { UserProfileDto, GameActivityEntryDto } from '@raid-ledger/contract
 // Mock the hooks used by the page
 vi.mock('../hooks/use-user-profile');
 vi.mock('../hooks/use-game-registry');
+vi.mock('../hooks/use-auth', () => ({
+    useAuth: () => ({ user: null, isLoading: false, isAuthenticated: false }),
+}));
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 

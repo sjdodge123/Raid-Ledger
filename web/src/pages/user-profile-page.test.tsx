@@ -11,6 +11,9 @@ import type { UserProfileDto, CharacterDto, UserHeartedGameDto } from '@raid-led
 // Mock the hooks
 vi.mock('../hooks/use-user-profile');
 vi.mock('../hooks/use-game-registry');
+vi.mock('../hooks/use-auth', () => ({
+    useAuth: () => ({ user: null, isLoading: false, isAuthenticated: false }),
+}));
 
 const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
     id: 'char-uuid-1',

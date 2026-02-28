@@ -3,10 +3,7 @@
  * Tests request parsing, period validation, 404 handling, and privacy delegation.
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  BadRequestException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { AvatarService } from './avatar.service';
@@ -16,9 +13,7 @@ import { CharactersService } from '../characters/characters.service';
 import { EventsService } from '../events/events.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
-import {
-  UserActivityResponseSchema,
-} from '@raid-ledger/contract';
+import { UserActivityResponseSchema } from '@raid-ledger/contract';
 
 describe('UsersController.getUserActivity (ROK-443)', () => {
   let controller: UsersController;
@@ -121,7 +116,9 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
         },
         {
           provide: ChannelResolverService,
-          useValue: { resolveChannelForEvent: jest.fn().mockResolvedValue(null) },
+          useValue: {
+            resolveChannelForEvent: jest.fn().mockResolvedValue(null),
+          },
         },
       ],
     }).compile();
@@ -222,7 +219,9 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
   describe('response shape', () => {
     it('should return data and period in response', async () => {
       jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
-      jest.spyOn(usersService, 'getUserActivity').mockResolvedValue(mockActivityEntries);
+      jest
+        .spyOn(usersService, 'getUserActivity')
+        .mockResolvedValue(mockActivityEntries);
 
       const result = await controller.getUserActivity(1, 'week', undefined);
 
@@ -233,7 +232,9 @@ describe('UsersController.getUserActivity (ROK-443)', () => {
 
     it('should validate against UserActivityResponseSchema', async () => {
       jest.spyOn(usersService, 'findById').mockResolvedValue(mockUser as never);
-      jest.spyOn(usersService, 'getUserActivity').mockResolvedValue(mockActivityEntries);
+      jest
+        .spyOn(usersService, 'getUserActivity')
+        .mockResolvedValue(mockActivityEntries);
 
       const result = await controller.getUserActivity(1, 'month', undefined);
 
