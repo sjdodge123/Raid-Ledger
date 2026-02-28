@@ -170,7 +170,7 @@ describe('useConnectivityStore', () => {
             expect(mockFetch).toHaveBeenCalled();
         });
 
-        it('uses 30s interval when status is online', async () => {
+        it('uses 60s interval when status is online', async () => {
             const mockFetch = vi.fn().mockResolvedValue({ ok: true });
             vi.stubGlobal('fetch', mockFetch);
 
@@ -182,11 +182,11 @@ describe('useConnectivityStore', () => {
 
             const callCountAfterInit = mockFetch.mock.calls.length;
 
-            // Advance less than 30s — no new poll timer fires
-            await vi.advanceTimersByTimeAsync(29_000);
+            // Advance less than 60s — no new poll timer fires
+            await vi.advanceTimersByTimeAsync(59_000);
             expect(mockFetch.mock.calls.length).toBe(callCountAfterInit);
 
-            // Cross the 30s threshold — the next poll timer fires
+            // Cross the 60s threshold — the next poll timer fires
             await vi.advanceTimersByTimeAsync(1_001);
             // Flush the promise from that poll
             await Promise.resolve();
@@ -197,7 +197,7 @@ describe('useConnectivityStore', () => {
             stop();
         });
 
-        it('uses 3s interval when status is offline', async () => {
+        it('uses 3s initial interval when status is offline', async () => {
             // Start offline (2 failures already accumulated)
             useConnectivityStore.setState({
                 status: 'offline',
@@ -215,12 +215,139 @@ describe('useConnectivityStore', () => {
 
             const callCountAfterInit = mockFetch.mock.calls.length;
 
-            // Advance past 3s — the next poll timer fires
+            // Advance past 3s — the first offline poll timer fires
             await vi.advanceTimersByTimeAsync(3_001);
             await Promise.resolve();
             await Promise.resolve();
 
             expect(mockFetch.mock.calls.length).toBeGreaterThan(callCountAfterInit);
+
+            stop();
+        });
+
+        it('applies exponential backoff for offline polls (3s, 6s, 12s, 24s, capped at 30s)', async () => {
+            useConnectivityStore.setState({
+                status: 'offline',
+                consecutiveFailures: 2,
+                hasBeenOnline: false,
+            });
+            const mockFetch = vi.fn().mockResolvedValue({ ok: false });
+            vi.stubGlobal('fetch', mockFetch);
+
+            const stop = useConnectivityStore.getState().startPolling();
+
+            // Initial check
+            await Promise.resolve();
+            await Promise.resolve();
+            const callsAfterInit = mockFetch.mock.calls.length;
+
+            // 1st offline poll at 3s
+            await vi.advanceTimersByTimeAsync(3_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 1);
+
+            // 2nd offline poll at 6s (not before)
+            await vi.advanceTimersByTimeAsync(5_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 1); // not yet
+            await vi.advanceTimersByTimeAsync(1_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 2);
+
+            // 3rd offline poll at 12s
+            await vi.advanceTimersByTimeAsync(12_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 3);
+
+            // 4th offline poll at 24s
+            await vi.advanceTimersByTimeAsync(24_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 4);
+
+            // 5th offline poll capped at 30s (not 48s)
+            await vi.advanceTimersByTimeAsync(29_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 4); // not yet
+            await vi.advanceTimersByTimeAsync(1_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsAfterInit + 5);
+
+            stop();
+        });
+
+        it('resets backoff when recovering to online', async () => {
+            useConnectivityStore.setState({
+                status: 'offline',
+                consecutiveFailures: 2,
+                hasBeenOnline: true,
+            });
+
+            // Start with failures to build up backoff
+            const mockFetch = vi.fn().mockResolvedValue({ ok: false });
+            vi.stubGlobal('fetch', mockFetch);
+
+            const stop = useConnectivityStore.getState().startPolling();
+
+            // Initial check (still offline)
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // 1st offline poll at 3s
+            await vi.advanceTimersByTimeAsync(3_001);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // 2nd offline poll at 6s
+            await vi.advanceTimersByTimeAsync(6_001);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Now recover
+            mockFetch.mockResolvedValue({ ok: true });
+
+            // 3rd offline poll at 12s — this one succeeds, goes online
+            await vi.advanceTimersByTimeAsync(12_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(useConnectivityStore.getState().status).toBe('online');
+
+            // Next poll should use 60s online interval
+            const callsBeforeOnlinePoll = mockFetch.mock.calls.length;
+            await vi.advanceTimersByTimeAsync(59_000);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsBeforeOnlinePoll); // not yet
+
+            await vi.advanceTimersByTimeAsync(1_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBe(callsBeforeOnlinePoll + 1);
+
+            // Go offline again — should start backoff from 3s, not continue from 12s
+            mockFetch.mockResolvedValue({ ok: false });
+
+            // Let the online poll complete (which will fail now)
+            await vi.advanceTimersByTimeAsync(60_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(60_001);
+            await Promise.resolve();
+            await Promise.resolve();
+
+            // Now offline again — verify the next interval is 3s (reset backoff)
+            expect(useConnectivityStore.getState().status).toBe('offline');
+            const callsAfterOffline = mockFetch.mock.calls.length;
+            await vi.advanceTimersByTimeAsync(3_001);
+            await Promise.resolve();
+            await Promise.resolve();
+            expect(mockFetch.mock.calls.length).toBeGreaterThan(callsAfterOffline);
 
             stop();
         });
