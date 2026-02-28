@@ -18,16 +18,16 @@
  *    db.select({userId}).from(userPreferences).where(and(...))
  *    → terminates at .where() (no limit)
  *
- * 3. Existing interests:
- *    db.select({userId, gameId}).from(gameInterests)
- *    → terminates at .from() — no further chaining
+ * 3. Existing interests (scoped to candidate user IDs):
+ *    db.select({userId, gameId}).from(gameInterests).where(inArray(...))
+ *    → terminates at .where()
  *
- * 4. Suppressions:
- *    db.select({userId, gameId}).from(gameInterestSuppressions)
- *    → terminates at .from() — no further chaining
+ * 4. Suppressions (scoped to candidate user IDs):
+ *    db.select({userId, gameId}).from(gameInterestSuppressions).where(inArray(...))
+ *    → terminates at .where()
  *
- * 5. Insert:
- *    db.insert(gameInterests).values({...}).onConflictDoNothing()
+ * 5. Insert (batch):
+ *    db.insert(gameInterests).values([...]).onConflictDoNothing()
  *    → terminates at .onConflictDoNothing()
  */
 import { Test, TestingModule } from '@nestjs/testing';
@@ -63,60 +63,36 @@ function buildAutoHeartMockDb({
   const havingMock = jest.fn().mockResolvedValue(candidates);
   mockDb.having = havingMock;
 
-  // Opted-out query terminates at .where()
-  // Interests and suppressions terminate at .from()
-  // We need to sequence these because they all share the same mock methods.
+  // All 4 queries now terminate at .where() (candidates continues, others resolve):
   //
-  // Since the drizzle mock returns `this` for all chain methods,
-  // the sequence depends on which call to which terminal resolves what.
-  //
-  // Pattern: .from() is called for:
-  //   - interests query (3rd call to .from after select)
-  //   - suppressions query (4th call to .from after select)
-  //
-  // And .where() is called as terminal for:
-  //   - opted-out query (2nd call to .where — 1st is inside candidates' query chain)
-  //
-  // The flat mock shares `.where` across all chains. We need each to return
-  // the right value in sequence.
+  // Call 1: candidates query .where(...).groupBy(...).having(...)
+  //         → .where returns this (continues to .groupBy)
+  // Call 2: opted-out query's terminal .where(and(...))
+  //         → resolves to optedOut array
+  // Call 3: interests query's terminal .where(inArray(...))
+  //         → resolves to existingInterests
+  // Call 4: suppressions query's terminal .where(inArray(...))
+  //         → resolves to suppressions
 
   let whereCallCount = 0;
   mockDb.where = jest.fn().mockImplementation(() => {
     whereCallCount++;
-    // Call 1: candidates query's .where(...).groupBy(...).having(...)
-    //         → .where returns this (continues to .groupBy)
-    // Call 2: opted-out query's terminal .where(and(...))
-    //         → resolves to optedOut array
     if (whereCallCount === 1) {
       return mockDb; // candidates chain continues
     }
     if (whereCallCount === 2) {
       return Promise.resolve(optedOut);
     }
-    return mockDb;
-  });
-
-  let fromCallCount = 0;
-  mockDb.from = jest.fn().mockImplementation(() => {
-    fromCallCount++;
-    // from() calls:
-    //   1st: candidates query .from(gameActivitySessions) → chain continues
-    //   2nd: opted-out query .from(userPreferences) → chain continues (where is terminal)
-    //   3rd: interests query .from(gameInterests) → terminal (resolves)
-    //   4th: suppressions query .from(gameInterestSuppressions) → terminal (resolves)
-    if (fromCallCount <= 2) {
-      return mockDb;
-    }
-    if (fromCallCount === 3) {
+    if (whereCallCount === 3) {
       return Promise.resolve(existingInterests);
     }
-    if (fromCallCount === 4) {
+    if (whereCallCount === 4) {
       return Promise.resolve(suppressions);
     }
     return mockDb;
   });
 
-  // Insert terminates at onConflictDoNothing
+  // Insert terminates at onConflictDoNothing (single batch)
   mockDb.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
 
   return mockDb;
@@ -166,10 +142,10 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
 
       await service.autoHeartCheck();
 
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 1, gameId: 10, source: 'discord' }),
-      );
+      ]);
       expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
     });
 
@@ -187,7 +163,12 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
 
       await service.autoHeartCheck();
 
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
+      // Batch insert: single call with array of values
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+      expect(mockDb.values).toHaveBeenCalledWith([
+        expect.objectContaining({ userId: 1, gameId: 10, source: 'discord' }),
+        expect.objectContaining({ userId: 2, gameId: 20, source: 'discord' }),
+      ]);
     });
 
     it('uses onConflictDoNothing for idempotency', async () => {
@@ -237,9 +218,9 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
       await service.autoHeartCheck();
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 1, gameId: 10 }),
-      );
+      ]);
     });
   });
 
@@ -275,9 +256,9 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
       await service.autoHeartCheck();
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 1, gameId: 99 }),
-      );
+      ]);
     });
   });
 
@@ -313,9 +294,9 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
       await service.autoHeartCheck();
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 2, gameId: 10 }),
-      );
+      ]);
     });
 
     it('suppression is independent of opt-out toggle', async () => {
@@ -366,9 +347,9 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
       await service.autoHeartCheck();
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({ userId: 2, gameId: 5 }),
-      );
+      ]);
     });
   });
 
@@ -413,13 +394,13 @@ describe('GameActivityService — autoHeartCheck (ROK-444)', () => {
       await service.autoHeartCheck();
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.values).toHaveBeenCalledWith([
         expect.objectContaining({
           userId: 4,
           gameId: 40,
           source: 'discord',
         }),
-      );
+      ]);
     });
   });
 });

@@ -37,6 +37,8 @@ export default defineConfig({
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
           'query-vendor': ['@tanstack/react-query', 'zustand'],
           'calendar-vendor': ['react-big-calendar', 'date-fns'],
+          'sentry': ['@sentry/react'],
+          'socket': ['socket.io-client'],
         },
       },
     },

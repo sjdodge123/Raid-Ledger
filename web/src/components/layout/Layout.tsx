@@ -11,6 +11,7 @@ import { DiscordJoinBanner } from '../ui/DiscordJoinBanner';
 import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';
 import { usePluginHydration } from '../../hooks/use-plugins';
+import { useMediaQuery } from '../../hooks/use-media-query';
 
 interface LayoutProps {
     children: ReactNode;
@@ -26,6 +27,10 @@ interface LayoutProps {
 export function Layout({ children }: LayoutProps) {
     useThemeSync();
     usePluginHydration();
+
+    const isDesktop = useMediaQuery('(min-width: 1024px)');
+    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
+    const showSpaceEffects = isDesktop && prefersMotion;
 
     const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
     const openMoreDrawer = useCallback(() => setMoreDrawerOpen(true), []);
@@ -43,7 +48,7 @@ export function Layout({ children }: LayoutProps) {
     return (
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
             <CurrentUserAvatarSync />
-            <SpaceEffects />
+            {showSpaceEffects && <SpaceEffects />}
             <ImpersonationBanner />
             <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />

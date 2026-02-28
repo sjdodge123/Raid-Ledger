@@ -24,7 +24,7 @@ export const gameInterests = pgTable(
     gameId: integer('game_id')
       .references(() => games.id, { onDelete: 'cascade' })
       .notNull(),
-    /** Source of the interest: manual toggle or steam wishlist import */
+    /** Source of the interest. Valid values: 'manual', 'discord', 'steam' (enforced by DB CHECK constraint) */
     source: text('source').default('manual').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },

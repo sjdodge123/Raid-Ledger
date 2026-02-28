@@ -58,7 +58,11 @@ describe('DiscordBotSettingsController', () => {
             setDiscordBotDefaultVoiceChannel: jest.fn(),
             getAdHocEventsEnabled: jest.fn(),
             setAdHocEventsEnabled: jest.fn(),
-            getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Community', communityLogoPath: null, communityAccentColor: null }),
+            getBranding: jest.fn().mockResolvedValue({
+              communityName: 'Test Community',
+              communityLogoPath: null,
+              communityAccentColor: null,
+            }),
             getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
           },
         },
@@ -562,13 +566,20 @@ describe('DiscordBotSettingsController', () => {
     it('should delegate to discordBotService.getSetupStatus', async () => {
       const mockStatus = {
         steps: [
-          { key: 'oauth', label: 'Configure Discord OAuth', completed: true, settingsPath: '/admin/settings/discord/auth' },
+          {
+            key: 'oauth',
+            label: 'Configure Discord OAuth',
+            completed: true,
+            settingsPath: '/admin/settings/discord/auth',
+          },
         ],
         overallComplete: false,
         completedCount: 1,
         totalCount: 5,
       };
-      jest.spyOn(discordBotService, 'getSetupStatus').mockResolvedValue(mockStatus);
+      jest
+        .spyOn(discordBotService, 'getSetupStatus')
+        .mockResolvedValue(mockStatus);
 
       const result = await controller.getSetupStatus();
 
@@ -591,7 +602,9 @@ describe('DiscordBotSettingsController', () => {
       const result = await controller.reconnect();
 
       expect(discordBotClientService.disconnect).toHaveBeenCalled();
-      expect(discordBotClientService.connect).toHaveBeenCalledWith('bot-token-123');
+      expect(discordBotClientService.connect).toHaveBeenCalledWith(
+        'bot-token-123',
+      );
       expect(result).toMatchObject({ success: true });
     });
 
@@ -621,11 +634,11 @@ describe('DiscordBotSettingsController', () => {
 
   describe('sendTestMessage', () => {
     it('should throw BadRequestException when bot is not connected', async () => {
-      jest
-        .spyOn(discordBotClientService, 'isConnected')
-        .mockReturnValue(false);
+      jest.spyOn(discordBotClientService, 'isConnected').mockReturnValue(false);
 
-      await expect(controller.sendTestMessage()).rejects.toThrow(BadRequestException);
+      await expect(controller.sendTestMessage()).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when no default channel is set', async () => {
@@ -634,7 +647,9 @@ describe('DiscordBotSettingsController', () => {
         .spyOn(settingsService, 'getDiscordBotDefaultChannel')
         .mockResolvedValue(null);
 
-      await expect(controller.sendTestMessage()).rejects.toThrow(BadRequestException);
+      await expect(controller.sendTestMessage()).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should send embed to default channel and return success', async () => {
@@ -642,9 +657,11 @@ describe('DiscordBotSettingsController', () => {
       jest
         .spyOn(settingsService, 'getDiscordBotDefaultChannel')
         .mockResolvedValue('channel-123');
-      jest
-        .spyOn(settingsService, 'getBranding')
-        .mockResolvedValue({ communityName: 'My Guild', communityLogoPath: null, communityAccentColor: null });
+      jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+        communityAccentColor: null,
+      });
       jest
         .spyOn(settingsService, 'getClientUrl')
         .mockResolvedValue('https://myguild.example.com');
@@ -663,12 +680,12 @@ describe('DiscordBotSettingsController', () => {
       jest
         .spyOn(settingsService, 'getDiscordBotDefaultChannel')
         .mockResolvedValue('channel-123');
-      jest
-        .spyOn(settingsService, 'getBranding')
-        .mockResolvedValue({ communityName: 'My Guild', communityLogoPath: null, communityAccentColor: null });
-      jest
-        .spyOn(settingsService, 'getClientUrl')
-        .mockResolvedValue(null);
+      jest.spyOn(settingsService, 'getBranding').mockResolvedValue({
+        communityName: 'My Guild',
+        communityLogoPath: null,
+        communityAccentColor: null,
+      });
+      jest.spyOn(settingsService, 'getClientUrl').mockResolvedValue(null);
       jest
         .spyOn(discordBotClientService, 'sendEmbed')
         .mockRejectedValue(new Error('Channel not found'));

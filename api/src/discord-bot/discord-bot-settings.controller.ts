@@ -27,17 +27,15 @@ import {
   DiscordBotConfigSchema,
   DiscordBotTestConnectionSchema,
   DiscordMemberCharactersQuerySchema,
+  DiscordBotSetDefaultChannelSchema,
+  DiscordBotSetVoiceChannelSchema,
+  DiscordBotSetAdHocStatusSchema,
   type DiscordBotStatusResponse,
   type DiscordBotTestResult,
   type DiscordSetupStatus,
   type CharacterDto,
 } from '@raid-ledger/contract';
-import { z, ZodError } from 'zod';
-
-/** Inline Zod schema for voice-channel PUT body. */
-const VoiceChannelBodySchema = z.object({
-  channelId: z.string().min(1),
-});
+import { ZodError } from 'zod';
 
 /**
  * Handle Zod validation errors by converting to BadRequestException.
@@ -209,28 +207,20 @@ export class DiscordBotSettingsController {
   async setDefaultChannel(
     @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    if (
-      !body ||
-      typeof body !== 'object' ||
-      !('channelId' in body) ||
-      typeof (body as Record<string, unknown>).channelId !== 'string' ||
-      !(body as Record<string, unknown>).channelId
-    ) {
-      throw new BadRequestException(
-        'channelId is required and must be a non-empty string',
-      );
+    try {
+      const { channelId } = DiscordBotSetDefaultChannelSchema.parse(body);
+
+      await this.settingsService.setDiscordBotDefaultChannel(channelId);
+
+      this.logger.log('Discord bot default channel updated via admin UI');
+
+      return {
+        success: true,
+        message: 'Default channel updated.',
+      };
+    } catch (error) {
+      handleValidationError(error);
     }
-
-    await this.settingsService.setDiscordBotDefaultChannel(
-      (body as Record<string, unknown>).channelId as string,
-    );
-
-    this.logger.log('Discord bot default channel updated via admin UI');
-
-    return {
-      success: true,
-      message: 'Default channel updated.',
-    };
   }
 
   /**
@@ -388,7 +378,7 @@ export class DiscordBotSettingsController {
     @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
     try {
-      const { channelId } = VoiceChannelBodySchema.parse(body);
+      const { channelId } = DiscordBotSetVoiceChannelSchema.parse(body);
 
       await this.settingsService.setDiscordBotDefaultVoiceChannel(channelId);
 
@@ -420,27 +410,21 @@ export class DiscordBotSettingsController {
   async setAdHocStatus(
     @Body() body: unknown,
   ): Promise<{ success: boolean; message: string }> {
-    if (
-      !body ||
-      typeof body !== 'object' ||
-      !('enabled' in body) ||
-      typeof (body as Record<string, unknown>).enabled !== 'boolean'
-    ) {
-      throw new BadRequestException(
-        'enabled is required and must be a boolean',
+    try {
+      const { enabled } = DiscordBotSetAdHocStatusSchema.parse(body);
+
+      await this.settingsService.setAdHocEventsEnabled(enabled);
+
+      this.logger.log(
+        `Ad-hoc events ${enabled ? 'enabled' : 'disabled'} via admin UI`,
       );
+
+      return {
+        success: true,
+        message: `Ad-hoc events ${enabled ? 'enabled' : 'disabled'}.`,
+      };
+    } catch (error) {
+      handleValidationError(error);
     }
-
-    const enabled = (body as Record<string, unknown>).enabled as boolean;
-    await this.settingsService.setAdHocEventsEnabled(enabled);
-
-    this.logger.log(
-      `Ad-hoc events ${enabled ? 'enabled' : 'disabled'} via admin UI`,
-    );
-
-    return {
-      success: true,
-      message: `Ad-hoc events ${enabled ? 'enabled' : 'disabled'}.`,
-    };
   }
 }
