@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
 import { useOnboarding } from '../../../hooks/use-onboarding';
-import { API_BASE_URL } from '../../../lib/config';
-import { toast } from '../../../lib/toast';
+import { useDiscordLink } from '../../../hooks/use-discord-link';
 import { isDiscordLinked } from '../../../lib/avatar';
+import { toast } from '../../../lib/toast';
 
 interface SecureAccountStepProps {
   onNext: () => void;
@@ -45,6 +45,7 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
   const [passwordChanged, setPasswordChanged] = useState(false);
 
   const hasDiscordLinked = isDiscordLinked(user?.discordId);
+  const handleLinkDiscord = useDiscordLink();
 
   const strength = getPasswordStrength(newPassword);
   const passwordsMatch = newPassword === confirmPassword;
@@ -67,15 +68,6 @@ export function SecureAccountStep({ onNext, onSkip }: SecureAccountStepProps) {
         },
       },
     );
-  };
-
-  const handleLinkDiscord = () => {
-    const token = localStorage.getItem('raid_ledger_token');
-    if (!token) {
-      toast.error('Please log in again to link Discord');
-      return;
-    }
-    window.location.href = `${API_BASE_URL}/auth/discord/link?token=${encodeURIComponent(token)}`;
   };
 
   const handleSkip = () => {
