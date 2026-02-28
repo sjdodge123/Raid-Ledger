@@ -212,3 +212,70 @@ export const UserHeartedGamesResponseSchema = z.object({
 });
 
 export type UserHeartedGamesResponseDto = z.infer<typeof UserHeartedGamesResponseSchema>;
+
+// ============================================================
+// ROK-443: Game Activity Display (Phase 2)
+// ============================================================
+
+/** Period filter for activity queries */
+export const ActivityPeriodSchema = z.enum(['week', 'month', 'all']);
+export type ActivityPeriod = z.infer<typeof ActivityPeriodSchema>;
+
+/** A single game activity entry in a user's activity list */
+export const GameActivityEntrySchema = z.object({
+    gameId: z.number(),
+    gameName: z.string(),
+    coverUrl: z.string().nullable(),
+    totalSeconds: z.number(),
+    isMostPlayed: z.boolean(),
+});
+
+export type GameActivityEntryDto = z.infer<typeof GameActivityEntrySchema>;
+
+/** Response for GET /users/:id/activity */
+export const UserActivityResponseSchema = z.object({
+    data: z.array(GameActivityEntrySchema),
+    period: ActivityPeriodSchema,
+});
+
+export type UserActivityResponseDto = z.infer<typeof UserActivityResponseSchema>;
+
+/** A top player entry for game activity */
+export const GameTopPlayerSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+    totalSeconds: z.number(),
+});
+
+export type GameTopPlayerDto = z.infer<typeof GameTopPlayerSchema>;
+
+/** Response for GET /games/:id/activity */
+export const GameActivityResponseSchema = z.object({
+    topPlayers: z.array(GameTopPlayerSchema),
+    totalSeconds: z.number(),
+    period: ActivityPeriodSchema,
+});
+
+export type GameActivityResponseDto = z.infer<typeof GameActivityResponseSchema>;
+
+/** A player currently playing a game */
+export const NowPlayingPlayerSchema = z.object({
+    userId: z.number(),
+    username: z.string(),
+    avatar: z.string().nullable(),
+    customAvatarUrl: z.string().nullable(),
+    discordId: z.string().nullable(),
+});
+
+export type NowPlayingPlayerDto = z.infer<typeof NowPlayingPlayerSchema>;
+
+/** Response for GET /games/:id/now-playing */
+export const GameNowPlayingResponseSchema = z.object({
+    players: z.array(NowPlayingPlayerSchema),
+    count: z.number(),
+});
+
+export type GameNowPlayingResponseDto = z.infer<typeof GameNowPlayingResponseSchema>;

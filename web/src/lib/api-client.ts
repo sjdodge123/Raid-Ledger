@@ -35,6 +35,10 @@ import type {
     UserEventSignupsResponseDto,
     AttendanceSummaryDto,
     AttendanceStatus,
+    ActivityPeriod,
+    UserActivityResponseDto,
+    GameActivityResponseDto,
+    GameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
 import {
     EventListResponseSchema,
@@ -698,6 +702,31 @@ export async function getUserHeartedGames(userId: number): Promise<UserHeartedGa
  */
 export async function getUserEventSignups(userId: number): Promise<UserEventSignupsResponseDto> {
     return fetchApi(`/users/${userId}/events/signups`);
+}
+
+// ============================================================
+// Game Activity API (ROK-443)
+// ============================================================
+
+/**
+ * ROK-443: Fetch a user's game activity (recently played games).
+ */
+export async function getUserActivity(userId: number, period: ActivityPeriod): Promise<UserActivityResponseDto> {
+    return fetchApi(`/users/${userId}/activity?period=${period}`);
+}
+
+/**
+ * ROK-443: Fetch community activity for a game (top players, total hours).
+ */
+export async function getGameActivity(gameId: number, period: ActivityPeriod): Promise<GameActivityResponseDto> {
+    return fetchApi(`/games/${gameId}/activity?period=${period}`);
+}
+
+/**
+ * ROK-443: Fetch users currently playing a game (open sessions).
+ */
+export async function getGameNowPlaying(gameId: number): Promise<GameNowPlayingResponseDto> {
+    return fetchApi(`/games/${gameId}/now-playing`);
 }
 
 // ============================================================

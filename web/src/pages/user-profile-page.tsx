@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { useParams, Link, useLocation, useNavigate } from 'react-router-dom';
-import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
+import { useUserProfile, useUserHeartedGames, useUserActivity } from '../hooks/use-user-profile';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useBranding } from '../hooks/use-branding';
 import { formatDistanceToNow } from 'date-fns';
-import type { CharacterDto, UserHeartedGameDto } from '@raid-ledger/contract';
+import type { CharacterDto, UserHeartedGameDto, ActivityPeriod, GameActivityEntryDto } from '@raid-ledger/contract';
 import { resolveAvatar, toAvatarUser, buildDiscordAvatarUrl } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
 import { CharacterCardCompact } from '../components/characters/character-card-compact';
@@ -93,6 +94,100 @@ function GroupedCharacters({
                     );
                 })}
             </div>
+        </div>
+    );
+}
+
+/** Format seconds as "Xh Ym" or "Xm" */
+function formatPlaytime(totalSeconds: number): string {
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) {
+        return minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    }
+    return `${minutes}m`;
+}
+
+const PERIOD_LABELS: { value: ActivityPeriod; label: string }[] = [
+    { value: 'week', label: 'This Week' },
+    { value: 'month', label: 'This Month' },
+    { value: 'all', label: 'All Time' },
+];
+
+/** ROK-443: Game activity section for user profiles */
+function ActivitySection({ userId }: { userId: number }) {
+    const [period, setPeriod] = useState<ActivityPeriod>('week');
+    const { data, isLoading } = useUserActivity(userId, period);
+    const entries = data?.data ?? [];
+
+    return (
+        <div className="user-profile-section">
+            <div className="flex items-center justify-between mb-3">
+                <h2 className="user-profile-section-title mb-0">Game Activity</h2>
+                <div className="flex gap-1">
+                    {PERIOD_LABELS.map((p) => (
+                        <button
+                            key={p.value}
+                            onClick={() => setPeriod(p.value)}
+                            className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                                period === p.value
+                                    ? 'bg-emerald-600 text-white'
+                                    : 'bg-overlay text-muted hover:text-foreground'
+                            }`}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
+            {isLoading ? (
+                <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                        <div key={i} className="h-16 bg-overlay rounded-lg animate-pulse" />
+                    ))}
+                </div>
+            ) : entries.length === 0 ? (
+                <p className="text-muted text-sm">No activity tracked yet.</p>
+            ) : (
+                <div className="flex flex-col gap-2">
+                    {entries.map((entry: GameActivityEntryDto) => (
+                        <Link
+                            key={entry.gameId}
+                            to={`/games/${entry.gameId}`}
+                            className="bg-panel border border-edge rounded-lg p-3 flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity"
+                        >
+                            {entry.coverUrl ? (
+                                <img
+                                    src={entry.coverUrl}
+                                    alt={entry.gameName}
+                                    className="w-10 h-14 rounded object-cover flex-shrink-0"
+                                    loading="lazy"
+                                />
+                            ) : (
+                                <div className="w-10 h-14 rounded bg-overlay flex items-center justify-center text-muted flex-shrink-0 text-xs">
+                                    ?
+                                </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="font-medium text-foreground truncate">
+                                        {entry.gameName}
+                                    </span>
+                                    {entry.isMostPlayed && (
+                                        <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/20 text-emerald-400 rounded">
+                                            Most Played
+                                        </span>
+                                    )}
+                                </div>
+                                <span className="text-sm text-muted">
+                                    {formatPlaytime(entry.totalSeconds)}
+                                </span>
+                            </div>
+                        </Link>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -249,6 +344,9 @@ export function UserProfilePage() {
                         </p>
                     </div>
                 </div>
+
+                {/* Game Activity Section (ROK-443) */}
+                {numericId && <ActivitySection userId={numericId} />}
 
                 {/* Upcoming Events Section (ROK-299) */}
                 {numericId && <UserEventSignups userId={numericId} />}

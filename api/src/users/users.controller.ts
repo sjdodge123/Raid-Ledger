@@ -42,6 +42,8 @@ import {
   UpdateUserProfileSchema,
   CheckDisplayNameQuerySchema,
   DeleteAccountSchema,
+  ActivityPeriodSchema,
+  UserActivityResponseDto,
 } from '@raid-ledger/contract';
 import type {
   UserRole,
@@ -49,6 +51,7 @@ import type {
 } from '@raid-ledger/contract';
 import { AdminGuard } from '../auth/admin.guard';
 import { OperatorGuard } from '../auth/operator.guard';
+import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 
@@ -199,6 +202,39 @@ export class UsersController {
 
     const games = await this.usersService.getHeartedGames(id);
     return { data: games };
+  }
+
+  /**
+   * ROK-443: Get a user's game activity (recently played games).
+   * Public endpoint with optional JWT to check requester identity for privacy.
+   */
+  @Get(':id/activity')
+  @UseGuards(OptionalJwtGuard)
+  async getUserActivity(
+    @Param('id', ParseIntPipe) id: number,
+    @Query('period') periodParam?: string,
+    @Request() req?: { user?: { id: number } },
+  ): Promise<UserActivityResponseDto> {
+    const period = ActivityPeriodSchema.safeParse(periodParam ?? 'week');
+    if (!period.success) {
+      throw new BadRequestException(
+        'Invalid period. Must be week, month, or all.',
+      );
+    }
+
+    const user = await this.usersService.findById(id);
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const requesterId = req?.user?.id;
+    const data = await this.usersService.getUserActivity(
+      id,
+      period.data,
+      requesterId,
+    );
+
+    return { data, period: period.data };
   }
 
   /**

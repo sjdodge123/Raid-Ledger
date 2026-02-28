@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { getUserProfile, getUserHeartedGames, getUserEventSignups } from '../lib/api-client';
-import type { UserProfileDto, UserHeartedGamesResponseDto, UserEventSignupsResponseDto } from '@raid-ledger/contract';
+import { getUserProfile, getUserHeartedGames, getUserEventSignups, getUserActivity } from '../lib/api-client';
+import type { UserProfileDto, UserHeartedGamesResponseDto, UserEventSignupsResponseDto, ActivityPeriod, UserActivityResponseDto } from '@raid-ledger/contract';
 
 /**
  * Fetch a user's public profile by ID (ROK-181).
@@ -41,6 +41,21 @@ export function useUserEventSignups(userId: number | undefined) {
         queryFn: async () => {
             if (!userId) throw new Error('User ID required');
             return getUserEventSignups(userId);
+        },
+        enabled: !!userId,
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+/**
+ * ROK-443: Fetch a user's game activity (recently played games).
+ */
+export function useUserActivity(userId: number | undefined, period: ActivityPeriod) {
+    return useQuery<UserActivityResponseDto>({
+        queryKey: ['userActivity', userId, period],
+        queryFn: async () => {
+            if (!userId) throw new Error('User ID required');
+            return getUserActivity(userId, period);
         },
         enabled: !!userId,
         staleTime: 5 * 60 * 1000,
