@@ -181,6 +181,8 @@ export const GameInterestResponseSchema = z.object({
     count: z.number(),
     /** First N interested players for avatar display (ROK-282) */
     players: z.array(InterestPlayerPreviewSchema).optional(),
+    /** Source of the interest: manual, steam, or discord (ROK-444) */
+    source: z.enum(['manual', 'steam', 'discord']).optional(),
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;

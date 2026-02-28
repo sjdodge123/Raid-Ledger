@@ -505,6 +505,13 @@
       "when": 1772247704900,
       "tag": "0071_married_susan_delgado",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1772259991982,
+      "tag": "0072_narrow_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

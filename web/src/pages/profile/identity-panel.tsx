@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth, isImpersonating } from '../../hooks/use-auth';
@@ -13,7 +13,7 @@ import { toast } from '../../lib/toast';
 import { AvatarSelectorModal } from '../../components/profile/AvatarSelectorModal';
 import { Modal } from '../../components/ui/modal';
 import { useAvatarUpload } from '../../hooks/use-avatar-upload';
-import { updatePreference, deleteMyAccount } from '../../lib/api-client';
+import { getMyPreferences, updatePreference, deleteMyAccount } from '../../lib/api-client';
 
 function buildAvatarOptions(user: { discordId: string | null; avatar: string | null; customAvatarUrl: string | null }, characters: { avatarUrl: string | null; name: string }[]) {
     const options: { url: string; label: string; type: AvatarType; characterName?: string }[] = [];
@@ -106,6 +106,26 @@ export function IdentityPanel() {
     });
     const isConfirmValid = confirmName === expectedName;
 
+    const hasDiscordLinked = isDiscordLinked(user?.discordId ?? null);
+
+    // Auto-heart preference (ROK-444)
+    const { data: prefs } = useQuery({
+        queryKey: ['user-preferences'],
+        queryFn: getMyPreferences,
+        enabled: isAuthenticated && hasDiscordLinked,
+        staleTime: Infinity,
+    });
+    const autoHeartEnabled = prefs?.autoHeartGames !== false;
+    const autoHeartMutation = useMutation({
+        mutationFn: (enabled: boolean) => updatePreference('autoHeartGames', enabled),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['user-preferences'] });
+        },
+        onError: () => {
+            toast.error('Failed to update auto-heart preference');
+        },
+    });
+
     if (!user) return null;
 
     const showDangerZone = !isImpersonating();
@@ -115,7 +135,6 @@ export function IdentityPanel() {
     // Use optimistic URL when a selection is pending, otherwise use resolved
     const currentAvatarUrl = optimisticUrl ?? resolvedAvatarUrl;
 
-    const hasDiscordLinked = isDiscordLinked(user.discordId);
     const showDiscord = systemStatus?.discordConfigured;
 
     const handleLinkDiscord = () => {
@@ -188,6 +207,36 @@ export function IdentityPanel() {
                             </svg>
                             Link Discord Account
                         </button>
+                    </div>
+                )}
+
+                {/* Auto-heart toggle — only shown when Discord is connected (ROK-444) */}
+                {hasDiscordLinked && (
+                    <div className="mt-4 p-4 bg-panel rounded-lg border border-edge">
+                        <div className="flex items-center justify-between gap-4">
+                            <div>
+                                <h3 className="text-sm font-semibold text-foreground">Auto-heart games</h3>
+                                <p className="text-sm text-muted mt-0.5">
+                                    Automatically heart games you play for 5+ hours so you get notified about new events
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                role="switch"
+                                aria-checked={autoHeartEnabled}
+                                onClick={() => autoHeartMutation.mutate(!autoHeartEnabled)}
+                                disabled={autoHeartMutation.isPending}
+                                className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-backdrop ${
+                                    autoHeartEnabled ? 'bg-emerald-600' : 'bg-overlay'
+                                } ${autoHeartMutation.isPending ? 'opacity-50' : ''}`}
+                            >
+                                <span
+                                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                                        autoHeartEnabled ? 'translate-x-5' : 'translate-x-0'
+                                    }`}
+                                />
+                            </button>
+                        </div>
                     </div>
                 )}
             </div>
