@@ -439,6 +439,7 @@ export const DayEventCard = React.memo(function DayEventCard({ event, eventOverl
                             ? (pendingRole as CharacterRole)
                             : undefined
                     }
+                    eventId={event.resource?.id}
                 />
             )}
             </div>
