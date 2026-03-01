@@ -125,6 +125,7 @@ export function EventInviteActions({
                         gameName={event?.game?.name ?? undefined}
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event?.game?.slug ?? undefined}
+                        eventId={eventId}
                     />
                 </Suspense>
             )}

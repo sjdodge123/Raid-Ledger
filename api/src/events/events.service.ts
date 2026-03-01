@@ -6,7 +6,18 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, gte, lte, asc, desc, sql, and, inArray, ne } from 'drizzle-orm';
+import {
+  eq,
+  gte,
+  lte,
+  asc,
+  desc,
+  sql,
+  and,
+  inArray,
+  ne,
+  not,
+} from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -1537,5 +1548,71 @@ export class EventsService {
         ? { name: event.game.name, coverUrl: event.game.coverUrl }
         : null,
     };
+  }
+
+  /**
+   * ROK-587: Get the dominant game variant and region from an event's signups.
+   * Used to auto-populate the variant selector when a player imports a character
+   * in the context of an event (e.g., most players are on classic_anniversary).
+   */
+  async getVariantContext(
+    eventId: number,
+  ): Promise<{ gameVariant: string | null; region: string | null }> {
+    const rows = await this.db
+      .select({
+        gameVariant: schema.characters.gameVariant,
+        region: schema.characters.region,
+      })
+      .from(schema.eventSignups)
+      .innerJoin(
+        schema.characters,
+        eq(schema.eventSignups.characterId, schema.characters.id),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          not(eq(schema.eventSignups.status, 'declined')),
+          not(eq(schema.eventSignups.status, 'roached_out')),
+        ),
+      );
+
+    if (rows.length === 0) {
+      return { gameVariant: null, region: null };
+    }
+
+    // Find the most common gameVariant
+    const variantCounts = new Map<string, number>();
+    const regionCounts = new Map<string, number>();
+    for (const row of rows) {
+      if (row.gameVariant) {
+        variantCounts.set(
+          row.gameVariant,
+          (variantCounts.get(row.gameVariant) ?? 0) + 1,
+        );
+      }
+      if (row.region) {
+        regionCounts.set(row.region, (regionCounts.get(row.region) ?? 0) + 1);
+      }
+    }
+
+    let dominantVariant: string | null = null;
+    let maxVariantCount = 0;
+    for (const [variant, count] of variantCounts) {
+      if (count > maxVariantCount) {
+        dominantVariant = variant;
+        maxVariantCount = count;
+      }
+    }
+
+    let dominantRegion: string | null = null;
+    let maxRegionCount = 0;
+    for (const [region, count] of regionCounts) {
+      if (count > maxRegionCount) {
+        dominantRegion = region;
+        maxRegionCount = count;
+      }
+    }
+
+    return { gameVariant: dominantVariant, region: dominantRegion };
   }
 }

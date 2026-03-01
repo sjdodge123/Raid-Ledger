@@ -9,6 +9,8 @@ interface InlineCharacterFormProps {
     hasSpecs?: boolean;
     /** Game slug for plugin slot context (enables WoW import when plugin active) */
     gameSlug?: string;
+    /** ROK-587: Event ID for variant context auto-population */
+    eventId?: number;
     onCharacterCreated?: (character: CharacterDto) => void;
     onCancel?: () => void;
 }
@@ -22,6 +24,7 @@ export function InlineCharacterForm({
     gameId,
     hasRoles = true,
     gameSlug,
+    eventId,
     onCharacterCreated,
     onCancel,
 }: InlineCharacterFormProps) {
@@ -79,6 +82,7 @@ export function InlineCharacterForm({
                     isMain: true,
                     gameSlug,
                     onModeChange: handleModeChange,
+                    eventId,
                 }}
             />
 

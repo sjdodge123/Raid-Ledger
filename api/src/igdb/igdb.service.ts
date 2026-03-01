@@ -152,6 +152,19 @@ const IGDB_CONFIG = {
   ].join(', '),
 } as const;
 
+/**
+ * ROK-587: IGDB slugs that are variant-specific WoW Classic entries.
+ * These should be auto-hidden during IGDB sync to prevent duplicate
+ * game entries — all WoW Classic variants use the single
+ * "world-of-warcraft-classic" game entry and the gameVariant field
+ * on characters to distinguish between Classic Era, TBC Anniversary, etc.
+ */
+const WOW_CLASSIC_VARIANT_SLUGS = new Set([
+  'world-of-warcraft-classic-the-burning-crusade',
+  'world-of-warcraft-classic-anniversary',
+  'world-of-warcraft-classic-burning-crusade-classic',
+]);
+
 @Injectable()
 export class IgdbService {
   private readonly logger = new Logger(IgdbService.name);
@@ -928,6 +941,19 @@ export class IgdbService {
             cachedAt: new Date(),
           },
         });
+
+      // ROK-587: Auto-hide WoW Classic variant entries from IGDB
+      // These slugs are variant-specific releases that should use
+      // the single "world-of-warcraft-classic" game entry instead.
+      if (WOW_CLASSIC_VARIANT_SLUGS.has(row.slug)) {
+        await this.db
+          .update(schema.games)
+          .set({ hidden: true })
+          .where(eq(schema.games.igdbId, row.igdbId));
+        this.logger.log(
+          `Auto-hidden WoW Classic variant "${row.name}" (slug=${row.slug}) — use "world-of-warcraft-classic" instead`,
+        );
+      }
     }
 
     // Fetch the upserted rows
@@ -1342,6 +1368,17 @@ export class IgdbService {
             cachedAt: new Date(),
           },
         });
+
+      // ROK-587: Auto-hide WoW Classic variant entries
+      if (WOW_CLASSIC_VARIANT_SLUGS.has(row.slug)) {
+        await this.db
+          .update(schema.games)
+          .set({ hidden: true })
+          .where(eq(schema.games.igdbId, row.igdbId));
+        this.logger.log(
+          `Auto-hidden WoW Classic variant "${row.name}" (slug=${row.slug})`,
+        );
+      }
     }
   }
 

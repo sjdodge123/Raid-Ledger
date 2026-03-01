@@ -25,6 +25,8 @@ interface SignupConfirmationModalProps {
     gameSlug?: string;
     /** Pre-selected role (e.g., from clicking an empty roster slot) */
     preSelectedRole?: CharacterRole;
+    /** ROK-587: Event ID for variant context auto-population */
+    eventId?: number;
 }
 
 /** Role display colors */
@@ -52,6 +54,7 @@ export function SignupConfirmationModal({
     hasRoles = true,
     gameSlug,
     preSelectedRole,
+    eventId,
 }: SignupConfirmationModalProps) {
     const { data: charactersData, isLoading: isLoadingCharacters, isError, error } = useMyCharacters(gameId, isOpen);
     const isMobile = useMediaQuery('(max-width: 767px)');
@@ -248,6 +251,7 @@ export function SignupConfirmationModal({
                         gameId={gameId}
                         hasRoles={hasRoles}
                         gameSlug={gameSlug}
+                        eventId={eventId}
                         onCharacterCreated={handleCharacterCreated}
                         onCancel={() => setShowCreateForm(false)}
                     />
@@ -308,6 +312,7 @@ export function SignupConfirmationModal({
                         gameId={gameId}
                         hasRoles={hasRoles}
                         gameSlug={gameSlug}
+                        eventId={eventId}
                         onCharacterCreated={handleCharacterCreated}
                         onCancel={() => setShowCreateForm(false)}
                     />

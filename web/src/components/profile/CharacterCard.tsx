@@ -14,6 +14,13 @@ const FACTION_STYLES: Record<string, string> = {
     horde: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
+/** ROK-587: Short labels for WoW Classic game variants */
+const VARIANT_LABELS: Record<string, string> = {
+    classic_anniversary: 'TBC',
+    classic_era: 'Era',
+    classic: 'Cata',
+};
+
 /**
  * Card displaying a single character with actions.
  * Enhanced for ROK-234: shows level, race, faction badge for Armory-imported characters.
@@ -85,6 +92,12 @@ export function CharacterCard({ character, onEdit }: CharacterCardProps) {
                                     }`}
                                 >
                                     {character.faction.charAt(0).toUpperCase() + character.faction.slice(1)}
+                                </span>
+                            )}
+                            {/* ROK-587: Game variant badge */}
+                            {character.gameVariant && VARIANT_LABELS[character.gameVariant] && (
+                                <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 flex-shrink-0">
+                                    {VARIANT_LABELS[character.gameVariant]}
                                 </span>
                             )}
                         </div>
