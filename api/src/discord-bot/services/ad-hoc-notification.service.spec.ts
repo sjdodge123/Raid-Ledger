@@ -3,6 +3,7 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { DiscordEmbedFactory } from './discord-embed.factory';
 import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
@@ -24,6 +25,9 @@ describe('AdHocNotificationService', () => {
   };
   let mockChannelBindingsService: {
     getBindingById: jest.Mock;
+  };
+  let mockChannelResolver: {
+    resolveVoiceChannelForScheduledEvent: jest.Mock;
   };
   let mockSettingsService: {
     getBranding: jest.Mock;
@@ -76,6 +80,10 @@ describe('AdHocNotificationService', () => {
       getBindingById: jest.fn(),
     };
 
+    mockChannelResolver = {
+      resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+    };
+
     mockSettingsService = {
       getBranding: jest.fn().mockResolvedValue({ communityName: 'Test Guild' }),
       getClientUrl: jest.fn().mockResolvedValue('https://example.com'),
@@ -94,6 +102,10 @@ describe('AdHocNotificationService', () => {
         {
           provide: ChannelBindingsService,
           useValue: mockChannelBindingsService,
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: mockChannelResolver,
         },
         { provide: SettingsService, useValue: mockSettingsService },
       ],

@@ -16,6 +16,7 @@ import {
 } from './discord-embed.factory';
 import { EMBED_STATES } from '../discord-bot.constants';
 import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 
 /** Batch flush interval for embed updates (ms). */
@@ -62,6 +63,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
     private readonly clientService: DiscordBotClientService,
     private readonly embedFactory: DiscordEmbedFactory,
     private readonly channelBindingsService: ChannelBindingsService,
+    private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
   ) {
     this.startFlushTimer();
@@ -299,10 +301,16 @@ export class AdHocNotificationService implements OnModuleDestroy {
       if (gameRow) game = gameRow;
     }
 
+    // ROK-597: Resolve voice channel for the ad-hoc event's game
+    const voiceChannelId =
+      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        event.gameId,
+      );
+
     // Only count active participants for the signup count
     const activeCount = participants.filter((p) => p.isActive).length;
 
-    return {
+    const embedData: EmbedEventData = {
       id: event.id,
       title: event.title,
       startTime: event.duration[0].toISOString(),
@@ -321,6 +329,12 @@ export class AdHocNotificationService implements OnModuleDestroy {
           preferredRoles: null,
         })),
     };
+
+    if (voiceChannelId) {
+      embedData.voiceChannelId = voiceChannelId;
+    }
+
+    return embedData;
   }
 
   /**
