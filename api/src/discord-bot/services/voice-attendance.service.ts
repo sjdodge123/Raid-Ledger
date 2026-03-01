@@ -34,6 +34,7 @@ interface InMemorySession {
   userId: number | null;
   discordUserId: string;
   discordUsername: string;
+  discordAvatarHash: string | null;
   firstJoinAt: Date;
   lastLeaveAt: Date | null;
   totalDurationSec: number;
@@ -107,6 +108,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     discordUserId: string,
     discordUsername: string,
     userId: number | null,
+    discordAvatarHash?: string | null,
   ): void {
     const key = `${eventId}:${discordUserId}`;
     const now = new Date();
@@ -133,6 +135,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       userId,
       discordUserId,
       discordUsername,
+      discordAvatarHash: discordAvatarHash ?? null,
       firstJoinAt: now,
       lastLeaveAt: null,
       totalDurationSec: 0,
@@ -553,6 +556,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
                 guildMember.displayName ??
                 guildMember.user?.username ??
                 'Unknown',
+              discordAvatarHash: guildMember.user?.avatar ?? null,
               firstJoinAt: existingDb.firstJoinAt,
               lastLeaveAt: null,
               totalDurationSec: existingDb.totalDurationSec ?? 0,
@@ -581,6 +585,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
                 guildMember.user?.username ??
                 'Unknown',
               null,
+              guildMember.user?.avatar ?? null,
             );
           }
           recovered++;
@@ -763,7 +768,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         userId: session.userId,
         discordUserId: session.discordUserId,
         discordUsername: session.discordUsername,
-        discordAvatarHash: null,
+        discordAvatarHash: session.discordAvatarHash,
         joinedAt: session.firstJoinAt.toISOString(),
         leftAt: session.isActive
           ? null

@@ -775,6 +775,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-scheduled',
       'ScheduledPlayer',
       null,
+      null,
     );
   });
 
@@ -834,6 +835,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-no-binding',
       'UnboundPlayer',
       null,
+      null,
     );
     // Ad-hoc service should NOT fire (no binding)
     expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
@@ -866,11 +868,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-multi-event',
       'MultiPlayer',
       null,
+      null,
     );
     expect(mockVoiceAttendanceService.handleJoin).toHaveBeenCalledWith(
       402,
       'user-multi-event',
       'MultiPlayer',
+      null,
       null,
     );
   });

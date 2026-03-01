@@ -325,6 +325,7 @@ export class VoiceStateListener {
             discordMember.discordUserId,
             discordMember.discordUsername,
             rlUser?.id ?? null,
+            discordMember.discordAvatarHash,
           );
           // ROK-530: Emit live roster update via WebSocket
           const roster = this.voiceAttendanceService.getActiveRoster(eventId);
