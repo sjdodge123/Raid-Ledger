@@ -74,7 +74,7 @@ export class ChannelResolverService {
 
   /**
    * Resolve the voice channel for an event (for invite DM embeds).
-   * Looks for game-voice-monitor bindings specifically.
+   * Looks for game-specific voice-monitor bindings only (ROK-592).
    * @param gameId - Games table PK (integer) for game-specific binding lookup
    * @returns Voice channel ID string or null if none configured
    */
@@ -88,15 +88,15 @@ export class ChannelResolverService {
   }
 
   /**
-   * Resolve voice channel for Discord Scheduled Events (ROK-471).
-   * 3-tier fallback: game-specific binding -> default binding -> app setting.
+   * Resolve voice channel for Discord Scheduled Events (ROK-471, ROK-592).
+   * 2-tier fallback: game-specific binding -> app setting default.
    * @param gameId - Games table PK (integer) for game-specific binding lookup
    * @returns Voice channel ID string or null if none configured
    */
   async resolveVoiceChannelForScheduledEvent(
     gameId?: number | null,
   ): Promise<string | null> {
-    // Tier 1 + 2: Game-specific voice binding, then any voice monitor binding
+    // Tier 1: Game-specific voice binding
     const voiceChannel = await this.resolveVoiceChannelForEvent(gameId);
     if (voiceChannel) return voiceChannel;
 
