@@ -23,8 +23,8 @@ import { useCreatePug, useDeletePug, usePugs, useRegeneratePugInviteCode } from 
 import { PluginSlot } from '../plugins';
 import { AttendanceTracker } from '../components/events/AttendanceTracker';
 import { LiveBadge } from '../components/events/LiveBadge';
-import { AdHocRoster } from '../components/events/AdHocRoster';
-import { useAdHocSocket } from '../hooks/use-ad-hoc-socket';
+import { VoiceRoster } from '../components/events/VoiceRoster';
+import { useVoiceRoster } from '../hooks/use-voice-roster';
 import './event-detail-page.css';
 
 // ROK-343: Lazy load modals — only fetched when user triggers them
@@ -67,9 +67,11 @@ export function EventDetailPage() {
     const { data: roster } = useEventRoster(eventId);
     const { games } = useGameRegistry();
 
-    // ROK-293: Real-time ad-hoc event updates
+    // ROK-293 / ROK-530: Real-time voice roster (ad-hoc + planned events)
     const isAdHoc = event?.isAdHoc ?? false;
-    const adHocSocket = useAdHocSocket(isAdHoc ? eventId : null);
+    const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
+    const showVoiceRoster = isAdHoc || (eventStatus === 'live' && !!event?.game);
+    const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
 
     // Look up game config entry for hasRoles/slug (ROK-234)
     // ROK-400: event.game.id is now the games table integer ID directly
@@ -743,13 +745,13 @@ export function EventDetailPage() {
                 />
             )}
 
-            {/* ROK-293: Ad-Hoc Event Roster */}
-            {isAdHoc && (
+            {/* ROK-293 / ROK-530: Voice Channel Roster (ad-hoc + planned events) */}
+            {showVoiceRoster && voiceRoster.participants.length > 0 && (
                 <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
-                    {event.adHocStatus === 'live' && <LiveBadge className="mb-3" />}
-                    <AdHocRoster
-                        participants={adHocSocket.participants}
-                        activeCount={adHocSocket.activeCount}
+                    {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
+                    <VoiceRoster
+                        participants={voiceRoster.participants}
+                        activeCount={voiceRoster.activeCount}
                     />
                 </div>
             )}

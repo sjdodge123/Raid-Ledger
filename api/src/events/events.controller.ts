@@ -239,13 +239,19 @@ export class EventsController {
   }
 
   /**
-   * ROK-293: Get ad-hoc event roster (participant tracking).
+   * ROK-293 / ROK-530: Get voice roster for an event.
+   * For ad-hoc events, delegates to AdHocEventService (DB-backed participants).
+   * For scheduled events, delegates to VoiceAttendanceService (in-memory sessions).
    */
   @Get(':id/ad-hoc-roster')
   async getAdHocRoster(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<AdHocRosterResponseDto> {
-    return this.adHocEventService.getAdHocRoster(id);
+    const event = await this.eventsService.findOne(id);
+    if (event.isAdHoc) {
+      return this.adHocEventService.getAdHocRoster(id);
+    }
+    return this.voiceAttendanceService.getActiveRoster(id);
   }
 
   /**

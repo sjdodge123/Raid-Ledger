@@ -6,6 +6,7 @@ import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { Events, Collection } from 'discord.js';
 
 /** Create a discord.js-compatible Collection from entries */
@@ -81,6 +82,7 @@ describe('VoiceStateListener', () => {
             findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
             handleJoin: jest.fn(),
             handleLeave: jest.fn(),
+            getActiveRoster: jest.fn().mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
             recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
           },
         },
@@ -93,6 +95,14 @@ describe('VoiceStateListener', () => {
           useValue: mockPresenceDetector,
         },
         { provide: UsersService, useValue: mockUsersService },
+        {
+          provide: AdHocEventsGateway,
+          useValue: {
+            emitRosterUpdate: jest.fn(),
+            emitStatusChange: jest.fn(),
+            emitEndTimeExtended: jest.fn(),
+          },
+        },
       ],
     }).compile();
 

@@ -21,6 +21,8 @@ import {
   type EventVoiceSessionDto,
   type VoiceSessionsResponseDto,
   type VoiceAttendanceSummaryDto,
+  type AdHocParticipantDto,
+  type AdHocRosterResponseDto,
 } from '@raid-ledger/contract';
 
 /** Interval for flushing in-memory sessions to DB (ms). */
@@ -713,6 +715,57 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       unclassified: sessions.filter((s) => s.classification === null).length,
       sessions: dtos,
     };
+  }
+
+  /**
+   * Get the live roster for a scheduled event from in-memory sessions.
+   * Maps InMemorySession fields to AdHocParticipantDto shape for reuse.
+   */
+  getActiveRoster(eventId: number): AdHocRosterResponseDto {
+    const participants: AdHocParticipantDto[] = [];
+
+    for (const session of this.sessions.values()) {
+      if (session.eventId !== eventId) continue;
+
+      const now = new Date();
+      let totalDuration = session.totalDurationSec;
+      if (session.isActive && session.activeSegmentStart) {
+        totalDuration += Math.floor(
+          (now.getTime() - session.activeSegmentStart.getTime()) / 1000,
+        );
+      }
+
+      participants.push({
+        id: session.discordUserId,
+        eventId: session.eventId,
+        userId: session.userId,
+        discordUserId: session.discordUserId,
+        discordUsername: session.discordUsername,
+        discordAvatarHash: null,
+        joinedAt: session.firstJoinAt.toISOString(),
+        leftAt: session.isActive
+          ? null
+          : (session.lastLeaveAt?.toISOString() ?? null),
+        totalDurationSeconds: totalDuration,
+        sessionCount: session.segments.length,
+      });
+    }
+
+    const activeCount = participants.filter((p) => p.leftAt === null).length;
+    return { eventId, participants, activeCount };
+  }
+
+  /**
+   * Get the count of currently active users for a scheduled event.
+   */
+  getActiveCount(eventId: number): number {
+    let count = 0;
+    for (const session of this.sessions.values()) {
+      if (session.eventId === eventId && session.isActive) {
+        count++;
+      }
+    }
+    return count;
   }
 
   // ─── Private helpers ───────────────────────────────────────
