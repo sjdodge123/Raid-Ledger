@@ -530,12 +530,95 @@ export class CharactersService {
       });
     } catch (error: unknown) {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
-        throw new ConflictException(
-          `Character ${profile.name} on ${profile.realm} already exists`,
+        // ROK-578: Merge imported data into the existing local character
+        // instead of throwing a 409 conflict.
+        return this.mergeIntoExisting(
+          userId,
+          game.id,
+          profile,
+          dto,
+          equipment,
+          talents,
         );
       }
       throw error;
     }
+  }
+
+  /**
+   * ROK-578: Merge imported character data into an existing local character.
+   * Called when importExternal hits a same-user unique constraint violation,
+   * indicating the user already has a local character with the same name+realm.
+   * Overwrites API-synced fields but preserves user preferences (isMain, roleOverride).
+   */
+  private async mergeIntoExisting(
+    userId: number,
+    gameId: number,
+    profile: {
+      name: string;
+      realm: string;
+      class?: string | null;
+      spec?: string | null;
+      role?: string | null;
+      itemLevel?: number | null;
+      avatarUrl?: string | null;
+      renderUrl?: string | null;
+      level?: number | null;
+      race?: string | null;
+      faction?: string | null;
+      profileUrl?: string | null;
+    },
+    dto: ImportWowCharacterDto,
+    equipment: unknown,
+    talents: unknown,
+  ): Promise<CharacterDto> {
+    const [existing] = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.gameId, gameId),
+          ilike(schema.characters.name, profile.name),
+          eq(schema.characters.realm, profile.realm),
+        ),
+      )
+      .limit(1);
+
+    if (!existing) {
+      // Should not happen — the unique violation implies the row exists
+      throw new ConflictException(
+        `Character ${profile.name} on ${profile.realm} already exists`,
+      );
+    }
+
+    const [merged] = await this.db
+      .update(schema.characters)
+      .set({
+        region: dto.region,
+        gameVariant: dto.gameVariant,
+        lastSyncedAt: new Date(),
+        class: profile.class,
+        spec: profile.spec,
+        role: profile.role,
+        itemLevel: profile.itemLevel,
+        avatarUrl: profile.avatarUrl,
+        renderUrl: profile.renderUrl,
+        level: profile.level,
+        race: profile.race,
+        faction: profile.faction,
+        profileUrl: profile.profileUrl,
+        equipment: equipment,
+        talents: talents,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.characters.id, existing.id))
+      .returning();
+
+    this.logger.log(
+      `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
+    );
+    return this.mapToDto(merged);
   }
 
   /**
