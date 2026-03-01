@@ -111,6 +111,19 @@ export class AdHocNotificationService implements OnModuleDestroy {
           channelId,
           messageId: message.id,
         });
+
+        // ROK-593: Insert discord_event_messages row so the embed scheduler
+        // does not treat this ad-hoc event as "unposted" and create a duplicate.
+        const guildId = this.clientService.getGuildId();
+        if (guildId) {
+          await this.db.insert(schema.discordEventMessages).values({
+            eventId,
+            guildId,
+            channelId,
+            messageId: message.id,
+            embedState: EMBED_STATES.LIVE,
+          });
+        }
       } else {
         this.logger.warn(
           `sendEmbed returned no message for event ${eventId} — edit-in-place updates disabled`,

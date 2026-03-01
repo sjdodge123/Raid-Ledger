@@ -242,11 +242,12 @@ export function InvitePage() {
         }
     }, [authLoading, isAuthenticated, resolveData, step]);
 
-    const handleClaim = useCallback(async (roleOverride?: PugRole) => {
+    const handleClaim = useCallback(async (roleOverride?: PugRole, characterIdOverride?: string) => {
         if (!code) return;
         setIsClaiming(true);
         try {
-            const result = await claimInviteCode(code, roleOverride ?? selectedRole ?? undefined);
+            const effectiveCharacterId = characterIdOverride ?? selectedCharacterId ?? undefined;
+            const result = await claimInviteCode(code, roleOverride ?? selectedRole ?? undefined, effectiveCharacterId);
             setClaimResult(result);
             setStep(3);
 
@@ -272,7 +273,7 @@ export function InvitePage() {
         } finally {
             setIsClaiming(false);
         }
-    }, [code, navigate, resolveData, selectedRole]);
+    }, [code, navigate, resolveData, selectedRole, selectedCharacterId]);
 
     /**
      * After a successful WoW character import, refetch characters and auto-claim
@@ -290,7 +291,7 @@ export function InvitePage() {
                 toast.success('Character imported! Joining event...', {
                     description: `${newest.name} (${formatRole(importedRole)})`,
                 });
-                void handleClaim(importedRole);
+                void handleClaim(importedRole, newest.id);
             } else {
                 toast.success('Character imported!', {
                     description: 'Now select your role to join.',
