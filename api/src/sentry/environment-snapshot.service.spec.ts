@@ -240,5 +240,48 @@ describe('EnvironmentSnapshotService', () => {
       const snapshot = await service.collectSnapshot();
       expect(snapshot.migrations).toHaveLength(0);
     });
+
+    it('suppresses repeated warnings when __drizzle_migrations table is missing', async () => {
+      const pgError = new Error(
+        'relation "__drizzle_migrations" does not exist',
+      );
+      (pgError as Error & { code: string }).code = '42P01';
+      mockDb.execute.mockRejectedValue(pgError);
+
+      const loggerDebugSpy = jest.spyOn(service['logger'], 'debug');
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+
+      // First call: should log at DEBUG, not WARN
+      const snapshot1 = await service.collectSnapshot();
+      expect(snapshot1.migrations).toEqual([]);
+      expect(loggerDebugSpy).toHaveBeenCalledTimes(1);
+      expect(loggerDebugSpy).toHaveBeenCalledWith(
+        '__drizzle_migrations table not found — skipping migration snapshot',
+      );
+      expect(loggerWarnSpy).not.toHaveBeenCalled();
+
+      // Force cache to be stale so collectSnapshot runs doCollect again
+      service['cacheTimestamp'] = 0;
+      service['collectPromise'] = null;
+
+      // Second call: should skip the query entirely (no additional DB call)
+      mockDb.execute.mockClear();
+      const snapshot2 = await service.collectSnapshot();
+      expect(snapshot2.migrations).toEqual([]);
+      expect(mockDb.execute).not.toHaveBeenCalled();
+    });
+
+    it('still warns on non-42P01 database errors', async () => {
+      mockDb.execute.mockRejectedValueOnce(new Error('connection refused'));
+
+      const loggerWarnSpy = jest.spyOn(service['logger'], 'warn');
+
+      const snapshot = await service.collectSnapshot();
+      expect(snapshot.migrations).toEqual([]);
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        'Failed to query migration history',
+        expect.any(Error),
+      );
+    });
   });
 });
