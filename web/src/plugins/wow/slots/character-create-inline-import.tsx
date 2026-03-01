@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
+import { useEventVariantContext } from '../../../hooks/use-events';
 
 interface CharacterCreateInlineImportProps {
     onSuccess?: (character?: import('@raid-ledger/contract').CharacterDto) => void;
     isMain?: boolean;
     gameSlug?: string;
     onModeChange?: (mode: 'import' | 'manual') => void;
+    /** ROK-587: Event ID for variant context auto-population */
+    eventId?: number;
 }
 
 const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
@@ -29,10 +32,17 @@ export function CharacterCreateInlineImport({
     isMain,
     gameSlug,
     onModeChange,
+    eventId,
 }: CharacterCreateInlineImportProps) {
     const [mode, setMode] = useState<'manual' | 'import'>('import');
     const isClassic = gameSlug === 'world-of-warcraft-classic';
-    const [classicVariant, setClassicVariant] = useState('classic_anniversary');
+
+    // ROK-587: Track only the user's explicit selection; null = no override yet
+    const { data: variantContext } = useEventVariantContext(eventId, isClassic && !!eventId);
+    const [userVariant, setUserVariant] = useState<string | null>(null);
+
+    // Effective variant: user override > event context > default
+    const classicVariant = userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary';
 
     // Notify parent of initial import mode on mount so it hides the manual form
     useEffect(() => {
@@ -77,7 +87,7 @@ export function CharacterCreateInlineImport({
             {mode === 'import' && isClassic && (
                 <select
                     value={classicVariant}
-                    onChange={(e) => setClassicVariant(e.target.value)}
+                    onChange={(e) => setUserVariant(e.target.value)}
                     className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                     {CLASSIC_VARIANTS.map((v) => (
@@ -90,6 +100,7 @@ export function CharacterCreateInlineImport({
                 <WowArmoryImportForm
                     isMain={isMain}
                     gameVariant={gameVariant}
+                    defaultRegion={variantContext?.region as import('@raid-ledger/contract').WowRegion | undefined}
                     onSuccess={(character) => {
                         onSuccess?.(character);
                     }}

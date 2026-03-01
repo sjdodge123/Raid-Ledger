@@ -182,6 +182,23 @@ export class EventsController {
   }
 
   // ============================================================
+  // Variant Context (ROK-587)
+  // ============================================================
+
+  /**
+   * Get the dominant game variant and region from an event's signups.
+   * Used to auto-populate the variant selector when importing a character
+   * in the context of an event signup.
+   */
+  @Get(':id/variant-context')
+  @UseGuards(AuthGuard('jwt'))
+  async getVariantContext(
+    @Param('id', ParseIntPipe) eventId: number,
+  ): Promise<{ gameVariant: string | null; region: string | null }> {
+    return this.eventsService.getVariantContext(eventId);
+  }
+
+  // ============================================================
   // Voice Attendance Endpoints (ROK-490)
   // ============================================================
 

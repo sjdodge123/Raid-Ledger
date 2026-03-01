@@ -239,6 +239,15 @@ export async function getEventRoster(eventId: number): Promise<EventRosterDto> {
 }
 
 /**
+ * ROK-587: Get the dominant game variant and region from an event's signups.
+ * Used to auto-populate the variant selector when importing a character
+ * in the context of an event.
+ */
+export async function getEventVariantContext(eventId: number): Promise<{ gameVariant: string | null; region: string | null }> {
+    return fetchApi<{ gameVariant: string | null; region: string | null }>(`/events/${eventId}/variant-context`);
+}
+
+/**
  * Create a new event
  */
 export async function createEvent(dto: CreateEventDto): Promise<EventResponseDto> {

@@ -169,6 +169,7 @@ export function EventBlockPopover({ event, anchorRect, onClose }: EventBlockPopo
                     gameId={event.gameId ?? undefined}
                     gameName={event.gameName ?? undefined}
                     gameSlug={event.gameSlug ?? undefined}
+                    eventId={event.eventId}
                 />
             )}
         </>

@@ -13,6 +13,13 @@ const ROLE_COLORS: Record<string, string> = {
     dps: 'bg-red-600',
 };
 
+/** ROK-587: Short labels for WoW Classic game variants */
+const VARIANT_LABELS: Record<string, string> = {
+    classic_anniversary: 'TBC',
+    classic_era: 'Era',
+    classic: 'Cata',
+};
+
 interface CharacterCardCompactProps {
     /** Full CharacterDto — preferred. */
     character?: CharacterDto;
@@ -67,6 +74,8 @@ export function CharacterCardCompact({
     const role = character?.effectiveRole ?? roleProp;
     const itemLevel = character?.itemLevel ?? itemLevelProp;
     const isMain = character?.isMain ?? isMainProp;
+    const gameVariant = character?.gameVariant;
+    const variantLabel = gameVariant ? VARIANT_LABELS[gameVariant] : null;
 
     const isSm = size === 'sm';
     const avatarSize = isSm ? 'w-8 h-8' : 'w-10 h-10';
@@ -108,6 +117,11 @@ export function CharacterCardCompact({
                     {faction && (
                         <span className={`px-1.5 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>
                             {faction.charAt(0).toUpperCase() + faction.slice(1)}
+                        </span>
+                    )}
+                    {variantLabel && (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30 flex-shrink-0">
+                            {variantLabel}
                         </span>
                     )}
                 </div>

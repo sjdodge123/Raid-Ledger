@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getEvents, getEvent, getEventRoster, cancelEvent } from '../lib/api-client';
+import { getEvents, getEvent, getEventRoster, getEventVariantContext, cancelEvent } from '../lib/api-client';
 import type { EventListParams } from '../lib/api-client';
 import { useInfiniteList } from './use-infinite-list';
 import type { EventResponseDto } from '@raid-ledger/contract';
@@ -49,6 +49,21 @@ export function useEventRoster(eventId: number) {
         queryKey: ['events', eventId, 'roster'],
         queryFn: () => getEventRoster(eventId),
         enabled: !!eventId,
+    });
+}
+
+/**
+ * ROK-587: Hook to fetch dominant game variant/region context from an event's signups.
+ * Used to auto-populate the variant selector when importing a character.
+ * @param eventId - Event ID to fetch context for
+ * @param enabled - Whether to enable the query (e.g., only for WoW Classic events)
+ */
+export function useEventVariantContext(eventId: number | undefined, enabled = true) {
+    return useQuery({
+        queryKey: ['events', eventId, 'variant-context'],
+        queryFn: () => getEventVariantContext(eventId!),
+        enabled: !!eventId && enabled,
+        staleTime: 60_000, // Cache for 1 minute
     });
 }
 

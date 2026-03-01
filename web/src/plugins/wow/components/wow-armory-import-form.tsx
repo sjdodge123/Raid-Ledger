@@ -11,6 +11,8 @@ interface WowArmoryImportFormProps {
     gameVariant?: string;
     /** Pre-fill the realm field (e.g., from inviter's character) */
     defaultRealm?: string;
+    /** ROK-587: Pre-fill the region (e.g., from event context) */
+    defaultRegion?: import('@raid-ledger/contract').WowRegion;
     /** Register a validator fn with the wizard. Return false = block Next. */
     onRegisterValidator?: (fn: () => boolean) => void;
 }
@@ -28,11 +30,11 @@ type FormState = 'idle' | 'searching' | 'preview' | 'importing' | 'done';
  * Form for importing a WoW character from Blizzard Armory (ROK-234).
  * Flow: select realm → enter name → search → preview card → confirm import.
  */
-export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, defaultRealm, onRegisterValidator }: WowArmoryImportFormProps) {
+export function WowArmoryImportForm({ onSuccess, isMain = false, gameVariant, defaultRealm, defaultRegion, onRegisterValidator }: WowArmoryImportFormProps) {
     const importMutation = useImportWowCharacter();
     const [name, setName] = useState('');
     const [realm, setRealm] = useState(defaultRealm ?? '');
-    const [region, setRegion] = useState<WowRegion>('us');
+    const [region, setRegion] = useState<WowRegion>(defaultRegion ?? 'us');
     const [setAsMain, setSetAsMain] = useState(isMain);
     const [error, setError] = useState('');
     const [formState, setFormState] = useState<FormState>('idle');

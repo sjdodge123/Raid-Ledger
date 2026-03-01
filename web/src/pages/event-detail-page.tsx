@@ -955,6 +955,7 @@ export function EventDetailPage() {
                         hasRoles={gameRegistryEntry?.hasRoles ?? true}
                         gameSlug={event.game?.slug ?? undefined}
                         preSelectedRole={preSelectedRole}
+                        eventId={eventId}
                     />
                 </Suspense>
             )}

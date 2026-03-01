@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { WowArmoryImportForm } from '../components/wow-armory-import-form';
 import { useSystemStatus } from '../../../hooks/use-system-status';
+import { useEventVariantContext } from '../../../hooks/use-events';
 
 const WOW_SLUGS = new Set(['world-of-warcraft', 'world-of-warcraft-classic']);
 
@@ -16,6 +17,8 @@ interface CharacterCreateImportFormProps {
     onTabChange: (tab: 'manual' | 'import') => void;
     existingCharacters?: CharacterDto[];
     onRegisterValidator?: (fn: () => boolean) => void;
+    /** ROK-587: Event ID for variant context auto-population */
+    eventId?: number;
 }
 
 export function CharacterCreateImportForm({
@@ -25,16 +28,22 @@ export function CharacterCreateImportForm({
     onTabChange,
     existingCharacters = [],
     onRegisterValidator,
+    eventId,
 }: CharacterCreateImportFormProps) {
     const systemStatus = useSystemStatus();
     const blizzardConfigured = systemStatus.data?.blizzardConfigured ?? false;
+    const isClassic = gameSlug === 'world-of-warcraft-classic';
 
-    const [wowVariant, setWowVariant] = useState<string>(() => {
-        if (gameSlug === 'world-of-warcraft-classic') {
-            return 'classic_anniversary';
-        }
-        return 'retail';
-    });
+    // ROK-587: Auto-populate variant from event context
+    const { data: variantContext } = useEventVariantContext(eventId, isClassic && !!eventId);
+
+    // Track only the user's explicit selection; null = no override yet
+    const [userVariant, setUserVariant] = useState<string | null>(null);
+
+    // Effective variant: user override > event context > default
+    const wowVariant = isClassic
+        ? (userVariant ?? variantContext?.gameVariant ?? 'classic_anniversary')
+        : 'retail';
 
     // Check if any existing character for this variant already has isMain
     const variantIsMain = useMemo(() => {
@@ -88,7 +97,7 @@ export function CharacterCreateImportForm({
                     </label>
                     <select
                         value={wowVariant}
-                        onChange={(e) => setWowVariant(e.target.value)}
+                        onChange={(e) => setUserVariant(e.target.value)}
                         className="w-full px-3 py-2 bg-panel border border-edge rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                         {gameSlug === 'world-of-warcraft-classic' ? (
