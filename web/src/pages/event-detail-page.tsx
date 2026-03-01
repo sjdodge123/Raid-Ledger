@@ -512,8 +512,8 @@ export function EventDetailPage() {
                 />
             )}
 
-            {/* ROK-491: Link to per-event metrics for past events */}
-            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && (
+            {/* ROK-491: Link to per-event metrics for past events (creator/admin/operator only) */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && canManageRoster && (
                 <div className="flex justify-center">
                     <Link
                         to={`/events/${eventId}/metrics`}
