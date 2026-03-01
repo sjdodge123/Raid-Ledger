@@ -225,7 +225,12 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
     }
 
-    // Tier 2: Default voice channel fallback — match any live scheduled event
+    // Tier 2: Default voice channel fallback — match any live scheduled event.
+    // Intentionally returns ALL concurrent live events. When multiple scheduled
+    // events overlap and no game-specific voice binding exists, users in the
+    // default channel get attendance tracked for every active event. This is
+    // the desired behavior — guilds using the default channel accept that
+    // concurrent events share a single voice channel.
     const defaultVoice =
       await this.settingsService.getDiscordBotDefaultVoiceChannel();
     if (defaultVoice && channelId === defaultVoice) {

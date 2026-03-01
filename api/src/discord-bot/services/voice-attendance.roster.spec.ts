@@ -122,7 +122,7 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
     });
   });
 
-  it('always sets discordAvatarHash to null (not stored in-memory)', () => {
+  it('always sets discordAvatarHash to null (avatar hash is not tracked in roster)', () => {
     service.handleJoin(10, 'discord-B', 'PlayerB', 1);
     service.handleLeave(10, 'discord-B');
 
