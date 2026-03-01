@@ -100,7 +100,7 @@ export class ChannelResolverService {
     const voiceChannel = await this.resolveVoiceChannelForEvent(gameId);
     if (voiceChannel) return voiceChannel;
 
-    // Tier 3: App setting fallback
+    // Tier 2: App setting fallback
     const defaultVoice =
       await this.settingsService.getDiscordBotDefaultVoiceChannel();
     if (defaultVoice) return defaultVoice;
