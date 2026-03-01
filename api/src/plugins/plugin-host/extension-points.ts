@@ -78,6 +78,8 @@ export interface LoginMethod {
   label: string;
   icon?: string;
   loginPath: string;
+  /** Hex color for the provider button (e.g. '#5865F2') */
+  color?: string;
 }
 
 /** Pluggable authentication strategy provided by a plugin */

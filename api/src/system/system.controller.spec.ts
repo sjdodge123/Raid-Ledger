@@ -140,6 +140,7 @@ describe('SystemController', () => {
           label: 'Continue with Discord',
           icon: 'discord',
           loginPath: '/auth/discord',
+          color: '#5865F2',
         }),
         isConfigured: jest.fn().mockResolvedValue(true),
       };
@@ -156,6 +157,7 @@ describe('SystemController', () => {
           label: 'Continue with Discord',
           icon: 'discord',
           loginPath: '/auth/discord',
+          color: '#5865F2',
         },
       ]);
     });
@@ -173,6 +175,7 @@ describe('SystemController', () => {
           label: 'Continue with Discord',
           icon: 'discord',
           loginPath: '/auth/discord',
+          color: '#5865F2',
         }),
         isConfigured: jest.fn().mockResolvedValue(false),
       };

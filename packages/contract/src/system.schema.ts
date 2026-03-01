@@ -6,6 +6,8 @@ export const LoginMethodSchema = z.object({
     label: z.string(),
     icon: z.string().optional(),
     loginPath: z.string(),
+    /** Hex color for the provider button (e.g. '#5865F2') */
+    color: z.string().optional(),
 });
 
 export type LoginMethodDto = z.infer<typeof LoginMethodSchema>;

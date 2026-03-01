@@ -217,12 +217,18 @@ export function LoginPage() {
                         <>
                             {/* Auth provider buttons (ROK-267) */}
                             <div className="space-y-3">
-                                {authProviders.map((provider) => (
+                                {authProviders.map((provider) => {
+                                    const color = provider.color ?? '#5865F2';
+                                    return (
                                     <button
                                         key={provider.key}
                                         onClick={() => handleProviderLogin(provider)}
                                         disabled={isRedirecting}
-                                        className="w-full py-3.5 px-4 bg-[#5865F2] hover:bg-[#4752C4] disabled:bg-[#5865F2]/50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-[#5865F2] focus:ring-offset-2 focus:ring-offset-slate-900"
+                                        className="w-full py-3.5 px-4 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed text-foreground font-semibold rounded-lg transition-colors flex items-center justify-center gap-3 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900"
+                                        style={{
+                                            backgroundColor: color,
+                                            '--tw-ring-color': color,
+                                        } as React.CSSProperties}
                                     >
                                         {isRedirecting ? (
                                             <>
@@ -236,7 +242,8 @@ export function LoginPage() {
                                             </>
                                         )}
                                     </button>
-                                ))}
+                                    );
+                                })}
                             </div>
 
                             {/* Toggle for local login */}
