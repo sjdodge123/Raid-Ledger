@@ -138,24 +138,10 @@ describe('NoShowPatterns', () => {
         expect(offenderItems[1]).toContain('2');
     });
 
-    it('renders Day-of-Week Activity section', async () => {
+    it('does not render Day-of-Week Activity placeholder section', async () => {
         renderWithProviders(<NoShowPatterns />);
-        await waitFor(() => {
-            expect(screen.getByText('Day-of-Week Activity')).toBeInTheDocument();
-        });
-    });
-
-    it('renders all 7 day labels in the heatmap', async () => {
-        renderWithProviders(<NoShowPatterns />);
-        await waitFor(() => {
-            expect(screen.getByText('Sun')).toBeInTheDocument();
-            expect(screen.getByText('Mon')).toBeInTheDocument();
-            expect(screen.getByText('Tue')).toBeInTheDocument();
-            expect(screen.getByText('Wed')).toBeInTheDocument();
-            expect(screen.getByText('Thu')).toBeInTheDocument();
-            expect(screen.getByText('Fri')).toBeInTheDocument();
-            expect(screen.getByText('Sat')).toBeInTheDocument();
-        });
+        await waitFor(() => screen.getByText('Repeat Offenders'));
+        expect(screen.queryByText('Day-of-Week Activity')).not.toBeInTheDocument();
     });
 
     it('shows error state when request fails', async () => {

@@ -66,6 +66,7 @@ describe('AnalyticsService', () => {
           no_show: '2',
           excused: '1',
           total: '11',
+          distinct_events: '1',
         },
         {
           event_date: '2026-01-22',
@@ -73,6 +74,7 @@ describe('AnalyticsService', () => {
           no_show: '1',
           excused: '0',
           total: '11',
+          distinct_events: '1',
         },
       ]);
 
@@ -104,6 +106,7 @@ describe('AnalyticsService', () => {
           no_show: '1',
           excused: '0',
           total: '5',
+          distinct_events: '1',
         },
         {
           event_date: '2026-01-17',
@@ -111,6 +114,7 @@ describe('AnalyticsService', () => {
           no_show: '1',
           excused: '0',
           total: '6',
+          distinct_events: '1',
         },
       ]);
 
@@ -121,6 +125,24 @@ describe('AnalyticsService', () => {
       expect(result.summary.avgAttendanceRate).toBeCloseTo(0.82, 2);
       // 2 / 11 = 0.181..., rounded
       expect(result.summary.avgNoShowRate).toBeCloseTo(0.18, 2);
+    });
+
+    it('counts multiple events on the same date correctly', async () => {
+      // Two events on the same date should count as 2, not 1
+      mockDb.execute.mockResolvedValueOnce([
+        {
+          event_date: '2026-01-10',
+          attended: '10',
+          no_show: '2',
+          excused: '0',
+          total: '12',
+          distinct_events: '2',
+        },
+      ]);
+
+      const result = await service.getAttendanceTrends('30d');
+
+      expect(result.summary.totalEvents).toBe(2);
     });
 
     it('uses 90d period correctly (passes period through to response)', async () => {
@@ -139,6 +161,7 @@ describe('AnalyticsService', () => {
           no_show: '0',
           excused: '0',
           total: '0',
+          distinct_events: '1',
         },
       ]);
 

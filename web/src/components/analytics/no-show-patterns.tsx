@@ -1,7 +1,5 @@
 import { useUserReliability } from '../../hooks/use-analytics';
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 export function NoShowPatterns() {
     const { data, isLoading, error } = useUserReliability(50, 0);
 
@@ -73,32 +71,6 @@ export function NoShowPatterns() {
                         )}
                     </div>
 
-                    {/* Day-of-Week Heatmap (static placeholder derived from client) */}
-                    <div>
-                        <h4 className="text-sm font-medium text-muted mb-3">
-                            Day-of-Week Activity
-                        </h4>
-                        <div className="grid grid-cols-7 gap-2">
-                            {DAY_LABELS.map((day, idx) => (
-                                <div
-                                    key={idx}
-                                    className="flex flex-col items-center"
-                                >
-                                    <span className="text-xs text-muted mb-1">
-                                        {day}
-                                    </span>
-                                    <div className="w-full aspect-square bg-panel rounded flex items-center justify-center border border-edge">
-                                        <span className="text-xs text-muted">
-                                            --
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <p className="text-xs text-muted mt-2">
-                            Day-of-week heatmap requires additional data collection.
-                        </p>
-                    </div>
                 </div>
             )}
         </div>
