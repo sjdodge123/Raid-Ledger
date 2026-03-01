@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
@@ -189,7 +190,7 @@ export class EventsController {
   ): Promise<VoiceSessionsResponseDto> {
     const event = await this.eventsService.findOne(eventId);
     if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
-      throw new BadRequestException(
+      throw new ForbiddenException(
         'Only event creator or admin/operator can view voice sessions',
       );
     }
@@ -208,7 +209,7 @@ export class EventsController {
   ): Promise<VoiceAttendanceSummaryDto> {
     const event = await this.eventsService.findOne(eventId);
     if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
-      throw new BadRequestException(
+      throw new ForbiddenException(
         'Only event creator or admin/operator can view voice attendance',
       );
     }

@@ -11,7 +11,7 @@
  *  6. EventsController voice endpoints — 403 for non-creator / non-admin
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
   VoiceAttendanceService,
   classifyVoiceSession,
@@ -1052,13 +1052,13 @@ describe('EventsController — voice endpoint authorization', () => {
       expect(result).toMatchObject({ eventId: 10 });
     });
 
-    it('throws BadRequestException for a non-creator member user', async () => {
+    it('throws ForbiddenException for a non-creator member user', async () => {
       await expect(
         controller.getVoiceSessions(10, { user: memberUser }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('throws BadRequestException with descriptive message for unauthorized user', async () => {
+    it('throws ForbiddenException with descriptive message for unauthorized user', async () => {
       await expect(
         controller.getVoiceSessions(10, { user: memberUser }),
       ).rejects.toMatchObject({
@@ -1095,13 +1095,13 @@ describe('EventsController — voice endpoint authorization', () => {
       expect(result).toMatchObject({ eventId: 10 });
     });
 
-    it('throws BadRequestException for a non-creator member user', async () => {
+    it('throws ForbiddenException for a non-creator member user', async () => {
       await expect(
         controller.getVoiceAttendance(10, { user: memberUser }),
-      ).rejects.toThrow(BadRequestException);
+      ).rejects.toThrow(ForbiddenException);
     });
 
-    it('throws BadRequestException with descriptive message for unauthorized user', async () => {
+    it('throws ForbiddenException with descriptive message for unauthorized user', async () => {
       await expect(
         controller.getVoiceAttendance(10, { user: memberUser }),
       ).rejects.toMatchObject({
