@@ -185,6 +185,7 @@ export class InviteService {
     code: string,
     userId: number,
     roleOverride?: 'tank' | 'healer' | 'dps' | 'player',
+    characterId?: string,
   ): Promise<{
     type: 'signup' | 'claimed';
     eventId: number;
@@ -262,6 +263,7 @@ export class InviteService {
       try {
         await this.signupsService.signup(slot.eventId, userId, {
           slotRole: effectiveRole,
+          characterId,
         });
       } catch (err) {
         this.logger.warn(
@@ -304,6 +306,7 @@ export class InviteService {
     try {
       await this.signupsService.signup(slot.eventId, userId, {
         slotRole: effectiveRole,
+        characterId,
       });
     } catch (err) {
       this.logger.warn(

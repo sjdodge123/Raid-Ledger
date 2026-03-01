@@ -110,6 +110,8 @@ export type InviteCodeResolveResponseDto = z.infer<typeof InviteCodeResolveRespo
 export const InviteCodeClaimSchema = z.object({
     /** Optional — if the user wants to sign up with a specific role */
     role: PugRoleSchema.optional(),
+    /** Optional — character ID to attach to the signup (ROK-572) */
+    characterId: z.string().uuid().optional(),
 });
 
 export type InviteCodeClaimDto = z.infer<typeof InviteCodeClaimSchema>;
