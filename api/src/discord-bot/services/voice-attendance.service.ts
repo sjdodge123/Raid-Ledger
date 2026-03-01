@@ -223,7 +223,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   async flushToDb(): Promise<void> {
     const dirtyEntries: InMemorySession[] = [];
     for (const session of this.sessions.values()) {
-      if (session.dirty) {
+      // Flush if explicitly dirty OR still actively connected (duration keeps growing)
+      if (session.dirty || session.isActive) {
         dirtyEntries.push(session);
       }
     }
@@ -497,12 +498,65 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
       for (const { eventId } of activeEvents) {
         for (const [memberId, guildMember] of channel.members) {
-          this.handleJoin(
-            eventId,
-            memberId,
-            guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
-            null, // userId will be resolved if/when they leave
-          );
+          const key = `${eventId}:${memberId}`;
+          // Load existing DB session so accumulated time is preserved across restarts
+          const [existingDb] = await this.db
+            .select()
+            .from(schema.eventVoiceSessions)
+            .where(
+              and(
+                eq(schema.eventVoiceSessions.eventId, eventId),
+                eq(schema.eventVoiceSessions.discordUserId, memberId),
+              ),
+            )
+            .limit(1);
+
+          const now = new Date();
+          if (existingDb) {
+            // Restore from DB and resume tracking
+            const priorSegments = (existingDb.segments as Array<{
+              joinAt: string;
+              leaveAt: string | null;
+              durationSec: number;
+            }>) ?? [];
+            this.sessions.set(key, {
+              eventId,
+              userId: existingDb.userId,
+              discordUserId: memberId,
+              discordUsername:
+                guildMember.displayName ??
+                guildMember.user?.username ??
+                'Unknown',
+              firstJoinAt: existingDb.firstJoinAt,
+              lastLeaveAt: null,
+              totalDurationSec: existingDb.totalDurationSec ?? 0,
+              segments: [
+                ...priorSegments.map((s) => ({
+                  ...s,
+                  // Close any open segments from before the restart
+                  leaveAt: s.leaveAt ?? now.toISOString(),
+                  durationSec: s.durationSec ?? 0,
+                })),
+                {
+                  joinAt: now.toISOString(),
+                  leaveAt: null,
+                  durationSec: 0,
+                },
+              ],
+              isActive: true,
+              activeSegmentStart: now,
+              dirty: true,
+            });
+          } else {
+            this.handleJoin(
+              eventId,
+              memberId,
+              guildMember.displayName ??
+                guildMember.user?.username ??
+                'Unknown',
+              null,
+            );
+          }
           recovered++;
         }
       }
