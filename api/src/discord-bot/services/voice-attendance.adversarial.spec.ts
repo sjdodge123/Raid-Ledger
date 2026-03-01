@@ -482,7 +482,9 @@ describe('VoiceAttendanceService — in-memory session lifecycle', () => {
     expect(mockDb.values).toHaveBeenCalledTimes(2);
 
     const calls = mockDb.values.mock.calls;
-    const discordIds = calls.map((c: [Record<string, unknown>]) => c[0].discordUserId);
+    const discordIds = calls.map(
+      (c: [Record<string, unknown>]) => c[0].discordUserId,
+    );
     expect(discordIds).toContain('discord-A');
     expect(discordIds).toContain('discord-B');
   });
@@ -709,13 +711,15 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 
     // Set up client with handler capture
     const mockClient = {
-      on: jest.fn().mockImplementation(
-        (event: string, handler: (...args: unknown[]) => void) => {
-          if (event === (Events.VoiceStateUpdate as string)) {
-            voiceHandler = handler;
-          }
-        },
-      ),
+      on: jest
+        .fn()
+        .mockImplementation(
+          (event: string, handler: (...args: unknown[]) => void) => {
+            if (event === (Events.VoiceStateUpdate as string)) {
+              voiceHandler = handler;
+            }
+          },
+        ),
       removeListener: jest.fn(),
       guilds: {
         cache: makeCollection([
@@ -926,7 +930,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     expect(mockAdHocEventService.handleVoiceLeave).toHaveBeenCalled();
   });
 
-  it('recoverActiveSessions is called on bot connect', async () => {
+  it('recoverActiveSessions is called on bot connect', () => {
     // Already called in beforeEach, just verify it was invoked
     expect(mockVoiceAttendanceService.recoverActiveSessions).toHaveBeenCalled();
   });
@@ -951,7 +955,12 @@ describe('EventsController — voice endpoint authorization', () => {
   const mockEvent = {
     id: 10,
     title: 'Test Event',
-    creator: { id: creatorId, discordId: '111', username: 'creator', avatar: null },
+    creator: {
+      id: creatorId,
+      discordId: '111',
+      username: 'creator',
+      avatar: null,
+    },
     game: null,
     createdAt: '2026-02-01T00:00:00.000Z',
     updatedAt: '2026-02-01T00:00:00.000Z',
@@ -963,7 +972,9 @@ describe('EventsController — voice endpoint authorization', () => {
     };
 
     mockVoiceAttendanceService = {
-      getVoiceSessions: jest.fn().mockResolvedValue({ eventId: 10, sessions: [] }),
+      getVoiceSessions: jest
+        .fn()
+        .mockResolvedValue({ eventId: 10, sessions: [] }),
       getVoiceAttendanceSummary: jest.fn().mockResolvedValue({
         eventId: 10,
         totalTracked: 0,
@@ -983,7 +994,11 @@ describe('EventsController — voice endpoint authorization', () => {
         { provide: EventsService, useValue: mockEventsService },
         {
           provide: SignupsService,
-          useValue: { signup: jest.fn(), cancel: jest.fn(), getRoster: jest.fn() },
+          useValue: {
+            signup: jest.fn(),
+            cancel: jest.fn(),
+            getRoster: jest.fn(),
+          },
         },
         {
           provide: AttendanceService,
@@ -993,7 +1008,10 @@ describe('EventsController — voice endpoint authorization', () => {
           },
         },
         { provide: PugsService, useValue: {} },
-        { provide: ShareService, useValue: { shareToDiscordChannels: jest.fn() } },
+        {
+          provide: ShareService,
+          useValue: { shareToDiscordChannels: jest.fn() },
+        },
         {
           provide: AdHocEventService,
           useValue: { getAdHocRoster: jest.fn() },
@@ -1015,7 +1033,9 @@ describe('EventsController — voice endpoint authorization', () => {
       });
 
       expect(result).toMatchObject({ eventId: 10 });
-      expect(mockVoiceAttendanceService.getVoiceSessions).toHaveBeenCalledWith(10);
+      expect(mockVoiceAttendanceService.getVoiceSessions).toHaveBeenCalledWith(
+        10,
+      );
     });
 
     it('allows admin to view voice sessions for any event', async () => {
@@ -1025,7 +1045,9 @@ describe('EventsController — voice endpoint authorization', () => {
     });
 
     it('allows operator to view voice sessions for any event', async () => {
-      const result = await controller.getVoiceSessions(10, { user: operatorUser });
+      const result = await controller.getVoiceSessions(10, {
+        user: operatorUser,
+      });
 
       expect(result).toMatchObject({ eventId: 10 });
     });
