@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
@@ -198,7 +198,7 @@ export class IgdbService {
    * Scheduled sync: refresh game data from IGDB every 6 hours.
    * Only runs when IGDB credentials are configured.
    */
-  @Cron(CronExpression.EVERY_6_HOURS, {
+  @Cron('50 0 */6 * * *', {
     name: 'IgdbService_handleScheduledSync',
   })
   async handleScheduledSync() {

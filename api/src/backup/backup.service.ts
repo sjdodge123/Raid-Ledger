@@ -88,7 +88,7 @@ export class BackupService implements OnModuleInit {
    * Daily scheduled backup at 2 AM.
    * Produces a pg_dump custom-format compressed file.
    */
-  @Cron('0 2 * * *', { name: 'BackupService_dailyBackup' })
+  @Cron('10 0 2 * * *', { name: 'BackupService_dailyBackup' })
   async handleDailyBackup(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'BackupService_dailyBackup',

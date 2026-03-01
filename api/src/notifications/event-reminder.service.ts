@@ -350,7 +350,9 @@ export class EventReminderService {
    * Legacy compatibility: kept for existing day-of reminders.
    * Now delegates to handleReminders for the 24-hour window.
    */
-  @Cron('0 */15 * * * *', { name: 'EventReminderService_handleDayOfReminders' })
+  @Cron('45 */15 * * * *', {
+    name: 'EventReminderService_handleDayOfReminders',
+  })
   async handleDayOfReminders(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'EventReminderService_handleDayOfReminders',
