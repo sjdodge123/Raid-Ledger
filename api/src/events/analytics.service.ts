@@ -38,13 +38,15 @@ export class AnalyticsService {
       no_show: string;
       excused: string;
       total: string;
+      distinct_events: string;
     }>(sql`
       SELECT
         DATE(upper(e.duration)) AS event_date,
         COUNT(*) FILTER (WHERE es.attendance_status = 'attended') AS attended,
         COUNT(*) FILTER (WHERE es.attendance_status = 'no_show') AS no_show,
         COUNT(*) FILTER (WHERE es.attendance_status = 'excused') AS excused,
-        COUNT(*) AS total
+        COUNT(*) AS total,
+        COUNT(DISTINCT e.id) AS distinct_events
       FROM events e
       JOIN event_signups es ON es.event_id = e.id
       WHERE upper(e.duration) >= ${cutoff.toISOString()}::timestamptz
@@ -68,8 +70,8 @@ export class AnalyticsService {
     const totalNoShow = dataPoints.reduce((s, d) => s + d.noShow, 0);
     const totalMarked = dataPoints.reduce((s, d) => s + d.total, 0);
 
-    // Count distinct event dates as proxy for total events
-    const totalEvents = dataPoints.length;
+    // Count distinct event IDs across all dates
+    const totalEvents = rows.reduce((s, r) => s + Number(r.distinct_events), 0);
 
     return {
       period,

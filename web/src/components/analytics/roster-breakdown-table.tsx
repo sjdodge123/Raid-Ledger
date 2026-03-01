@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { RosterBreakdownEntryDto } from '@raid-ledger/contract';
+import { formatDuration } from '../../lib/format-duration';
 
 interface RosterBreakdownTableProps {
     roster: RosterBreakdownEntryDto[];
@@ -221,11 +222,4 @@ function SortableHeader({
             )}
         </th>
     );
-}
-
-function formatDuration(seconds: number): string {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
 }
