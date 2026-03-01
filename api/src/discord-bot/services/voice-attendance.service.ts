@@ -196,30 +196,53 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const guildId = this.clientService.getGuildId();
     if (!guildId) return [];
 
+    const now = new Date();
     const bindings = await this.channelBindingsService.getBindings(guildId);
+
+    // Tier 1: Game-specific voice binding
     const voiceBinding = bindings.find(
       (b) =>
         b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
     );
 
-    if (!voiceBinding || voiceBinding.gameId === null) return [];
+    if (voiceBinding && voiceBinding.gameId !== null) {
+      const activeEvents = await this.db
+        .select({ id: schema.events.id, gameId: schema.events.gameId })
+        .from(schema.events)
+        .where(
+          and(
+            eq(schema.events.gameId, voiceBinding.gameId),
+            eq(schema.events.isAdHoc, false),
+            sql`${schema.events.cancelledAt} IS NULL`,
+            sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+          ),
+        );
 
-    const now = new Date();
-    const activeEvents = await this.db
-      .select({ id: schema.events.id, gameId: schema.events.gameId })
-      .from(schema.events)
-      .where(
-        and(
-          eq(schema.events.gameId, voiceBinding.gameId),
-          eq(schema.events.isAdHoc, false),
-          sql`${schema.events.cancelledAt} IS NULL`,
-          // Event is currently active (within its scheduled time window)
-          sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
-        ),
-      );
+      return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    }
 
-    return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    // Tier 2: Default voice channel fallback — match any live scheduled event
+    const defaultVoice =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    if (defaultVoice && channelId === defaultVoice) {
+      const activeEvents = await this.db
+        .select({ id: schema.events.id, gameId: schema.events.gameId })
+        .from(schema.events)
+        .where(
+          and(
+            eq(schema.events.isAdHoc, false),
+            sql`${schema.events.cancelledAt} IS NULL`,
+            sql`${schema.events.gameId} IS NOT NULL`,
+            sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+          ),
+        );
+
+      return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    }
+
+    return [];
   }
 
   // ─── DB flush ──────────────────────────────────────────────

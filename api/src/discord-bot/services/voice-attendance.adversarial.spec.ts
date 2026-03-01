@@ -647,6 +647,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     handleJoin: jest.Mock;
     handleLeave: jest.Mock;
     recoverActiveSessions: jest.Mock;
+    getActiveRoster: jest.Mock;
   };
   let mockAdHocEventService: {
     handleVoiceJoin: jest.Mock;
