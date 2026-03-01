@@ -30,6 +30,7 @@ import { AdHocEventService } from './ad-hoc-event.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { EventsController } from '../../events/events.controller';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
@@ -664,6 +665,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       handleJoin: jest.fn(),
       handleLeave: jest.fn(),
       recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+      getActiveRoster: jest.fn().mockReturnValue({ participants: [], activeCount: 0 }),
     };
 
     mockAdHocEventService = {
@@ -704,6 +706,10 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
         {
           provide: UsersService,
           useValue: { findByDiscordId: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: AdHocEventsGateway,
+          useValue: { emitRosterUpdate: jest.fn() },
         },
       ],
     }).compile();
