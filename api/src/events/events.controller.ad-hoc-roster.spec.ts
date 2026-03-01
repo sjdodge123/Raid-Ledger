@@ -101,11 +101,18 @@ describe('EventsController.getAdHocRoster (ROK-530)', () => {
         { provide: EventsService, useValue: mockEventsService },
         {
           provide: SignupsService,
-          useValue: { signup: jest.fn(), cancel: jest.fn(), getRoster: jest.fn() },
+          useValue: {
+            signup: jest.fn(),
+            cancel: jest.fn(),
+            getRoster: jest.fn(),
+          },
         },
         {
           provide: AttendanceService,
-          useValue: { recordAttendance: jest.fn(), getAttendanceSummary: jest.fn() },
+          useValue: {
+            recordAttendance: jest.fn(),
+            getAttendanceSummary: jest.fn(),
+          },
         },
         { provide: PugsService, useValue: {} },
         {
@@ -113,7 +120,10 @@ describe('EventsController.getAdHocRoster (ROK-530)', () => {
           useValue: { shareToDiscordChannels: jest.fn() },
         },
         { provide: AdHocEventService, useValue: mockAdHocEventService },
-        { provide: VoiceAttendanceService, useValue: mockVoiceAttendanceService },
+        {
+          provide: VoiceAttendanceService,
+          useValue: mockVoiceAttendanceService,
+        },
         { provide: AnalyticsService, useValue: { getEventMetrics: jest.fn() } },
       ],
     }).compile();
@@ -215,7 +225,9 @@ describe('EventsController.getAdHocRoster (ROK-530)', () => {
     const notFound = new Error('Event not found');
     mockEventsService.findOne.mockRejectedValue(notFound);
 
-    await expect(controller.getAdHocRoster(999)).rejects.toThrow('Event not found');
+    await expect(controller.getAdHocRoster(999)).rejects.toThrow(
+      'Event not found',
+    );
 
     expect(mockAdHocEventService.getAdHocRoster).not.toHaveBeenCalled();
     expect(mockVoiceAttendanceService.getActiveRoster).not.toHaveBeenCalled();

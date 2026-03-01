@@ -70,7 +70,7 @@ export function EventDetailPage() {
     // ROK-293 / ROK-530: Real-time voice roster (ad-hoc + planned events)
     const isAdHoc = event?.isAdHoc ?? false;
     const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
-    const showVoiceRoster = isAdHoc || (eventStatus === 'live' && !!event?.game);
+    const showVoiceRoster = isAdHoc || eventStatus === 'live';
     const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
 
     // Look up game config entry for hasRoles/slug (ROK-234)

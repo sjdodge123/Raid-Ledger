@@ -4,7 +4,7 @@
  * Tests for the showVoiceRoster logic introduced in ROK-530.
  *
  * The showVoiceRoster flag is:
- *   `isAdHoc || (eventStatus === 'live' && !!event?.game)`
+ *   `isAdHoc || eventStatus === 'live'`
  *
  * The VoiceRoster panel is rendered when:
  *   `showVoiceRoster && voiceRoster.participants.length > 0`
@@ -21,7 +21,7 @@ import { getEventStatus } from '../lib/event-utils';
 // The component derives showVoiceRoster as:
 //   const isAdHoc = event?.isAdHoc ?? false;
 //   const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
-//   const showVoiceRoster = isAdHoc || (eventStatus === 'live' && !!event?.game);
+//   const showVoiceRoster = isAdHoc || eventStatus === 'live';
 //
 // We test this logic directly using the same function and conditions.
 
@@ -35,7 +35,7 @@ function deriveShowVoiceRoster(
 ): boolean {
   const isAdHoc = event?.isAdHoc ?? false;
   const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
-  return isAdHoc || (eventStatus === 'live' && !!event?.game);
+  return isAdHoc || eventStatus === 'live';
 }
 
 // Helper: time strings relative to "now"
@@ -93,7 +93,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
     expect(deriveShowVoiceRoster(livePlannedWithGame)).toBe(true);
   });
 
-  it('showVoiceRoster is false for planned events that are live but have NO game', () => {
+  it('showVoiceRoster is true for planned events that are live without a game (default voice channel fallback)', () => {
     const livePlannedNoGame = {
       isAdHoc: false,
       startTime: timeOffset(-30 * 60_000),
@@ -101,7 +101,7 @@ describe('showVoiceRoster logic (ROK-530)', () => {
       game: null,
     };
 
-    expect(deriveShowVoiceRoster(livePlannedNoGame)).toBe(false);
+    expect(deriveShowVoiceRoster(livePlannedNoGame)).toBe(true);
   });
 
   // ── Planned events: upcoming ──────────────────────────────────────────────
@@ -241,8 +241,7 @@ describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () =
     );
 
     const isAdHoc = false;
-    const game = { id: 1, name: 'WoW' };
-    const showVoiceRoster = isAdHoc || (status === 'live' && !!game);
+    const showVoiceRoster = isAdHoc || status === 'live';
 
     expect(showVoiceRoster).toBe(false);
   });
@@ -254,8 +253,7 @@ describe('getEventStatus boundaries relevant to showVoiceRoster (ROK-530)', () =
     );
 
     const isAdHoc = false;
-    const game = { id: 1, name: 'WoW' };
-    const showVoiceRoster = isAdHoc || (status === 'live' && !!game);
+    const showVoiceRoster = isAdHoc || status === 'live';
 
     expect(showVoiceRoster).toBe(false);
   });

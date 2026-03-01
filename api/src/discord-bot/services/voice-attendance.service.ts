@@ -233,7 +233,6 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
           and(
             eq(schema.events.isAdHoc, false),
             sql`${schema.events.cancelledAt} IS NULL`,
-            sql`${schema.events.gameId} IS NOT NULL`,
             sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
             sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
           ),

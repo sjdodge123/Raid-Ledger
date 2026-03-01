@@ -84,7 +84,11 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
             findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
             handleJoin: jest.fn(),
             handleLeave: jest.fn(),
-            getActiveRoster: jest.fn().mockReturnValue({ eventId: 0, participants: [], activeCount: 0 }),
+            getActiveRoster: jest.fn().mockReturnValue({
+              eventId: 0,
+              participants: [],
+              activeCount: 0,
+            }),
             recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
           },
         },

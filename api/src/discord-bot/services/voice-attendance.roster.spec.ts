@@ -137,7 +137,9 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
     service.handleJoin(10, 'discord-active', 'ActiveUser', 1);
 
     const result = service.getActiveRoster(10);
-    const p = result.participants.find((p) => p.discordUserId === 'discord-active');
+    const p = result.participants.find(
+      (p) => p.discordUserId === 'discord-active',
+    );
 
     expect(p?.leftAt).toBeNull();
   });
@@ -150,7 +152,9 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
     service.handleLeave(10, 'discord-left');
 
     const result = service.getActiveRoster(10);
-    const p = result.participants.find((p) => p.discordUserId === 'discord-left');
+    const p = result.participants.find(
+      (p) => p.discordUserId === 'discord-left',
+    );
 
     expect(p?.leftAt).toBe('2026-03-01T18:30:00.000Z');
   });
@@ -208,7 +212,9 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
     jest.setSystemTime(new Date('2026-03-01T18:02:30Z'));
 
     const result = service.getActiveRoster(10);
-    const p = result.participants.find((p) => p.discordUserId === 'discord-seg');
+    const p = result.participants.find(
+      (p) => p.discordUserId === 'discord-seg',
+    );
 
     // First segment = 60s, current active = 30s → total >= 90s
     expect(p?.totalDurationSeconds).toBeGreaterThanOrEqual(90);
