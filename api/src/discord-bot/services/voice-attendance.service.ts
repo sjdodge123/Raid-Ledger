@@ -387,7 +387,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         and(
           eq(schema.eventSignups.eventId, eventId),
           sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
-          sql`${schema.eventSignups.status} IN ('signed_up', 'tentative')`,
+          sql`${schema.eventSignups.status} IN ('signed_up', 'tentative', 'going')`,
         ),
       );
 
@@ -560,15 +560,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         await this.flushToDb();
 
         for (const event of endedEvents) {
-          // Check if any sessions exist for this event
-          const [sessionCount] = await this.db
-            .select({ count: sql<number>`count(*)` })
-            .from(schema.eventVoiceSessions)
-            .where(eq(schema.eventVoiceSessions.eventId, event.id));
-
-          if (!sessionCount || sessionCount.count === 0) continue;
-
-          // Check if already classified
+          // Check if already fully classified (all sessions have a classification)
           const [unclassified] = await this.db
             .select({ count: sql<number>`count(*)` })
             .from(schema.eventVoiceSessions)
@@ -579,7 +571,28 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
               ),
             );
 
-          if (!unclassified || unclassified.count === 0) continue;
+          // Check if there are signups that might need no_show classification
+          const [signupCount] = await this.db
+            .select({ count: sql<number>`count(*)` })
+            .from(schema.eventSignups)
+            .where(eq(schema.eventSignups.eventId, event.id));
+
+          const hasUnclassifiedSessions =
+            unclassified && unclassified.count > 0;
+          const hasSignups = signupCount && signupCount.count > 0;
+
+          // Skip if no unclassified sessions AND no signups to check for no-shows
+          if (!hasUnclassifiedSessions && !hasSignups) continue;
+
+          // Skip if already processed (sessions exist, all classified, and no-shows already created)
+          if (!hasUnclassifiedSessions && hasSignups) {
+            const [sessionCount] = await this.db
+              .select({ count: sql<number>`count(*)` })
+              .from(schema.eventVoiceSessions)
+              .where(eq(schema.eventVoiceSessions.eventId, event.id));
+            // If we already have sessions (including no_show records), skip
+            if (sessionCount && sessionCount.count > 0) continue;
+          }
 
           this.logger.log(`Classifying voice attendance for event ${event.id}`);
           await this.classifyEvent(event.id);
