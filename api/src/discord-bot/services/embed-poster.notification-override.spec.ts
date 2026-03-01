@@ -235,7 +235,9 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
         .mockReturnValueOnce(makeSelectChain([])); // rosterAssignments
 
       // Edit fails with Unknown Message (10008)
-      const editError = Object.assign(new Error('Unknown Message'), { code: 10008 });
+      const editError = Object.assign(new Error('Unknown Message'), {
+        code: 10008,
+      });
       clientService.editEmbed = jest.fn().mockRejectedValue(editError);
     };
 
@@ -244,18 +246,12 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
 
       // After fallback re-post, the update chain is needed
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
-      clientService.sendEmbed.mockResolvedValue({ id: 'msg-new-789' });
+      clientService.sendEmbed.mockResolvedValue({ id: 'msg-new-789' } as any);
       channelResolver.resolveChannelForEvent.mockResolvedValue(
         'override-channel-777',
       );
 
-      await service.postEmbed(
-        42,
-        baseEvent,
-        5,
-        null,
-        'override-channel-777',
-      );
+      await service.postEmbed(42, baseEvent, 5, null, 'override-channel-777');
 
       // Should be called twice: once for initial check, once for fallback re-post
       expect(channelResolver.resolveChannelForEvent).toHaveBeenCalledTimes(2);
@@ -279,7 +275,7 @@ describe('EmbedPosterService — notification channel override (ROK-599)', () =>
       setupExistingEmbedDeleted();
 
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
-      clientService.sendEmbed.mockResolvedValue({ id: 'msg-new-789' });
+      clientService.sendEmbed.mockResolvedValue({ id: 'msg-new-789' } as any);
       channelResolver.resolveChannelForEvent.mockResolvedValue(
         'override-channel-888',
       );
