@@ -746,5 +746,126 @@ describe('CharactersService', () => {
         }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    // ROK-578: Merge imported data into existing local character on conflict
+    it('should merge imported data into existing local character instead of throwing 409', async () => {
+      const mockAdapter = {
+        resolveGameSlugs: jest.fn().mockReturnValue(['world-of-warcraft']),
+        fetchProfile: jest.fn().mockResolvedValue({
+          name: 'Thrall',
+          realm: 'Area 52',
+          class: 'Shaman',
+          spec: 'Enhancement',
+          role: 'dps',
+          itemLevel: 500,
+          avatarUrl: 'https://render.worldofwarcraft.com/thrall.jpg',
+          renderUrl: 'https://render.worldofwarcraft.com/thrall-render.jpg',
+          level: 80,
+          race: 'Orc',
+          faction: 'horde',
+          profileUrl: 'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+        }),
+        fetchSpecialization: jest.fn().mockResolvedValue({
+          spec: 'Enhancement',
+          role: 'dps',
+          talents: { loadouts: [] },
+        }),
+        fetchEquipment: jest.fn().mockResolvedValue({ slots: [] }),
+      };
+
+      mockPluginRegistry.getAdaptersForExtensionPoint.mockReturnValue(
+        new Map([['wow', mockAdapter]]),
+      );
+
+      // User exists
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([{ id: 1 }]),
+          }),
+        }),
+      });
+
+      // Game lookup
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockGame]),
+          }),
+        }),
+      });
+
+      // Transaction throws unique violation (simulates duplicate)
+      mockDb.transaction.mockImplementationOnce(
+        (callback: (tx: Record<string, jest.Mock>) => unknown) => {
+          const tx = {
+            select: mockTxSelectDualCall([], [{ charCount: 1 }]),
+            insert: jest.fn().mockReturnValue({
+              values: jest.fn().mockReturnValue({
+                returning: jest
+                  .fn()
+                  .mockRejectedValue(new Error('unique_user_game_character')),
+              }),
+            }),
+          };
+          return callback(tx);
+        },
+      );
+
+      // mergeIntoExisting: find existing local character
+      const existingLocal = {
+        ...mockCharacter,
+        externalId: null,
+        region: null,
+        gameVariant: null,
+        lastSyncedAt: null,
+      };
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([existingLocal]),
+          }),
+        }),
+      });
+
+      // mergeIntoExisting: update returns merged character
+      const mergedCharacter = {
+        ...mockCharacter,
+        itemLevel: 500,
+        avatarUrl: 'https://render.worldofwarcraft.com/thrall.jpg',
+        renderUrl: 'https://render.worldofwarcraft.com/thrall-render.jpg',
+        region: 'us',
+        gameVariant: 'retail',
+        lastSyncedAt: new Date(),
+        profileUrl: 'https://worldofwarcraft.blizzard.com/en-us/character/us/area-52/thrall',
+        equipment: { slots: [] },
+        talents: { loadouts: [] },
+      };
+      mockDb.update.mockReturnValueOnce({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([mergedCharacter]),
+          }),
+        }),
+      });
+
+      const result = await service.importExternal(1, {
+        name: 'Thrall',
+        realm: 'area-52',
+        region: 'us',
+        gameVariant: 'retail',
+        isMain: false,
+      });
+
+      // Should return merged data, not throw ConflictException
+      expect(result.itemLevel).toBe(500);
+      expect(result.avatarUrl).toBe('https://render.worldofwarcraft.com/thrall.jpg');
+      expect(result.region).toBe('us');
+      expect(result.gameVariant).toBe('retail');
+      expect(result.equipment).toEqual({ slots: [] });
+
+      // Verify update was called (merge path), not just insert
+      expect(mockDb.update).toHaveBeenCalled();
+    });
   });
 });
