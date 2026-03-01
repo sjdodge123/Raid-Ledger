@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
@@ -72,6 +72,21 @@ export function EventDetailPage() {
     const eventStatus = event ? getEventStatus(event.startTime, event.endTime) : null;
     const showVoiceRoster = isAdHoc || eventStatus === 'live';
     const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
+
+    // ROK-530: Resolve voice channel name for event detail summary
+    const [voiceChannelName, setVoiceChannelName] = useState<string | null>(null);
+    const fetchVoiceChannel = useCallback(async () => {
+        if (!eventId || isAdHoc) { setVoiceChannelName(null); return; }
+        try {
+            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+            const res = await fetch(`${API_BASE}/events/${eventId}/voice-channel`);
+            if (res.ok) {
+                const data = await res.json() as { channelName: string | null };
+                setVoiceChannelName(data.channelName);
+            }
+        } catch { /* ignore */ }
+    }, [eventId, isAdHoc]);
+    useEffect(() => { void fetchVoiceChannel(); }, [fetchVoiceChannel]);
 
     // Look up game config entry for hasRoles/slug (ROK-234)
     // ROK-400: event.game.id is now the games table integer ID directly
@@ -503,6 +518,7 @@ export function EventDetailPage() {
                     endTime={event.endTime}
                     creator={event.creator}
                     description={event.description}
+                    voiceChannelName={voiceChannelName}
                 />
             </div>
 

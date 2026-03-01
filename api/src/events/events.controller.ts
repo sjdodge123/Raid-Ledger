@@ -23,6 +23,8 @@ import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { AnalyticsService } from './analytics.service';
 import {
   CreateEventSchema,
@@ -100,6 +102,8 @@ export class EventsController {
     private readonly shareService: ShareService,
     private readonly adHocEventService: AdHocEventService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly channelResolverService: ChannelResolverService,
+    private readonly discordBotClientService: DiscordBotClientService,
     private readonly analyticsService: AnalyticsService,
   ) {}
 
@@ -252,6 +256,43 @@ export class EventsController {
       return this.adHocEventService.getAdHocRoster(id);
     }
     return this.voiceAttendanceService.getActiveRoster(id);
+  }
+
+  /**
+   * ROK-530: Get the resolved voice channel for an event.
+   * Uses 2-tier fallback: game-specific voice binding → default voice channel.
+   */
+  @Get(':id/voice-channel')
+  async getVoiceChannel(
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<{ channelId: string | null; channelName: string | null }> {
+    const event = await this.eventsService.findOne(id);
+    const channelId =
+      await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
+        event.game?.id ?? null,
+      );
+
+    if (!channelId) {
+      return { channelId: null, channelName: null };
+    }
+
+    // Resolve channel name from Discord
+    try {
+      const guildId = this.discordBotClientService.getGuildId();
+      const client = this.discordBotClientService.getClient();
+      if (guildId && client) {
+        const guild = await client.guilds.fetch(guildId);
+        const channel = await guild.channels.fetch(channelId);
+        return {
+          channelId,
+          channelName: channel?.name ?? null,
+        };
+      }
+    } catch {
+      // Discord API failure — return ID without name
+    }
+
+    return { channelId, channelName: null };
   }
 
   /**
