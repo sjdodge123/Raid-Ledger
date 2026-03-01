@@ -265,7 +265,7 @@ export class EventsController {
   @Get(':id/voice-channel')
   async getVoiceChannel(
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<{ channelId: string | null; channelName: string | null }> {
+  ): Promise<{ channelId: string | null; channelName: string | null; guildId: string | null }> {
     const event = await this.eventsService.findOne(id);
     const channelId =
       await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
@@ -273,7 +273,7 @@ export class EventsController {
       );
 
     if (!channelId) {
-      return { channelId: null, channelName: null };
+      return { channelId: null, channelName: null, guildId: null };
     }
 
     // Resolve channel name from Discord
@@ -286,13 +286,14 @@ export class EventsController {
         return {
           channelId,
           channelName: channel?.name ?? null,
+          guildId,
         };
       }
     } catch {
       // Discord API failure — return ID without name
     }
 
-    return { channelId, channelName: null };
+    return { channelId, channelName: null, guildId: null };
   }
 
   /**

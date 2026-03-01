@@ -74,14 +74,21 @@ export function EventDetailPage() {
     const voiceRoster = useVoiceRoster(showVoiceRoster ? eventId : null);
 
     // ROK-530: Resolve voice channel name for event detail summary
-    const [voiceChannelName, setVoiceChannelName] = useState<string | null>(null);
+    const [voiceChannel, setVoiceChannel] = useState<{ name: string; url: string } | null>(null);
     useEffect(() => {
         if (!eventId || isAdHoc) return;
         let cancelled = false;
         const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
         fetch(`${API_BASE}/events/${eventId}/voice-channel`)
-            .then((res) => res.ok ? res.json() as Promise<{ channelName: string | null }> : null)
-            .then((data) => { if (!cancelled && data) setVoiceChannelName(data.channelName); })
+            .then((res) => res.ok ? res.json() as Promise<{ channelId: string | null; channelName: string | null; guildId: string | null }> : null)
+            .then((data) => {
+                if (!cancelled && data?.channelName && data.guildId && data.channelId) {
+                    setVoiceChannel({
+                        name: data.channelName,
+                        url: `https://discord.com/channels/${data.guildId}/${data.channelId}`,
+                    });
+                }
+            })
             .catch(() => { /* ignore */ });
         return () => { cancelled = true; };
     }, [eventId, isAdHoc]);
@@ -516,7 +523,8 @@ export function EventDetailPage() {
                     endTime={event.endTime}
                     creator={event.creator}
                     description={event.description}
-                    voiceChannelName={voiceChannelName}
+                    voiceChannelName={voiceChannel?.name ?? null}
+                    voiceChannelUrl={voiceChannel?.url ?? null}
                 />
             </div>
 
