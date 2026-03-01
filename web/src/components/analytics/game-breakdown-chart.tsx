@@ -66,10 +66,10 @@ export function GameBreakdownChart() {
                                 borderRadius: '8px',
                                 color: '#F3F4F6',
                             }}
-                            formatter={(value: number, name: string) => [
-                                `${value}%`,
-                                name,
-                            ]}
+                            formatter={((value: number | undefined, name: string | undefined) => [
+                                `${value ?? 0}%`,
+                                name ?? '',
+                            ]) as never}
                         />
                         <Legend />
                         <Bar
