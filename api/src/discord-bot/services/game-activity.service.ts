@@ -288,7 +288,7 @@ export class GameActivityService
 
   // ─── Stale session sweep (every 15 min) ───────────────────────
 
-  @Cron('0 */15 * * * *', {
+  @Cron('30 */15 * * * *', {
     name: 'GameActivityService_sweepStaleSessions',
   })
   async sweepStaleSessions(): Promise<void> {
@@ -324,7 +324,7 @@ export class GameActivityService
 
   // ─── Rollup cron (daily at 5 AM) ─────────────────────────────
 
-  @Cron('0 5 * * *', {
+  @Cron('40 0 5 * * *', {
     name: 'GameActivityService_dailyRollup',
   })
   async dailyRollup(): Promise<void> {

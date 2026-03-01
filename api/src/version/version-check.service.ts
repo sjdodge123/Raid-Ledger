@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { join } from 'path';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
@@ -53,7 +53,7 @@ export class VersionCheckService implements OnModuleInit {
   /**
    * Cron: run every day at midnight.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT, {
+  @Cron('0 0 0 * * *', {
     name: 'VersionCheckService_handleCron',
   })
   async handleCron() {

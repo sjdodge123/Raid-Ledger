@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Cron } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { randomUUID } from 'crypto';
@@ -249,7 +249,7 @@ export class RelayService {
    * Hourly heartbeat cron — sends anonymous usage stats to relay.
    * No-ops when relay is disabled or not registered.
    */
-  @Cron(CronExpression.EVERY_HOUR, { name: 'RelayService_handleHeartbeat' })
+  @Cron('20 0 * * * *', { name: 'RelayService_handleHeartbeat' })
   async handleHeartbeat(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'RelayService_handleHeartbeat',

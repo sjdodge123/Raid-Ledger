@@ -327,7 +327,7 @@ export class NotificationService {
     return this.mapPreferencesToDto(updated);
   }
 
-  @Cron('0 4 * * *', {
+  @Cron('30 0 4 * * *', {
     name: 'NotificationService_cleanupExpiredNotifications',
   })
   async cleanupExpiredNotifications(): Promise<void> {

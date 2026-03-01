@@ -572,7 +572,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Cron: classify completed events ───────────────────────
 
-  @Cron('0 */1 * * * *', {
+  @Cron('10 */1 * * * *', {
     name: 'VoiceAttendanceService_classifyCompletedEvents',
   })
   async classifyCompletedEvents(): Promise<void> {
