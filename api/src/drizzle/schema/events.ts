@@ -88,6 +88,10 @@ export const events = pgTable(
     discordScheduledEventId: varchar('discord_scheduled_event_id', {
       length: 255,
     }),
+    /** ROK-490: Extended suppression window. When members remain in voice after
+     *  a scheduled event's original end time, this is set instead of mutating
+     *  `duration` so that attendance metrics stay based on the original schedule. */
+    extendedUntil: timestamp('extended_until'),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */

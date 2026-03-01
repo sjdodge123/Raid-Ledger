@@ -256,6 +256,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       .select({
         id: schema.events.id,
         duration: schema.events.duration,
+        extendedUntil: schema.events.extendedUntil,
       })
       .from(schema.events)
       .where(
@@ -266,30 +267,32 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
             : eq(schema.events.channelBindingId, bindingId),
           eq(schema.events.isAdHoc, false),
           sql`${schema.events.cancelledAt} IS NULL`,
-          // Match if: event is currently active OR ended within last 30 min
+          // Match if: event is currently active, within suppression window, or ended within last 30 min
           sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`upper(${schema.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz`,
+          sql`(upper(${schema.events.duration}) >= ${lookbackTime.toISOString()}::timestamptz OR ${schema.events.extendedUntil} >= ${now.toISOString()}::timestamptz)`,
         ),
       )
       .limit(1);
 
     if (activeScheduled) {
-      // Extend the scheduled event's end time by 1 hour from now
-      // so it doesn't expire while members are still in the channel
+      // Extend the suppression window by 1 hour from now so the ad-hoc service
+      // doesn't spawn a new event while members are still in the channel.
+      // Uses extendedUntil instead of mutating duration so that attendance
+      // metrics stay based on the original schedule (ROK-490).
       const newEnd = new Date(now.getTime() + 60 * 60 * 1000);
-      const currentEnd = activeScheduled.duration?.[1];
+      const currentExtended = activeScheduled.extendedUntil;
 
-      if (!currentEnd || currentEnd < newEnd) {
+      if (!currentExtended || currentExtended < newEnd) {
         await this.db
           .update(schema.events)
           .set({
-            duration: [activeScheduled.duration[0], newEnd] as [Date, Date],
+            extendedUntil: newEnd,
             updatedAt: now,
           })
           .where(eq(schema.events.id, activeScheduled.id));
 
         this.logger.debug(
-          `Extended scheduled event ${activeScheduled.id} end time to ${newEnd.toISOString()} (members still in voice)`,
+          `Extended scheduled event ${activeScheduled.id} suppression window to ${newEnd.toISOString()} (members still in voice)`,
         );
       }
 
