@@ -307,7 +307,10 @@ export class EmbedSyncProcessor extends WorkerHost {
   ): EmbedState {
     const now = Date.now();
     const startTime = event.duration[0].getTime();
-    const endTime = event.duration[1].getTime();
+    // ROK-576: Use extendedUntil as effective end time when present
+    const endTime = event.extendedUntil
+      ? event.extendedUntil.getTime()
+      : event.duration[1].getTime();
 
     // Time-based states take priority (irreversible progression)
     if (now >= endTime) {

@@ -83,7 +83,8 @@ export class ScheduledEventService {
     const now = new Date();
 
     // Find events where: start time <= now, has a Discord scheduled event ID,
-    // not cancelled, and end time hasn't passed yet (no point starting a finished event)
+    // not cancelled, and effective end time hasn't passed yet (no point starting a finished event).
+    // ROK-576: Use COALESCE(extended_until, upper(duration)) for effective end time.
     const candidates = await this.db
       .select({
         id: schema.events.id,
@@ -95,7 +96,7 @@ export class ScheduledEventService {
           isNotNull(schema.events.discordScheduledEventId),
           isNull(schema.events.cancelledAt),
           sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
         ),
       );
 
@@ -452,6 +453,57 @@ export class ScheduledEventService {
     } catch (error) {
       this.logger.error(
         `Failed to complete scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Update only the end time of a Discord Scheduled Event (ROK-576).
+   * Called when an event is auto-extended due to voice channel activity.
+   */
+  async updateEndTime(eventId: number, newEndTime: Date): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const [event] = await this.db
+        .select({
+          discordScheduledEventId: schema.events.discordScheduledEventId,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (!event?.discordScheduledEventId) return;
+
+      try {
+        await guild.scheduledEvents.edit(event.discordScheduledEventId, {
+          scheduledEndTime: newEndTime,
+        });
+        this.logger.log(
+          `Updated end time for scheduled event ${event.discordScheduledEventId} to ${newEndTime.toISOString()}`,
+        );
+      } catch (editError) {
+        if (
+          editError instanceof DiscordAPIError &&
+          editError.code === UNKNOWN_SCHEDULED_EVENT
+        ) {
+          this.logger.debug(
+            `Scheduled event ${event.discordScheduledEventId} was deleted in Discord, clearing reference`,
+          );
+          await this.db
+            .update(schema.events)
+            .set({ discordScheduledEventId: null })
+            .where(eq(schema.events.id, eventId));
+        } else {
+          throw editError;
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Failed to update scheduled event end time for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

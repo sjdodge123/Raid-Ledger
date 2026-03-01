@@ -1434,6 +1434,7 @@ export class EventsService {
         (event.adHocStatus as 'live' | 'grace_period' | 'ended') ?? null,
       channelBindingId: event.channelBindingId ?? null,
       notificationChannelOverride: event.notificationChannelOverride ?? null,
+      extendedUntil: event.extendedUntil?.toISOString() ?? null,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };

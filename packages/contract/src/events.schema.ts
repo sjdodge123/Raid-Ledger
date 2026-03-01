@@ -148,6 +148,8 @@ export const EventResponseSchema = z.object({
     channelBindingId: z.string().uuid().nullable().optional(),
     /** ROK-599: Per-event notification channel override (Discord channel ID) */
     notificationChannelOverride: z.string().nullable().optional(),
+    /** ROK-576: Extended end time when voice channel activity extends the event */
+    extendedUntil: z.string().datetime().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
