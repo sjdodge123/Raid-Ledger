@@ -12,7 +12,7 @@
  * own character and role when they accept (via the Discord DM flow,
  * mirroring the signup embed).
  */
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Modal } from '../ui/modal';
 import { toast } from '../../lib/toast';
 import {
@@ -23,6 +23,8 @@ import {
     type DiscordMemberSearchResult,
 } from '../../lib/api-client';
 import { useCreatePug } from '../../hooks/use-pugs';
+import { useBranding } from '../../hooks/use-branding';
+import { useEvents } from '../../hooks/use-events';
 
 interface InviteModalProps {
     isOpen: boolean;
@@ -46,6 +48,11 @@ export function InviteModal({
 }: InviteModalProps) {
     const createPug = useCreatePug(eventId);
     const defaultPugRole = isMMOGame ? 'dps' : 'player';
+
+    // ROK-581: MOTD summary data
+    const { brandingQuery } = useBranding();
+    const communityName = brandingQuery.data?.communityName || 'Our Guild';
+    const { data: upcomingEventsData } = useEvents({ upcoming: true, limit: 3 });
 
     // Member list state
     const [members, setMembers] = useState<DiscordMemberSearchResult[]>([]);
@@ -236,6 +243,34 @@ export function InviteModal({
         }
     };
 
+    // ROK-581: Build MOTD summary text
+    const motdText = useMemo(() => {
+        const siteHost = window.location.host;
+        const lines = [`${communityName} -- ${siteHost}`];
+
+        const events = upcomingEventsData?.data ?? [];
+        if (events.length > 0) {
+            const summaries = events.map((e) => {
+                const d = new Date(e.startTime);
+                const day = d.toLocaleDateString('en-US', { weekday: 'short' });
+                const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+                return `${e.title} ${day} ${time}`;
+            });
+            lines.push(`Upcoming: ${summaries.join(' | ')}`);
+        }
+
+        lines.push(`Sign up & manage your characters at ${siteHost}`);
+        return lines.join('\n');
+    }, [communityName, upcomingEventsData]);
+
+    const handleCopyMotd = () => {
+        navigator.clipboard.writeText(motdText).then(() => {
+            toast.success('MOTD copied to clipboard!');
+        }).catch(() => {
+            toast.error('Failed to copy MOTD');
+        });
+    };
+
     const handleGenerateInviteLink = async () => {
         setIsSubmitting(true);
         try {
@@ -403,6 +438,26 @@ export function InviteModal({
                     )}
                     <p className="mt-1.5 text-xs text-dim">
                         Creates a shareable link anyone can use to join this event.
+                    </p>
+                </div>
+
+                {/* ROK-581: MOTD Summary */}
+                <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-secondary mb-2">
+                        MOTD Summary
+                    </label>
+                    <div className="relative rounded-lg border border-edge bg-surface">
+                        <pre className="p-3 pr-16 text-xs text-foreground whitespace-pre-wrap font-mono leading-relaxed">{motdText}</pre>
+                        <button
+                            type="button"
+                            onClick={handleCopyMotd}
+                            className="absolute top-2 right-2 btn btn-secondary btn-sm"
+                        >
+                            Copy
+                        </button>
+                    </div>
+                    <p className="mt-1.5 text-xs text-dim">
+                        Paste this into your in-game guild MOTD or chat.
                     </p>
                 </div>
             </div>
