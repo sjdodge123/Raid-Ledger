@@ -221,13 +221,20 @@ export class EventsController {
 
   /**
    * ROK-491: Get per-event metrics with attendance and voice data.
-   * Requires authentication (any authenticated user can view).
+   * Requires authentication. Only event creator or admin/operator.
    */
   @Get(':id/metrics')
   @UseGuards(AuthGuard('jwt'))
   async getEventMetrics(
     @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
   ): Promise<EventMetricsResponseDto> {
+    const event = await this.eventsService.findOne(eventId);
+    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
+      throw new ForbiddenException(
+        'Only event creator or admin/operator can view event metrics',
+      );
+    }
     return this.analyticsService.getEventMetrics(eventId);
   }
 

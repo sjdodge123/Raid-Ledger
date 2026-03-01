@@ -941,6 +941,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 
 describe('EventsController — voice endpoint authorization', () => {
   let controller: EventsController;
+  let module: TestingModule;
   let mockEventsService: Partial<EventsService>;
   let mockVoiceAttendanceService: {
     getVoiceSessions: jest.Mock;
@@ -989,7 +990,7 @@ describe('EventsController — voice endpoint authorization', () => {
       }),
     };
 
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       controllers: [EventsController],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
@@ -1140,6 +1141,50 @@ describe('EventsController — voice endpoint authorization', () => {
         earlyLeaver: expect.any(Number),
         noShow: expect.any(Number),
         unclassified: expect.any(Number),
+      });
+    });
+  });
+
+  describe('GET :id/metrics', () => {
+    it('allows event creator to view event metrics', async () => {
+      const mockMetrics = { eventId: 10, title: 'Test Event' };
+      const analyticsService = module.get(AnalyticsService);
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue(mockMetrics);
+
+      const result = await controller.getEventMetrics(10, {
+        user: { id: creatorId, role: 'member' },
+      });
+
+      expect(result).toMatchObject({ eventId: 10 });
+    });
+
+    it('allows admin to view event metrics for any event', async () => {
+      const analyticsService = module.get(AnalyticsService);
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({ eventId: 10 });
+
+      const result = await controller.getEventMetrics(10, { user: adminUser });
+      expect(result).toMatchObject({ eventId: 10 });
+    });
+
+    it('allows operator to view event metrics for any event', async () => {
+      const analyticsService = module.get(AnalyticsService);
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({ eventId: 10 });
+
+      const result = await controller.getEventMetrics(10, { user: operatorUser });
+      expect(result).toMatchObject({ eventId: 10 });
+    });
+
+    it('throws ForbiddenException for a non-creator member user', async () => {
+      await expect(
+        controller.getEventMetrics(10, { user: memberUser }),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('throws ForbiddenException with descriptive message for unauthorized user', async () => {
+      await expect(
+        controller.getEventMetrics(10, { user: memberUser }),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('creator'),
       });
     });
   });
