@@ -502,23 +502,23 @@ export class VoiceStateListener {
       detected = { gameId: null, gameName: 'Just Chatting' };
     }
 
+    // Resolve RL user once — used for both the voice→activity bridge and ad-hoc roster
+    const rlUser = await this.usersService.findByDiscordId(
+      discordMember.discordUserId,
+    );
+
     // ROK-591: Voice→activity bridge for general-lobby (game detected via presence)
-    if (detected.gameId !== null) {
-      const rlUserForBridge = await this.usersService.findByDiscordId(
-        discordMember.discordUserId,
+    if (detected.gameId !== null && rlUser?.id) {
+      this.voiceGameTracker.set(discordMember.discordUserId, {
+        gameName: detected.gameName,
+        userId: rlUser.id,
+      });
+      this.gameActivityService.bufferStart(
+        rlUser.id,
+        detected.gameName,
+        new Date(),
+        'voice',
       );
-      if (rlUserForBridge?.id) {
-        this.voiceGameTracker.set(discordMember.discordUserId, {
-          gameName: detected.gameName,
-          userId: rlUserForBridge.id,
-        });
-        this.gameActivityService.bufferStart(
-          rlUserForBridge.id,
-          detected.gameName,
-          new Date(),
-          'voice',
-        );
-      }
     }
 
     const minPlayers = binding.config?.minPlayers ?? 2;
@@ -547,11 +547,6 @@ export class VoiceStateListener {
       await this.handleGeneralLobbyGroupDetection(channelId, binding);
       return;
     }
-
-    // Resolve RL user
-    const rlUser = await this.usersService.findByDiscordId(
-      discordMember.discordUserId,
-    );
 
     const memberInfo: VoiceMemberInfo = {
       ...discordMember,
