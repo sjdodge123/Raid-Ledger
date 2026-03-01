@@ -263,9 +263,15 @@ export class EventsController {
    * Uses 2-tier fallback: game-specific voice binding → default voice channel.
    */
   @Get(':id/voice-channel')
+  @UseGuards(OptionalJwtGuard)
   async getVoiceChannel(
     @Param('id', ParseIntPipe) id: number,
-  ): Promise<{ channelId: string | null; channelName: string | null; guildId: string | null }> {
+    @Request() req: { user?: { id: number; role: UserRole } },
+  ): Promise<{
+    channelId: string | null;
+    channelName: string | null;
+    guildId: string | null;
+  }> {
     const event = await this.eventsService.findOne(id);
     const channelId =
       await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
@@ -276,17 +282,21 @@ export class EventsController {
       return { channelId: null, channelName: null, guildId: null };
     }
 
-    // Resolve channel name from Discord
+    // Resolve channel name from Discord (prefer cache to avoid REST calls)
     try {
       const guildId = this.discordBotClientService.getGuildId();
       const client = this.discordBotClientService.getClient();
       if (guildId && client) {
-        const guild = await client.guilds.fetch(guildId);
-        const channel = await guild.channels.fetch(channelId);
+        const guild =
+          client.guilds.cache.get(guildId) ??
+          (await client.guilds.fetch(guildId));
+        const channel =
+          guild.channels.cache.get(channelId) ??
+          (await guild.channels.fetch(channelId));
         return {
           channelId,
           channelName: channel?.name ?? null,
-          guildId,
+          guildId: req.user ? guildId : null,
         };
       }
     } catch {

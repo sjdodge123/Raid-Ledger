@@ -667,7 +667,9 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       handleJoin: jest.fn(),
       handleLeave: jest.fn(),
       recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-      getActiveRoster: jest.fn().mockReturnValue({ participants: [], activeCount: 0 }),
+      getActiveRoster: jest
+        .fn()
+        .mockReturnValue({ participants: [], activeCount: 0 }),
     };
 
     mockAdHocEventService = {
