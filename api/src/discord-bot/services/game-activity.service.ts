@@ -28,6 +28,9 @@ const MAX_SESSION_DURATION_SECONDS = 24 * 60 * 60;
 /** How often to flush the in-memory buffer to the database (ms) */
 const FLUSH_INTERVAL_MS = 30_000;
 
+/** Source of a game activity detection */
+export type ActivitySource = 'presence' | 'voice';
+
 interface SessionOpenEvent {
   type: 'open';
   userId: number;
@@ -55,6 +58,7 @@ type BufferedEvent = SessionOpenEvent | SessionCloseEvent;
  * - Sweeps stale sessions (users who went offline without explicit stop)
  * - Closes leftover sessions on startup (from prior bot restart)
  * - Aggregates sessions into rollups via daily cron
+ * - Deduplicates multiple sources (presence + voice) for the same user+game (ROK-591)
  */
 @Injectable()
 export class GameActivityService
@@ -66,6 +70,15 @@ export class GameActivityService
 
   /** Cache of discord activity name -> game ID (or null if unmatched) */
   private gameNameCache = new Map<string, number | null>();
+
+  /**
+   * Tracks active sources per user+game combination (ROK-591).
+   * Key: `${userId}:${discordActivityName}`, Value: set of active sources.
+   * Used to deduplicate when both Rich Presence and voice channel
+   * report the same game — only the first source creates a session,
+   * and the session only closes when ALL sources have stopped.
+   */
+  private activeSources = new Map<string, Set<ActivitySource>>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -90,18 +103,37 @@ export class GameActivityService
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+    this.activeSources.clear();
   }
 
-  // ─── Public API (called by ActivityListener) ──────────────────
+  // ─── Public API (called by ActivityListener / VoiceStateListener) ──
 
   /**
    * Buffer a game activity start event.
+   * @param source — 'presence' (Rich Presence) or 'voice' (voice channel).
+   *   Defaults to 'presence' for backward compatibility.
    */
   bufferStart(
     userId: number,
     discordActivityName: string,
     startedAt: Date,
+    source: ActivitySource = 'presence',
   ): void {
+    const sourceKey = `${userId}:${discordActivityName}`;
+    const sources = this.activeSources.get(sourceKey);
+
+    if (sources) {
+      // Another source is already tracking this user+game — dedup
+      sources.add(source);
+      this.logger.debug(
+        `Dedup: added source '${source}' for ${sourceKey} (now: ${[...sources].join(',')})`,
+      );
+      return;
+    }
+
+    // First source — create the session
+    this.activeSources.set(sourceKey, new Set([source]));
+
     // Resolve game ID synchronously from cache if possible
     const gameId = this.gameNameCache.get(discordActivityName);
     if (gameId !== undefined) {
@@ -127,14 +159,62 @@ export class GameActivityService
 
   /**
    * Buffer a game activity stop event.
+   * @param source — 'presence' (Rich Presence) or 'voice' (voice channel).
+   *   Defaults to 'presence' for backward compatibility.
    */
-  bufferStop(userId: number, discordActivityName: string, endedAt: Date): void {
+  bufferStop(
+    userId: number,
+    discordActivityName: string,
+    endedAt: Date,
+    source: ActivitySource = 'presence',
+  ): void {
+    const sourceKey = `${userId}:${discordActivityName}`;
+    const sources = this.activeSources.get(sourceKey);
+
+    if (sources) {
+      sources.delete(source);
+
+      if (sources.size > 0) {
+        // Other source(s) still active — don't close the session yet
+        this.logger.debug(
+          `Dedup: removed source '${source}' for ${sourceKey}, remaining: ${[...sources].join(',')}`,
+        );
+        return;
+      }
+
+      // All sources gone — close the session
+      this.activeSources.delete(sourceKey);
+    }
+
     this.buffer.push({
       type: 'close',
       userId,
       discordActivityName,
       endedAt,
     });
+  }
+
+  /**
+   * Check if a source is currently active for a user+game (for testing).
+   */
+  hasActiveSource(
+    userId: number,
+    discordActivityName: string,
+    source: ActivitySource,
+  ): boolean {
+    const sourceKey = `${userId}:${discordActivityName}`;
+    return this.activeSources.get(sourceKey)?.has(source) ?? false;
+  }
+
+  /**
+   * Get all active sources for a user+game (for testing).
+   */
+  getActiveSources(
+    userId: number,
+    discordActivityName: string,
+  ): Set<ActivitySource> | undefined {
+    const sourceKey = `${userId}:${discordActivityName}`;
+    return this.activeSources.get(sourceKey);
   }
 
   // ─── Periodic flush ───────────────────────────────────────────
@@ -174,6 +254,30 @@ export class GameActivityService
       const gameId = resolvedGameId !== undefined ? resolvedGameId : null;
 
       try {
+        // DB-level safety net (ROK-591): check for existing open session
+        // before inserting to prevent duplicate sessions after bot restart
+        const [existingOpen] = await this.db
+          .select({ id: schema.gameActivitySessions.id })
+          .from(schema.gameActivitySessions)
+          .where(
+            and(
+              eq(schema.gameActivitySessions.userId, ev.userId),
+              eq(
+                schema.gameActivitySessions.discordActivityName,
+                ev.discordActivityName,
+              ),
+              isNull(schema.gameActivitySessions.endedAt),
+            ),
+          )
+          .limit(1);
+
+        if (existingOpen) {
+          this.logger.debug(
+            `Skipping duplicate session insert for user ${ev.userId} / "${ev.discordActivityName}" — open session ${existingOpen.id} already exists`,
+          );
+          continue;
+        }
+
         await this.db.insert(schema.gameActivitySessions).values({
           userId: ev.userId,
           gameId,

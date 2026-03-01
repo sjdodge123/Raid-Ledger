@@ -29,6 +29,7 @@ import {
 import { VoiceStateListener } from '../listeners/voice-state.listener';
 import { AdHocEventService } from './ad-hoc-event.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
+import { GameActivityService } from './game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
@@ -655,7 +656,10 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     handleVoiceLeave: jest.Mock;
     getActiveState: jest.Mock;
   };
-  let mockChannelBindingsService: { getBindings: jest.Mock };
+  let mockChannelBindingsService: {
+    getBindings: jest.Mock;
+    getBindingsWithGameNames: jest.Mock;
+  };
   let mockClientService: { getClient: jest.Mock; getGuildId: jest.Mock };
   let voiceHandler: (oldState: unknown, newState: unknown) => void;
 
@@ -667,7 +671,9 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       handleJoin: jest.fn(),
       handleLeave: jest.fn(),
       recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
-      getActiveRoster: jest.fn().mockReturnValue({ participants: [], activeCount: 0 }),
+      getActiveRoster: jest
+        .fn()
+        .mockReturnValue({ participants: [], activeCount: 0 }),
     };
 
     mockAdHocEventService = {
@@ -678,6 +684,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 
     mockChannelBindingsService = {
       getBindings: jest.fn().mockResolvedValue([]),
+      getBindingsWithGameNames: jest.fn().mockResolvedValue([]),
     };
 
     mockClientService = {
@@ -703,6 +710,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
           useValue: {
             detectGameForMember: jest.fn().mockResolvedValue(null),
             detectGames: jest.fn().mockResolvedValue([]),
+          },
+        },
+        {
+          provide: GameActivityService,
+          useValue: {
+            bufferStart: jest.fn(),
+            bufferStop: jest.fn(),
           },
         },
         {
@@ -786,12 +800,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     ]);
 
     // Set up a binding so the ad-hoc path also fires
-    mockChannelBindingsService.getBindings.mockResolvedValue([
+    mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
       {
         id: 'bind-1',
         channelId: 'voice-ch-leave2',
         bindingPurpose: 'game-voice-monitor',
         gameId: 2,
+        gameName: 'TestGame',
         config: {},
       },
     ]);
@@ -811,7 +826,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 
   it('voice attendance join fires independently of the ad-hoc binding (no binding needed)', async () => {
     // No channel binding for the channel, but there IS an active scheduled event
-    mockChannelBindingsService.getBindings.mockResolvedValue([]);
+    mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
     mockVoiceAttendanceService.findActiveScheduledEvents.mockResolvedValue([
       { eventId: 303, gameId: null },
     ]);
@@ -885,12 +900,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     mockVoiceAttendanceService.findActiveScheduledEvents.mockRejectedValue(
       new Error('DB connection lost'),
     );
-    mockChannelBindingsService.getBindings.mockResolvedValue([
+    mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
       {
         id: 'bind-fallback',
         channelId: 'voice-ch-fallback',
         bindingPurpose: 'game-voice-monitor',
         gameId: 1,
+        gameName: 'TestGame',
         config: { minPlayers: 1 },
       },
     ]);
@@ -923,12 +939,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     mockVoiceAttendanceService.findActiveScheduledEvents.mockRejectedValue(
       new Error('DB connection lost'),
     );
-    mockChannelBindingsService.getBindings.mockResolvedValue([
+    mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
       {
         id: 'bind-leave-err',
         channelId: 'voice-ch-leave-err',
         bindingPurpose: 'game-voice-monitor',
         gameId: 1,
+        gameName: 'TestGame',
         config: {},
       },
     ]);

@@ -481,4 +481,217 @@ describe('GameActivityService — flush', () => {
     // select was called to look for open session
     expect(mockDb.select).toHaveBeenCalled();
   });
+
+  it('flush skips insert when an open session already exists (DB safety net)', async () => {
+    // Set up: game name already cached, and an open session exists in DB
+    mockDb.limit
+      .mockResolvedValueOnce([]) // discordGameMappings → no mapping
+      .mockResolvedValueOnce([{ id: 1 }]) // games.name match
+      .mockResolvedValueOnce([{ id: 99 }]); // existing open session found
+
+    const service = await createFlushService(mockDb);
+
+    service.bufferStart(1, 'SomeGame', new Date());
+    await service.flush();
+
+    // select was called (for game resolution + open session check)
+    // but insert should NOT be called because open session exists
+    expect(mockDb.insert).not.toHaveBeenCalled();
+  });
+});
+
+// ─── GameActivityService — source dedup (ROK-591) ────────────────────────────
+
+describe('GameActivityService — source dedup (ROK-591)', () => {
+  let mockDb: MockDb;
+
+  beforeEach(() => {
+    mockDb = createDrizzleMock();
+    mockDb.having = jest.fn().mockReturnThis();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  async function createDedupService(db: MockDb) {
+    const mockCronJobService = {
+      executeWithTracking: jest
+        .fn()
+        .mockImplementation(async (_name: string, fn: () => Promise<void>) =>
+          fn(),
+        ),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        GameActivityService,
+        { provide: DrizzleAsyncProvider, useValue: db },
+        { provide: CronJobService, useValue: mockCronJobService },
+      ],
+    }).compile();
+
+    const service = module.get<GameActivityService>(GameActivityService);
+    service.onApplicationShutdown();
+    return service;
+  }
+
+  describe('bufferStart dedup', () => {
+    it('first source creates a buffer event', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+    });
+
+    it('second source for same user+game does NOT create a second buffer event', async () => {
+      // Set up DB for flush (game resolution + open session check + insert)
+      mockDb.limit
+        .mockResolvedValueOnce([]) // discordGameMappings → no mapping
+        .mockResolvedValueOnce([{ id: 1 }]) // games.name match
+        .mockResolvedValueOnce([]); // no existing open session
+
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      service.bufferStart(1, 'TestGame', new Date(), 'voice');
+
+      // Both sources should be tracked
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+      expect(service.hasActiveSource(1, 'TestGame', 'voice')).toBe(true);
+
+      // Flush should only insert ONE session (the first bufferStart)
+      await service.flush();
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('different games for same user are tracked independently', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'GameA', new Date(), 'presence');
+      service.bufferStart(1, 'GameB', new Date(), 'voice');
+
+      expect(service.hasActiveSource(1, 'GameA', 'presence')).toBe(true);
+      expect(service.hasActiveSource(1, 'GameB', 'voice')).toBe(true);
+      // They are NOT deduped — different games
+      expect(service.hasActiveSource(1, 'GameA', 'voice')).toBe(false);
+    });
+
+    it('different users for same game are tracked independently', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      service.bufferStart(2, 'TestGame', new Date(), 'presence');
+
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+      expect(service.hasActiveSource(2, 'TestGame', 'presence')).toBe(true);
+    });
+  });
+
+  describe('bufferStop dedup', () => {
+    it('removing one source when another remains does NOT buffer a close event', async () => {
+      const service = await createDedupService(mockDb);
+
+      // Start both sources
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      service.bufferStart(1, 'TestGame', new Date(), 'voice');
+
+      // Stop voice — presence still active
+      service.bufferStop(1, 'TestGame', new Date(), 'voice');
+
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+      expect(service.hasActiveSource(1, 'TestGame', 'voice')).toBe(false);
+
+      // Flush should only have the open event (from first bufferStart), no close
+      // Set up DB for the open event flush
+      mockDb.limit
+        .mockResolvedValueOnce([]) // discordGameMappings
+        .mockResolvedValueOnce([{ id: 1 }]) // games.name match
+        .mockResolvedValueOnce([]); // no existing open session
+
+      await service.flush();
+      // insert called for the open, but no close query for finding session
+      expect(mockDb.insert).toHaveBeenCalledTimes(1);
+    });
+
+    it('removing last source buffers a close event', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      service.bufferStop(1, 'TestGame', new Date(), 'presence');
+
+      // Source tracking should be fully cleared
+      expect(service.getActiveSources(1, 'TestGame')).toBeUndefined();
+
+      // Flush should have both open + close events
+      mockDb.limit
+        .mockResolvedValueOnce([]) // discordGameMappings
+        .mockResolvedValueOnce([{ id: 1 }]) // games.name match
+        .mockResolvedValueOnce([]) // no existing open session (safety check)
+        .mockResolvedValueOnce([{ id: 50, startedAt: new Date() }]); // find open session for close
+
+      await service.flush();
+      // insert for open + update for close
+      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalled();
+    });
+
+    it('both sources stop in sequence → single close event', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      service.bufferStart(1, 'TestGame', new Date(), 'voice');
+
+      // Voice stops first — no close buffered
+      service.bufferStop(1, 'TestGame', new Date(), 'voice');
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+
+      // Presence stops — NOW close is buffered
+      service.bufferStop(1, 'TestGame', new Date(), 'presence');
+      expect(service.getActiveSources(1, 'TestGame')).toBeUndefined();
+
+      // Flush: 1 open (from first bufferStart) + 1 close (from last bufferStop)
+      mockDb.limit
+        .mockResolvedValueOnce([]) // discordGameMappings
+        .mockResolvedValueOnce([{ id: 1 }]) // games.name match
+        .mockResolvedValueOnce([]) // no existing open session
+        .mockResolvedValueOnce([{ id: 50, startedAt: new Date() }]); // find open session for close
+
+      await service.flush();
+      expect(mockDb.insert).toHaveBeenCalledTimes(1); // only 1 open
+    });
+  });
+
+  describe('edge cases', () => {
+    it('bufferStop for unknown source still closes the session', async () => {
+      // Scenario: voice source was never tracked (e.g., bot restart cleared state)
+      const service = await createDedupService(mockDb);
+
+      service.bufferStop(1, 'TestGame', new Date(), 'voice');
+
+      // Should still buffer the close event (activeSources was empty/undefined)
+      mockDb.limit.mockResolvedValueOnce([{ id: 50, startedAt: new Date() }]);
+      await service.flush();
+      expect(mockDb.select).toHaveBeenCalled();
+    });
+
+    it('onApplicationShutdown clears active sources', async () => {
+      const service = await createDedupService(mockDb);
+
+      service.bufferStart(1, 'TestGame', new Date(), 'presence');
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+
+      service.onApplicationShutdown();
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(false);
+    });
+
+    it('default source parameter is "presence"', async () => {
+      const service = await createDedupService(mockDb);
+
+      // Call without explicit source — should default to 'presence'
+      service.bufferStart(1, 'TestGame', new Date());
+      expect(service.hasActiveSource(1, 'TestGame', 'presence')).toBe(true);
+    });
+  });
 });
