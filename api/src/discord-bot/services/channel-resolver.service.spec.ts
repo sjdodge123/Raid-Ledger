@@ -113,23 +113,23 @@ describe('ChannelResolverService', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // ROK-471: resolveVoiceChannelForScheduledEvent — 3-tier fallback
+  // ROK-471/ROK-592: resolveVoiceChannelForScheduledEvent — 2-tier fallback
   // ---------------------------------------------------------------------------
   describe('resolveVoiceChannelForScheduledEvent', () => {
-    it('returns game-specific voice binding when one is configured (Tier 1/2)', async () => {
+    it('returns game-specific voice binding when one is configured (Tier 1)', async () => {
       clientService.getGuildId.mockReturnValue('guild-123');
       bindingsService.getVoiceChannelForGame.mockResolvedValue('game-voice-ch');
 
       const result = await service.resolveVoiceChannelForScheduledEvent(99);
 
       expect(result).toBe('game-voice-ch');
-      // App setting (Tier 3) should NOT be consulted
+      // App setting (Tier 2) should NOT be consulted
       expect(
         settingsService.getDiscordBotDefaultVoiceChannel,
       ).not.toHaveBeenCalled();
     });
 
-    it('falls back to app setting when no game voice binding exists (Tier 3)', async () => {
+    it('falls back to app setting when no game voice binding exists (Tier 2)', async () => {
       clientService.getGuildId.mockReturnValue('guild-123');
       bindingsService.getVoiceChannelForGame.mockResolvedValue(null);
       settingsService.getDiscordBotDefaultVoiceChannel.mockResolvedValue(

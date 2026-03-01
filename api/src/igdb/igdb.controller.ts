@@ -502,6 +502,10 @@ export class IgdbController {
       const { clientId } = await this.igdbService['resolveCredentials']();
       const token = await this.igdbService['getAccessToken']();
 
+      // ROK-585: 3s timeout to prevent slow Twitch API calls from blocking page loads
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 3000);
+
       const response = await fetch(
         `https://api.twitch.tv/helix/streams?game_id=${encodeURIComponent(twitchGameId)}&first=10`,
         {
@@ -509,8 +513,10 @@ export class IgdbController {
             'Client-ID': clientId,
             Authorization: `Bearer ${token}`,
           },
+          signal: controller.signal,
         },
       );
+      clearTimeout(timeout);
 
       if (!response.ok) {
         this.logger.warn(`Twitch streams API error: ${response.status}`);

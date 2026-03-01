@@ -16,7 +16,9 @@ export class SessionCleanupService {
     private readonly cronJobService: CronJobService,
   ) {}
 
-  @Cron('0 3 * * *', { name: 'SessionCleanupService_cleanupExpiredSessions' })
+  @Cron('20 0 3 * * *', {
+    name: 'SessionCleanupService_cleanupExpiredSessions',
+  })
   async cleanupExpiredSessions(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'SessionCleanupService_cleanupExpiredSessions',

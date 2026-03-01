@@ -66,8 +66,8 @@ export class PugsService {
     isAdmin: boolean,
     dto: CreatePugSlotDto,
   ): Promise<PugSlotResponseDto> {
-    // Any signed-up user, event creator, or admin can invite PUGs
-    await this.verifyInvitePermission(eventId, userId, isAdmin);
+    // Any authenticated guild member can invite PUGs
+    await this.verifyInvitePermission(eventId);
 
     const inviteCode = await this.generateUniqueInviteCode();
     const discordUsername = dto.discordUsername ?? null;
@@ -346,13 +346,10 @@ export class PugsService {
   }
 
   /**
-   * Verify the user can invite PUGs: creator, admin/operator, OR any signed-up attendee.
+   * Verify the user can invite PUGs: any authenticated guild member.
+   * The event must exist; the caller must be authenticated (guaranteed by guard).
    */
-  private async verifyInvitePermission(
-    eventId: number,
-    userId: number,
-    isAdmin: boolean,
-  ): Promise<void> {
+  private async verifyInvitePermission(eventId: number): Promise<void> {
     const [event] = await this.db
       .select()
       .from(schema.events)
@@ -361,27 +358,6 @@ export class PugsService {
 
     if (!event) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
-    }
-
-    // Creator and admin/operator always allowed
-    if (event.creatorId === userId || isAdmin) return;
-
-    // Check if user is signed up for this event
-    const [signup] = await this.db
-      .select({ id: schema.eventSignups.id })
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          eq(schema.eventSignups.userId, userId),
-        ),
-      )
-      .limit(1);
-
-    if (!signup) {
-      throw new ForbiddenException(
-        'You must be signed up for the event to invite players',
-      );
     }
   }
 

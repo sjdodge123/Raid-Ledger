@@ -36,7 +36,7 @@ export class PostEventReminderService {
    * Cron: runs every 60 seconds — checks for events that ended ~15 minutes ago
    * and sends onboarding reminders to qualifying PUG participants.
    */
-  @Cron('0 */1 * * * *', {
+  @Cron('5 */1 * * * *', {
     name: 'PostEventReminderService_handlePostEventReminders',
   })
   async handlePostEventReminders(): Promise<void> {

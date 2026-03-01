@@ -15,11 +15,12 @@ import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
-import type {
-  VoiceClassification,
-  EventVoiceSessionDto,
-  VoiceSessionsResponseDto,
-  VoiceAttendanceSummaryDto,
+import {
+  VoiceClassificationEnum,
+  type VoiceClassification,
+  type EventVoiceSessionDto,
+  type VoiceSessionsResponseDto,
+  type VoiceAttendanceSummaryDto,
 } from '@raid-ledger/contract';
 
 /** Interval for flushing in-memory sessions to DB (ms). */
@@ -181,6 +182,11 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
    * Find active scheduled events for a given voice channel.
    * Resolves: channelId → channel_bindings (game-voice-monitor) → events with matching gameId
    *           that are currently within their scheduled time window.
+   *
+   * Note: This intentionally does NOT consider `extendedUntil` — voice tracking
+   * is scoped to the originally scheduled time window. Users who join during an
+   * extension period are not tracked because the extension is a grace period for
+   * wrap-up, not an extension of the tracked attendance window.
    */
   async findActiveScheduledEvents(
     channelId: string,
@@ -514,12 +520,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
           const now = new Date();
           if (existingDb) {
             // Restore from DB and resume tracking
-            const priorSegments =
-              (existingDb.segments as Array<{
-                joinAt: string;
-                leaveAt: string | null;
-                durationSec: number;
-              }>) ?? [];
+            const priorSegments = existingDb.segments ?? [];
             this.sessions.set(key, {
               eventId,
               userId: existingDb.userId,
@@ -572,17 +573,20 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   // ─── Cron: classify completed events ───────────────────────
 
-  @Cron('0 */1 * * * *', {
+  @Cron('10 */1 * * * *', {
     name: 'VoiceAttendanceService_classifyCompletedEvents',
+    waitForCompletion: true,
   })
   async classifyCompletedEvents(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'VoiceAttendanceService_classifyCompletedEvents',
       async () => {
-        // Find scheduled events that ended in the last 2 minutes
-        // and have voice sessions that haven't been classified yet
+        // Look back 24 hours for events that ended but haven't been classified.
+        // A wide window ensures events are still classified after API downtime
+        // (e.g. restart, outage). The "already classified" guard below prevents
+        // re-processing events that were handled in a prior run.
         const now = new Date();
-        const twoMinutesAgo = new Date(now.getTime() - 2 * 60 * 1000);
+        const lookbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
         const endedEvents = await this.db
           .select({ id: schema.events.id })
@@ -591,8 +595,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             and(
               eq(schema.events.isAdHoc, false),
               sql`${schema.events.cancelledAt} IS NULL`,
-              // Event ended between 2 minutes ago and now
-              sql`upper(${schema.events.duration}) >= ${twoMinutesAgo.toISOString()}::timestamptz`,
+              // Event ended between lookback window start and now
+              sql`upper(${schema.events.duration}) >= ${lookbackStart.toISOString()}::timestamptz`,
               sql`upper(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
             ),
           );
@@ -665,6 +669,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ─── API methods ───────────────────────────────────────────
+  // TODO(ROK-589): If voice attendance grows (manual trigger, re-classify
+  // endpoint), consider a thin VoiceAttendanceController inside DiscordBotModule
+  // rather than further inflating EventsController.
 
   /**
    * Get raw voice sessions for an event.
@@ -735,8 +742,10 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         leaveAt: string | null;
         durationSec: number;
       }>,
-      classification:
-        (session.classification as VoiceClassification | null) ?? null,
+      classification: session.classification
+        ? (VoiceClassificationEnum.safeParse(session.classification).data ??
+          null)
+        : null,
     };
   }
 }
@@ -748,6 +757,15 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
  * Exported for unit testing.
  *
  * Priority: no_show > late > early_leaver > partial > full
+ *
+ * Design rationale for priority ordering:
+ * - `late` takes priority over `full` because punctuality is a distinct
+ *   trackable behavior. A user who joins 6 minutes late to a 3-hour raid
+ *   gets `late` even with 95% presence — this ensures officers can see
+ *   who was on time vs. who wasn't, regardless of total duration.
+ * - `early_leaver` is separate from `partial` to distinguish users who
+ *   explicitly left before the event ended from those with intermittent
+ *   connectivity or partial attendance throughout.
  */
 export function classifyVoiceSession(
   session: {

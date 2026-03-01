@@ -35,7 +35,7 @@ export class EmbedSchedulerService {
     private readonly embedPosterService: EmbedPosterService,
   ) {}
 
-  @Cron('0 */15 * * * *', {
+  @Cron('15 */15 * * * *', {
     name: 'EmbedSchedulerService_handleScheduledEmbeds',
   })
   async handleScheduledEmbeds(): Promise<void> {

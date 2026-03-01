@@ -52,6 +52,7 @@ export class EnvironmentSnapshotService implements OnModuleInit {
   private cachedSnapshot: EnvironmentSnapshot | null = null;
   private cacheTimestamp = 0;
   private collectPromise: Promise<EnvironmentSnapshot> | null = null;
+  private migrationTableMissing = false;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -157,6 +158,10 @@ export class EnvironmentSnapshotService implements OnModuleInit {
   private async collectMigrationHistory(): Promise<
     EnvironmentSnapshot['migrations']
   > {
+    if (this.migrationTableMissing) {
+      return [];
+    }
+
     try {
       const rows = await this.db.execute<{ tag: string; created_at: string }>(
         sql`SELECT tag, created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 10`,
@@ -167,7 +172,19 @@ export class EnvironmentSnapshotService implements OnModuleInit {
         appliedAt: row.created_at,
       }));
     } catch (err: unknown) {
-      this.logger.warn('Failed to query migration history', err);
+      const isTableMissing =
+        err instanceof Error &&
+        'code' in err &&
+        (err as Error & { code: string }).code === '42P01';
+
+      if (isTableMissing) {
+        this.logger.debug(
+          '__drizzle_migrations table not found — skipping migration snapshot',
+        );
+        this.migrationTableMissing = true;
+      } else {
+        this.logger.warn('Failed to query migration history', err);
+      }
       return [];
     }
   }

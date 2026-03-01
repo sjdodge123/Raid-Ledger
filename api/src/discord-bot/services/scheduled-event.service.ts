@@ -4,6 +4,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   GuildScheduledEventEntityType,
   GuildScheduledEventPrivacyLevel,
+  GuildScheduledEventStatus,
   DiscordAPIError,
 } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -271,6 +272,80 @@ export class ScheduledEventService {
     } catch (error) {
       this.logger.error(
         `Failed to delete scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Complete a Discord Scheduled Event (ROK-577).
+   * Called when a Raid Ledger event reaches its end time.
+   * Discord requires Active -> Completed transition, so we first ensure the
+   * event is Active, then set it to Completed.
+   */
+  async completeScheduledEvent(eventId: number): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const [event] = await this.db
+        .select({
+          discordScheduledEventId: schema.events.discordScheduledEventId,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (!event?.discordScheduledEventId) return;
+
+      try {
+        const scheduledEvent = await guild.scheduledEvents.fetch(
+          event.discordScheduledEventId,
+        );
+
+        if (
+          scheduledEvent.status === GuildScheduledEventStatus.Completed ||
+          scheduledEvent.status === GuildScheduledEventStatus.Canceled
+        ) {
+          this.logger.debug(
+            `Scheduled event ${event.discordScheduledEventId} already ended (status=${scheduledEvent.status})`,
+          );
+        } else {
+          if (scheduledEvent.status === GuildScheduledEventStatus.Scheduled) {
+            // Must transition Scheduled -> Active before completing
+            await guild.scheduledEvents.edit(event.discordScheduledEventId, {
+              status: GuildScheduledEventStatus.Active,
+            });
+          }
+          await guild.scheduledEvents.edit(event.discordScheduledEventId, {
+            status: GuildScheduledEventStatus.Completed,
+          });
+
+          this.logger.log(
+            `Completed Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
+          );
+        }
+      } catch (editError) {
+        if (
+          editError instanceof DiscordAPIError &&
+          editError.code === UNKNOWN_SCHEDULED_EVENT
+        ) {
+          this.logger.debug(
+            `Scheduled event ${event.discordScheduledEventId} already deleted in Discord`,
+          );
+        } else {
+          throw editError;
+        }
+      }
+
+      await this.db
+        .update(schema.events)
+        .set({ discordScheduledEventId: null })
+        .where(eq(schema.events.id, eventId));
+    } catch (error) {
+      this.logger.error(
+        `Failed to complete scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

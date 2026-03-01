@@ -6,7 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
-import { eq, gte, lte, asc, sql, and, inArray, ne } from 'drizzle-orm';
+import { eq, gte, lte, asc, desc, sql, and, inArray, ne } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -287,9 +287,10 @@ export class EventsService {
       eventsQuery = eventsQuery.where(whereCondition);
     }
 
-    // ROK-174 AC-3: Order by start_time ASC for calendar views
+    // ROK-174 AC-3: Order by start_time ASC for upcoming, DESC for past
+    const sortDirection = query.upcoming === 'false' ? desc : asc;
     const events = await eventsQuery
-      .orderBy(asc(sql`lower(${schema.events.duration})`))
+      .orderBy(sortDirection(sql`lower(${schema.events.duration})`))
       .limit(limit)
       .offset(offset);
 

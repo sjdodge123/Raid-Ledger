@@ -243,44 +243,30 @@ export class ChannelBindingsService {
   }
 
   /**
-   * Get the voice channel binding for a specific game (or any game) in a guild.
+   * Get the voice channel binding for a specific game in a guild.
    * Used for invite DMs to show the correct voice channel to join.
-   * Priority: game-specific voice → any voice monitor binding.
+   * Returns only the game-specific voice binding; callers fall back to
+   * the app-setting default voice channel themselves (ROK-592).
    */
   async getVoiceChannelForGame(
     guildId: string,
     gameId?: number | null,
   ): Promise<string | null> {
-    // Try game-specific voice binding first
-    if (gameId) {
-      const [gameRow] = await this.db
-        .select({ channelId: schema.channelBindings.channelId })
-        .from(schema.channelBindings)
-        .where(
-          and(
-            eq(schema.channelBindings.guildId, guildId),
-            eq(schema.channelBindings.gameId, gameId),
-            eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
-          ),
-        )
-        .limit(1);
+    if (!gameId) return null;
 
-      if (gameRow) return gameRow.channelId;
-    }
-
-    // Fall back to any voice monitor binding (all-games)
-    const [anyRow] = await this.db
+    const [gameRow] = await this.db
       .select({ channelId: schema.channelBindings.channelId })
       .from(schema.channelBindings)
       .where(
         and(
           eq(schema.channelBindings.guildId, guildId),
+          eq(schema.channelBindings.gameId, gameId),
           eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
         ),
       )
       .limit(1);
 
-    return anyRow?.channelId ?? null;
+    return gameRow?.channelId ?? null;
   }
 
   /**
