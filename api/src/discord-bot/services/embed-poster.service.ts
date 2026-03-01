@@ -56,6 +56,7 @@ export class EmbedPosterService {
     event: EmbedEventData,
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     if (!this.clientService.isConnected()) {
       this.logger.debug('Bot not connected, skipping embed post');
@@ -65,6 +66,7 @@ export class EmbedPosterService {
     const channelId = await this.channelResolver.resolveChannelForEvent(
       gameId,
       recurrenceGroupId,
+      notificationChannelOverride,
     );
     if (!channelId) return false;
 
@@ -114,6 +116,9 @@ export class EmbedPosterService {
           existingRecord,
           embed,
           row,
+          gameId,
+          recurrenceGroupId,
+          notificationChannelOverride,
         );
       }
 
@@ -150,6 +155,9 @@ export class EmbedPosterService {
     record: { id: string; channelId: string; messageId: string },
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    gameId?: number | null,
+    recurrenceGroupId?: string | null,
+    notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     try {
       await this.clientService.editEmbed(
@@ -185,7 +193,11 @@ export class EmbedPosterService {
       const guildId = this.clientService.getGuildId();
       if (!guildId) return false;
 
-      const channelId = await this.channelResolver.resolveChannelForEvent();
+      const channelId = await this.channelResolver.resolveChannelForEvent(
+        gameId,
+        recurrenceGroupId,
+        notificationChannelOverride,
+      );
       if (!channelId) return false;
 
       const message = await this.clientService.sendEmbed(channelId, embed, row);

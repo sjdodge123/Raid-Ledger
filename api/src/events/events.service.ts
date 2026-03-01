@@ -1433,6 +1433,7 @@ export class EventsService {
       adHocStatus:
         (event.adHocStatus as 'live' | 'grace_period' | 'ended') ?? null,
       channelBindingId: event.channelBindingId ?? null,
+      notificationChannelOverride: event.notificationChannelOverride ?? null,
       createdAt: event.createdAt.toISOString(),
       updatedAt: event.updatedAt.toISOString(),
     };
@@ -1469,6 +1470,8 @@ export class EventsService {
       recurrenceGroupId: eventResponse.recurrenceGroupId ?? null,
       creatorId: eventResponse.creator.id,
       isAdHoc: eventResponse.isAdHoc ?? false,
+      notificationChannelOverride:
+        eventResponse.notificationChannelOverride ?? null,
     });
   }
 

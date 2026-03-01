@@ -146,6 +146,8 @@ export const EventResponseSchema = z.object({
     adHocStatus: z.enum(['live', 'grace_period', 'ended']).nullable().optional(),
     /** ROK-293: Channel binding that spawned this ad-hoc event */
     channelBindingId: z.string().uuid().nullable().optional(),
+    /** ROK-599: Per-event notification channel override (Discord channel ID) */
+    notificationChannelOverride: z.string().nullable().optional(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),
 });
