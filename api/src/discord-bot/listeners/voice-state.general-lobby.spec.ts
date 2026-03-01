@@ -14,6 +14,7 @@ import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { Events, Collection } from 'discord.js';
@@ -35,7 +36,10 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
     getActiveState: jest.Mock;
     hasAnyActiveEvent: jest.Mock;
   };
-  let mockChannelBindingsService: { getBindings: jest.Mock };
+  let mockChannelBindingsService: {
+    getBindings: jest.Mock;
+    getBindingsWithGameNames: jest.Mock;
+  };
   let mockPresenceDetector: {
     detectGameForMember: jest.Mock;
     detectGames: jest.Mock;
@@ -59,6 +63,7 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
 
     mockChannelBindingsService = {
       getBindings: jest.fn().mockResolvedValue([]),
+      getBindingsWithGameNames: jest.fn().mockResolvedValue([]),
     };
 
     mockPresenceDetector = {
@@ -99,6 +104,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
         {
           provide: PresenceGameDetectorService,
           useValue: mockPresenceDetector,
+        },
+        {
+          provide: GameActivityService,
+          useValue: {
+            bufferStart: jest.fn(),
+            bufferStop: jest.fn(),
+          },
         },
         { provide: UsersService, useValue: mockUsersService },
         {
@@ -204,12 +216,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-lobby',
           channelId: 'lobby-ch-1',
           bindingPurpose: 'general-lobby',
           gameId: null,
+          gameName: null,
           config: { minPlayers: 2 },
         },
       ]);
@@ -217,9 +230,9 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       await listener.onBotConnected();
 
       // Bindings were queried — general-lobby purpose is recognized
-      expect(mockChannelBindingsService.getBindings).toHaveBeenCalledWith(
-        'guild-1',
-      );
+      expect(
+        mockChannelBindingsService.getBindingsWithGameNames,
+      ).toHaveBeenCalledWith('guild-1');
     });
 
     it('does NOT recognize unknown binding purposes', async () => {
@@ -233,12 +246,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-other',
           channelId: 'unknown-ch',
           bindingPurpose: 'some-unknown-purpose',
           gameId: null,
+          gameName: null,
           config: null,
         },
       ]);
@@ -278,12 +292,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-gl',
           channelId: 'gl-ch',
           bindingPurpose: 'general-lobby',
           gameId: null,
+          gameName: null,
           config: { minPlayers: 2 },
         },
       ]);
@@ -365,12 +380,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
 
     it('creates "Just Chatting" event when allowJustChatting is enabled and no game detected', async () => {
       // Reconfigure bindings with allowJustChatting: true
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-gl',
           channelId: 'gl-ch',
           bindingPurpose: 'general-lobby',
           gameId: null,
+          gameName: null,
           config: { minPlayers: 2, allowJustChatting: true },
         },
       ]);
@@ -463,12 +479,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-presence',
           channelId: 'presence-ch',
           bindingPurpose: 'general-lobby',
           gameId: null,
+          gameName: null,
           config: { minPlayers: 2 },
         },
       ]);
@@ -575,12 +592,13 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       mockClientService.getClient.mockReturnValue(mockClient);
 
       // Game-specific binding (not general-lobby)
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-game',
           channelId: 'game-ch',
           bindingPurpose: 'game-voice-monitor',
           gameId: 5,
+          gameName: 'SomeGame',
           config: { minPlayers: 1 },
         },
       ]);
