@@ -36,6 +36,7 @@ import { SignupsService } from '../../events/signups.service';
 import { AttendanceService } from '../../events/attendance.service';
 import { PugsService } from '../../events/pugs.service';
 import { ShareService } from '../../events/share.service';
+import { AnalyticsService } from '../../events/analytics.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -1019,6 +1020,10 @@ describe('EventsController — voice endpoint authorization', () => {
         {
           provide: VoiceAttendanceService,
           useValue: mockVoiceAttendanceService,
+        },
+        {
+          provide: AnalyticsService,
+          useValue: { getEventMetrics: jest.fn() },
         },
       ],
     }).compile();
