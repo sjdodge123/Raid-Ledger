@@ -23,6 +23,7 @@ import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { AnalyticsService } from './analytics.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -52,6 +53,7 @@ import {
   AdHocRosterResponseDto,
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
+  EventMetricsResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -98,6 +100,7 @@ export class EventsController {
     private readonly shareService: ShareService,
     private readonly adHocEventService: AdHocEventService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   /**
@@ -214,6 +217,25 @@ export class EventsController {
       );
     }
     return this.voiceAttendanceService.getVoiceAttendanceSummary(eventId);
+  }
+
+  /**
+   * ROK-491: Get per-event metrics with attendance and voice data.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Get(':id/metrics')
+  @UseGuards(AuthGuard('jwt'))
+  async getEventMetrics(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<EventMetricsResponseDto> {
+    const event = await this.eventsService.findOne(eventId);
+    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
+      throw new ForbiddenException(
+        'Only event creator or admin/operator can view event metrics',
+      );
+    }
+    return this.analyticsService.getEventMetrics(eventId);
   }
 
   /**

@@ -512,6 +512,18 @@ export function EventDetailPage() {
                 />
             )}
 
+            {/* ROK-491: Link to per-event metrics for past events (creator/admin/operator only) */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && canManageRoster && (
+                <div className="flex justify-center">
+                    <Link
+                        to={`/events/${eventId}/metrics`}
+                        className="px-4 py-2 bg-surface hover:bg-panel text-emerald-400 hover:text-emerald-300 text-sm font-medium rounded-lg border border-edge transition-colors"
+                    >
+                        View Event Metrics
+                    </Link>
+                </div>
+            )}
+
             {/* ROK-335: Mobile Quick Info bar — key event info at a glance */}
             <div className="md:hidden event-detail-quick-info">
                 <div className="flex items-center justify-between gap-2">

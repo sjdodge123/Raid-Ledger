@@ -81,6 +81,7 @@ const GameDetailPage = lazyWithRetry(() => import('./pages/game-detail-page').th
 const CharacterDetailPage = lazyWithRetry(() => import('./pages/character-detail-page').then(m => ({ default: m.CharacterDetailPage })));
 const PlayersPage = lazyWithRetry(() => import('./pages/players-page').then(m => ({ default: m.PlayersPage })));
 const MyEventsPage = lazyWithRetry(() => import('./pages/my-events-page').then(m => ({ default: m.MyEventsPage })));
+const EventMetricsPage = lazyWithRetry(() => import('./pages/event-metrics-page').then(m => ({ default: m.EventMetricsPage })));
 const UserProfilePage = lazyWithRetry(() => import('./pages/user-profile-page').then(m => ({ default: m.UserProfilePage })));
 const OnboardingWizardPage = lazyWithRetry(() => import('./pages/onboarding-wizard-page').then(m => ({ default: m.OnboardingWizardPage })));
 
@@ -206,6 +207,8 @@ function App() {
                 <Route path="/event-metrics" element={<MyEventsPage />} />
                 <Route path="/events/new" element={<CreateEventPage />} />
                 <Route path="/events/plan" element={<PlanEventPage />} />
+                {/* ROK-491: Per-event metrics — must be before :id catch-all */}
+                <Route path="/events/:id/metrics" element={<EventMetricsPage />} />
                 <Route path="/events/:id" element={<EventDetailPage />} />
                 <Route path="/events/:id/edit" element={<EditEventPage />} />
                 {/* ROK-181: Public user profiles */}

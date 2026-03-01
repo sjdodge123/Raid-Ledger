@@ -8,6 +8,7 @@ import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { AnalyticsService } from './analytics.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -114,6 +115,12 @@ describe('EventsController', () => {
               participants: [],
               activeCount: 0,
             }),
+          },
+        },
+        {
+          provide: AnalyticsService,
+          useValue: {
+            getEventMetrics: jest.fn().mockResolvedValue({}),
           },
         },
         {
