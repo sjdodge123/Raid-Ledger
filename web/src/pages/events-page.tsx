@@ -124,7 +124,7 @@ export function EventsPage() {
     return set;
   }, [items, slotSet]);
 
-  // Sort events: game-time overlaps first, then filter if toggle is on + mobile search
+  // Sort events: game-time overlaps first (stable by startTime), then filter if toggle is on + mobile search
   const displayEvents = useMemo(() => {
     if (!items.length) return items;
     let result = items;
@@ -137,17 +137,21 @@ export function EventsPage() {
       );
     }
     if (overlapSet) {
+      // ROK-603: Stable sort — game-time overlaps first, then preserve
+      // chronological startTime order within each group (ASC for upcoming/mine, DESC for past)
+      const timeDirection = activeTab === 'past' ? -1 : 1;
       result = [...result].sort((a, b) => {
         const aOverlaps = overlapSet.has(a.id) ? 0 : 1;
         const bOverlaps = overlapSet.has(b.id) ? 0 : 1;
-        return aOverlaps - bOverlaps;
+        if (aOverlaps !== bOverlaps) return aOverlaps - bOverlaps;
+        return (new Date(a.startTime).getTime() - new Date(b.startTime).getTime()) * timeDirection;
       });
     }
     if (filterGameTime && overlapSet) {
       result = result.filter((e) => overlapSet.has(e.id));
     }
     return result;
-  }, [items, overlapSet, filterGameTime, searchQuery]);
+  }, [items, overlapSet, filterGameTime, searchQuery, activeTab]);
 
   if (error) {
     return (
