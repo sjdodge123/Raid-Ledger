@@ -155,14 +155,25 @@ export class EmbedSyncProcessor extends WorkerHost {
           reason,
         });
 
-      // ROK-471: Update Discord Scheduled Event description with new signup count
-      this.scheduledEventService
-        .updateDescription(eventId, eventData)
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Failed to update scheduled event description for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
+      // ROK-577: Complete Discord Scheduled Event when embed transitions to COMPLETED
+      if (newState === EMBED_STATES.COMPLETED) {
+        this.scheduledEventService
+          .completeScheduledEvent(eventId)
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `Failed to complete scheduled event for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            );
+          });
+      } else {
+        // ROK-471: Update Discord Scheduled Event description with new signup count
+        this.scheduledEventService
+          .updateDescription(eventId, eventData)
+          .catch((err: unknown) => {
+            this.logger.warn(
+              `Failed to update scheduled event description for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+            );
+          });
+      }
     } catch (error) {
       this.logger.error(
         `Failed to sync embed for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
