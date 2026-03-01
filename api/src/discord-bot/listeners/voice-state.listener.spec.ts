@@ -5,6 +5,7 @@ import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { Events, Collection } from 'discord.js';
@@ -31,11 +32,16 @@ describe('VoiceStateListener', () => {
   };
   let mockChannelBindingsService: {
     getBindings: jest.Mock;
+    getBindingsWithGameNames: jest.Mock;
   };
   let mockPresenceDetector: {
     detectGameForMember: jest.Mock;
     detectGames: jest.Mock;
     setManualOverride: jest.Mock;
+  };
+  let mockGameActivityService: {
+    bufferStart: jest.Mock;
+    bufferStop: jest.Mock;
   };
   let mockUsersService: {
     findByDiscordId: jest.Mock;
@@ -57,6 +63,7 @@ describe('VoiceStateListener', () => {
 
     mockChannelBindingsService = {
       getBindings: jest.fn().mockResolvedValue([]),
+      getBindingsWithGameNames: jest.fn().mockResolvedValue([]),
     };
 
     mockPresenceDetector = {
@@ -65,6 +72,11 @@ describe('VoiceStateListener', () => {
         .fn()
         .mockResolvedValue({ primary: null, groups: new Map() }),
       setManualOverride: jest.fn(),
+    };
+
+    mockGameActivityService = {
+      bufferStart: jest.fn(),
+      bufferStop: jest.fn(),
     };
 
     mockUsersService = {
@@ -97,6 +109,10 @@ describe('VoiceStateListener', () => {
         {
           provide: PresenceGameDetectorService,
           useValue: mockPresenceDetector,
+        },
+        {
+          provide: GameActivityService,
+          useValue: mockGameActivityService,
         },
         { provide: UsersService, useValue: mockUsersService },
         {
@@ -183,12 +199,13 @@ describe('VoiceStateListener', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-1',
           channelId: 'voice-ch-1',
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
+          gameName: 'TestGame',
           config: { minPlayers: 2 },
         },
       ]);
@@ -196,9 +213,9 @@ describe('VoiceStateListener', () => {
       await listener.onBotConnected();
 
       // Recovery should have looked up bindings for the voice channel
-      expect(mockChannelBindingsService.getBindings).toHaveBeenCalledWith(
-        'guild-1',
-      );
+      expect(
+        mockChannelBindingsService.getBindingsWithGameNames,
+      ).toHaveBeenCalledWith('guild-1');
     });
   });
 
@@ -270,12 +287,13 @@ describe('VoiceStateListener', () => {
     });
 
     it('detects join event (null -> channel)', async () => {
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-join',
           channelId: 'voice-ch-join',
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
+          gameName: 'TestGame',
           config: { minPlayers: 1 },
         },
       ]);
@@ -306,12 +324,13 @@ describe('VoiceStateListener', () => {
     });
 
     it('detects leave event (channel -> null)', async () => {
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-leave',
           channelId: 'voice-ch-leave',
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
+          gameName: 'TestGame',
           config: {},
         },
       ]);
@@ -329,12 +348,13 @@ describe('VoiceStateListener', () => {
 
     it('detects move event (channel A -> channel B) as leave+join', async () => {
       // Both channels are bound
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-a',
           channelId: 'ch-a',
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
+          gameName: 'GameA',
           config: { minPlayers: 1 },
         },
         {
@@ -342,6 +362,7 @@ describe('VoiceStateListener', () => {
           channelId: 'ch-b',
           bindingPurpose: 'game-voice-monitor',
           gameId: 2,
+          gameName: 'GameB',
           config: { minPlayers: 1 },
         },
       ]);
@@ -384,12 +405,13 @@ describe('VoiceStateListener', () => {
       );
       mockClientService.getClient.mockReturnValue(mockClient);
 
-      mockChannelBindingsService.getBindings.mockResolvedValue([
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
         {
           id: 'bind-thresh',
           channelId: 'voice-thresh',
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
+          gameName: 'TestGame',
           config: { minPlayers: 3 },
         },
       ]);
@@ -430,7 +452,7 @@ describe('VoiceStateListener', () => {
       mockClientService.getClient.mockReturnValue(mockClient);
 
       // No bindings at all
-      mockChannelBindingsService.getBindings.mockResolvedValue([]);
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
 
       await listener.onBotConnected();
 
@@ -449,6 +471,215 @@ describe('VoiceStateListener', () => {
       await jest.advanceTimersByTimeAsync(2100);
 
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Voice→Activity Bridge (ROK-591) ──────────────────────────────────────
+
+  describe('voice→activity bridge (ROK-591)', () => {
+    let voiceHandler: (oldState: unknown, newState: unknown) => void;
+
+    beforeEach(async () => {
+      const mockClient = createMockClient();
+      mockClient.on.mockImplementation(
+        (event: string, handler: (...args: unknown[]) => void) => {
+          if (event === (Events.VoiceStateUpdate as string)) {
+            voiceHandler = handler;
+          }
+        },
+      );
+      mockClientService.getClient.mockReturnValue(mockClient);
+
+      await listener.onBotConnected();
+    });
+
+    it('calls bufferStart with voice source when linked user joins game-bound channel', async () => {
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+        {
+          id: 'bind-game',
+          channelId: 'voice-game',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 42,
+          gameName: 'Rise of Kingdoms',
+          config: { minPlayers: 1 },
+        },
+      ]);
+
+      // Active state so threshold check passes
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 100,
+        memberSet: new Set(),
+        lastExtendedAt: 0,
+      });
+
+      // Linked user
+      mockUsersService.findByDiscordId.mockResolvedValue({ id: 7 });
+
+      voiceHandler(
+        { channelId: null, id: 'user-linked' },
+        {
+          channelId: 'voice-game',
+          id: 'user-linked',
+          member: {
+            displayName: 'LinkedPlayer',
+            user: { username: 'LinkedPlayer', avatar: null },
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStart).toHaveBeenCalledWith(
+        7,
+        'Rise of Kingdoms',
+        expect.any(Date),
+        'voice',
+      );
+    });
+
+    it('does NOT call bufferStart for unlinked users', async () => {
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+        {
+          id: 'bind-game',
+          channelId: 'voice-game',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 42,
+          gameName: 'Rise of Kingdoms',
+          config: { minPlayers: 1 },
+        },
+      ]);
+
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 100,
+        memberSet: new Set(),
+        lastExtendedAt: 0,
+      });
+
+      // Unlinked user
+      mockUsersService.findByDiscordId.mockResolvedValue(null);
+
+      voiceHandler(
+        { channelId: null, id: 'user-unlinked' },
+        {
+          channelId: 'voice-game',
+          id: 'user-unlinked',
+          member: {
+            displayName: 'Unlinked',
+            user: { username: 'Unlinked', avatar: null },
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStart).not.toHaveBeenCalled();
+    });
+
+    it('does NOT call bufferStart when binding has null gameId', async () => {
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+        {
+          id: 'bind-no-game',
+          channelId: 'voice-no-game',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: null,
+          gameName: null,
+          config: { minPlayers: 1 },
+        },
+      ]);
+
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 100,
+        memberSet: new Set(),
+        lastExtendedAt: 0,
+      });
+
+      mockUsersService.findByDiscordId.mockResolvedValue({ id: 7 });
+
+      voiceHandler(
+        { channelId: null, id: 'user-nogame' },
+        {
+          channelId: 'voice-no-game',
+          id: 'user-nogame',
+          member: {
+            displayName: 'Player',
+            user: { username: 'Player', avatar: null },
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStart).not.toHaveBeenCalled();
+    });
+
+    it('calls bufferStop with voice source when tracked user leaves channel', async () => {
+      // First, set up a join so the user gets tracked
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+        {
+          id: 'bind-game',
+          channelId: 'voice-game',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 42,
+          gameName: 'Rise of Kingdoms',
+          config: { minPlayers: 1 },
+        },
+      ]);
+
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 100,
+        memberSet: new Set(),
+        lastExtendedAt: 0,
+      });
+
+      mockUsersService.findByDiscordId.mockResolvedValue({ id: 7 });
+
+      // Join
+      voiceHandler(
+        { channelId: null, id: 'user-track' },
+        {
+          channelId: 'voice-game',
+          id: 'user-track',
+          member: {
+            displayName: 'TrackedPlayer',
+            user: { username: 'TrackedPlayer', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStart).toHaveBeenCalledWith(
+        7,
+        'Rise of Kingdoms',
+        expect.any(Date),
+        'voice',
+      );
+
+      // Now leave
+      voiceHandler(
+        { channelId: 'voice-game', id: 'user-track' },
+        { channelId: null, id: 'user-track', member: null },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStop).toHaveBeenCalledWith(
+        7,
+        'Rise of Kingdoms',
+        expect.any(Date),
+        'voice',
+      );
+    });
+
+    it('does NOT call bufferStop for untracked users on leave', async () => {
+      // No prior join — leave an unbound channel
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
+
+      voiceHandler(
+        { channelId: 'some-channel', id: 'user-untracked' },
+        { channelId: null, id: 'user-untracked', member: null },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      expect(mockGameActivityService.bufferStop).not.toHaveBeenCalled();
     });
   });
 });

@@ -11,6 +11,7 @@ import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
@@ -25,6 +26,7 @@ const CACHE_TTL_MS = 60 * 1000;
 interface ResolvedBinding {
   bindingId: string;
   gameId: number | null;
+  gameName: string | null;
   bindingPurpose: string;
   config: {
     minPlayers?: number;
@@ -82,12 +84,24 @@ export class VoiceStateListener {
   /** Tracks which channel each user is in (for presence change handling) */
   private userChannelMap = new Map<string, string>();
 
+  /**
+   * Tracks game context per user for the voice→activity bridge (ROK-591).
+   * Key: discordUserId, Value: { gameName, userId (RL user ID) }.
+   * Populated on voice join for linked users in game-bound channels,
+   * consumed on voice leave so bufferStop has the game name.
+   */
+  private voiceGameTracker = new Map<
+    string,
+    { gameName: string; userId: number }
+  >();
+
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly presenceDetector: PresenceGameDetectorService,
+    private readonly gameActivityService: GameActivityService,
     private readonly usersService: UsersService,
     private readonly adHocEventsGateway: AdHocEventsGateway,
   ) {}
@@ -160,6 +174,7 @@ export class VoiceStateListener {
     this.channelBindingCache.clear();
     this.channelMembers.clear();
     this.userChannelMap.clear();
+    this.voiceGameTracker.clear();
 
     // Clear all debounce timers
     for (const timer of this.debounceTimers.values()) {
@@ -255,6 +270,18 @@ export class VoiceStateListener {
     if (detected.gameId === null) {
       const allowJustChatting = binding.config?.allowJustChatting ?? false;
       if (!allowJustChatting) {
+        // ROK-591: Stop voice activity tracking for the old game
+        const oldVoiceGame = this.voiceGameTracker.get(userId);
+        if (oldVoiceGame) {
+          this.voiceGameTracker.delete(userId);
+          this.gameActivityService.bufferStop(
+            oldVoiceGame.userId,
+            oldVoiceGame.gameName,
+            new Date(),
+            'voice',
+          );
+        }
+
         // Just leave the event — don't create a null-game event
         await this.adHocEventService.handleVoiceLeave(
           binding.bindingId,
@@ -276,10 +303,37 @@ export class VoiceStateListener {
     );
     if (currentState?.memberSet.has(userId)) return;
 
+    // ROK-591: Mid-session game switch — stop old game, start new game
+    const oldVoiceGame = this.voiceGameTracker.get(userId);
+    if (oldVoiceGame) {
+      this.gameActivityService.bufferStop(
+        oldVoiceGame.userId,
+        oldVoiceGame.gameName,
+        new Date(),
+        'voice',
+      );
+      this.voiceGameTracker.delete(userId);
+    }
+
     // User is playing a different game — leave old event, join new
     await this.adHocEventService.handleVoiceLeave(binding.bindingId, userId);
 
     const rlUser = await this.usersService.findByDiscordId(userId);
+
+    // ROK-591: Start tracking the new game via voice→activity bridge
+    if (detected.gameId !== null && rlUser?.id) {
+      this.voiceGameTracker.set(userId, {
+        gameName: detected.gameName,
+        userId: rlUser.id,
+      });
+      this.gameActivityService.bufferStart(
+        rlUser.id,
+        detected.gameName,
+        new Date(),
+        'voice',
+      );
+    }
+
     const memberInfo: VoiceMemberInfo = {
       discordUserId: userId,
       discordUsername:
@@ -371,16 +425,31 @@ export class VoiceStateListener {
     const minPlayers = binding.config?.minPlayers ?? 2;
     const state = this.adHocEventService.getActiveState(binding.bindingId);
 
+    // Resolve RL user (needed for both ad-hoc roster and voice→activity bridge)
+    const rlUser = await this.usersService.findByDiscordId(
+      discordMember.discordUserId,
+    );
+
+    // ROK-591: Voice→activity bridge — track game activity for linked users
+    // in game-bound channels with a known game.
+    if (rlUser?.id && binding.gameId && binding.gameName) {
+      this.voiceGameTracker.set(discordMember.discordUserId, {
+        gameName: binding.gameName,
+        userId: rlUser.id,
+      });
+      this.gameActivityService.bufferStart(
+        rlUser.id,
+        binding.gameName,
+        new Date(),
+        'voice',
+      );
+    }
+
     // If event already exists, always add
     // If no event, check threshold
     if (!state && members.size < minPlayers) {
       return;
     }
-
-    // Resolve RL user
-    const rlUser = await this.usersService.findByDiscordId(
-      discordMember.discordUserId,
-    );
 
     const memberInfo: VoiceMemberInfo = {
       ...discordMember,
@@ -431,6 +500,25 @@ export class VoiceStateListener {
       }
       // Rename to "Just Chatting" for clarity
       detected = { gameId: null, gameName: 'Just Chatting' };
+    }
+
+    // ROK-591: Voice→activity bridge for general-lobby (game detected via presence)
+    if (detected.gameId !== null) {
+      const rlUserForBridge = await this.usersService.findByDiscordId(
+        discordMember.discordUserId,
+      );
+      if (rlUserForBridge?.id) {
+        this.voiceGameTracker.set(discordMember.discordUserId, {
+          gameName: detected.gameName,
+          userId: rlUserForBridge.id,
+        });
+        this.gameActivityService.bufferStart(
+          rlUserForBridge.id,
+          detected.gameName,
+          new Date(),
+          'voice',
+        );
+      }
     }
 
     const minPlayers = binding.config?.minPlayers ?? 2;
@@ -523,6 +611,9 @@ export class VoiceStateListener {
       return;
     }
 
+    // Track which members have been added to an event (for ROK-593 dedup)
+    const addedMembers = new Set<string>();
+
     for (const group of groups) {
       for (const memberId of group.memberIds) {
         const guildMember = channel.members.get(memberId);
@@ -544,6 +635,48 @@ export class VoiceStateListener {
           group.gameId,
           group.gameName,
         );
+        addedMembers.add(memberId);
+
+        // ROK-591: Voice→activity bridge for group detection
+        if (group.gameId !== null && rlUser?.id) {
+          this.voiceGameTracker.set(memberId, {
+            gameName: group.gameName,
+            userId: rlUser.id,
+          });
+          this.gameActivityService.bufferStart(
+            rlUser.id,
+            group.gameName,
+            new Date(),
+            'voice',
+          );
+        }
+      }
+    }
+
+    // ROK-593: Add remaining voice channel members to the first event
+    // (members without detectable game activity who are still in the channel).
+    // Only adds if there are game groups — skip if all groups are "Just Chatting".
+    if (groups.length > 0) {
+      const primaryGroup = groups[0];
+      for (const [memberId, guildMember] of channel.members) {
+        if (addedMembers.has(memberId)) continue;
+
+        const rlUser = await this.usersService.findByDiscordId(memberId);
+        const memberInfo: VoiceMemberInfo = {
+          discordUserId: memberId,
+          discordUsername:
+            guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+          discordAvatarHash: guildMember.user?.avatar ?? null,
+          userId: rlUser?.id ?? null,
+        };
+
+        await this.adHocEventService.handleVoiceJoin(
+          binding.bindingId,
+          memberInfo,
+          binding,
+          primaryGroup.gameId,
+          primaryGroup.gameName,
+        );
       }
     }
   }
@@ -552,6 +685,18 @@ export class VoiceStateListener {
     channelId: string,
     discordUserId: string,
   ): Promise<void> {
+    // ROK-591: Voice→activity bridge — stop tracking game activity on leave
+    const voiceGame = this.voiceGameTracker.get(discordUserId);
+    if (voiceGame) {
+      this.voiceGameTracker.delete(discordUserId);
+      this.gameActivityService.bufferStop(
+        voiceGame.userId,
+        voiceGame.gameName,
+        new Date(),
+        'voice',
+      );
+    }
+
     // ROK-490: Track voice attendance leave for active scheduled events
     try {
       const activeScheduledEvents =
@@ -612,8 +757,10 @@ export class VoiceStateListener {
     }
 
     // Look up binding for this voice channel — match both game-voice-monitor
-    // and general-lobby binding purposes
-    const bindings = await this.channelBindingsService.getBindings(guildId);
+    // and general-lobby binding purposes. Uses getBindingsWithGameNames so the
+    // voice→activity bridge (ROK-591) can map gameId to a game name.
+    const bindings =
+      await this.channelBindingsService.getBindingsWithGameNames(guildId);
     const binding = bindings.find(
       (b) =>
         b.channelId === channelId &&
@@ -632,6 +779,7 @@ export class VoiceStateListener {
     const result: ResolvedBinding = {
       bindingId: binding.id,
       gameId: binding.gameId,
+      gameName: binding.gameName ?? null,
       bindingPurpose: binding.bindingPurpose,
       config: binding.config as {
         minPlayers?: number;

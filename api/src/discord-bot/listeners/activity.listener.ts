@@ -93,14 +93,14 @@ export class ActivityListener {
     // Detect stopped games (in old but not in new)
     for (const gameName of oldGames) {
       if (!newGames.includes(gameName)) {
-        this.gameActivityService.bufferStop(userId, gameName, now);
+        this.gameActivityService.bufferStop(userId, gameName, now, 'presence');
       }
     }
 
     // Detect started games (in new but not in old)
     for (const gameName of newGames) {
       if (!oldGames.includes(gameName)) {
-        this.gameActivityService.bufferStart(userId, gameName, now);
+        this.gameActivityService.bufferStart(userId, gameName, now, 'presence');
       }
     }
   }
