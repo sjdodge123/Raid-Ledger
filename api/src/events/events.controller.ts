@@ -23,6 +23,7 @@ import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
+import { AnalyticsService } from './analytics.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -52,6 +53,7 @@ import {
   AdHocRosterResponseDto,
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
+  EventMetricsResponseDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -98,6 +100,7 @@ export class EventsController {
     private readonly shareService: ShareService,
     private readonly adHocEventService: AdHocEventService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly analyticsService: AnalyticsService,
   ) {}
 
   /**
@@ -214,6 +217,18 @@ export class EventsController {
       );
     }
     return this.voiceAttendanceService.getVoiceAttendanceSummary(eventId);
+  }
+
+  /**
+   * ROK-491: Get per-event metrics with attendance and voice data.
+   * Requires authentication (any authenticated user can view).
+   */
+  @Get(':id/metrics')
+  @UseGuards(AuthGuard('jwt'))
+  async getEventMetrics(
+    @Param('id', ParseIntPipe) eventId: number,
+  ): Promise<EventMetricsResponseDto> {
+    return this.analyticsService.getEventMetrics(eventId);
   }
 
   /**

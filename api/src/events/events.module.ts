@@ -16,6 +16,8 @@ import { EventsController } from './events.controller';
 import { EventPlansController } from './event-plans.controller';
 import { InviteController } from './invite.controller';
 import { TemplatesController } from './templates.controller';
+import { AnalyticsController } from './analytics.controller';
+import { AnalyticsService } from './analytics.service';
 import { AvailabilityModule } from '../availability/availability.module';
 import { NotificationModule } from '../notifications/notification.module';
 import { DiscordBotModule } from '../discord-bot/discord-bot.module';
@@ -49,6 +51,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     EventPlansController,
     InviteController,
     TemplatesController,
+    AnalyticsController,
   ],
   providers: [
     EventsService,
@@ -64,6 +67,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     EventPlansService,
     EventPlansProcessor,
     AdHocEventsGateway,
+    AnalyticsService,
   ],
   exports: [
     EventsService,
