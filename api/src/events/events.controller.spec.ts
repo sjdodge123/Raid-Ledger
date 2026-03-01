@@ -7,6 +7,7 @@ import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -112,6 +113,26 @@ describe('EventsController', () => {
               eventId: 1,
               participants: [],
               activeCount: 0,
+            }),
+          },
+        },
+        {
+          provide: VoiceAttendanceService,
+          useValue: {
+            getVoiceSessions: jest.fn().mockResolvedValue({
+              eventId: 1,
+              sessions: [],
+            }),
+            getVoiceAttendanceSummary: jest.fn().mockResolvedValue({
+              eventId: 1,
+              totalTracked: 0,
+              full: 0,
+              partial: 0,
+              late: 0,
+              earlyLeaver: 0,
+              noShow: 0,
+              unclassified: 0,
+              sessions: [],
             }),
           },
         },

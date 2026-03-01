@@ -55,6 +55,7 @@ import { EmbedPosterService } from './services/embed-poster.service';
 import { EmbedSchedulerService } from './services/embed-scheduler.service';
 import { ScheduledEventService } from './services/scheduled-event.service';
 import { PresenceGameDetectorService } from './services/presence-game-detector.service';
+import { VoiceAttendanceService } from './services/voice-attendance.service';
 import { PlayingCommand } from './commands/playing.command';
 
 @Module({
@@ -101,6 +102,7 @@ import { PlayingCommand } from './commands/playing.command';
     VoiceStateListener,
     GameActivityService,
     PresenceGameDetectorService,
+    VoiceAttendanceService,
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,
@@ -126,6 +128,7 @@ import { PlayingCommand } from './commands/playing.command';
     ChannelResolverService,
     PugInviteService,
     AdHocEventService,
+    VoiceAttendanceService,
   ],
 })
 export class DiscordBotModule {}

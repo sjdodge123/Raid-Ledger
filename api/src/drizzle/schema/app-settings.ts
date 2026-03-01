@@ -67,6 +67,8 @@ export const SETTING_KEYS = {
   AD_HOC_EVENTS_ENABLED: 'ad_hoc_events_enabled',
   /** ROK-471: Default voice channel for Discord Scheduled Events */
   DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',
+  /** ROK-490: Grace minutes for voice attendance classification */
+  VOICE_ATTENDANCE_GRACE_MINUTES: 'voice_attendance_grace_minutes',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

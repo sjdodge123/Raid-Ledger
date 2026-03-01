@@ -11,6 +11,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { VoiceStateListener } from './voice-state.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
@@ -76,6 +77,15 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
         VoiceStateListener,
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: AdHocEventService, useValue: mockAdHocEventService },
+        {
+          provide: VoiceAttendanceService,
+          useValue: {
+            findActiveScheduledEvents: jest.fn().mockResolvedValue([]),
+            handleJoin: jest.fn(),
+            handleLeave: jest.fn(),
+            recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+          },
+        },
         {
           provide: ChannelBindingsService,
           useValue: mockChannelBindingsService,
