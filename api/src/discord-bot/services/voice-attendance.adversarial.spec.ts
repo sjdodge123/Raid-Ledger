@@ -17,6 +17,7 @@ import {
   classifyVoiceSession,
 } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
@@ -1036,6 +1037,14 @@ describe('EventsController — voice endpoint authorization', () => {
         {
           provide: AnalyticsService,
           useValue: { getEventMetrics: jest.fn() },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
         },
       ],
     }).compile();

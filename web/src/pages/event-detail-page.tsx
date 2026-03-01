@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useRef, useEffect, lazy, Suspense } from 'react';
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
@@ -75,18 +75,16 @@ export function EventDetailPage() {
 
     // ROK-530: Resolve voice channel name for event detail summary
     const [voiceChannelName, setVoiceChannelName] = useState<string | null>(null);
-    const fetchVoiceChannel = useCallback(async () => {
-        if (!eventId || isAdHoc) { setVoiceChannelName(null); return; }
-        try {
-            const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-            const res = await fetch(`${API_BASE}/events/${eventId}/voice-channel`);
-            if (res.ok) {
-                const data = await res.json() as { channelName: string | null };
-                setVoiceChannelName(data.channelName);
-            }
-        } catch { /* ignore */ }
+    useEffect(() => {
+        if (!eventId || isAdHoc) return;
+        let cancelled = false;
+        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+        fetch(`${API_BASE}/events/${eventId}/voice-channel`)
+            .then((res) => res.ok ? res.json() as Promise<{ channelName: string | null }> : null)
+            .then((data) => { if (!cancelled && data) setVoiceChannelName(data.channelName); })
+            .catch(() => { /* ignore */ });
+        return () => { cancelled = true; };
     }, [eventId, isAdHoc]);
-    useEffect(() => { void fetchVoiceChannel(); }, [fetchVoiceChannel]);
 
     // Look up game config entry for hasRoles/slug (ROK-234)
     // ROK-400: event.game.id is now the games table integer ID directly
