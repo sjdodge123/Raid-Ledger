@@ -56,7 +56,7 @@ mcp__linear__list_issues({
 })
 ```
 
-Filter results to stories with labels: **Bug**, **Tech Debt**, or **Chore**.
+Filter results to stories with labels: **Bug**, **Tech Debt**, **Chore**, or **Performance**.
 
 ### Secondary pool — "Backlog" status (opt-in):
 
@@ -68,7 +68,7 @@ mcp__linear__list_issues({
 })
 ```
 
-Filter results to stories with labels: **Bug**, **Tech Debt**, or **Chore**.
+Filter results to stories with labels: **Bug**, **Tech Debt**, **Chore**, or **Performance**.
 
 ### If operator specified specific stories (e.g. `ROK-XXX ROK-YYY`):
 
@@ -78,9 +78,9 @@ mcp__linear__get_issue({ issueId: "ROK-XXX" })
 mcp__linear__get_issue({ issueId: "ROK-YYY" })
 ```
 
-### Verify "Chore" label exists
+### Verify "Chore" and "Performance" labels exist
 
-On first run, check that the "Chore" label exists in Linear. If not, create it:
+On first run, check that the "Chore" and "Performance" labels exist in Linear. If not, create them:
 ```
 mcp__linear__list_issue_labels({ teamId: "0728c19f-5268-4e16-aa45-c944349ce386" })
 ```
@@ -90,6 +90,14 @@ mcp__linear__create_issue_label({
   teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
   name: "Chore",
   color: "#95A5A6"
+})
+```
+If "Performance" is missing:
+```
+mcp__linear__create_issue_label({
+  teamId: "0728c19f-5268-4e16-aa45-c944349ce386",
+  name: "Performance",
+  color: "#F2994A"
 })
 ```
 

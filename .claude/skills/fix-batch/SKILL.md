@@ -15,7 +15,7 @@ Pulls small-scope stories (Bug, Tech Debt, Chore) from Linear, batches them, spa
 
 ## When to Use
 
-- Bug fixes, tech debt, chores, small improvements
+- Bug fixes, tech debt, chores, performance improvements, small improvements
 - Stories that are light or standard scope ONLY
 - If a story looks full-scope (contract changes, migrations, cross-module), flag it and recommend `/build` instead
 
