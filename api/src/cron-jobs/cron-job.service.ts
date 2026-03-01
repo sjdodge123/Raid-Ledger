@@ -67,6 +67,10 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
     description:
       'Creates a pg_dump backup and rotates backups older than 30 days',
   },
+  ScheduledEventService_startScheduledEvents: {
+    description:
+      'Auto-starts Discord scheduled events when their start time arrives every 30 seconds',
+  },
 };
 
 /**

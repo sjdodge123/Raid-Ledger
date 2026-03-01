@@ -10,6 +10,7 @@ import { ScheduledEventService } from './scheduled-event.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { ScheduledEventData } from './scheduled-event.service';
 
@@ -130,6 +131,16 @@ describe('ScheduledEventService', () => {
           provide: SettingsService,
           useValue: {
             getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
+          },
+        },
+        {
+          provide: CronJobService,
+          useValue: {
+            executeWithTracking: jest
+              .fn()
+              .mockImplementation((_name: string, fn: () => Promise<void>) =>
+                fn(),
+              ),
           },
         },
       ],
@@ -614,9 +625,7 @@ describe('ScheduledEventService', () => {
       );
       mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
 
-      await expect(
-        service.completeScheduledEvent(42),
-      ).resolves.not.toThrow();
+      await expect(service.completeScheduledEvent(42)).resolves.not.toThrow();
 
       // Still clears the DB reference
       expect(updateChain.set).toHaveBeenCalledWith({
@@ -634,9 +643,7 @@ describe('ScheduledEventService', () => {
         new Error('Unexpected API error'),
       );
 
-      await expect(
-        service.completeScheduledEvent(42),
-      ).resolves.not.toThrow();
+      await expect(service.completeScheduledEvent(42)).resolves.not.toThrow();
     });
   });
 
@@ -838,6 +845,151 @@ describe('ScheduledEventService', () => {
       };
       // Should still produce a valid description
       expect(editArg.description).toContain('World of Warcraft');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // startScheduledEvents (ROK-573)
+  // ---------------------------------------------------------------------------
+  describe('startScheduledEvents', () => {
+    /** Helper to build a select chain that resolves at .where() (no .limit()). */
+    const createSelectChainNoLimit = (rows: unknown[] = []) => {
+      const chain: Record<string, jest.Mock> = {};
+      chain.select = jest.fn().mockReturnValue(chain);
+      chain.from = jest.fn().mockReturnValue(chain);
+      chain.where = jest.fn().mockResolvedValue(rows);
+      return chain;
+    };
+
+    it('starts a Discord scheduled event that is still in SCHEDULED state', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mockDb.select.mockReturnValue(selectChain);
+
+      mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Scheduled,
+      });
+
+      await service.startScheduledEvents();
+
+      expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith(
+        'discord-se-id-1',
+        { status: GuildScheduledEventStatus.Active },
+      );
+    });
+
+    it('skips events already in ACTIVE state', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'discord-se-id-1' },
+      ]);
+      mockDb.select.mockReturnValue(selectChain);
+
+      mockGuild.scheduledEvents.fetch.mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Active,
+      });
+
+      await service.startScheduledEvents();
+
+      expect(mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when no candidates found', async () => {
+      const selectChain = createSelectChainNoLimit([]);
+      mockDb.select.mockReturnValue(selectChain);
+
+      await service.startScheduledEvents();
+
+      expect(mockGuild.scheduledEvents.fetch).not.toHaveBeenCalled();
+      expect(mockGuild.scheduledEvents.edit).not.toHaveBeenCalled();
+    });
+
+    it('skips when bot is not connected', async () => {
+      clientService.isConnected.mockReturnValue(false);
+
+      await service.startScheduledEvents();
+
+      expect(mockDb.select).not.toHaveBeenCalled();
+    });
+
+    it('skips when no guild is available', async () => {
+      clientService.getGuild.mockReturnValue(null);
+
+      await service.startScheduledEvents();
+
+      expect(mockDb.select).not.toHaveBeenCalled();
+    });
+
+    it('clears DB reference when Discord event was manually deleted (10070)', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'deleted-se-id' },
+      ]);
+      mockDb.select.mockReturnValue(selectChain);
+      const updateChain = createUpdateChain();
+      mockDb.update.mockReturnValue(updateChain);
+
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
+      mockGuild.scheduledEvents.fetch.mockRejectedValue(unknownError);
+
+      await service.startScheduledEvents();
+
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
+    });
+
+    it('handles multiple candidates — starts only SCHEDULED ones', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'se-1' },
+        { id: 43, discordScheduledEventId: 'se-2' },
+      ]);
+      mockDb.select.mockReturnValue(selectChain);
+
+      mockGuild.scheduledEvents.fetch
+        .mockResolvedValueOnce({
+          id: 'se-1',
+          status: GuildScheduledEventStatus.Scheduled,
+        })
+        .mockResolvedValueOnce({
+          id: 'se-2',
+          status: GuildScheduledEventStatus.Active,
+        });
+
+      await service.startScheduledEvents();
+
+      // Only se-1 should be started
+      expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledTimes(1);
+      expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-1', {
+        status: GuildScheduledEventStatus.Active,
+      });
+    });
+
+    it('does not throw on Discord API errors — logs and continues', async () => {
+      const selectChain = createSelectChainNoLimit([
+        { id: 42, discordScheduledEventId: 'se-1' },
+        { id: 43, discordScheduledEventId: 'se-2' },
+      ]);
+      mockDb.select.mockReturnValue(selectChain);
+
+      // First event fails with a non-10070 error
+      mockGuild.scheduledEvents.fetch
+        .mockRejectedValueOnce(new Error('Rate limited'))
+        .mockResolvedValueOnce({
+          id: 'se-2',
+          status: GuildScheduledEventStatus.Scheduled,
+        });
+
+      await expect(service.startScheduledEvents()).resolves.not.toThrow();
+
+      // Second event should still be started despite first failing
+      expect(mockGuild.scheduledEvents.edit).toHaveBeenCalledWith('se-2', {
+        status: GuildScheduledEventStatus.Active,
+      });
     });
   });
 });
