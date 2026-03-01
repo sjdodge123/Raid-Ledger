@@ -85,7 +85,7 @@ export function EventDetailPage() {
                 if (!cancelled && data?.channelName && data.guildId && data.channelId) {
                     setVoiceChannel({
                         name: data.channelName,
-                        url: `https://discord.com/channels/${data.guildId}/${data.channelId}`,
+                        url: `discord://discord.com/channels/${data.guildId}/${data.channelId}`,
                     });
                 }
             })
