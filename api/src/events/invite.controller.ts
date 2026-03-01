@@ -68,6 +68,11 @@ export class InviteController {
     discordServerInviteUrl?: string;
   }> {
     const dto = InviteCodeClaimSchema.parse(body ?? {});
-    return this.inviteService.claimInvite(code, req.user.id, dto.role);
+    return this.inviteService.claimInvite(
+      code,
+      req.user.id,
+      dto.role,
+      dto.characterId,
+    );
   }
 }

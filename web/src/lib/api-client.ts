@@ -1058,14 +1058,18 @@ export async function resolveInviteCode(
 export async function claimInviteCode(
     code: string,
     role?: PugRole,
+    characterId?: string,
 ): Promise<{
     type: 'signup' | 'claimed';
     eventId: number;
     discordServerInviteUrl?: string;
 }> {
+    const body: Record<string, unknown> = {};
+    if (role) body.role = role;
+    if (characterId) body.characterId = characterId;
     return fetchApi(`/invite/${code}/claim`, {
         method: 'POST',
-        body: JSON.stringify(role ? { role } : {}),
+        body: JSON.stringify(body),
     });
 }
 
