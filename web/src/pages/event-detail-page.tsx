@@ -429,8 +429,8 @@ export function EventDetailPage() {
                     {fromCalendar ? '← Back to Calendar' : '← Back'}
                 </button>
 
-                {/* Invite button for any signed-up user */}
-                {isSignedUp && !canManageRoster && !isCancelled && !isEnded && (
+                {/* Invite button for any authenticated guild member */}
+                {isAuthenticated && !canManageRoster && !isCancelled && !isEnded && (
                     <button
                         onClick={() => setShowInviteModal(true)}
                         className="btn btn-primary btn-sm"
