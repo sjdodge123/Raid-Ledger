@@ -12,6 +12,7 @@ import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
 
@@ -88,6 +89,7 @@ export class VoiceStateListener {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly presenceDetector: PresenceGameDetectorService,
     private readonly usersService: UsersService,
+    private readonly adHocEventsGateway: AdHocEventsGateway,
   ) {}
 
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
@@ -323,6 +325,14 @@ export class VoiceStateListener {
             discordMember.discordUserId,
             discordMember.discordUsername,
             rlUser?.id ?? null,
+            discordMember.discordAvatarHash,
+          );
+          // ROK-530: Emit live roster update via WebSocket
+          const roster = this.voiceAttendanceService.getActiveRoster(eventId);
+          this.adHocEventsGateway.emitRosterUpdate(
+            eventId,
+            roster.participants,
+            roster.activeCount,
           );
         }
       }
@@ -548,6 +558,13 @@ export class VoiceStateListener {
         await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
       for (const { eventId } of activeScheduledEvents) {
         this.voiceAttendanceService.handleLeave(eventId, discordUserId);
+        // ROK-530: Emit live roster update via WebSocket
+        const roster = this.voiceAttendanceService.getActiveRoster(eventId);
+        this.adHocEventsGateway.emitRosterUpdate(
+          eventId,
+          roster.participants,
+          roster.activeCount,
+        );
       }
     } catch (err) {
       this.logger.error(

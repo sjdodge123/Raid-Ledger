@@ -24,6 +24,8 @@ interface EventBannerProps {
         customAvatarUrl?: string | null;
     };
     description?: string | null;
+    voiceChannelName?: string | null;
+    voiceChannelUrl?: string | null;
     isCollapsed?: boolean;
 }
 
@@ -40,6 +42,8 @@ export const EventBanner = memo(function EventBanner({
     endTime,
     creator,
     description,
+    voiceChannelName,
+    voiceChannelUrl,
     isCollapsed = false,
 }: EventBannerProps) {
     const resolved = useTimezoneStore((s) => s.resolved);
@@ -137,6 +141,19 @@ export const EventBanner = memo(function EventBanner({
                     <span className="event-banner__duration">
                         <span role="img" aria-hidden="true">⏱️</span> {duration}
                     </span>
+                    {voiceChannelName && (
+                        <>
+                            <span className="event-banner__separator">•</span>
+                            <span className="event-banner__voice-channel">
+                                <span role="img" aria-hidden="true">🔊</span>{' '}
+                                {voiceChannelUrl ? (
+                                    <a href={voiceChannelUrl} target="_blank" rel="noopener noreferrer">
+                                        {voiceChannelName}
+                                    </a>
+                                ) : voiceChannelName}
+                            </span>
+                        </>
+                    )}
                     <span className="event-banner__separator">•</span>
                     <span className="event-banner__creator">
                         <UserLink

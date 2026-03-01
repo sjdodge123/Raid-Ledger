@@ -9,6 +9,8 @@ import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { AnalyticsService } from './analytics.service';
+import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -142,6 +144,14 @@ describe('EventsController', () => {
               sessions: [],
             }),
           },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
         },
       ],
     }).compile();

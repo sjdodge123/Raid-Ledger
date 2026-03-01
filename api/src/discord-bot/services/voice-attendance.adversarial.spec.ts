@@ -17,6 +17,7 @@ import {
   classifyVoiceSession,
 } from './voice-attendance.service';
 import { ChannelBindingsService } from './channel-bindings.service';
+import { ChannelResolverService } from './channel-resolver.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
@@ -30,6 +31,7 @@ import { AdHocEventService } from './ad-hoc-event.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
+import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { EventsController } from '../../events/events.controller';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
@@ -646,6 +648,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
     handleJoin: jest.Mock;
     handleLeave: jest.Mock;
     recoverActiveSessions: jest.Mock;
+    getActiveRoster: jest.Mock;
   };
   let mockAdHocEventService: {
     handleVoiceJoin: jest.Mock;
@@ -664,6 +667,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       handleJoin: jest.fn(),
       handleLeave: jest.fn(),
       recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+      getActiveRoster: jest.fn().mockReturnValue({ participants: [], activeCount: 0 }),
     };
 
     mockAdHocEventService = {
@@ -704,6 +708,10 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
         {
           provide: UsersService,
           useValue: { findByDiscordId: jest.fn().mockResolvedValue(null) },
+        },
+        {
+          provide: AdHocEventsGateway,
+          useValue: { emitRosterUpdate: jest.fn() },
         },
       ],
     }).compile();
@@ -768,6 +776,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-scheduled',
       'ScheduledPlayer',
       null,
+      null,
     );
   });
 
@@ -827,6 +836,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-no-binding',
       'UnboundPlayer',
       null,
+      null,
     );
     // Ad-hoc service should NOT fire (no binding)
     expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
@@ -859,11 +869,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
       'user-multi-event',
       'MultiPlayer',
       null,
+      null,
     );
     expect(mockVoiceAttendanceService.handleJoin).toHaveBeenCalledWith(
       402,
       'user-multi-event',
       'MultiPlayer',
+      null,
       null,
     );
   });
@@ -1025,6 +1037,14 @@ describe('EventsController — voice endpoint authorization', () => {
         {
           provide: AnalyticsService,
           useValue: { getEventMetrics: jest.fn() },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: { resolveVoiceChannelForScheduledEvent: jest.fn() },
+        },
+        {
+          provide: DiscordBotClientService,
+          useValue: { getGuildId: jest.fn(), getClient: jest.fn() },
         },
       ],
     }).compile();

@@ -21,6 +21,8 @@ import {
   type EventVoiceSessionDto,
   type VoiceSessionsResponseDto,
   type VoiceAttendanceSummaryDto,
+  type AdHocParticipantDto,
+  type AdHocRosterResponseDto,
 } from '@raid-ledger/contract';
 
 /** Interval for flushing in-memory sessions to DB (ms). */
@@ -32,6 +34,7 @@ interface InMemorySession {
   userId: number | null;
   discordUserId: string;
   discordUsername: string;
+  discordAvatarHash: string | null;
   firstJoinAt: Date;
   lastLeaveAt: Date | null;
   totalDurationSec: number;
@@ -105,6 +108,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     discordUserId: string,
     discordUsername: string,
     userId: number | null,
+    discordAvatarHash?: string | null,
   ): void {
     const key = `${eventId}:${discordUserId}`;
     const now = new Date();
@@ -131,6 +135,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       userId,
       discordUserId,
       discordUsername,
+      discordAvatarHash: discordAvatarHash ?? null,
       firstJoinAt: now,
       lastLeaveAt: null,
       totalDurationSec: 0,
@@ -194,30 +199,52 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const guildId = this.clientService.getGuildId();
     if (!guildId) return [];
 
+    const now = new Date();
     const bindings = await this.channelBindingsService.getBindings(guildId);
+
+    // Tier 1: Game-specific voice binding
     const voiceBinding = bindings.find(
       (b) =>
         b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
     );
 
-    if (!voiceBinding || voiceBinding.gameId === null) return [];
+    if (voiceBinding && voiceBinding.gameId !== null) {
+      const activeEvents = await this.db
+        .select({ id: schema.events.id, gameId: schema.events.gameId })
+        .from(schema.events)
+        .where(
+          and(
+            eq(schema.events.gameId, voiceBinding.gameId),
+            eq(schema.events.isAdHoc, false),
+            sql`${schema.events.cancelledAt} IS NULL`,
+            sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+          ),
+        );
 
-    const now = new Date();
-    const activeEvents = await this.db
-      .select({ id: schema.events.id, gameId: schema.events.gameId })
-      .from(schema.events)
-      .where(
-        and(
-          eq(schema.events.gameId, voiceBinding.gameId),
-          eq(schema.events.isAdHoc, false),
-          sql`${schema.events.cancelledAt} IS NULL`,
-          // Event is currently active (within its scheduled time window)
-          sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
-        ),
-      );
+      return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    }
 
-    return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    // Tier 2: Default voice channel fallback — match any live scheduled event
+    const defaultVoice =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    if (defaultVoice && channelId === defaultVoice) {
+      const activeEvents = await this.db
+        .select({ id: schema.events.id, gameId: schema.events.gameId })
+        .from(schema.events)
+        .where(
+          and(
+            eq(schema.events.isAdHoc, false),
+            sql`${schema.events.cancelledAt} IS NULL`,
+            sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+          ),
+        );
+
+      return activeEvents.map((e) => ({ eventId: e.id, gameId: e.gameId }));
+    }
+
+    return [];
   }
 
   // ─── DB flush ──────────────────────────────────────────────
@@ -529,6 +556,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
                 guildMember.displayName ??
                 guildMember.user?.username ??
                 'Unknown',
+              discordAvatarHash: guildMember.user?.avatar ?? null,
               firstJoinAt: existingDb.firstJoinAt,
               lastLeaveAt: null,
               totalDurationSec: existingDb.totalDurationSec ?? 0,
@@ -557,6 +585,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
                 guildMember.user?.username ??
                 'Unknown',
               null,
+              guildMember.user?.avatar ?? null,
             );
           }
           recovered++;
@@ -713,6 +742,57 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       unclassified: sessions.filter((s) => s.classification === null).length,
       sessions: dtos,
     };
+  }
+
+  /**
+   * Get the live roster for a scheduled event from in-memory sessions.
+   * Maps InMemorySession fields to AdHocParticipantDto shape for reuse.
+   */
+  getActiveRoster(eventId: number): AdHocRosterResponseDto {
+    const participants: AdHocParticipantDto[] = [];
+
+    for (const session of this.sessions.values()) {
+      if (session.eventId !== eventId) continue;
+
+      const now = new Date();
+      let totalDuration = session.totalDurationSec;
+      if (session.isActive && session.activeSegmentStart) {
+        totalDuration += Math.floor(
+          (now.getTime() - session.activeSegmentStart.getTime()) / 1000,
+        );
+      }
+
+      participants.push({
+        id: session.discordUserId,
+        eventId: session.eventId,
+        userId: session.userId,
+        discordUserId: session.discordUserId,
+        discordUsername: session.discordUsername,
+        discordAvatarHash: session.discordAvatarHash,
+        joinedAt: session.firstJoinAt.toISOString(),
+        leftAt: session.isActive
+          ? null
+          : (session.lastLeaveAt?.toISOString() ?? null),
+        totalDurationSeconds: totalDuration,
+        sessionCount: session.segments.length,
+      });
+    }
+
+    const activeCount = participants.filter((p) => p.leftAt === null).length;
+    return { eventId, participants, activeCount };
+  }
+
+  /**
+   * Get the count of currently active users for a scheduled event.
+   */
+  getActiveCount(eventId: number): number {
+    let count = 0;
+    for (const session of this.sessions.values()) {
+      if (session.eventId === eventId && session.isActive) {
+        count++;
+      }
+    }
+    return count;
   }
 
   // ─── Private helpers ───────────────────────────────────────
