@@ -16,6 +16,7 @@ import { Modal } from '../components/ui/modal';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import { useUpdateAutoUnbench } from '../hooks/use-auto-unbench';
 import { useGameRegistry } from '../hooks/use-game-registry';
+import { useMyCharacters } from '../hooks/use-characters';
 import { getEventStatus } from '../lib/event-utils';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
 import { GameTimeWidget } from '../components/features/game-time/GameTimeWidget';
@@ -99,6 +100,15 @@ export function EventDetailPage() {
         (g) => g.id === event?.game?.id || g.slug === event?.game?.slug,
     );
 
+    // ROK-600: Determine if the game supports characters (hasRoles or user has characters)
+    const gameHasRoles = gameRegistryEntry?.hasRoles ?? event?.game?.hasRoles ?? false;
+    const gameId = event?.game?.id;
+    // Only fetch characters for non-MMO games to check the edge case (user has characters for a non-MMO game)
+    const { data: myCharsData } = useMyCharacters(gameId, !!gameId && !gameHasRoles);
+    const userHasCharactersForGame = (myCharsData?.data?.length ?? 0) > 0;
+    // Show the character modal when: game has roles (MMO) OR user has characters for this game
+    const shouldShowCharacterModal = !!gameId && (gameHasRoles || userHasCharactersForGame);
+
     useEffect(() => {
         const el = bannerRef.current;
         if (!el) return;
@@ -180,16 +190,16 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-439: Selection-first signup — open modal BEFORE any API call
+    // ROK-439/600: Selection-first signup — open modal BEFORE any API call
     const handleSignup = () => {
-        // If game has character support, show selection modal first
-        if (event?.game?.id) {
+        // ROK-600: Only show character modal for MMO games or games where user has characters
+        if (shouldShowCharacterModal) {
             setPreSelectedRole(undefined);
             setPendingSlot(null);
             setShowConfirmModal(true);
             return;
         }
-        // No game / no character support → instant signup
+        // No game / non-MMO with no characters → instant signup
         doSignup();
     };
 
@@ -373,12 +383,12 @@ export function EventDetailPage() {
         }
     };
 
-    // ROK-439: Handle slot click — open selection modal with role pre-selected
+    // ROK-439/600: Handle slot click — open selection modal with role pre-selected
     const handleSlotClick = (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
 
-        // If game has character support, show selection modal first
-        if (event?.game?.id) {
+        // ROK-600: Only show character modal for MMO games or games where user has characters
+        if (shouldShowCharacterModal) {
             // Pre-select role if it's an MMO role (tank/healer/dps)
             const mmoRoles: string[] = ['tank', 'healer', 'dps'];
             setPreSelectedRole(mmoRoles.includes(role) ? (role as CharacterRole) : undefined);
@@ -387,7 +397,7 @@ export function EventDetailPage() {
             return;
         }
 
-        // No game / no character support → instant slot join
+        // No game / non-MMO with no characters → instant slot join
         // ROK-506: Default role preference to the clicked slot's role
         doSignup({ slotRole: role, slotPosition: position, preferredRoles: [role] });
     };

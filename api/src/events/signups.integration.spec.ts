@@ -384,6 +384,128 @@ describe('Signups, Attendance & Roster (integration)', () => {
   });
 
   // ===================================================================
+  // ROK-600: Character-optional signup flows (MMO vs non-MMO)
+  // ===================================================================
+
+  describe('character-optional signup (ROK-600)', () => {
+    it('should sign up for non-MMO event without character', async () => {
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'casual_player',
+        'casual@test.local',
+      );
+
+      // testApp.seed.game has hasRoles: false (default) — non-MMO
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        gameId: testApp.seed.game.id,
+      });
+
+      // Sign up without character — should succeed
+      const signupRes = await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(signupRes.status).toBe(201);
+      expect(signupRes.body).toMatchObject({
+        id: expect.any(Number),
+        eventId,
+        user: expect.objectContaining({ username: 'casual_player' }),
+      });
+      // No character attached
+      expect(signupRes.body.character).toBeNull();
+    });
+
+    it('should sign up for MMO event without character (character optional)', async () => {
+      // Create an MMO game (hasRoles: true)
+      const [mmoGame] = await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'World of Warcraft',
+          slug: 'world-of-warcraft',
+          hasRoles: true,
+          hasSpecs: true,
+        })
+        .returning();
+
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'mmo_no_char',
+        'mmo_no_char@test.local',
+      );
+
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        gameId: mmoGame.id,
+      });
+
+      // Sign up without character — should still succeed (character is optional)
+      const signupRes = await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+      expect(signupRes.status).toBe(201);
+      expect(signupRes.body).toMatchObject({
+        id: expect.any(Number),
+        eventId,
+        user: expect.objectContaining({ username: 'mmo_no_char' }),
+      });
+      expect(signupRes.body.character).toBeNull();
+    });
+
+    it('should sign up for MMO event with character attached', async () => {
+      // Create an MMO game (hasRoles: true)
+      const [mmoGame] = await testApp.db
+        .insert(schema.games)
+        .values({
+          name: 'Final Fantasy XIV',
+          slug: 'ffxiv',
+          hasRoles: true,
+          hasSpecs: true,
+        })
+        .returning();
+
+      const { token } = await createMemberAndLogin(
+        testApp,
+        'mmo_with_char',
+        'mmo_with_char@test.local',
+      );
+
+      // Create a character first
+      const charRes = await testApp.request
+        .post('/users/me/characters')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          gameId: mmoGame.id,
+          name: 'WhiteMage',
+          class: 'White Mage',
+          role: 'healer',
+        });
+      expect(charRes.status).toBe(201);
+      const characterId = charRes.body.id;
+
+      const eventId = await createFutureEvent(testApp, adminToken, {
+        gameId: mmoGame.id,
+      });
+
+      // Sign up WITH character via selection-first flow (ROK-439)
+      const signupRes = await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ characterId });
+
+      expect(signupRes.status).toBe(201);
+      expect(signupRes.body).toMatchObject({
+        id: expect.any(Number),
+        eventId,
+        user: expect.objectContaining({ username: 'mmo_with_char' }),
+      });
+      // Character should be attached to the signup
+      expect(signupRes.body.characterId).toBe(characterId);
+    });
+  });
+
+  // ===================================================================
   // Admin Remove Signup
   // ===================================================================
 
