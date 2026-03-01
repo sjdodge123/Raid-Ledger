@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useInfiniteEvents } from "../hooks/use-events";
 import { useAuth } from "../hooks/use-auth";
 import { useGameTime } from "../hooks/use-game-time";
+import { useGameRegistry } from "../hooks/use-game-registry";
 import { EventCard, EventCardSkeleton } from "../components/events/event-card";
 import { MobileEventCard, MobileEventCardSkeleton } from "../components/events/mobile-event-card";
 import { EventsEmptyState } from "../components/events/events-empty-state";
@@ -91,6 +92,7 @@ export function EventsPage() {
   } = useInfiniteEvents(eventQueryParams);
   const { isAuthenticated } = useAuth();
   const { data: gameTime } = useGameTime({ enabled: isAuthenticated });
+  const { games: registryGames } = useGameRegistry();
 
   const gameTimeSlots = gameTime?.slots;
 
@@ -174,6 +176,17 @@ export function EventsPage() {
           onTabChange={setActiveTab}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          games={registryGames}
+          selectedGameId={gameIdFilter}
+          onGameChange={(gameId) => {
+            const next = new URLSearchParams(searchParams);
+            if (gameId) {
+              next.set('gameId', gameId);
+            } else {
+              next.delete('gameId');
+            }
+            setSearchParams(next);
+          }}
         />
 
         <div className="py-8 px-4">
@@ -279,6 +292,30 @@ export function EventsPage() {
                     className="w-full pl-10 pr-4 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground placeholder:text-muted focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
+                {/* Game filter dropdown */}
+                {registryGames.length > 1 && (
+                  <select
+                    value={gameIdFilter ?? ''}
+                    onChange={(e) => {
+                      const next = new URLSearchParams(searchParams);
+                      if (e.target.value) {
+                        next.set('gameId', e.target.value);
+                      } else {
+                        next.delete('gameId');
+                      }
+                      setSearchParams(next);
+                    }}
+                    aria-label="Filter by game"
+                    className="px-3 py-2 bg-panel/50 border border-edge rounded-lg text-sm text-foreground focus:ring-2 focus:ring-emerald-500 focus:outline-none appearance-none pr-8 bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2020%2020%22%20fill%3D%22%239ca3af%22%3E%3Cpath%20fill-rule%3D%22evenodd%22%20d%3D%22M5.23%207.21a.75.75%200%20011.06.02L10%2011.168l3.71-3.938a.75.75%200%20111.08%201.04l-4.25%204.5a.75.75%200%2001-1.08%200l-4.25-4.5a.75.75%200%2001.02-1.06z%22%20clip-rule%3D%22evenodd%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[position:right_0.5rem_center] bg-[length:1.25rem]"
+                  >
+                    <option value="">All Games</option>
+                    {registryGames.map((game) => (
+                      <option key={game.id} value={String(game.id)}>
+                        {game.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             )}
 
