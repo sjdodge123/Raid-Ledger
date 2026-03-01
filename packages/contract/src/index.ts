@@ -93,3 +93,6 @@ export * from './quest-progress.schema.js';
 
 // Ad-Hoc Events (ROK-293)
 export * from './ad-hoc-events.schema.js';
+
+// Voice Attendance (ROK-490)
+export * from './voice-attendance.schema.js';

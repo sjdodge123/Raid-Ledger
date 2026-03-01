@@ -12,6 +12,7 @@ import {
   ParseIntPipe,
   ParseUUIDPipe,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
@@ -21,6 +22,7 @@ import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
@@ -48,6 +50,8 @@ import {
   ShareEventResponseDto,
   AttendanceSummaryDto,
   AdHocRosterResponseDto,
+  VoiceSessionsResponseDto,
+  VoiceAttendanceSummaryDto,
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 
@@ -93,6 +97,7 @@ export class EventsController {
     private readonly pugsService: PugsService,
     private readonly shareService: ShareService,
     private readonly adHocEventService: AdHocEventService,
+    private readonly voiceAttendanceService: VoiceAttendanceService,
   ) {}
 
   /**
@@ -167,6 +172,48 @@ export class EventsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<EventResponseDto> {
     return this.eventsService.findOne(id);
+  }
+
+  // ============================================================
+  // Voice Attendance Endpoints (ROK-490)
+  // ============================================================
+
+  /**
+   * Get raw voice sessions for an event.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Get(':id/voice-sessions')
+  @UseGuards(AuthGuard('jwt'))
+  async getVoiceSessions(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<VoiceSessionsResponseDto> {
+    const event = await this.eventsService.findOne(eventId);
+    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
+      throw new ForbiddenException(
+        'Only event creator or admin/operator can view voice sessions',
+      );
+    }
+    return this.voiceAttendanceService.getVoiceSessions(eventId);
+  }
+
+  /**
+   * Get voice attendance summary with classifications.
+   * Requires authentication. Only event creator or admin/operator.
+   */
+  @Get(':id/voice-attendance')
+  @UseGuards(AuthGuard('jwt'))
+  async getVoiceAttendance(
+    @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
+  ): Promise<VoiceAttendanceSummaryDto> {
+    const event = await this.eventsService.findOne(eventId);
+    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
+      throw new ForbiddenException(
+        'Only event creator or admin/operator can view voice attendance',
+      );
+    }
+    return this.voiceAttendanceService.getVoiceAttendanceSummary(eventId);
   }
 
   /**

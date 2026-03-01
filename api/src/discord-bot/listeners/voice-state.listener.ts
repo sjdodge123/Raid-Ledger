@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
+import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { UsersService } from '../../users/users.service';
@@ -83,6 +84,7 @@ export class VoiceStateListener {
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
+    private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly presenceDetector: PresenceGameDetectorService,
     private readonly usersService: UsersService,
@@ -119,6 +121,9 @@ export class VoiceStateListener {
     client.on(Events.PresenceUpdate, this.presenceHandler);
 
     this.logger.log('Registered voiceStateUpdate listener for ad-hoc events');
+
+    // ROK-490: Recover voice attendance sessions from live channels
+    await this.voiceAttendanceService.recoverActiveSessions();
 
     // Startup recovery: scan voice channels for current members
     await this.recoverFromVoiceChannels();
@@ -303,6 +308,30 @@ export class VoiceStateListener {
     },
     guildMember?: GuildMember,
   ): Promise<void> {
+    // ROK-490: Track voice attendance for active scheduled events
+    // This fires independently of (before) the ad-hoc event path.
+    try {
+      const activeScheduledEvents =
+        await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
+      if (activeScheduledEvents.length > 0) {
+        const rlUser = await this.usersService.findByDiscordId(
+          discordMember.discordUserId,
+        );
+        for (const { eventId } of activeScheduledEvents) {
+          this.voiceAttendanceService.handleJoin(
+            eventId,
+            discordMember.discordUserId,
+            discordMember.discordUsername,
+            rlUser?.id ?? null,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.error(
+        `Voice attendance join tracking failed for ${discordMember.discordUserId}: ${err}`,
+      );
+    }
+
     const binding = await this.resolveBinding(channelId);
     this.logger.debug(
       `handleChannelJoin: channel=${channelId} binding=${binding ? `${binding.bindingPurpose} (${binding.bindingId})` : 'NONE'}`,
@@ -513,6 +542,19 @@ export class VoiceStateListener {
     channelId: string,
     discordUserId: string,
   ): Promise<void> {
+    // ROK-490: Track voice attendance leave for active scheduled events
+    try {
+      const activeScheduledEvents =
+        await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
+      for (const { eventId } of activeScheduledEvents) {
+        this.voiceAttendanceService.handleLeave(eventId, discordUserId);
+      }
+    } catch (err) {
+      this.logger.error(
+        `Voice attendance leave tracking failed for ${discordUserId}: ${err}`,
+      );
+    }
+
     const binding = await this.resolveBinding(channelId);
     if (!binding) return;
 

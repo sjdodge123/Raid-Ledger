@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EventsController } from './events.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
@@ -7,6 +7,7 @@ import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
+import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -112,6 +113,26 @@ describe('EventsController', () => {
               eventId: 1,
               participants: [],
               activeCount: 0,
+            }),
+          },
+        },
+        {
+          provide: VoiceAttendanceService,
+          useValue: {
+            getVoiceSessions: jest.fn().mockResolvedValue({
+              eventId: 1,
+              sessions: [],
+            }),
+            getVoiceAttendanceSummary: jest.fn().mockResolvedValue({
+              eventId: 1,
+              totalTracked: 0,
+              full: 0,
+              partial: 0,
+              late: 0,
+              earlyLeaver: 0,
+              noShow: 0,
+              unclassified: 0,
+              sessions: [],
             }),
           },
         },
@@ -416,6 +437,78 @@ describe('EventsController', () => {
           body,
         ),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getVoiceSessions ACL (ROK-490)', () => {
+    const creatorReq = {
+      user: { id: 1, role: 'member' as UserRole },
+    } as AuthenticatedRequest;
+    const nonCreatorReq = {
+      user: { id: 99, role: 'member' as UserRole },
+    } as AuthenticatedRequest;
+    const operatorReq = {
+      user: { id: 99, role: 'operator' as UserRole },
+    } as AuthenticatedRequest;
+    const adminReq = {
+      user: { id: 99, role: 'admin' as UserRole },
+    } as AuthenticatedRequest;
+
+    it('should allow event creator to view voice sessions', async () => {
+      const result = await controller.getVoiceSessions(1, creatorReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should allow operator to view voice sessions', async () => {
+      const result = await controller.getVoiceSessions(1, operatorReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should allow admin to view voice sessions', async () => {
+      const result = await controller.getVoiceSessions(1, adminReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should throw ForbiddenException for non-creator member', async () => {
+      await expect(
+        controller.getVoiceSessions(1, nonCreatorReq),
+      ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('getVoiceAttendance ACL (ROK-490)', () => {
+    const creatorReq = {
+      user: { id: 1, role: 'member' as UserRole },
+    } as AuthenticatedRequest;
+    const nonCreatorReq = {
+      user: { id: 99, role: 'member' as UserRole },
+    } as AuthenticatedRequest;
+    const operatorReq = {
+      user: { id: 99, role: 'operator' as UserRole },
+    } as AuthenticatedRequest;
+    const adminReq = {
+      user: { id: 99, role: 'admin' as UserRole },
+    } as AuthenticatedRequest;
+
+    it('should allow event creator to view voice attendance', async () => {
+      const result = await controller.getVoiceAttendance(1, creatorReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should allow operator to view voice attendance', async () => {
+      const result = await controller.getVoiceAttendance(1, operatorReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should allow admin to view voice attendance', async () => {
+      const result = await controller.getVoiceAttendance(1, adminReq);
+      expect(result).toMatchObject({ eventId: 1 });
+    });
+
+    it('should throw ForbiddenException for non-creator member', async () => {
+      await expect(
+        controller.getVoiceAttendance(1, nonCreatorReq),
+      ).rejects.toThrow(ForbiddenException);
     });
   });
 

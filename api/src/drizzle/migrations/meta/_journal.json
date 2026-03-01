@@ -526,6 +526,20 @@
       "when": 1772330400000,
       "tag": "0074_check_game_interests_source",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1772330692358,
+      "tag": "0075_overconfident_wither",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1772381293232,
+      "tag": "0076_ordinary_thunderbolt",
+      "breakpoints": true
     }
   ]
 }

@@ -860,11 +860,11 @@ describe('AdHocEventService', () => {
 
       // Should NOT create an ad-hoc event
       expect(mockDb.insert).not.toHaveBeenCalled();
-      // Should extend the scheduled event's end time
+      // Should set extendedUntil (not mutate duration) for suppression window
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({
-          duration: expect.any(Array),
+          extendedUntil: expect.any(Date),
         }),
       );
     });
