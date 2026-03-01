@@ -14,11 +14,26 @@ const JOB_TITLES: Record<string, string> = {
 
 /** Theme categorization for cron jobs */
 const JOB_THEMES: Record<string, string> = {
+    // Data Sync
     IgdbService_handleScheduledSync: 'Data Sync',
+    GameActivityService_dailyRollup: 'Data Sync',
+    // Notifications
+    EventReminderService_handleReminders: 'Notifications',
     EventReminderService_handleDayOfReminders: 'Notifications',
     EventReminderService_handleStartingSoonReminders: 'Notifications',
+    EmbedSchedulerService_handleScheduledEmbeds: 'Notifications',
+    PostEventReminderService_handlePostEventReminders: 'Notifications',
+    // Monitoring
     RelayService_handleHeartbeat: 'Monitoring',
     VersionCheckService_handleCron: 'Monitoring',
+    // Maintenance
+    SessionCleanupService_cleanupExpiredSessions: 'Maintenance',
+    NotificationService_cleanupExpiredNotifications: 'Maintenance',
+    GameActivityService_sweepStaleSessions: 'Maintenance',
+    BackupService_dailyBackup: 'Maintenance',
+    // Events
+    ScheduledEventService_startScheduledEvents: 'Events',
+    VoiceAttendanceService_classifyCompletedEvents: 'Events',
 };
 
 /** Derive theme from job name */
@@ -36,6 +51,8 @@ const THEME_COLORS: Record<string, string> = {
     'Notifications': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
     'Data Sync': 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
     'Monitoring': 'bg-indigo-500/15 text-indigo-400 border-indigo-500/30',
+    'Maintenance': 'bg-green-500/15 text-green-400 border-green-500/30',
+    'Events': 'bg-teal-500/15 text-teal-400 border-teal-500/30',
     'Plugin': 'bg-purple-500/15 text-purple-400 border-purple-500/30',
     'Other': 'bg-gray-500/15 text-gray-400 border-gray-500/30',
 };
