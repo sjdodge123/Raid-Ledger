@@ -255,9 +255,7 @@ describe('AnalyticsService', () => {
     });
 
     it('handles missing countRow gracefully (totalUsers = 0)', async () => {
-      mockDb.execute
-        .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([]); // empty = undefined countRow
+      mockDb.execute.mockResolvedValueOnce([]).mockResolvedValueOnce([]); // empty = undefined countRow
 
       const result = await service.getUserReliability(20, 0);
 
@@ -404,7 +402,10 @@ describe('AnalyticsService', () => {
     const mockEventRow = {
       id: 10,
       title: 'Epic Raid',
-      duration: [new Date('2026-01-15T18:00:00Z'), new Date('2026-01-15T21:00:00Z')],
+      duration: [
+        new Date('2026-01-15T18:00:00Z'),
+        new Date('2026-01-15T21:00:00Z'),
+      ],
       gameId: 3,
       gameName: 'World of Warcraft',
       gameCoverUrl: 'https://example.com/wow.jpg',
@@ -423,7 +424,9 @@ describe('AnalyticsService', () => {
     it('throws NotFoundException when event does not exist', async () => {
       mockDb.select.mockReturnValueOnce(buildSelectChain([]));
 
-      await expect(service.getEventMetrics(999)).rejects.toThrow(NotFoundException);
+      await expect(service.getEventMetrics(999)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('returns event metrics with correct eventId and title', async () => {
@@ -475,7 +478,12 @@ describe('AnalyticsService', () => {
     });
 
     it('sets game to null when event has no gameId', async () => {
-      const eventWithoutGame = { ...mockEventRow, gameId: null, gameName: null, gameCoverUrl: null };
+      const eventWithoutGame = {
+        ...mockEventRow,
+        gameId: null,
+        gameName: null,
+        gameCoverUrl: null,
+      };
       mockDb.select.mockReturnValueOnce(buildSelectChain([eventWithoutGame]));
       mockDb.select.mockReturnValueOnce({
         from: jest.fn().mockReturnValue({
@@ -497,11 +505,51 @@ describe('AnalyticsService', () => {
 
     it('computes attendanceSummary counts correctly', async () => {
       const mockSignups = [
-        { userId: 1, username: 'Alice', avatar: null, attendanceStatus: 'attended', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 2, username: 'Bob', avatar: null, attendanceStatus: 'attended', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 3, username: 'Carol', avatar: null, attendanceStatus: 'no_show', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 4, username: 'Dave', avatar: null, attendanceStatus: 'excused', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 5, username: 'Eve', avatar: null, attendanceStatus: null, signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
+        {
+          userId: 1,
+          username: 'Alice',
+          avatar: null,
+          attendanceStatus: 'attended',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 2,
+          username: 'Bob',
+          avatar: null,
+          attendanceStatus: 'attended',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 3,
+          username: 'Carol',
+          avatar: null,
+          attendanceStatus: 'no_show',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 4,
+          username: 'Dave',
+          avatar: null,
+          attendanceStatus: 'excused',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 5,
+          username: 'Eve',
+          avatar: null,
+          attendanceStatus: null,
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
       ];
 
       mockDb.select.mockReturnValueOnce(buildSelectChain([mockEventRow]));
@@ -532,11 +580,51 @@ describe('AnalyticsService', () => {
     it('computes attendanceRate correctly', async () => {
       // 3 attended, 1 no_show, 1 excused = 3/5 marked = 0.6
       const mockSignups = [
-        { userId: 1, username: 'A', avatar: null, attendanceStatus: 'attended', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 2, username: 'B', avatar: null, attendanceStatus: 'attended', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 3, username: 'C', avatar: null, attendanceStatus: 'attended', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 4, username: 'D', avatar: null, attendanceStatus: 'no_show', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
-        { userId: 5, username: 'E', avatar: null, attendanceStatus: 'excused', signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
+        {
+          userId: 1,
+          username: 'A',
+          avatar: null,
+          attendanceStatus: 'attended',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 2,
+          username: 'B',
+          avatar: null,
+          attendanceStatus: 'attended',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 3,
+          username: 'C',
+          avatar: null,
+          attendanceStatus: 'attended',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 4,
+          username: 'D',
+          avatar: null,
+          attendanceStatus: 'no_show',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
+        {
+          userId: 5,
+          username: 'E',
+          avatar: null,
+          attendanceStatus: 'excused',
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
       ];
 
       mockDb.select.mockReturnValueOnce(buildSelectChain([mockEventRow]));
@@ -560,7 +648,15 @@ describe('AnalyticsService', () => {
 
     it('sets attendanceRate to 0 when no marked signups', async () => {
       const allUnmarked = [
-        { userId: 1, username: 'A', avatar: null, attendanceStatus: null, signupStatus: 'signed_up', discordUserId: null, discordUsername: null },
+        {
+          userId: 1,
+          username: 'A',
+          avatar: null,
+          attendanceStatus: null,
+          signupStatus: 'signed_up',
+          discordUserId: null,
+          discordUsername: null,
+        },
       ];
 
       mockDb.select.mockReturnValueOnce(buildSelectChain([mockEventRow]));
@@ -855,11 +951,66 @@ describe('AnalyticsService', () => {
 
     it('counts voice classifications correctly across multiple sessions', async () => {
       const voiceSessions = [
-        { id: 1, eventId: 10, userId: 1, discordUserId: 'd1', discordUsername: 'A', firstJoinAt: new Date(), lastLeaveAt: new Date(), totalDurationSec: 100, segments: [], classification: 'full' },
-        { id: 2, eventId: 10, userId: 2, discordUserId: 'd2', discordUsername: 'B', firstJoinAt: new Date(), lastLeaveAt: new Date(), totalDurationSec: 100, segments: [], classification: 'full' },
-        { id: 3, eventId: 10, userId: 3, discordUserId: 'd3', discordUsername: 'C', firstJoinAt: new Date(), lastLeaveAt: new Date(), totalDurationSec: 100, segments: [], classification: 'late' },
-        { id: 4, eventId: 10, userId: 4, discordUserId: 'd4', discordUsername: 'D', firstJoinAt: new Date(), lastLeaveAt: new Date(), totalDurationSec: 100, segments: [], classification: 'early_leaver' },
-        { id: 5, eventId: 10, userId: 5, discordUserId: 'd5', discordUsername: 'E', firstJoinAt: new Date(), lastLeaveAt: new Date(), totalDurationSec: 0, segments: [], classification: 'no_show' },
+        {
+          id: 1,
+          eventId: 10,
+          userId: 1,
+          discordUserId: 'd1',
+          discordUsername: 'A',
+          firstJoinAt: new Date(),
+          lastLeaveAt: new Date(),
+          totalDurationSec: 100,
+          segments: [],
+          classification: 'full',
+        },
+        {
+          id: 2,
+          eventId: 10,
+          userId: 2,
+          discordUserId: 'd2',
+          discordUsername: 'B',
+          firstJoinAt: new Date(),
+          lastLeaveAt: new Date(),
+          totalDurationSec: 100,
+          segments: [],
+          classification: 'full',
+        },
+        {
+          id: 3,
+          eventId: 10,
+          userId: 3,
+          discordUserId: 'd3',
+          discordUsername: 'C',
+          firstJoinAt: new Date(),
+          lastLeaveAt: new Date(),
+          totalDurationSec: 100,
+          segments: [],
+          classification: 'late',
+        },
+        {
+          id: 4,
+          eventId: 10,
+          userId: 4,
+          discordUserId: 'd4',
+          discordUsername: 'D',
+          firstJoinAt: new Date(),
+          lastLeaveAt: new Date(),
+          totalDurationSec: 100,
+          segments: [],
+          classification: 'early_leaver',
+        },
+        {
+          id: 5,
+          eventId: 10,
+          userId: 5,
+          discordUserId: 'd5',
+          discordUsername: 'E',
+          firstJoinAt: new Date(),
+          lastLeaveAt: new Date(),
+          totalDurationSec: 0,
+          segments: [],
+          classification: 'no_show',
+        },
       ];
 
       mockDb.select.mockReturnValueOnce(buildSelectChain([mockEventRow]));

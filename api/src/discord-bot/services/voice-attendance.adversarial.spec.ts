@@ -1149,7 +1149,9 @@ describe('EventsController — voice endpoint authorization', () => {
     it('allows event creator to view event metrics', async () => {
       const mockMetrics = { eventId: 10, title: 'Test Event' };
       const analyticsService = module.get(AnalyticsService);
-      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue(mockMetrics);
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue(
+        mockMetrics,
+      );
 
       const result = await controller.getEventMetrics(10, {
         user: { id: creatorId, role: 'member' },
@@ -1160,7 +1162,9 @@ describe('EventsController — voice endpoint authorization', () => {
 
     it('allows admin to view event metrics for any event', async () => {
       const analyticsService = module.get(AnalyticsService);
-      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({ eventId: 10 });
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({
+        eventId: 10,
+      });
 
       const result = await controller.getEventMetrics(10, { user: adminUser });
       expect(result).toMatchObject({ eventId: 10 });
@@ -1168,9 +1172,13 @@ describe('EventsController — voice endpoint authorization', () => {
 
     it('allows operator to view event metrics for any event', async () => {
       const analyticsService = module.get(AnalyticsService);
-      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({ eventId: 10 });
+      (analyticsService.getEventMetrics as jest.Mock).mockResolvedValue({
+        eventId: 10,
+      });
 
-      const result = await controller.getEventMetrics(10, { user: operatorUser });
+      const result = await controller.getEventMetrics(10, {
+        user: operatorUser,
+      });
       expect(result).toMatchObject({ eventId: 10 });
     });
 

@@ -1,8 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { ForbiddenException, BadRequestException } from '@nestjs/common';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
 import type { UserRole } from '@raid-ledger/contract';
@@ -86,7 +83,10 @@ describe('AnalyticsController', () => {
     });
 
     it('allows operator role', async () => {
-      const result = await controller.getAttendanceTrends({}, makeReq('operator'));
+      const result = await controller.getAttendanceTrends(
+        {},
+        makeReq('operator'),
+      );
       expect(result).toEqual(mockAttendanceTrends);
     });
 
@@ -101,18 +101,27 @@ describe('AnalyticsController', () => {
     });
 
     it('passes 90d period to service when specified', async () => {
-      await controller.getAttendanceTrends({ period: '90d' }, makeReq('operator'));
+      await controller.getAttendanceTrends(
+        { period: '90d' },
+        makeReq('operator'),
+      );
       expect(mockService.getAttendanceTrends).toHaveBeenCalledWith('90d');
     });
 
     it('throws BadRequestException for invalid period value', async () => {
       await expect(
-        controller.getAttendanceTrends({ period: 'invalid' }, makeReq('operator')),
+        controller.getAttendanceTrends(
+          { period: 'invalid' },
+          makeReq('operator'),
+        ),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('returns data from service', async () => {
-      const result = await controller.getAttendanceTrends({ period: '30d' }, makeReq('admin'));
+      const result = await controller.getAttendanceTrends(
+        { period: '30d' },
+        makeReq('admin'),
+      );
       expect(result).toMatchObject({
         period: '30d',
         dataPoints: expect.any(Array),
@@ -131,7 +140,10 @@ describe('AnalyticsController', () => {
     });
 
     it('allows operator role', async () => {
-      const result = await controller.getUserReliability({}, makeReq('operator'));
+      const result = await controller.getUserReliability(
+        {},
+        makeReq('operator'),
+      );
       expect(result).toEqual(mockUserReliability);
     });
 
@@ -218,9 +230,15 @@ describe('AnalyticsController', () => {
     it('rejects all three endpoints for member role consistently', async () => {
       const memberReq = makeReq('member');
 
-      await expect(controller.getAttendanceTrends({}, memberReq)).rejects.toThrow(ForbiddenException);
-      await expect(controller.getUserReliability({}, memberReq)).rejects.toThrow(ForbiddenException);
-      await expect(controller.getGameAttendance(memberReq)).rejects.toThrow(ForbiddenException);
+      await expect(
+        controller.getAttendanceTrends({}, memberReq),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        controller.getUserReliability({}, memberReq),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(controller.getGameAttendance(memberReq)).rejects.toThrow(
+        ForbiddenException,
+      );
     });
   });
 });
