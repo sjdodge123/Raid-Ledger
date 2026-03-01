@@ -1,5 +1,6 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
+import { Cron } from '@nestjs/schedule';
+import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   GuildScheduledEventEntityType,
@@ -12,6 +13,7 @@ import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
 
 /** Discord API error code for "Unknown Scheduled Event" (manually deleted). */
 const UNKNOWN_SCHEDULED_EVENT = 10070;
@@ -49,7 +51,99 @@ export class ScheduledEventService {
     private readonly clientService: DiscordBotClientService,
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
+    private readonly cronJobService: CronJobService,
   ) {}
+
+  /**
+   * Cron: every 30 seconds, find events whose start time has passed and
+   * transition their Discord Scheduled Event from SCHEDULED → ACTIVE (ROK-573).
+   */
+  @Cron('*/30 * * * * *', {
+    name: 'ScheduledEventService_startScheduledEvents',
+  })
+  async handleStartScheduledEvents(): Promise<void> {
+    await this.cronJobService.executeWithTracking(
+      'ScheduledEventService_startScheduledEvents',
+      async () => {
+        await this.startScheduledEvents();
+      },
+    );
+  }
+
+  /**
+   * Find events where start time has passed and the Discord Scheduled Event
+   * is still in SCHEDULED state, then transition them to ACTIVE (ROK-573).
+   */
+  async startScheduledEvents(): Promise<void> {
+    if (!this.clientService.isConnected()) return;
+
+    const guild = this.clientService.getGuild();
+    if (!guild) return;
+
+    const now = new Date();
+
+    // Find events where: start time <= now, has a Discord scheduled event ID,
+    // not cancelled, and end time hasn't passed yet (no point starting a finished event)
+    const candidates = await this.db
+      .select({
+        id: schema.events.id,
+        discordScheduledEventId: schema.events.discordScheduledEventId,
+      })
+      .from(schema.events)
+      .where(
+        and(
+          isNotNull(schema.events.discordScheduledEventId),
+          isNull(schema.events.cancelledAt),
+          sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+          sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+        ),
+      );
+
+    if (candidates.length === 0) return;
+
+    this.logger.debug(
+      `Found ${candidates.length} event(s) to auto-start Discord scheduled events`,
+    );
+
+    for (const candidate of candidates) {
+      try {
+        const scheduledEvent = await guild.scheduledEvents.fetch(
+          candidate.discordScheduledEventId!,
+        );
+
+        if (scheduledEvent.status !== GuildScheduledEventStatus.Scheduled) {
+          // Already active, completed, or cancelled — nothing to do
+          continue;
+        }
+
+        await guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
+          status: GuildScheduledEventStatus.Active,
+        });
+
+        this.logger.log(
+          `Auto-started Discord Scheduled Event ${candidate.discordScheduledEventId} for event ${candidate.id}`,
+        );
+      } catch (error) {
+        if (
+          error instanceof DiscordAPIError &&
+          error.code === UNKNOWN_SCHEDULED_EVENT
+        ) {
+          // Event was manually deleted in Discord — clear the reference
+          this.logger.debug(
+            `Scheduled event ${candidate.discordScheduledEventId} was deleted in Discord, clearing reference for event ${candidate.id}`,
+          );
+          await this.db
+            .update(schema.events)
+            .set({ discordScheduledEventId: null })
+            .where(eq(schema.events.id, candidate.id));
+        } else {
+          this.logger.error(
+            `Failed to auto-start scheduled event ${candidate.discordScheduledEventId} for event ${candidate.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          );
+        }
+      }
+    }
+  }
 
   /**
    * Create a Discord Scheduled Event for a Raid Ledger event.
