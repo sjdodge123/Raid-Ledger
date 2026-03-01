@@ -570,7 +570,8 @@ describe('SignupsService', () => {
       const result = await service.signup(1, 1, { slotRole: 'dps' });
 
       expect(result.id).toBe(signupWithSlot.id);
-      expect(result.confirmationStatus).toBe('pending');
+      // ROK-598: Auto-slotted signups are implicitly confirmed
+      expect(result.confirmationStatus).toBe('confirmed');
       // insert called twice: once for signup, once for roster assignment
       expect(mockDb.insert).toHaveBeenCalledTimes(2);
       // The signup insert used onConflictDoNothing (not a raw insert)
