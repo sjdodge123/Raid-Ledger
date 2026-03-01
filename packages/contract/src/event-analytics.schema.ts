@@ -87,33 +87,6 @@ export const GameAttendanceResponseSchema = z.object({
 });
 export type GameAttendanceResponseDto = z.infer<typeof GameAttendanceResponseSchema>;
 
-/** Repeat no-show offender */
-export const NoShowPatternSchema = z.object({
-  userId: z.number(),
-  username: z.string(),
-  avatar: z.string().nullable(),
-  noShowCount: z.number(),
-  totalEvents: z.number(),
-  noShowRate: z.number(),
-});
-export type NoShowPatternDto = z.infer<typeof NoShowPatternSchema>;
-
-/** Day-of-week no-show distribution */
-export const DayOfWeekNoShowSchema = z.object({
-  dayOfWeek: z.number().int().min(0).max(6),
-  noShowCount: z.number(),
-  totalSignups: z.number(),
-  noShowRate: z.number(),
-});
-export type DayOfWeekNoShowDto = z.infer<typeof DayOfWeekNoShowSchema>;
-
-/** No-show patterns response (bundled in analytics/attendance endpoint) */
-export const NoShowPatternsResponseSchema = z.object({
-  repeatOffenders: z.array(NoShowPatternSchema),
-  dayOfWeekDistribution: z.array(DayOfWeekNoShowSchema),
-});
-export type NoShowPatternsResponseDto = z.infer<typeof NoShowPatternsResponseSchema>;
-
 // ─── Per-Event Metrics Response ─────────────────────────────
 
 /** Attendance summary for a single event's metrics donut chart */

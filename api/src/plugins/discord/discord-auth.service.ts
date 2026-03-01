@@ -17,6 +17,7 @@ export class DiscordAuthService implements AuthProvider {
       label: 'Continue with Discord',
       icon: 'discord',
       loginPath: '/auth/discord',
+      color: '#5865F2',
     };
   }
 

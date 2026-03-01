@@ -220,6 +220,15 @@ export class SignupsService {
                 .where(eq(schema.eventSignups.id, existing.id));
             }
             await this.autoAllocateSignup(tx, eventId, existing.id, slotConfigDup);
+            // ROK-598: Sync in-memory object after autoAllocateSignup may have confirmed it
+            const [refreshedExisting] = await tx
+              .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+              .from(schema.eventSignups)
+              .where(eq(schema.eventSignups.id, existing.id))
+              .limit(1);
+            if (refreshedExisting) {
+              existing.confirmationStatus = refreshedExisting.confirmationStatus;
+            }
           } else {
             // ROK-353: If caller requested a slot but the signup has no roster
             // assignment (e.g. after self-unassign), create one now.
@@ -255,6 +264,14 @@ export class SignupsService {
                 position,
                 isOverride: 0,
               });
+              // ROK-598: Auto-slotted signups are implicitly confirmed
+              if (slotRole !== 'bench') {
+                await tx
+                  .update(schema.eventSignups)
+                  .set({ confirmationStatus: 'confirmed' })
+                  .where(eq(schema.eventSignups.id, existing.id));
+                existing.confirmationStatus = 'confirmed';
+              }
               this.logger.log(
                 `Re-assigned user ${userId} to ${slotRole} slot ${position} (existing signup)`,
               );
@@ -300,6 +317,15 @@ export class SignupsService {
             .where(eq(schema.eventSignups.id, inserted.id));
         }
         await this.autoAllocateSignup(tx, eventId, inserted.id, slotConfig);
+        // ROK-598: Sync in-memory object after autoAllocateSignup may have confirmed it
+        const [refreshed] = await tx
+          .select({ confirmationStatus: schema.eventSignups.confirmationStatus })
+          .from(schema.eventSignups)
+          .where(eq(schema.eventSignups.id, inserted.id))
+          .limit(1);
+        if (refreshed) {
+          inserted.confirmationStatus = refreshed.confirmationStatus;
+        }
       } else {
         // ROK-183: Create roster assignment — explicit slot, auto-bench, or
         // ROK-451: auto-slot for generic events with open player slots
@@ -332,6 +358,14 @@ export class SignupsService {
             position,
             isOverride: 0,
           });
+          // ROK-598: Auto-slotted signups are implicitly confirmed
+          if (slotRole !== 'bench') {
+            await tx
+              .update(schema.eventSignups)
+              .set({ confirmationStatus: 'confirmed' })
+              .where(eq(schema.eventSignups.id, inserted.id));
+            inserted.confirmationStatus = 'confirmed';
+          }
           this.logger.log(
             `Assigned user ${userId} to ${slotRole} slot ${position}${autoBench ? ' (auto-benched)' : ''}`,
           );
@@ -2031,6 +2065,11 @@ export class SignupsService {
           position,
           isOverride: 0,
         });
+        // ROK-598: Auto-slotted signups are implicitly confirmed
+        await tx
+          .update(schema.eventSignups)
+          .set({ confirmationStatus: 'confirmed' })
+          .where(eq(schema.eventSignups.id, newSignupId));
         this.logger.log(
           `Auto-allocated signup ${newSignupId} to ${role} slot ${position} (direct match)`,
         );
@@ -2088,6 +2127,11 @@ export class SignupsService {
         isOverride: 0,
       });
 
+      // ROK-598: Auto-slotted signups are implicitly confirmed
+      await tx
+        .update(schema.eventSignups)
+        .set({ confirmationStatus: 'confirmed' })
+        .where(eq(schema.eventSignups.id, newSignupId));
       this.logger.log(
         `Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (${chain.moves.length}-step chain rearrangement)`,
       );
@@ -2368,6 +2412,11 @@ export class SignupsService {
       });
       occupiedPositions[role]?.add(freedPosition);
 
+      // ROK-598: Auto-slotted signups are implicitly confirmed
+      await tx
+        .update(schema.eventSignups)
+        .set({ confirmationStatus: 'confirmed' })
+        .where(eq(schema.eventSignups.id, newSignupId));
       this.logger.log(
         `ROK-459: Auto-allocated confirmed signup ${newSignupId} to ${role} slot ${freedPosition} (tentative displacement)`,
       );

@@ -505,7 +505,8 @@ export function EventDetailPage() {
             </div>
 
             {/* ROK-421: Attendance tracker for past events (creator/admin/operator only) */}
-            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && canManageRoster && (
+            {/* ROK-594: Skip ad-hoc events — voice attendance only applies to scheduled events */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && !isAdHoc && canManageRoster && (
                 <AttendanceTracker
                     eventId={eventId}
                     isOrganizer={canManageRoster}
@@ -513,7 +514,8 @@ export function EventDetailPage() {
             )}
 
             {/* ROK-491: Link to per-event metrics for past events (creator/admin/operator only) */}
-            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && canManageRoster && (
+            {/* ROK-594: Skip ad-hoc events — metrics are attendance-based */}
+            {event && event.endTime && new Date(event.endTime) < new Date() && !isCancelled && !isAdHoc && canManageRoster && (
                 <div className="flex justify-center">
                     <Link
                         to={`/events/${eventId}/metrics`}
