@@ -9,6 +9,7 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
+import * as schema from '../../drizzle/schema';
 
 describe('AdHocNotificationService', () => {
   let service: AdHocNotificationService;
@@ -16,6 +17,7 @@ describe('AdHocNotificationService', () => {
   let mockClientService: {
     sendEmbed: jest.Mock;
     editEmbed: jest.Mock;
+    getGuildId: jest.Mock;
   };
   let mockEmbedFactory: {
     buildEventEmbed: jest.Mock;
@@ -60,6 +62,7 @@ describe('AdHocNotificationService', () => {
     mockClientService = {
       sendEmbed: jest.fn().mockResolvedValue({ id: 'msg-1' }),
       editEmbed: jest.fn().mockResolvedValue(undefined),
+      getGuildId: jest.fn().mockReturnValue('guild-123'),
     };
 
     mockEmbedFactory = {
@@ -191,6 +194,53 @@ describe('AdHocNotificationService', () => {
       await expect(
         service.notifySpawn(45, 'binding-3', { id: 45, title: 'Test' }, []),
       ).resolves.not.toThrow();
+    });
+
+    it('inserts discord_event_messages row after posting (ROK-593)', async () => {
+      mockChannelBindingsService.getBindingById.mockResolvedValue({
+        id: 'binding-1',
+        config: { notificationChannelId: 'notif-channel-1' },
+      });
+      mockBuildEmbedData();
+
+      await service.notifySpawn(
+        42,
+        'binding-1',
+        { id: 42, title: 'WoW — Quick Play', gameName: 'WoW' },
+        [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
+      );
+
+      expect(mockDb.insert).toHaveBeenCalledWith(schema.discordEventMessages);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 42,
+          guildId: 'guild-123',
+          channelId: 'notif-channel-1',
+          messageId: 'msg-1',
+          embedState: 'live',
+        }),
+      );
+    });
+
+    it('skips discord_event_messages insert when guildId is null (ROK-593)', async () => {
+      mockClientService.getGuildId.mockReturnValue(null);
+      mockChannelBindingsService.getBindingById.mockResolvedValue({
+        id: 'binding-1',
+        config: { notificationChannelId: 'notif-channel-1' },
+      });
+      mockBuildEmbedData();
+
+      await service.notifySpawn(
+        42,
+        'binding-1',
+        { id: 42, title: 'WoW — Quick Play', gameName: 'WoW' },
+        [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
+      );
+
+      // sendEmbed should still be called
+      expect(mockClientService.sendEmbed).toHaveBeenCalled();
+      // But no DB insert since guildId is null
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });
 
