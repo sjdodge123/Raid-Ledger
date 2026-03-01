@@ -11,7 +11,7 @@
  *  6. EventsController voice endpoints — 403 for non-creator / non-admin
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ForbiddenException } from '@nestjs/common';
 import {
   VoiceAttendanceService,
   classifyVoiceSession,

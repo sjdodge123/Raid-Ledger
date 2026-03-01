@@ -388,7 +388,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         and(
           eq(schema.eventSignups.eventId, eventId),
           sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
-          sql`${schema.eventSignups.status} IN ('signed_up', 'tentative', 'going')`,
+          sql`${schema.eventSignups.status} IN ('signed_up', 'tentative')`,
         ),
       );
 
@@ -514,11 +514,12 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
           const now = new Date();
           if (existingDb) {
             // Restore from DB and resume tracking
-            const priorSegments = (existingDb.segments as Array<{
-              joinAt: string;
-              leaveAt: string | null;
-              durationSec: number;
-            }>) ?? [];
+            const priorSegments =
+              (existingDb.segments as Array<{
+                joinAt: string;
+                leaveAt: string | null;
+                durationSec: number;
+              }>) ?? [];
             this.sessions.set(key, {
               eventId,
               userId: existingDb.userId,
@@ -616,7 +617,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         for (const event of endedEvents) {
           // Check if already fully classified (all sessions have a classification)
           const [unclassified] = await this.db
-            .select({ count: sql<number>`count(*)` })
+            .select({ count: sql<number>`count(*)::int` })
             .from(schema.eventVoiceSessions)
             .where(
               and(
@@ -627,7 +628,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
           // Check if there are signups that might need no_show classification
           const [signupCount] = await this.db
-            .select({ count: sql<number>`count(*)` })
+            .select({ count: sql<number>`count(*)::int` })
             .from(schema.eventSignups)
             .where(eq(schema.eventSignups.eventId, event.id));
 
@@ -641,7 +642,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
           // Skip if already processed (sessions exist, all classified, and no-shows already created)
           if (!hasUnclassifiedSessions && hasSignups) {
             const [sessionCount] = await this.db
-              .select({ count: sql<number>`count(*)` })
+              .select({ count: sql<number>`count(*)::int` })
               .from(schema.eventVoiceSessions)
               .where(eq(schema.eventVoiceSessions.eventId, event.id));
             // If we already have sessions (including no_show records), skip
