@@ -274,7 +274,7 @@ describe('ScheduledEventService', () => {
       expect(mockGuild.scheduledEvents.create).toHaveBeenCalled();
     });
 
-    it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
+    it('uses voiceChannelOverride instead of resolver when provided (ROK-599)', async () => {
       await service.createScheduledEvent(
         42,
         baseEventData,

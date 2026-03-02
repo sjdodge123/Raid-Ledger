@@ -155,7 +155,7 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
     isAdHoc?: boolean,
-    notificationChannelOverride?: string | null,
+    voiceChannelOverride?: string | null,
   ): Promise<void> {
     try {
       if (isAdHoc) {
@@ -195,7 +195,7 @@ export class ScheduledEventService {
         .where(eq(schema.events.id, eventId))
         .limit(1);
       const voiceChannelId =
-        notificationChannelOverride ??
+        voiceChannelOverride ??
         (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
           gameId,
           eventRow?.recurrenceGroupId,

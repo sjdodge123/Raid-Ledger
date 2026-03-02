@@ -10,6 +10,12 @@ import { ScheduledEventService } from './scheduled-event.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 
+/** Look-ahead window: find events ending within the next 5 minutes (ms). */
+const WINDOW_AHEAD_MS = 5 * 60 * 1000;
+
+/** Look-behind window: catch events that ended within the last 2 minutes (ms). */
+const WINDOW_BEHIND_MS = 2 * 60 * 1000;
+
 /**
  * Auto-extends events (scheduled and ad-hoc) when voice channel activity
  * persists past the event's end time (ROK-576).
@@ -63,10 +69,10 @@ export class EventAutoExtendService {
       ]);
 
     const now = new Date();
-    // Look for events whose effective end time is within the next 5 minutes
-    // or has passed within the last 2 minutes (to catch events that just ended).
-    const windowAhead = new Date(now.getTime() + 5 * 60 * 1000);
-    const windowBehind = new Date(now.getTime() - 2 * 60 * 1000);
+    // Look for events whose effective end time is within the look-ahead window
+    // or has passed within the look-behind window (to catch events that just ended).
+    const windowAhead = new Date(now.getTime() + WINDOW_AHEAD_MS);
+    const windowBehind = new Date(now.getTime() - WINDOW_BEHIND_MS);
 
     // Find events (scheduled and ad-hoc) that are candidates for extension:
     // - Not cancelled
