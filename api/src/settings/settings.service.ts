@@ -686,7 +686,7 @@ export class SettingsService implements OnModuleInit {
       SETTING_KEYS.EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES,
     );
     const parsed = value ? parseInt(value, 10) : NaN;
-    return isNaN(parsed) ? 120 : parsed;
+    return isNaN(parsed) ? 720 : parsed;
   }
 
   /**

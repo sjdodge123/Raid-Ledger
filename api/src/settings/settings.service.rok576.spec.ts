@@ -2,7 +2,7 @@
  * Unit tests for SettingsService ROK-576 methods:
  * - getEventAutoExtendEnabled (defaults to true when not set)
  * - getEventAutoExtendIncrementMinutes (defaults to 15)
- * - getEventAutoExtendMaxOverageMinutes (defaults to 120)
+ * - getEventAutoExtendMaxOverageMinutes (defaults to 720)
  * - getEventAutoExtendMinVoiceMembers (defaults to 2)
  */
 import { Test, TestingModule } from '@nestjs/testing';
@@ -42,7 +42,9 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
       _selectChain: { from: jest.fn() },
       _insertChain: { values: jest.fn() },
       _deleteChain: { where: jest.fn() },
-      _insertValuesChain: { onConflictDoUpdate: jest.fn().mockResolvedValue([]) },
+      _insertValuesChain: {
+        onConflictDoUpdate: jest.fn().mockResolvedValue([]),
+      },
       select: jest.fn(),
       insert: jest.fn(),
       delete: jest.fn(),
@@ -55,7 +57,10 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
     mockDb.delete.mockReturnValue(mockDb._deleteChain);
     mockDb._deleteChain.where.mockResolvedValue([]);
 
-    mockEventEmitter = { emit: jest.fn(), emitAsync: jest.fn().mockResolvedValue([]) };
+    mockEventEmitter = {
+      emit: jest.fn(),
+      emitAsync: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -127,7 +132,10 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
 
     it('returns 15 when DB value is not a valid integer', async () => {
       mockDb._selectChain.from.mockResolvedValue([
-        makeRow(SETTING_KEYS.EVENT_AUTO_EXTEND_INCREMENT_MINUTES, 'not-a-number'),
+        makeRow(
+          SETTING_KEYS.EVENT_AUTO_EXTEND_INCREMENT_MINUTES,
+          'not-a-number',
+        ),
       ]);
 
       const result = await service.getEventAutoExtendIncrementMinutes();
@@ -139,12 +147,12 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
   // ─── getEventAutoExtendMaxOverageMinutes ──────────────────────────────────
 
   describe('getEventAutoExtendMaxOverageMinutes', () => {
-    it('defaults to 120 when the setting is not in the DB', async () => {
+    it('defaults to 720 when the setting is not in the DB', async () => {
       mockDb._selectChain.from.mockResolvedValue([]);
 
       const result = await service.getEventAutoExtendMaxOverageMinutes();
 
-      expect(result).toBe(120);
+      expect(result).toBe(720);
     });
 
     it('returns the configured integer value from DB', async () => {
@@ -157,14 +165,14 @@ describe('SettingsService — ROK-576 auto-extend methods', () => {
       expect(result).toBe(60);
     });
 
-    it('returns 120 when DB value is not a valid integer', async () => {
+    it('returns 720 when DB value is not a valid integer', async () => {
       mockDb._selectChain.from.mockResolvedValue([
         makeRow(SETTING_KEYS.EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES, ''),
       ]);
 
       const result = await service.getEventAutoExtendMaxOverageMinutes();
 
-      expect(result).toBe(120);
+      expect(result).toBe(720);
     });
   });
 
