@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import {
   Events,
@@ -50,7 +50,7 @@ interface ResolvedBinding {
  * - Startup recovery: scans voice channels for current members.
  */
 @Injectable()
-export class VoiceStateListener {
+export class VoiceStateListener implements OnApplicationShutdown {
   private readonly logger = new Logger(VoiceStateListener.name);
 
   /** Bound handler reference for cleanup */
@@ -188,6 +188,29 @@ export class VoiceStateListener {
     }
 
     this.logger.log('Unregistered voiceStateUpdate listener');
+  }
+
+  /**
+   * ROK-604: Clear in-memory state on application shutdown.
+   * Mirrors the pattern in GameActivityService.onApplicationShutdown —
+   * ensures voiceGameTracker is cleaned up even if the bot disconnect
+   * event does not fire before the process exits.
+   */
+  onApplicationShutdown(): void {
+    this.voiceGameTracker.clear();
+    this.channelMembers.clear();
+    this.userChannelMap.clear();
+    this.channelBindingCache.clear();
+
+    for (const timer of this.debounceTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.debounceTimers.clear();
+
+    if (this.cacheSweepTimer) {
+      clearInterval(this.cacheSweepTimer);
+      this.cacheSweepTimer = null;
+    }
   }
 
   private handleVoiceStateUpdate(
@@ -432,6 +455,10 @@ export class VoiceStateListener {
 
     // ROK-591: Voice→activity bridge — track game activity for linked users
     // in game-bound channels with a known game.
+    // NOTE (ROK-604): This intentionally fires BEFORE the minPlayers threshold
+    // check below. Voice activity tracks independently of ad-hoc event creation —
+    // a user's game_activity_session may exist without a corresponding ad-hoc event
+    // (e.g., solo user in a channel that requires 2+ players for event spawn).
     if (rlUser?.id && binding.gameId && binding.gameName) {
       this.voiceGameTracker.set(discordMember.discordUserId, {
         gameName: binding.gameName,
@@ -514,7 +541,9 @@ export class VoiceStateListener {
       discordMember.discordUserId,
     );
 
-    // ROK-591: Voice→activity bridge for general-lobby (game detected via presence)
+    // ROK-591: Voice→activity bridge for general-lobby (game detected via presence).
+    // NOTE (ROK-604): Like game-bound channels, this fires BEFORE the minPlayers
+    // threshold check. Voice activity tracks independently of ad-hoc event creation.
     if (detected.gameId !== null && rlUser?.id) {
       this.voiceGameTracker.set(discordMember.discordUserId, {
         gameName: detected.gameName,
@@ -694,9 +723,13 @@ export class VoiceStateListener {
       }
     }
 
-    // ROK-593: Add remaining voice channel members to the first event
-    // (members without detectable game activity who are still in the channel).
-    // Only adds if there are game groups — skip if all groups are "Just Chatting".
+    // ROK-593: Add remaining voice channel members to the first (primary) event.
+    // These are members without detectable game activity who are still in the channel.
+    // NOTE (ROK-604): These members intentionally do NOT get voice→activity tracking
+    // via bufferStart. The voice→activity bridge requires a detected game to attribute
+    // the session to — members added here have no game presence, so there is no game
+    // name to record. They appear on the ad-hoc event roster but without individual
+    // game_activity_session rows.
     if (groups.length > 0) {
       const primaryGroup = groups[0];
       for (const [memberId, guildMember] of channel.members) {

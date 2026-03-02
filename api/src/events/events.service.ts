@@ -190,6 +190,14 @@ export class EventsService {
           sql`${new Date().toISOString()}::timestamp`,
         ),
       );
+    } else if (query.upcoming === 'false') {
+      // ROK-621: Past events must have already ended
+      conditions.push(
+        lte(
+          sql`upper(${schema.events.duration})`,
+          sql`${new Date().toISOString()}::timestamp`,
+        ),
+      );
     }
 
     // ROK-174: startAfter filter - events starting after this date
