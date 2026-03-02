@@ -274,14 +274,20 @@ describe('ScheduledEventService', () => {
       expect(mockGuild.scheduledEvents.create).toHaveBeenCalled();
     });
 
-    it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
-      await service.createScheduledEvent(42, baseEventData, 99, false, 'override-vc-456');
+    it('always uses the voice channel resolver (notificationChannelOverride is a text channel, not voice)', async () => {
+      // notificationChannelOverride is a TEXT channel and must not be used for
+      // Discord Scheduled Event voice channel creation — it would cause a Discord API error.
+      channelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
+        'resolved-vc-789',
+      );
+
+      await service.createScheduledEvent(42, baseEventData, 99, false);
 
       expect(
         channelResolver.resolveVoiceChannelForScheduledEvent,
-      ).not.toHaveBeenCalled();
+      ).toHaveBeenCalled();
       expect(mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
-        expect.objectContaining({ channel: 'override-vc-456' }),
+        expect.objectContaining({ channel: 'resolved-vc-789' }),
       );
     });
 

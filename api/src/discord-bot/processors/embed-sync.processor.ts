@@ -278,11 +278,12 @@ export class EmbedSyncProcessor extends WorkerHost {
     }
 
     // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
-    const voiceChannelId = event.notificationChannelOverride ??
-      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+    const voiceChannelId =
+      event.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         event.gameId,
         event.recurrenceGroupId,
-      );
+      ));
     if (voiceChannelId) {
       eventData.voiceChannelId = voiceChannelId;
     }

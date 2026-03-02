@@ -154,7 +154,6 @@ export class ScheduledEventService {
     eventData: ScheduledEventData,
     gameId?: number | null,
     isAdHoc?: boolean,
-    notificationChannelOverride?: string | null,
   ): Promise<void> {
     try {
       if (isAdHoc) {
@@ -187,14 +186,19 @@ export class ScheduledEventService {
         return;
       }
 
-      // ROK-599: Resolve voice channel — per-event override → series → game → default
+      // ROK-471/ROK-599: Resolve voice channel — series → game → default.
+      // notificationChannelOverride is a TEXT channel and must NOT be used here;
+      // Discord Scheduled Events require a real voice channel.
       const [eventRow] = await this.db
         .select({ recurrenceGroupId: schema.events.recurrenceGroupId })
         .from(schema.events)
         .where(eq(schema.events.id, eventId))
         .limit(1);
-      const voiceChannelId = notificationChannelOverride ??
-        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId, eventRow?.recurrenceGroupId);
+      const voiceChannelId =
+        await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+          gameId,
+          eventRow?.recurrenceGroupId,
+        );
       if (!voiceChannelId) {
         this.logger.warn(
           `No voice channel resolved for event ${eventId}, skipping scheduled event`,
@@ -270,12 +274,10 @@ export class ScheduledEventService {
         return;
       }
 
-      // Get stored scheduled event ID + channel override + recurrence group
+      // Get stored scheduled event ID for this event
       const [event] = await this.db
         .select({
           discordScheduledEventId: schema.events.discordScheduledEventId,
-          notificationChannelOverride: schema.events.notificationChannelOverride,
-          recurrenceGroupId: schema.events.recurrenceGroupId,
         })
         .from(schema.events)
         .where(eq(schema.events.id, eventId))
@@ -286,7 +288,7 @@ export class ScheduledEventService {
         this.logger.debug(
           `No existing scheduled event for event ${eventId}, creating new one`,
         );
-        await this.createScheduledEvent(eventId, eventData, gameId, isAdHoc, event?.notificationChannelOverride);
+        await this.createScheduledEvent(eventId, eventData, gameId, isAdHoc);
         return;
       }
 
@@ -318,7 +320,7 @@ export class ScheduledEventService {
             .update(schema.events)
             .set({ discordScheduledEventId: null })
             .where(eq(schema.events.id, eventId));
-          await this.createScheduledEvent(eventId, eventData, gameId, isAdHoc, event?.notificationChannelOverride);
+          await this.createScheduledEvent(eventId, eventData, gameId, isAdHoc);
         } else {
           throw editError;
         }

@@ -365,7 +365,8 @@ export class NotificationService {
       .limit(1);
     if (!event) return null;
     // ROK-599: Per-event channel override takes priority
-    if (event.notificationChannelOverride) return event.notificationChannelOverride;
+    if (event.notificationChannelOverride)
+      return event.notificationChannelOverride;
     return this.channelResolver.resolveVoiceChannelForScheduledEvent(
       event.gameId,
       event.recurrenceGroupId,

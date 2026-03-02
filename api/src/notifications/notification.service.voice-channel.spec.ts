@@ -139,7 +139,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
 
   describe('resolveVoiceChannelForEvent', () => {
     it('looks up event by ID and delegates to channelResolver with its gameId', async () => {
-      const mockEvent = { gameId: 7, notificationChannelOverride: null, recurrenceGroupId: null };
+      const mockEvent = {
+        gameId: 7,
+        notificationChannelOverride: null,
+        recurrenceGroupId: null,
+      };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
         'vc-from-game-7',
@@ -166,7 +170,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     });
 
     it('returns null when event has no gameId (null)', async () => {
-      const mockEvent = { gameId: null, notificationChannelOverride: null, recurrenceGroupId: null };
+      const mockEvent = {
+        gameId: null,
+        notificationChannelOverride: null,
+        recurrenceGroupId: null,
+      };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
         null,
@@ -181,7 +189,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     });
 
     it('returns null when channelResolver returns null for the event game', async () => {
-      const mockEvent = { gameId: 3, notificationChannelOverride: null, recurrenceGroupId: null };
+      const mockEvent = {
+        gameId: 3,
+        notificationChannelOverride: null,
+        recurrenceGroupId: null,
+      };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
         null,
@@ -193,7 +205,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     });
 
     it('returns the voice channel ID string when resolved', async () => {
-      const mockEvent = { gameId: 20, notificationChannelOverride: null, recurrenceGroupId: null };
+      const mockEvent = {
+        gameId: 20,
+        notificationChannelOverride: null,
+        recurrenceGroupId: null,
+      };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
       mockChannelResolver.resolveVoiceChannelForScheduledEvent.mockResolvedValue(
         '111222333444',
@@ -205,7 +221,11 @@ describe('NotificationService — voice channel resolution (ROK-507)', () => {
     });
 
     it('returns notificationChannelOverride directly without calling resolver (ROK-599)', async () => {
-      const mockEvent = { gameId: 7, notificationChannelOverride: 'override-vc-999', recurrenceGroupId: null };
+      const mockEvent = {
+        gameId: 7,
+        notificationChannelOverride: 'override-vc-999',
+        recurrenceGroupId: null,
+      };
       mockDb.select.mockReturnValue(makeSelectChain([mockEvent]));
 
       const result = await service.resolveVoiceChannelForEvent(42);

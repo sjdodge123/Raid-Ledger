@@ -302,11 +302,12 @@ export class AdHocNotificationService implements OnModuleDestroy {
     }
 
     // ROK-597/ROK-599: Resolve voice channel — per-event override takes priority
-    const voiceChannelId = event.notificationChannelOverride ??
-      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+    const voiceChannelId =
+      event.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         event.gameId,
         event.recurrenceGroupId,
-      );
+      ));
 
     // Only count active participants for the signup count
     const activeCount = participants.filter((p) => p.isActive).length;

@@ -97,8 +97,12 @@ export class EmbedPosterService {
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
 
       // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
-      const voiceChannelId = notificationChannelOverride ??
-        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId, recurrenceGroupId);
+      const voiceChannelId =
+        notificationChannelOverride ??
+        (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+          gameId,
+          recurrenceGroupId,
+        ));
       if (voiceChannelId) {
         enrichedEvent.voiceChannelId = voiceChannelId;
       }
