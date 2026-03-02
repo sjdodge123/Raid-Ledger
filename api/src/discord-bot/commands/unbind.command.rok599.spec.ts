@@ -41,7 +41,10 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
     gameId: 5,
     recurrenceGroupId: 'rec-uuid-123',
     notificationChannelOverride: 'override-channel-id',
-    duration: [new Date('2026-04-01T20:00:00Z'), new Date('2026-04-01T23:00:00Z')],
+    duration: [
+      new Date('2026-04-01T20:00:00Z'),
+      new Date('2026-04-01T23:00:00Z'),
+    ],
   };
 
   // Event with no override
@@ -64,11 +67,17 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       gameId: 5,
       recurrenceGroupId: 'rec-uuid-123',
       notificationChannelOverride: null,
-      duration: [new Date('2026-04-01T20:00:00Z'), new Date('2026-04-01T23:00:00Z')],
+      duration: [
+        new Date('2026-04-01T20:00:00Z'),
+        new Date('2026-04-01T23:00:00Z'),
+      ],
       maxAttendees: null,
       slotConfig: null,
     },
-    games: { name: 'World of Warcraft', coverUrl: 'https://example.com/art.jpg' },
+    games: {
+      name: 'World of Warcraft',
+      coverUrl: 'https://example.com/art.jpg',
+    },
   };
 
   let mockDb: {
@@ -77,11 +86,13 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
   };
 
   /** Build a mock interaction for the event unbind path */
-  const mockEventUnbindInteraction = (overrides: {
-    guildId?: string | null;
-    discordUserId?: string;
-    eventValue?: string | null;
-  } = {}) => {
+  const mockEventUnbindInteraction = (
+    overrides: {
+      guildId?: string | null;
+      discordUserId?: string;
+      eventValue?: string | null;
+    } = {},
+  ) => {
     const {
       guildId = 'guild-123',
       discordUserId = 'discord-user-100',
@@ -93,7 +104,11 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       editReply: jest.fn().mockResolvedValue(undefined),
       guildId,
       user: { id: discordUserId },
-      channel: { id: 'channel-456', name: 'general', type: ChannelType.GuildText },
+      channel: {
+        id: 'channel-456',
+        name: 'general',
+        type: ChannelType.GuildText,
+      },
       options: {
         getString: jest.fn().mockImplementation((name: string) => {
           if (name === 'event') return eventValue;
@@ -147,7 +162,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction({ guildId: null });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -161,10 +178,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
   // ============================================================
   describe('invalid event ID', () => {
     it('rejects a non-numeric event ID', async () => {
-      const interaction = mockEventUnbindInteraction({ eventValue: 'not-a-number' });
+      const interaction = mockEventUnbindInteraction({
+        eventValue: 'not-a-number',
+      });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -183,7 +204,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -206,7 +229,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -225,10 +250,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         .mockReturnValueOnce(makeSelectChain([mockEventWithOverride]))
         .mockReturnValueOnce(makeSelectChain([mockOtherUser]));
 
-      const interaction = mockEventUnbindInteraction({ discordUserId: 'other-user-discord' });
+      const interaction = mockEventUnbindInteraction({
+        discordUserId: 'other-user-discord',
+      });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -248,7 +277,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(mockDb.update).toHaveBeenCalled();
@@ -262,10 +293,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
-      const interaction = mockEventUnbindInteraction({ discordUserId: 'admin-discord-id' });
+      const interaction = mockEventUnbindInteraction({
+        discordUserId: 'admin-discord-id',
+      });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(mockDb.update).toHaveBeenCalled();
@@ -279,10 +314,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
-      const interaction = mockEventUnbindInteraction({ discordUserId: 'operator-discord-id' });
+      const interaction = mockEventUnbindInteraction({
+        discordUserId: 'operator-discord-id',
+      });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(mockDb.update).toHaveBeenCalled();
@@ -302,7 +341,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -320,10 +361,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
-      const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0] as string;
+      const replyArg = (
+        interaction.editReply.mock.calls as unknown[][]
+      )[0][0] as string;
       expect(replyArg).toContain('Raid Night');
     });
   });
@@ -344,7 +389,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(updateChain.set).toHaveBeenCalledWith(
@@ -363,7 +410,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -386,14 +435,18 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         APP_EVENT_EVENTS.UPDATED,
         expect.objectContaining({
           event: expect.objectContaining({
-            game: expect.objectContaining({ name: 'World of Warcraft' }) as unknown,
+            game: expect.objectContaining({
+              name: 'World of Warcraft',
+            }) as unknown,
           }) as unknown,
         }),
       );
@@ -410,7 +463,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(eventEmitter.emit).toHaveBeenCalledWith(
@@ -432,7 +487,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
       expect(interaction.editReply).toHaveBeenCalledWith(
@@ -453,10 +510,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
-      const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      const replyArg = (
+        interaction.editReply.mock.calls as unknown[][]
+      )[0][0] as {
         embeds: { data: { description: string } }[];
       };
       const description = replyArg.embeds[0].data.description ?? '';
@@ -474,10 +535,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction();
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
-      const replyArg = (interaction.editReply.mock.calls as unknown[][])[0][0] as {
+      const replyArg = (
+        interaction.editReply.mock.calls as unknown[][]
+      )[0][0] as {
         embeds: { data: { description: string } }[];
       };
       const description = replyArg.embeds[0].data.description ?? '';
@@ -491,7 +556,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
   describe('getDefinition', () => {
     it('includes an "event" option in the command definition', () => {
       const definition = command.getDefinition();
-      const options = definition.options as Array<{ name: string; autocomplete?: boolean }> | undefined;
+      const options = definition.options as
+        | Array<{ name: string; autocomplete?: boolean }>
+        | undefined;
       const eventOption = options?.find((o) => o.name === 'event');
       expect(eventOption).toBeDefined();
       expect(eventOption?.autocomplete).toBe(true);
@@ -499,7 +566,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
 
     it('has description that mentions "override"', () => {
       const definition = command.getDefinition();
-      const options = definition.options as Array<{ name: string; description: string }> | undefined;
+      const options = definition.options as
+        | Array<{ name: string; description: string }>
+        | undefined;
       const eventOption = options?.find((o) => o.name === 'event');
       expect(eventOption?.description.toLowerCase()).toContain('override');
     });
@@ -516,10 +585,14 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = mockEventUnbindInteraction({ eventValue: '99' });
 
       await command.handleInteraction(
-        interaction as unknown as Parameters<typeof command.handleInteraction>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleInteraction
+        >[0],
       );
 
-      const channelBindingsService = command['channelBindingsService'] as jest.Mocked<ChannelBindingsService>;
+      const channelBindingsService = command[
+        'channelBindingsService'
+      ] as jest.Mocked<ChannelBindingsService>;
       expect(channelBindingsService.unbind).not.toHaveBeenCalled();
     });
   });
@@ -528,11 +601,13 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
   // handleAutocomplete — event option
   // ============================================================
   describe('handleAutocomplete — event option', () => {
-    const makeAutocompleteInteraction = (overrides: {
-      focusedName?: string;
-      focusedValue?: string;
-      discordUserId?: string;
-    } = {}) => {
+    const makeAutocompleteInteraction = (
+      overrides: {
+        focusedName?: string;
+        focusedValue?: string;
+        discordUserId?: string;
+      } = {},
+    ) => {
       const {
         focusedName = 'event',
         focusedValue = '',
@@ -541,7 +616,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
 
       return {
         options: {
-          getFocused: jest.fn().mockReturnValue({ name: focusedName, value: focusedValue }),
+          getFocused: jest
+            .fn()
+            .mockReturnValue({ name: focusedName, value: focusedValue }),
         },
         user: { id: discordUserId },
         respond: jest.fn().mockResolvedValue(undefined),
@@ -564,7 +641,10 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         {
           id: 42,
           title: 'Raid Night',
-          duration: [new Date('2026-04-01T20:00:00Z'), new Date('2026-04-01T23:00:00Z')],
+          duration: [
+            new Date('2026-04-01T20:00:00Z'),
+            new Date('2026-04-01T23:00:00Z'),
+          ],
         },
       ];
 
@@ -576,20 +656,39 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = makeAutocompleteInteraction();
 
       await command.handleAutocomplete(
-        interaction as unknown as Parameters<typeof command.handleAutocomplete>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleAutocomplete
+        >[0],
       );
 
       expect(interaction.respond).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ name: expect.stringContaining('Raid Night') as unknown, value: '42' }),
+          expect.objectContaining({
+            name: expect.stringContaining('Raid Night') as unknown,
+            value: '42',
+          }),
         ]),
       );
     });
 
     it('admin sees all upcoming events (no creator filter)', async () => {
       const mockEvents = [
-        { id: 1, title: 'Event One', duration: [new Date('2026-04-01T20:00:00Z'), new Date('2026-04-01T23:00:00Z')] },
-        { id: 2, title: 'Event Two', duration: [new Date('2026-04-08T20:00:00Z'), new Date('2026-04-08T23:00:00Z')] },
+        {
+          id: 1,
+          title: 'Event One',
+          duration: [
+            new Date('2026-04-01T20:00:00Z'),
+            new Date('2026-04-01T23:00:00Z'),
+          ],
+        },
+        {
+          id: 2,
+          title: 'Event Two',
+          duration: [
+            new Date('2026-04-08T20:00:00Z'),
+            new Date('2026-04-08T23:00:00Z'),
+          ],
+        },
       ];
 
       mockDb.select = jest
@@ -597,13 +696,19 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
         .mockReturnValueOnce(makeSelectChain([mockAdminUser]))
         .mockReturnValueOnce(makeEventsAutocompleteChain(mockEvents));
 
-      const interaction = makeAutocompleteInteraction({ discordUserId: 'admin-discord-id' });
+      const interaction = makeAutocompleteInteraction({
+        discordUserId: 'admin-discord-id',
+      });
 
       await command.handleAutocomplete(
-        interaction as unknown as Parameters<typeof command.handleAutocomplete>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleAutocomplete
+        >[0],
       );
 
-      const respondArg = (interaction.respond.mock.calls as unknown[][])[0][0] as unknown[];
+      const respondArg = (
+        interaction.respond.mock.calls as unknown[][]
+      )[0][0] as unknown[];
       expect(respondArg).toHaveLength(2);
     });
 
@@ -616,7 +721,9 @@ describe('UnbindCommand — ROK-599 event unbind', () => {
       const interaction = makeAutocompleteInteraction();
 
       await command.handleAutocomplete(
-        interaction as unknown as Parameters<typeof command.handleAutocomplete>[0],
+        interaction as unknown as Parameters<
+          typeof command.handleAutocomplete
+        >[0],
       );
 
       expect(interaction.respond).toHaveBeenCalledWith([]);

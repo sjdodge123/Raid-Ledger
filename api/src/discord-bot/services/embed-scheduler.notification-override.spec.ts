@@ -56,7 +56,9 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
           useValue: {
             executeWithTracking: jest
               .fn()
-              .mockImplementation(async (_name: string, fn: () => Promise<void>) => fn()),
+              .mockImplementation(
+                async (_name: string, fn: () => Promise<void>) => fn(),
+              ),
           },
         },
         {
@@ -329,7 +331,12 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
         .fn()
         .mockReturnValueOnce(makeSelectChain([eventWithGame]))
         .mockReturnValueOnce(
-          makeSelectChain([{ name: 'World of Warcraft', coverUrl: 'https://example.com/art.jpg' }]),
+          makeSelectChain([
+            {
+              name: 'World of Warcraft',
+              coverUrl: 'https://example.com/art.jpg',
+            },
+          ]),
         );
 
       await service.handleScheduledEmbeds();
@@ -337,7 +344,10 @@ describe('EmbedSchedulerService — notification override pass-through (ROK-599)
       expect(embedPoster.postEmbed).toHaveBeenCalledWith(
         56,
         expect.objectContaining({
-          game: { name: 'World of Warcraft', coverUrl: 'https://example.com/art.jpg' },
+          game: {
+            name: 'World of Warcraft',
+            coverUrl: 'https://example.com/art.jpg',
+          },
         }),
         7,
         null,

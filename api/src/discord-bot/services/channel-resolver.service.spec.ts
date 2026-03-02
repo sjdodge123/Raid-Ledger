@@ -151,7 +151,9 @@ describe('ChannelResolverService', () => {
 
       await service.resolveChannelForEvent(null, null, 'override-ch');
 
-      expect(settingsService.getDiscordBotDefaultChannel).not.toHaveBeenCalled();
+      expect(
+        settingsService.getDiscordBotDefaultChannel,
+      ).not.toHaveBeenCalled();
     });
 
     it('override takes priority over game binding, series binding, and default', async () => {
@@ -188,7 +190,11 @@ describe('ChannelResolverService', () => {
       clientService.getGuildId.mockReturnValue('guild-123');
       bindingsService.getChannelForGame.mockResolvedValue('game-channel-456');
 
-      const result = await service.resolveChannelForEvent(101, undefined, undefined);
+      const result = await service.resolveChannelForEvent(
+        101,
+        undefined,
+        undefined,
+      );
 
       expect(result).toBe('game-channel-456');
       expect(bindingsService.getChannelForGame).toHaveBeenCalledWith(
