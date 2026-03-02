@@ -7,6 +7,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { ScheduledEventService } from './scheduled-event.service';
+import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 
@@ -40,6 +41,7 @@ export class EventAutoExtendService {
     private readonly settingsService: SettingsService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly scheduledEventService: ScheduledEventService,
+    private readonly adHocNotificationService: AdHocNotificationService,
     private readonly adHocGateway: AdHocEventsGateway,
     private readonly cronJobService: CronJobService,
   ) {}
@@ -86,6 +88,8 @@ export class EventAutoExtendService {
         duration: schema.events.duration,
         extendedUntil: schema.events.extendedUntil,
         discordScheduledEventId: schema.events.discordScheduledEventId,
+        isAdHoc: schema.events.isAdHoc,
+        channelBindingId: schema.events.channelBindingId,
       })
       .from(schema.events)
       .where(
@@ -158,6 +162,14 @@ export class EventAutoExtendService {
         candidate.id,
         newExtendedUntil.toISOString(),
       );
+
+      // Update Discord embed for ad-hoc events so duration stays current
+      if (candidate.isAdHoc && candidate.channelBindingId) {
+        this.adHocNotificationService.queueUpdate(
+          candidate.id,
+          candidate.channelBindingId,
+        );
+      }
 
       // Update Discord Scheduled Event end time
       if (candidate.discordScheduledEventId) {
