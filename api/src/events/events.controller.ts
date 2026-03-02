@@ -290,9 +290,13 @@ export class EventsController {
     guildId: string | null;
   }> {
     const event = await this.eventsService.findOne(id);
-    const channelId =
+
+    // ROK-599: Per-event channel override takes priority
+    // ROK-599: Per-event override → series binding → game binding → default
+    const channelId = event.notificationChannelOverride ??
       await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
         event.game?.id ?? null,
+        event.recurrenceGroupId ?? null,
       );
 
     if (!channelId) {

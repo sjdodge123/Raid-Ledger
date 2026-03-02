@@ -96,19 +96,35 @@ export class ChannelResolverService {
   }
 
   /**
-   * Resolve voice channel for Discord Scheduled Events (ROK-471, ROK-592).
-   * 2-tier fallback: game-specific binding -> app setting default.
+   * Resolve voice channel for Discord Scheduled Events (ROK-471, ROK-592, ROK-599).
+   * 3-tier fallback: series-specific binding -> game-specific binding -> app setting default.
+   * Note: Per-event overrides (notificationChannelOverride) are handled by callers
+   * before invoking this method.
    * @param gameId - Games table PK (integer) for game-specific binding lookup
+   * @param recurrenceGroupId - Optional recurrence group ID for series-specific binding
    * @returns Voice channel ID string or null if none configured
    */
   async resolveVoiceChannelForScheduledEvent(
     gameId?: number | null,
+    recurrenceGroupId?: string | null,
   ): Promise<string | null> {
-    // Tier 1: Game-specific voice binding
+    const guildId = this.clientService.getGuildId();
+
+    // Tier 1: Series-specific voice binding (ROK-599)
+    if (recurrenceGroupId && guildId) {
+      const seriesVoice =
+        await this.channelBindingsService.getVoiceChannelForSeries(
+          guildId,
+          recurrenceGroupId,
+        );
+      if (seriesVoice) return seriesVoice;
+    }
+
+    // Tier 2: Game-specific voice binding
     const voiceChannel = await this.resolveVoiceChannelForEvent(gameId);
     if (voiceChannel) return voiceChannel;
 
-    // Tier 2: App setting fallback
+    // Tier 3: App setting fallback
     const defaultVoice =
       await this.settingsService.getDiscordBotDefaultVoiceChannel();
     if (defaultVoice) return defaultVoice;

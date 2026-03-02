@@ -270,6 +270,29 @@ export class ChannelBindingsService {
   }
 
   /**
+   * Get the voice channel binding for a specific event series in a guild.
+   * ROK-599: Series-specific voice binding takes priority over game-specific binding.
+   */
+  async getVoiceChannelForSeries(
+    guildId: string,
+    recurrenceGroupId: string,
+  ): Promise<string | null> {
+    const [row] = await this.db
+      .select({ channelId: schema.channelBindings.channelId })
+      .from(schema.channelBindings)
+      .where(
+        and(
+          eq(schema.channelBindings.guildId, guildId),
+          eq(schema.channelBindings.recurrenceGroupId, recurrenceGroupId),
+          eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
+        ),
+      )
+      .limit(1);
+
+    return row?.channelId ?? null;
+  }
+
+  /**
    * Update binding config fields (min players, grace period, etc.).
    */
   async updateConfig(

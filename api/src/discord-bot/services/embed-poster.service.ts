@@ -96,9 +96,9 @@ export class EmbedPosterService {
       // Enrich with live roster data so the embed reflects current signups
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
 
-      // ROK-507: Resolve voice channel for the event's game
-      const voiceChannelId =
-        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId);
+      // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
+      const voiceChannelId = notificationChannelOverride ??
+        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId, recurrenceGroupId);
       if (voiceChannelId) {
         enrichedEvent.voiceChannelId = voiceChannelId;
       }

@@ -112,6 +112,7 @@ export class DiscordEventListener {
         payload.event,
         payload.gameId,
         payload.isAdHoc,
+        payload.notificationChannelOverride,
       )
       .catch((err: unknown) => {
         this.logger.warn(
@@ -235,10 +236,11 @@ export class DiscordEventListener {
       payload.event,
     );
 
-    // ROK-507: Resolve voice channel so embed updates retain the voice channel line
-    const voiceChannelId =
+    // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
+    const voiceChannelId = payload.notificationChannelOverride ??
       await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         payload.gameId,
+        payload.recurrenceGroupId,
       );
     if (voiceChannelId) {
       eventData.voiceChannelId = voiceChannelId;
