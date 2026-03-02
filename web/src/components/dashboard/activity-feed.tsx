@@ -3,6 +3,7 @@ import { useNotifications, type Notification } from '../../hooks/use-notificatio
 /** Event-related notification types we show in the activity feed */
 const EVENT_TYPES = new Set([
     'slot_vacated',
+    'member_returned',
     'event_reminder',
     'new_event',
 ]);

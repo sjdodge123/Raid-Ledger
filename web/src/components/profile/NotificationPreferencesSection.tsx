@@ -17,6 +17,11 @@ const NOTIFICATION_TYPE_META: {
         description: 'When someone leaves a roster slot',
     },
     {
+        type: 'member_returned',
+        label: 'Member Returned',
+        description: 'When a departed member rejoins a live event',
+    },
+    {
         type: 'event_reminder',
         label: 'Event Reminders',
         description: 'Reminders for upcoming events',

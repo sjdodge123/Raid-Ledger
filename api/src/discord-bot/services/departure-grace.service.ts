@@ -152,7 +152,7 @@ export class DepartureGraceService {
 
       await this.notificationService.create({
         userId: event.creatorId,
-        type: 'slot_vacated',
+        type: 'member_returned',
         title: 'Member Returned',
         message: `${displayName} returned — reassigned to roster${slotInfo} for "${event.title}"`,
         payload: {
