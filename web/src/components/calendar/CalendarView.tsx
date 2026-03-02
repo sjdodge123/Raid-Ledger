@@ -185,7 +185,7 @@ export function CalendarView({
 
     // Fetch events for the current month
     // ROK-177: Include signups preview for week/day views to show attendee avatars
-    const { data: eventsData, isLoading } = useEvents({
+    const { data: eventsData, isLoading, isFetching } = useEvents({
         startAfter,
         endBefore,
         upcoming: false, // Get all events in range, not just upcoming
@@ -405,6 +405,7 @@ export function CalendarView({
                         onDateChange={setCurrentDate}
                         onSelectEvent={handleSelectEvent}
                         eventOverlapsGameTime={eventOverlapsGameTime}
+                        isFetching={isFetching}
                     />
                 )}
             </div>
@@ -512,7 +513,7 @@ export function CalendarView({
             </div>
 
             {/* Loading State */}
-            {isLoading && (
+            {(isLoading || (isFetching && calendarEvents.length === 0)) && (
                 <div className="calendar-loading">
                     <div className="loading-spinner" />
                     <span>Loading events...</span>
@@ -561,7 +562,7 @@ export function CalendarView({
             </div>
 
             {/* Empty State */}
-            {!isLoading && calendarEvents.length === 0 && (
+            {!isLoading && !isFetching && calendarEvents.length === 0 && (
                 <div className="calendar-empty">
                     <div className="empty-icon">📅</div>
                     <p>No events {view === Views.DAY ? 'today' : view === Views.WEEK ? 'this week' : 'this month'}</p>
