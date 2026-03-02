@@ -262,7 +262,7 @@ describe('ScheduledEventService', () => {
 
       expect(
         channelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(99);
+      ).toHaveBeenCalledWith(99, undefined);
     });
 
     it('handles null gameId gracefully', async () => {
@@ -270,8 +270,19 @@ describe('ScheduledEventService', () => {
 
       expect(
         channelResolver.resolveVoiceChannelForScheduledEvent,
-      ).toHaveBeenCalledWith(null);
+      ).toHaveBeenCalledWith(null, undefined);
       expect(mockGuild.scheduledEvents.create).toHaveBeenCalled();
+    });
+
+    it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
+      await service.createScheduledEvent(42, baseEventData, 99, false, 'override-vc-456');
+
+      expect(
+        channelResolver.resolveVoiceChannelForScheduledEvent,
+      ).not.toHaveBeenCalled();
+      expect(mockGuild.scheduledEvents.create).toHaveBeenCalledWith(
+        expect.objectContaining({ channel: 'override-vc-456' }),
+      );
     });
 
     it('skips when isAdHoc is undefined (treated as falsy — allows creation)', async () => {

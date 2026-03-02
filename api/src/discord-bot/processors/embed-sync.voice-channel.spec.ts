@@ -35,6 +35,8 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
     slotConfig: null,
     isAdHoc: false,
     discordScheduledEventId: null,
+    notificationChannelOverride: null,
+    recurrenceGroupId: null,
   };
 
   const mockRecord = {
@@ -160,7 +162,7 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7);
+    ).toHaveBeenCalledWith(7, null);
   });
 
   it('passes voiceChannelId to buildEventUpdate when resolver returns a channel', async () => {
@@ -209,7 +211,7 @@ describe('EmbedSyncProcessor — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null);
+    ).toHaveBeenCalledWith(null, null);
   });
 
   it('does not call resolveVoiceChannelForScheduledEvent when bot is not connected', async () => {

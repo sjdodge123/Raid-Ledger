@@ -26,6 +26,7 @@ import { AttendanceTracker } from '../components/events/AttendanceTracker';
 import { LiveBadge } from '../components/events/LiveBadge';
 import { VoiceRoster } from '../components/events/VoiceRoster';
 import { useVoiceRoster } from '../hooks/use-voice-roster';
+import { fetchApi } from '../lib/api-client';
 import './event-detail-page.css';
 
 // ROK-343: Lazy load modals — only fetched when user triggers them
@@ -79,14 +80,14 @@ export function EventDetailPage() {
     useEffect(() => {
         if (!eventId || isAdHoc) return;
         let cancelled = false;
-        const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-        fetch(`${API_BASE}/events/${eventId}/voice-channel`)
-            .then((res) => res.ok ? res.json() as Promise<{ channelId: string | null; channelName: string | null; guildId: string | null }> : null)
+        fetchApi<{ channelId: string | null; channelName: string | null; guildId: string | null }>(
+            `/events/${eventId}/voice-channel`,
+        )
             .then((data) => {
-                if (!cancelled && data?.channelName && data.guildId && data.channelId) {
+                if (!cancelled && data?.channelName && data.channelId) {
                     setVoiceChannel({
                         name: data.channelName,
-                        url: `discord://discord.com/channels/${data.guildId}/${data.channelId}`,
+                        url: data.guildId ? `discord://discord.com/channels/${data.guildId}/${data.channelId}` : '',
                     });
                 }
             })

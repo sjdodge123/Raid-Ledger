@@ -126,7 +126,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(7);
+    ).toHaveBeenCalledWith(7, undefined);
   });
 
   it('sets voiceChannelId on enriched event data when resolver returns a channel', async () => {
@@ -165,7 +165,7 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(null);
+    ).toHaveBeenCalledWith(null, undefined);
   });
 
   it('calls resolveVoiceChannelForScheduledEvent with undefined when gameId is not provided', async () => {
@@ -175,7 +175,21 @@ describe('EmbedPosterService — voice channel resolution (ROK-507)', () => {
 
     expect(
       channelResolver.resolveVoiceChannelForScheduledEvent,
-    ).toHaveBeenCalledWith(undefined);
+    ).toHaveBeenCalledWith(undefined, undefined);
+  });
+
+  it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
+    setupEmptyRoster();
+
+    await service.postEmbed(42, baseEvent, 7, undefined, 'override-vc-123');
+
+    expect(
+      channelResolver.resolveVoiceChannelForScheduledEvent,
+    ).not.toHaveBeenCalled();
+    expect(embedFactory.buildEventEmbed).toHaveBeenCalledWith(
+      expect.objectContaining({ voiceChannelId: 'override-vc-123' }),
+      expect.any(Object),
+    );
   });
 
   it('does not call resolveVoiceChannelForScheduledEvent when bot is not connected', async () => {
