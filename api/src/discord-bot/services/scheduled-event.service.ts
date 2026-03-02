@@ -57,8 +57,9 @@ export class ScheduledEventService {
   /**
    * Cron: every 30 seconds, find events whose start time has passed and
    * transition their Discord Scheduled Event from SCHEDULED → ACTIVE (ROK-573).
+   * Stagger: offset to seconds 3/33 to avoid collision with every-minute jobs at second 0 (ROK-606).
    */
-  @Cron('*/30 * * * * *', {
+  @Cron('3,33 * * * * *', {
     name: 'ScheduledEventService_startScheduledEvents',
   })
   async handleStartScheduledEvents(): Promise<void> {
