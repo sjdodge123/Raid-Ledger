@@ -10,7 +10,16 @@ import {
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
 } from 'discord.js';
-import { and, ilike, isNotNull, gte, sql, eq, isNull } from 'drizzle-orm';
+import {
+  and,
+  ilike,
+  isNotNull,
+  gte,
+  sql,
+  eq,
+  isNull,
+  notInArray,
+} from 'drizzle-orm';
 import { escapeLikePattern } from '../../common/search.util';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -369,6 +378,18 @@ export class BindCommand
       .where(eq(schema.events.id, eventId))
       .limit(1);
 
+    // Fetch actual signup count (exclude declined/roached_out)
+    const [signupResult] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          notInArray(schema.eventSignups.status, ['declined', 'roached_out']),
+        ),
+      );
+    const signupCount = signupResult?.count ?? 0;
+
     // Emit event.updated to trigger embed re-render with new channel/game
     if (updatedEvent) {
       this.eventEmitter.emit(APP_EVENT_EVENTS.UPDATED, {
@@ -379,7 +400,7 @@ export class BindCommand
           description: updatedEvent.events.description,
           startTime: updatedEvent.events.duration[0].toISOString(),
           endTime: updatedEvent.events.duration[1].toISOString(),
-          signupCount: 0,
+          signupCount,
           maxAttendees: updatedEvent.events.maxAttendees,
           slotConfig: updatedEvent.events.slotConfig,
           game: updatedEvent.games
