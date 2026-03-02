@@ -33,6 +33,7 @@ import { GameActivityService } from './game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { DepartureGraceService } from '../services/departure-grace.service';
 import { EventsController } from '../../events/events.controller';
 import { EventsService } from '../../events/events.service';
 import { SignupsService } from '../../events/signups.service';
@@ -700,6 +701,13 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
         {
           provide: VoiceAttendanceService,
           useValue: mockVoiceAttendanceService,
+        },
+        {
+          provide: DepartureGraceService,
+          useValue: {
+            onMemberLeave: jest.fn().mockResolvedValue(undefined),
+            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
+          },
         },
         {
           provide: ChannelBindingsService,

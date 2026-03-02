@@ -885,7 +885,10 @@ describe('Game Activity, Embed Scheduling & PUG Invites (integration)', () => {
         .where(eq(schema.eventSignups.eventId, event.id));
 
       const activeSignups = signupRows.filter(
-        (r) => r.status !== 'declined' && r.status !== 'roached_out',
+        (r) =>
+          r.status !== 'declined' &&
+          r.status !== 'roached_out' &&
+          r.status !== 'departed',
       );
 
       expect(signupRows.length).toBe(2);

@@ -168,10 +168,8 @@ export const RosterBuilder = memo(function RosterBuilder({
     // Get role slots to render based on game type
     const roleSlots = React.useMemo(() => {
         const result = isGenericGame ? [...GENERIC_ROLE_SLOTS] : [...MMO_ROLE_SLOTS];
-        // Add bench if configured
-        if (slots?.bench && slots.bench > 0) {
-            result.push({ ...BENCH_SLOT, count: slots.bench });
-        }
+        // ROK-596: Always include bench so it renders even when empty
+        result.push({ ...BENCH_SLOT, count: slots?.bench ?? 0 });
         return result;
     }, [isGenericGame, slots]);
 
@@ -549,9 +547,13 @@ export const RosterBuilder = memo(function RosterBuilder({
             {/* Role Slots */}
             <div className="space-y-2 sm:space-y-4">
                 {roleSlots.map(({ role, label, color }) => {
-                    const count = getSlotCount(role);
+                    const configuredCount = getSlotCount(role);
                     const assigned = assignments.filter((a) => a.slot === role);
-                    // Skip roles with 0 slots
+                    // ROK-596: Bench always renders — use max of configured slots,
+                    // assigned players, or 1 so there's always an empty "+ Assign" slot
+                    const count = role === 'bench'
+                        ? Math.max(configuredCount, assigned.length + 1)
+                        : configuredCount;
                     if (count === 0) return null;
 
                     return (
@@ -559,7 +561,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                             <h4 className="mb-2 sm:mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
                                 <RoleIcon role={role} size="w-4 h-4" />
                                 {/* ROK-183: For generic games show "Players" instead of just "Player" */}
-                                {isGenericGame && role === 'player' ? 'Players' : label} ({assigned.length}/{count})
+                                {isGenericGame && role === 'player' ? 'Players' : label} ({role === 'bench' ? assigned.length : `${assigned.length}/${count}`})
                             </h4>
                             <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
                                 {Array.from({ length: count }, (_, i) => {
@@ -587,6 +589,7 @@ export const RosterBuilder = memo(function RosterBuilder({
                         </div>
                     );
                 })}
+
             </div>
 
             {/* ROK-208: Assignment Popup */}
@@ -607,9 +610,12 @@ export const RosterBuilder = memo(function RosterBuilder({
                     onGenerateInviteLink(assignmentTarget.role);
                 } : undefined}
                 onRemoveFromEvent={onRemoveFromEvent}
-                onReassignToSlot={assignmentTarget?.occupant ? handleReassignToSlot : undefined}
+                onReassignToSlot={handleReassignToSlot}
+                assigned={assignments}
                 gameId={gameId}
                 isMMO={isMMOEvent}
+                currentUserId={currentUserId}
+                onSelfSlotClick={onSlotClick}
             />
         </div>
     );

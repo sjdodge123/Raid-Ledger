@@ -9,6 +9,7 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
+import { DepartureGraceService } from '../services/departure-grace.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { GameActivityService } from '../services/game-activity.service';
@@ -99,6 +100,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
+    private readonly departureGraceService: DepartureGraceService,
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly presenceDetector: PresenceGameDetectorService,
     private readonly gameActivityService: GameActivityService,
@@ -403,6 +405,11 @@ export class VoiceStateListener implements OnApplicationShutdown {
             discordMember.discordUsername,
             rlUser?.id ?? null,
             discordMember.discordAvatarHash,
+          );
+          // ROK-596: Handle departure grace rejoin (cancel timer or priority rejoin)
+          await this.departureGraceService.onMemberRejoin(
+            eventId,
+            discordMember.discordUserId,
           );
           // ROK-530: Emit live roster update via WebSocket
           const roster = this.voiceAttendanceService.getActiveRoster(eventId);
@@ -777,6 +784,8 @@ export class VoiceStateListener implements OnApplicationShutdown {
         await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
       for (const { eventId } of activeScheduledEvents) {
         this.voiceAttendanceService.handleLeave(eventId, discordUserId);
+        // ROK-596: Start departure grace timer for scheduled events
+        await this.departureGraceService.onMemberLeave(eventId, discordUserId);
         // ROK-530: Emit live roster update via WebSocket
         const roster = this.voiceAttendanceService.getActiveRoster(eventId);
         this.adHocEventsGateway.emitRosterUpdate(

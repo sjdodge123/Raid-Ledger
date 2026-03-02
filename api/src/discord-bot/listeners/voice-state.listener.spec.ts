@@ -8,6 +8,7 @@ import { PresenceGameDetectorService } from '../services/presence-game-detector.
 import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { DepartureGraceService } from '../services/departure-grace.service';
 import { Events, Collection } from 'discord.js';
 
 /** Create a discord.js-compatible Collection from entries */
@@ -100,6 +101,13 @@ describe('VoiceStateListener', () => {
               activeCount: 0,
             }),
             recoverActiveSessions: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: DepartureGraceService,
+          useValue: {
+            onMemberLeave: jest.fn().mockResolvedValue(undefined),
+            onMemberRejoin: jest.fn().mockResolvedValue(undefined),
           },
         },
         {

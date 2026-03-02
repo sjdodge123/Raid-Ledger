@@ -164,10 +164,12 @@ export class AttendanceService {
       const isAnonymous = !row.event_signups.userId;
       const isRoachedOut = row.event_signups.status === 'roached_out';
       const isDeclined = row.event_signups.status === 'declined';
+      const isDeparted = row.event_signups.status === 'departed';
 
-      // Cancelled signups: auto-classify based on status/timing if not manually overridden
+      // Cancelled/departed signups: auto-classify based on status/timing if not manually overridden
       // ROK-562: 'declined' signups are inherently excused (declined ≥23h before event)
       // 'roached_out': AC#8 <24h → no_show | AC#9 ≥24h → excused
+      // ROK-596: 'departed' signups left mid-event — classify as early_leaver equivalent
       let resolvedAttendance: AttendanceStatus | null =
         (row.event_signups.attendanceStatus as AttendanceStatus) ?? null;
 
@@ -183,6 +185,10 @@ export class AttendanceService {
           // No timestamp available (legacy data) — default to excused
           resolvedAttendance = 'excused';
         }
+      } else if (isDeparted && !resolvedAttendance) {
+        // ROK-596: Departed mid-event — voice classification will be more accurate,
+        // but default to 'attended' since they were present for part of the event
+        resolvedAttendance = 'attended';
       }
 
       if (isAnonymous) {

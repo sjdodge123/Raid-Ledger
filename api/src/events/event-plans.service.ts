@@ -631,8 +631,7 @@ export class EventPlansService {
       }),
     }));
     // Drafts never had a successful poll, so keep round at 1
-    const newRound =
-      plan.status === 'draft' ? 1 : (plan.pollRound ?? 1) + 1;
+    const newRound = plan.status === 'draft' ? 1 : (plan.pollRound ?? 1) + 1;
 
     // Resolve channel (may have changed since original creation)
     const channelId =

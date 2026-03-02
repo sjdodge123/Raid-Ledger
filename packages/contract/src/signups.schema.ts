@@ -8,8 +8,8 @@ import { z } from 'zod';
 export const ConfirmationStatusSchema = z.enum(['pending', 'confirmed', 'changed']);
 export type ConfirmationStatus = z.infer<typeof ConfirmationStatusSchema>;
 
-/** Signup status for attendance intent (ROK-137, ROK-421) */
-export const SignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined', 'roached_out']);
+/** Signup status for attendance intent (ROK-137, ROK-421, ROK-596) */
+export const SignupStatusSchema = z.enum(['signed_up', 'tentative', 'declined', 'roached_out', 'departed']);
 export type SignupStatus = z.infer<typeof SignupStatusSchema>;
 
 /** Post-event attendance status recorded by organizer (ROK-421) */

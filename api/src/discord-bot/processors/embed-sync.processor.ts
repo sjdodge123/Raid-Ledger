@@ -213,7 +213,10 @@ export class EmbedSyncProcessor extends WorkerHost {
       .where(eq(schema.eventSignups.eventId, event.id));
 
     const activeSignups = signupRows.filter(
-      (r) => r.status !== 'declined' && r.status !== 'roached_out',
+      (r) =>
+        r.status !== 'declined' &&
+        r.status !== 'roached_out' &&
+        r.status !== 'departed',
     );
     const signupCount = activeSignups.length;
 

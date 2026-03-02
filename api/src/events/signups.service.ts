@@ -162,8 +162,8 @@ export class SignupsService {
           )
           .limit(1);
 
-        // ROK-421/ROK-562: Reactivate cancelled signup (re-signup after cancel/decline)
-        if (existing.status === 'roached_out' || existing.status === 'declined') {
+        // ROK-421/ROK-562/ROK-596: Reactivate cancelled/departed signup (re-signup after cancel/decline/depart)
+        if (existing.status === 'roached_out' || existing.status === 'declined' || existing.status === 'departed') {
           const reactivated = hasCharacter ? 'confirmed' : 'pending';
           await tx
             .update(schema.eventSignups)
@@ -189,7 +189,7 @@ export class SignupsService {
         }
 
         // ROK-452: Update preferred roles on existing signup if provided
-        if (existing.status !== 'roached_out' && existing.status !== 'declined' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
+        if (existing.status !== 'roached_out' && existing.status !== 'declined' && existing.status !== 'departed' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
           await tx
             .update(schema.eventSignups)
             .set({ preferredRoles: dto.preferredRoles })
@@ -212,7 +212,8 @@ export class SignupsService {
             existing.preferredRoles && existing.preferredRoles.length > 0;
           const hasSingleSlotRoleDup = !hasPreferredRolesDup && dto?.slotRole && !autoBench;
 
-          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench) {
+          // ROK-596: Bench is always a direct assignment — skip auto-allocation
+          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench && dto?.slotRole !== 'bench') {
             if (hasSingleSlotRoleDup && dto?.slotRole) {
               await tx
                 .update(schema.eventSignups)
@@ -308,7 +309,8 @@ export class SignupsService {
         dto?.preferredRoles && dto.preferredRoles.length > 0;
       const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
 
-      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench) {
+      // ROK-596: Bench is always a direct assignment — skip auto-allocation
+      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench && dto?.slotRole !== 'bench') {
         // Ensure the signup has preferred roles stored for the algorithm
         if (hasSingleSlotRole && dto?.slotRole) {
           await tx
@@ -379,6 +381,18 @@ export class SignupsService {
             );
           }
         }
+      }
+
+      // Auto-confirm creator signups — creator is confirmed by definition
+      if (
+        event[0].creatorId === userId &&
+        inserted.confirmationStatus !== 'confirmed'
+      ) {
+        await tx
+          .update(schema.eventSignups)
+          .set({ confirmationStatus: 'confirmed' })
+          .where(eq(schema.eventSignups.id, inserted.id));
+        inserted.confirmationStatus = 'confirmed';
       }
 
       return { isDuplicate: false as const, signup: inserted };
@@ -723,6 +737,7 @@ export class SignupsService {
           eq(schema.eventSignups.discordUserId, discordUserId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .limit(1);
@@ -899,7 +914,7 @@ export class SignupsService {
    * @throws NotFoundException if signup doesn't exist
    */
   async cancel(eventId: number, userId: number): Promise<void> {
-    // Find the signup first to get its ID (exclude already cancelled statuses)
+    // Find the signup first to get its ID (exclude already cancelled/departed statuses)
     let [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -909,6 +924,7 @@ export class SignupsService {
           eq(schema.eventSignups.userId, userId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .limit(1);
@@ -932,6 +948,7 @@ export class SignupsService {
               eq(schema.eventSignups.discordUserId, user.discordId),
               ne(schema.eventSignups.status, 'roached_out'),
               ne(schema.eventSignups.status, 'declined'),
+              ne(schema.eventSignups.status, 'departed'),
             ),
           )
           .limit(1);
@@ -1083,6 +1100,7 @@ export class SignupsService {
     }
 
     // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted)
+    // ROK-596: Include departed signups so frontend can display them in the Departed section
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1665,6 +1683,7 @@ export class SignupsService {
     }
 
     // Get all signups with user and character data (exclude soft-deleted statuses)
+    // ROK-596: Include departed signups so frontend can display them in the Departed section
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1976,6 +1995,128 @@ export class SignupsService {
         },
       });
     }
+  }
+
+  /**
+   * ROK-596: Promote a bench player using the role calculation engine.
+   * Removes the bench assignment and runs autoAllocateSignup to find the
+   * optimal slot (including chain rearrangements).
+   *
+   * @returns Object with the resulting role/position and any warnings, or null if promotion failed.
+   */
+  async promoteFromBench(
+    eventId: number,
+    signupId: number,
+  ): Promise<{
+    role: string;
+    position: number;
+    username: string;
+    chainMoves?: string[];
+    warning?: string;
+  } | null> {
+    return this.db.transaction(async (tx) => {
+      // 1. Get the event's slot config
+      const [event] = await tx
+        .select({ slotConfig: schema.events.slotConfig })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (!event?.slotConfig) return null;
+
+      const slotConfig = event.slotConfig as Record<string, unknown>;
+      if (slotConfig.type !== 'mmo') {
+        // Generic games don't use role calculation — direct assign to first open slot
+        return null;
+      }
+
+      // 2. Get the signup's preferred roles and username
+      const [signup] = await tx
+        .select({
+          preferredRoles: schema.eventSignups.preferredRoles,
+          userId: schema.eventSignups.userId,
+        })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.id, signupId))
+        .limit(1);
+
+      if (!signup) return null;
+
+      let username = 'Bench player';
+      if (signup.userId) {
+        const [user] = await tx
+          .select({ username: schema.users.username })
+          .from(schema.users)
+          .where(eq(schema.users.id, signup.userId))
+          .limit(1);
+        if (user) username = user.username;
+      }
+
+      // 3. Delete the bench assignment
+      await tx
+        .delete(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.signupId, signupId),
+            eq(schema.rosterAssignments.role, 'bench'),
+          ),
+        );
+
+      // 4. Run the role calculation engine
+      await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
+
+      // 5. Check where they ended up
+      const [newAssignment] = await tx
+        .select({
+          role: schema.rosterAssignments.role,
+          position: schema.rosterAssignments.position,
+        })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.signupId, signupId),
+          ),
+        )
+        .limit(1);
+
+      if (!newAssignment || newAssignment.role === 'bench') {
+        // Allocation failed — put them back on bench
+        if (!newAssignment) {
+          await tx.insert(schema.rosterAssignments).values({
+            eventId,
+            signupId,
+            role: 'bench',
+            position: 1,
+          });
+        }
+        return {
+          role: 'bench',
+          position: 1,
+          username,
+          warning: `Could not find a suitable roster slot for ${username} based on their preferred roles.`,
+        };
+      }
+
+      // 6. Check if assigned role matches preferences
+      const prefs = (signup.preferredRoles as string[]) ?? [];
+      let warning: string | undefined;
+      if (
+        prefs.length > 0 &&
+        newAssignment.role &&
+        !prefs.includes(newAssignment.role)
+      ) {
+        warning = `${username} was placed in **${newAssignment.role}** which is not in their preferred roles (${prefs.join(', ')}).`;
+      }
+
+      return {
+        role: newAssignment.role ?? 'bench',
+        position: newAssignment.position,
+        username,
+        warning,
+      };
+    });
   }
 
   /**

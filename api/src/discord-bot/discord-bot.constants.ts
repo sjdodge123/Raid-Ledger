@@ -133,6 +133,15 @@ export const ROACH_OUT_BUTTON_IDS = {
   CANCEL: 'event_roachout_cancel',
 } as const;
 
+/**
+ * Custom IDs for departure promote/dismiss interaction buttons (ROK-596).
+ * Format: `{action}:{eventId}:{role}:{position}` — e.g. `depart_promote:42:tank:1`
+ */
+export const DEPARTURE_PROMOTE_BUTTON_IDS = {
+  PROMOTE: 'depart_promote',
+  DISMISS: 'depart_dismiss',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

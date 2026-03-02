@@ -388,6 +388,12 @@ export function EventDetailPage() {
     const handleSlotClick = (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
 
+        // ROK-596: Bench clicks skip character selection — direct assignment
+        if (role === 'bench') {
+            doSignup({ slotRole: 'bench', slotPosition: position });
+            return;
+        }
+
         // ROK-600: Only show character modal for MMO games or games where user has characters
         if (shouldShowCharacterModal) {
             // Pre-select role if it's an MMO role (tank/healer/dps)
@@ -430,8 +436,9 @@ export function EventDetailPage() {
     // Group signups by status for roster display, sorted alphabetically (ROK-300)
     const alphabetical = (a: { user: { username: string } }, b: { user: { username: string } }) =>
         a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
-    // Filter out declined signups from display
-    const activeSignups = roster?.signups.filter(s => s.status !== 'declined') || [];
+    // Filter out declined and departed signups from active display
+    const activeSignups = roster?.signups.filter(s => s.status !== 'declined' && s.status !== 'departed') || [];
+    const departedSignups = roster?.signups.filter(s => s.status === 'departed').sort(alphabetical) || [];
     // ROK-459: Separate tentative players from confirmed
     const tentativeSignups = activeSignups.filter(s => s.status === 'tentative').sort(alphabetical);
     const nonTentative = activeSignups.filter(s => s.status !== 'tentative');
@@ -902,6 +909,34 @@ export function EventDetailPage() {
                                             size="md"
                                         />
                                     )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {departedSignups.length > 0 && (
+                    <div className="event-detail-roster__group">
+                        <h3><span role="img" aria-hidden="true">🚪</span> Departed ({departedSignups.length})</h3>
+                        <div className="event-detail-roster__list">
+                            {departedSignups.map(signup => (
+                                <div key={signup.id} className="event-detail-roster__item flex items-center gap-2 opacity-50">
+                                    {signup.isAnonymous ? (
+                                        <span className="flex items-center gap-1.5 text-sm text-muted">
+                                            <span>{signup.discordUsername ?? signup.user.username}</span>
+                                            <span className="text-xs text-indigo-400/70 bg-indigo-500/10 px-1.5 py-0.5 rounded">via Discord</span>
+                                        </span>
+                                    ) : (
+                                        <UserLink
+                                            userId={signup.user.id}
+                                            username={signup.user.username}
+                                            user={toAvatarUser(signup.user)}
+                                            gameId={event.game?.id ?? undefined}
+                                            showAvatar
+                                            size="md"
+                                        />
+                                    )}
+                                    <span className="text-xs text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded">departed</span>
                                 </div>
                             ))}
                         </div>
