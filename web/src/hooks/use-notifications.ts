@@ -28,6 +28,7 @@ export type NotificationType =
     | 'event_cancelled'
     | 'roster_reassigned'
     | 'tentative_displaced'
+    | 'member_returned'
     | 'system';
 
 export type Channel = 'inApp' | 'push' | 'discord';

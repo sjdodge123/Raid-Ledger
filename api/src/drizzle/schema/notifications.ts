@@ -35,6 +35,7 @@ export const notifications = pgTable(
         'event_cancelled',
         'roster_reassigned',
         'tentative_displaced',
+        'member_returned',
         'system',
       ],
     }).notNull(),

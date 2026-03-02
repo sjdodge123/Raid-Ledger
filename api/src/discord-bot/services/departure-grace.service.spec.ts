@@ -433,7 +433,7 @@ describe('DepartureGraceService', () => {
         expect(mockNotificationService.create).toHaveBeenCalledWith(
           expect.objectContaining({
             userId: 99,
-            type: 'slot_vacated',
+            type: 'member_returned',
             title: 'Member Returned',
           }),
         );

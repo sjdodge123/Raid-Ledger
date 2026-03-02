@@ -52,6 +52,7 @@ export function NotificationItem({
     const getIcon = () => {
         switch (notification.type) {
             case 'slot_vacated':
+            case 'member_returned':
                 return (
                     <svg
                         className="w-5 h-5"
