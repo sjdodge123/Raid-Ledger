@@ -592,9 +592,13 @@ export class EventPlansService {
       );
     }
 
-    if (plan.status !== 'cancelled' && plan.status !== 'expired') {
+    if (
+      plan.status !== 'cancelled' &&
+      plan.status !== 'expired' &&
+      plan.status !== 'draft'
+    ) {
       throw new BadRequestException(
-        `Can only restart plans with status "cancelled" or "expired", got "${plan.status}"`,
+        `Can only restart plans with status "cancelled", "expired", or "draft", got "${plan.status}"`,
       );
     }
 
@@ -626,7 +630,9 @@ export class EventPlansService {
         timeZoneName: 'short',
       }),
     }));
-    const newRound = (plan.pollRound ?? 1) + 1;
+    // Drafts never had a successful poll, so keep round at 1
+    const newRound =
+      plan.status === 'draft' ? 1 : (plan.pollRound ?? 1) + 1;
 
     // Resolve channel (may have changed since original creation)
     const channelId =
