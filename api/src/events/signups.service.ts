@@ -9,7 +9,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { eq, and, or, sql, isNull, ne } from 'drizzle-orm';
+import { eq, and, or, sql, isNull, ne, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -1577,6 +1577,20 @@ export class SignupsService {
       });
 
       await this.db.insert(schema.rosterAssignments).values(assignmentValues);
+
+      // Confirm pending signups placed in non-bench slots (mirrors ROK-598 auto-slot logic)
+      const nonBenchSignupIds = dto.assignments
+        .filter((a) => a.slot && a.slot !== 'bench')
+        .map((a) => signupByUserId.get(a.userId)!)
+        .filter((s) => s.confirmationStatus === 'pending')
+        .map((s) => s.id);
+
+      if (nonBenchSignupIds.length > 0) {
+        await this.db
+          .update(schema.eventSignups)
+          .set({ confirmationStatus: 'confirmed' })
+          .where(inArray(schema.eventSignups.id, nonBenchSignupIds));
+      }
 
       // ROK-229: Cancel pending bench promotions for any non-bench slots that are now filled
       for (const a of dto.assignments) {
