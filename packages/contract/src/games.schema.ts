@@ -40,7 +40,7 @@ export const GameDetailSchema = z.object({
     platforms: z.array(z.number()).default([]),
     screenshots: z.array(z.string()).default([]),
     videos: z.array(z.object({
-        name: z.string(),
+        name: z.string().optional(),
         videoId: z.string(),
     })).default([]),
     firstReleaseDate: z.string().nullable(),
