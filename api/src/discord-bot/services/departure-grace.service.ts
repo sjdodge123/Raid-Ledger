@@ -177,13 +177,28 @@ export class DepartureGraceService {
   }
 
   /**
-   * Attempt to reassign a returning member to a roster slot.
+   * Attempt to reassign a returning member from bench back to a roster slot.
    * Does NOT displace anyone who was promoted or assigned after departure.
+   * If no slot available, they stay on bench.
    */
   private async tryRosterReassignment(
     eventId: number,
     signupId: number,
   ): Promise<{ role: string; position: number } | null> {
+    // Find the member's current bench assignment
+    const [benchAssignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.signupId, signupId),
+          eq(schema.rosterAssignments.role, 'bench'),
+        ),
+      )
+      .limit(1);
+
+    if (!benchAssignment) return null;
+
     // Get the event's slot config to understand what slots exist
     const [event] = await this.db
       .select({ slotConfig: schema.events.slotConfig })
@@ -193,14 +208,16 @@ export class DepartureGraceService {
 
     if (!event) return null;
 
-    // Get all current roster assignments for this event
+    // Get all current roster assignments for this event (excluding this member's bench slot)
     const currentAssignments = await this.db
       .select()
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId));
 
     const occupiedSlots = new Set(
-      currentAssignments.map((a) => `${a.role}:${a.position}`),
+      currentAssignments
+        .filter((a) => a.id !== benchAssignment.id)
+        .map((a) => `${a.role}:${a.position}`),
     );
 
     // Parse slot config to find available slots
@@ -240,17 +257,17 @@ export class DepartureGraceService {
     }
 
     if (availableSlot) {
-      await this.db.insert(schema.rosterAssignments).values({
-        eventId,
-        signupId,
-        role: availableSlot.role,
-        position: availableSlot.position,
-      });
+      // Move from bench back to the available slot
+      await this.db
+        .update(schema.rosterAssignments)
+        .set({ role: availableSlot.role, position: availableSlot.position })
+        .where(eq(schema.rosterAssignments.id, benchAssignment.id));
 
       this.logger.debug(
-        `Reassigned signup ${signupId} to slot ${availableSlot.role}:${availableSlot.position} for event ${eventId}`,
+        `Reassigned signup ${signupId} from bench to ${availableSlot.role}:${availableSlot.position} for event ${eventId}`,
       );
     }
+    // If no slot available, they stay on bench — no action needed
 
     return availableSlot;
   }

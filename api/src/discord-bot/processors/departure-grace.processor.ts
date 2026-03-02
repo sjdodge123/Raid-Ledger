@@ -113,20 +113,34 @@ export class DepartureGraceProcessor extends WorkerHost {
       .set({ status: 'departed' })
       .where(eq(schema.eventSignups.id, signupId));
 
-    // 5. Find and delete the user's roster assignment (capture role/position)
+    // 5. Move the user's roster assignment to bench (free their slot visually)
     const [assignment] = await this.db
       .select()
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.signupId, signupId))
       .limit(1);
 
-    if (assignment) {
+    if (assignment && assignment.role !== 'bench') {
+      // Find next available bench position
+      const benchSlots = await this.db
+        .select({ position: schema.rosterAssignments.position })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.role, 'bench'),
+          ),
+        );
+      const nextBenchPos =
+        benchSlots.reduce((max, r) => Math.max(max, r.position), 0) + 1;
+
       await this.db
-        .delete(schema.rosterAssignments)
+        .update(schema.rosterAssignments)
+        .set({ role: 'bench', position: nextBenchPos })
         .where(eq(schema.rosterAssignments.id, assignment.id));
 
       this.logger.log(
-        `Freed roster slot ${assignment.role}:${assignment.position} for event ${eventId} (user ${discordUserId} departed)`,
+        `Moved user ${discordUserId} from ${assignment.role}:${assignment.position} to bench:${nextBenchPos} for event ${eventId} (departed)`,
       );
     }
 

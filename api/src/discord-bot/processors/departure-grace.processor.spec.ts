@@ -270,25 +270,48 @@ describe('DepartureGraceProcessor', () => {
   // ─── Roster slot freeing ──────────────────────────────────────────────────
 
   describe('roster slot freeing', () => {
-    it('deletes the roster assignment when one exists', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+    /**
+     * Helper: set up mock chain for the full departure flow with a roster assignment.
+     * The processor queries: event(.limit), signup(.limit), update-status(.where),
+     * assignment(.limit), bench-slots(.where), update-assignment(.where).
+     * The bench-slots query terminates at .where() (no .limit), so we override
+     * .where on the 5th call to resolve to an array.
+     */
+    function setupRosterMocks(assignment: Record<string, unknown>) {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([activeSignup])
-        .mockResolvedValueOnce([assignment]); // roster assignment found
+        .mockResolvedValueOnce([assignment]);
+
+      // .where calls: 1=event, 2=signup, 3=update-status, 4=assignment, 5=bench-slots(terminal), 6=update-assignment
+      let whereCallCount = 0;
+      const originalWhere = mockDb.where;
+      mockDb.where = jest.fn().mockImplementation(function (this: unknown) {
+        whereCallCount++;
+        if (whereCallCount === 5) {
+          // bench slots query — terminal, resolve to empty array
+          return Promise.resolve([]);
+        }
+        return originalWhere.call(this);
+      });
+    }
+
+    it('moves the roster assignment to bench when one exists', async () => {
+      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      setupRosterMocks(assignment);
 
       await processor.process(makeJob(jobData));
 
-      expect(mockDb.delete).toHaveBeenCalled();
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'bench', position: 1 }),
+      );
     });
 
     it('triggers bench promotion for non-bench slots when eligible', async () => {
       const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
       mockBenchPromotionService.isEligible.mockResolvedValue(true);
-      mockDb.limit
-        .mockResolvedValueOnce([liveEvent])
-        .mockResolvedValueOnce([activeSignup])
-        .mockResolvedValueOnce([assignment]);
+      setupRosterMocks(assignment);
 
       await processor.process(makeJob(jobData));
 
@@ -312,17 +335,39 @@ describe('DepartureGraceProcessor', () => {
       expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
     });
 
-    it('does NOT trigger bench promotion when not eligible (bench full)', async () => {
+    it('does NOT trigger bench promotion when not eligible', async () => {
       const assignment = { id: 57, role: 'healer', position: 1, signupId: 10, eventId: 1 };
       mockBenchPromotionService.isEligible.mockResolvedValue(false);
+      setupRosterMocks(assignment);
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
+    });
+
+    it('places departed user at next bench position after existing bench members', async () => {
+      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([activeSignup])
         .mockResolvedValueOnce([assignment]);
 
+      let whereCallCount = 0;
+      const originalWhere = mockDb.where;
+      mockDb.where = jest.fn().mockImplementation(function (this: unknown) {
+        whereCallCount++;
+        if (whereCallCount === 5) {
+          // Existing bench members at positions 1 and 2
+          return Promise.resolve([{ position: 1 }, { position: 2 }]);
+        }
+        return originalWhere.call(this);
+      });
+
       await processor.process(makeJob(jobData));
 
-      expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'bench', position: 3 }),
+      );
     });
   });
 

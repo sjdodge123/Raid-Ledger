@@ -363,6 +363,8 @@ describe('DepartureGraceService', () => {
     });
 
     describe('when member WAS departed (priority rejoin)', () => {
+      const benchAssignment = { id: 77, role: 'bench', position: 1, signupId: departedSignup.id, eventId: EVENT_ID };
+
       function setupPriorityRejoin(eventOverrides = {}) {
         const event = createMockEvent({
           id: EVENT_ID,
@@ -374,9 +376,10 @@ describe('DepartureGraceService', () => {
 
         // findSignupByStatus: departed signup found directly
         mockDb._limitResults.push(
-          [departedSignup], // departed direct match
-          [event],          // tryRosterReassignment: event select
-          [event],          // handlePriorityRejoin: event for notification
+          [departedSignup],    // departed direct match
+          [benchAssignment],   // tryRosterReassignment: bench assignment lookup
+          [event],             // tryRosterReassignment: event select
+          [event],             // handlePriorityRejoin: event for notification
         );
         // rosterAssignments select terminates at .where()
         mockDb._whereResults.push([]);
@@ -446,6 +449,8 @@ describe('DepartureGraceService', () => {
   // ─── priority rejoin: roster reassignment ─────────────────────────────────
 
   describe('priority rejoin: roster reassignment', () => {
+    const benchAssignment = { id: 77, role: 'bench', position: 1, signupId: departedSignup.id, eventId: EVENT_ID };
+
     function setupWithSlotConfig(slotConfig: unknown, existingAssignments: unknown[]) {
       const event = createMockEvent({
         id: EVENT_ID,
@@ -455,9 +460,10 @@ describe('DepartureGraceService', () => {
       });
 
       mockDb._limitResults.push(
-        [departedSignup], // departed signup found
-        [event],          // tryRosterReassignment event select
-        [event],          // handlePriorityRejoin event for notification
+        [departedSignup],    // departed signup found
+        [benchAssignment],   // tryRosterReassignment: bench assignment lookup
+        [event],             // tryRosterReassignment: event select
+        [event],             // handlePriorityRejoin: event for notification
       );
       mockDb._whereResults.push(existingAssignments);
 
@@ -481,18 +487,17 @@ describe('DepartureGraceService', () => {
           { role: 'healer', count: 1 },
         ],
       };
-      // All slots occupied
+      // All slots occupied (excluding bench assignment)
       const existingAssignments = [
         { id: 1, role: 'tank', position: 1, signupId: 99 },
         { id: 2, role: 'healer', position: 1, signupId: 100 },
+        benchAssignment,
       ];
       setupWithSlotConfig(mmoSlotConfig, existingAssignments);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-      // No new insert — no slot available
-      expect(mockDb.insert).not.toHaveBeenCalled();
-      // Notification says bench/unassigned
+      // Stays on bench — notification says bench/unassigned
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining('bench/unassigned'),
@@ -500,7 +505,7 @@ describe('DepartureGraceService', () => {
       );
     });
 
-    it('assigns to first available MMO role slot when one is free', async () => {
+    it('moves from bench to first available MMO role slot when one is free', async () => {
       const mmoSlotConfig = {
         type: 'mmo',
         roles: [
@@ -511,49 +516,41 @@ describe('DepartureGraceService', () => {
       // tank:1 occupied, tank:2 is free
       const existingAssignments = [
         { id: 1, role: 'tank', position: 1, signupId: 99 },
+        benchAssignment,
       ];
       setupWithSlotConfig(mmoSlotConfig, existingAssignments);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          eventId: EVENT_ID,
-          signupId: departedSignup.id,
-          role: 'tank',
-          position: 2,
-        }),
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'tank', position: 2 }),
       );
     });
 
-    it('assigns to first available generic player slot for non-MMO events', async () => {
+    it('moves from bench to first available generic player slot for non-MMO events', async () => {
       const genericSlotConfig = { maxPlayers: 3 };
       // player:1 occupied, player:2 is free
       const existingAssignments = [
         { id: 1, role: 'player', position: 1, signupId: 99 },
+        benchAssignment,
       ];
       setupWithSlotConfig(genericSlotConfig, existingAssignments);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({
-          role: 'player',
-          position: 2,
-        }),
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ role: 'player', position: 2 }),
       );
     });
 
-    it('places member as bench/unassigned when event has no slot config', async () => {
-      setupWithSlotConfig(null, []);
+    it('stays on bench when event has no slot config', async () => {
+      setupWithSlotConfig(null, [benchAssignment]);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-      // No slot assignment made (slotConfig is null → maxPlayers is 0)
-      expect(mockDb.insert).not.toHaveBeenCalled();
-      // Status still reset
+      // Status still reset to signed_up
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -567,7 +564,7 @@ describe('DepartureGraceService', () => {
         type: 'mmo',
         roles: [{ role: 'healer', count: 1 }],
       };
-      setupWithSlotConfig(mmoSlotConfig, []); // all slots free
+      setupWithSlotConfig(mmoSlotConfig, [benchAssignment]); // healer:1 free
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
@@ -579,7 +576,7 @@ describe('DepartureGraceService', () => {
     });
 
     it('includes eventId in notification payload', async () => {
-      setupWithSlotConfig(null, []);
+      setupWithSlotConfig(null, [benchAssignment]);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
@@ -590,18 +587,18 @@ describe('DepartureGraceService', () => {
       );
     });
 
-    it('prefers original departed member over bench player — first free slot wins', async () => {
+    it('moves from bench to first free slot — does not skip available slots', async () => {
       // Only one dps slot, currently empty — returning member gets it
       const mmoSlotConfig = {
         type: 'mmo',
         roles: [{ role: 'dps', count: 1 }],
       };
-      setupWithSlotConfig(mmoSlotConfig, []);
+      setupWithSlotConfig(mmoSlotConfig, [benchAssignment]);
 
       await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-      expect(mockDb.insert).toHaveBeenCalled();
-      expect(mockDb.values).toHaveBeenCalledWith(
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'dps', position: 1 }),
       );
     });
