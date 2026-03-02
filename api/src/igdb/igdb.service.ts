@@ -738,11 +738,24 @@ export class IgdbService {
   private async fetchWithRetry(
     query: string,
     attempt = 1,
+    retriedAuth = false,
   ): Promise<IgdbApiGame[]> {
     try {
       return await this.fetchFromIgdb(query);
     } catch (error: unknown) {
-      const is429 = error instanceof Error && error.message.includes('429');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const is429 = errorMsg.includes('429');
+      const is401 = errorMsg.includes('401');
+
+      // On 401 (expired/revoked token), clear cached token and retry once
+      if (is401 && !retriedAuth) {
+        this.logger.warn(
+          'IGDB 401 Unauthorized — clearing cached token and retrying',
+        );
+        this.accessToken = null;
+        this.tokenExpiry = null;
+        return this.fetchWithRetry(query, attempt, true);
+      }
 
       if (is429 && attempt < IGDB_CONFIG.MAX_RETRIES) {
         const delay = Math.pow(2, attempt - 1) * IGDB_CONFIG.BASE_RETRY_DELAY;
@@ -750,7 +763,7 @@ export class IgdbService {
           `IGDB 429 rate limit, retrying in ${delay}ms (attempt ${attempt}/${IGDB_CONFIG.MAX_RETRIES})`,
         );
         await this.delay(delay);
-        return this.fetchWithRetry(query, attempt + 1);
+        return this.fetchWithRetry(query, attempt + 1, retriedAuth);
       }
 
       // Log final failure
