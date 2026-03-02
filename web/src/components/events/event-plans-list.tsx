@@ -227,12 +227,15 @@ function PlanCard({
     };
 
     const handleRestart = () => {
-        if (window.confirm(`Restart the poll for "${plan.title}"? A new Discord poll will be posted.`)) {
+        const message = plan.status === 'draft'
+            ? `Publish "${plan.title}"? A Discord poll will be posted.`
+            : `Restart the poll for "${plan.title}"? A new Discord poll will be posted.`;
+        if (window.confirm(message)) {
             onRestart(plan.id);
         }
     };
 
-    const canRestart = plan.status === 'cancelled' || plan.status === 'expired';
+    const canRestart = plan.status === 'cancelled' || plan.status === 'expired' || plan.status === 'draft';
 
     return (
         <div className="bg-panel border border-edge rounded-xl p-5 space-y-3">
@@ -331,7 +334,11 @@ function PlanCard({
                             disabled={isRestarting}
                             className="px-4 py-2 text-sm font-medium text-violet-400 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/30 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {isRestarting ? 'Restarting...' : 'Restart Poll'}
+                            {isRestarting
+                                ? 'Publishing...'
+                                : plan.status === 'draft'
+                                  ? 'Publish'
+                                  : 'Restart Poll'}
                         </button>
                     )}
                 </div>
