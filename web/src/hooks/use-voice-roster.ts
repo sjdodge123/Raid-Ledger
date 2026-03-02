@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
-import type { AdHocParticipantDto } from '@raid-ledger/contract';
+import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -39,6 +40,7 @@ async function fetchInitialRoster(
  * updates for a specific event. Automatically reconnects and cleans up on unmount.
  */
 export function useVoiceRoster(eventId: number | null): VoiceRosterState {
+  const queryClient = useQueryClient();
   const socketRef = useRef<Socket | null>(null);
   const [state, setState] = useState<VoiceRosterState>({
     connected: false,
@@ -118,6 +120,13 @@ export function useVoiceRoster(eventId: number | null): VoiceRosterState {
       'event:endTimeExtended',
       (data: { eventId: number; newEndTime: string }) => {
         setState((prev) => ({ ...prev, endTime: data.newEndTime }));
+        // ROK-618: Also update the React Query cache so all components
+        // reading event.endTime (banner, GameTimeWidget, edit form) reflect
+        // the extended end time without a full refetch.
+        queryClient.setQueryData<EventResponseDto>(
+          ['events', data.eventId],
+          (old) => old ? { ...old, endTime: data.newEndTime } : old,
+        );
       },
     );
 
@@ -126,7 +135,7 @@ export function useVoiceRoster(eventId: number | null): VoiceRosterState {
       socket.disconnect();
       socketRef.current = null;
     };
-  }, [eventId]);
+  }, [eventId, queryClient]);
 
   return state;
 }
