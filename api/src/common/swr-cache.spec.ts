@@ -1,8 +1,4 @@
-import {
-  memorySwr,
-  redisSwr,
-  type MemoryCacheEntry,
-} from './swr-cache';
+import { memorySwr, redisSwr, type MemoryCacheEntry } from './swr-cache';
 
 // Helper to create a fresh in-flight map for each test (module-level map persists across tests)
 // We clear it by importing a fresh module in tests that need isolation.
@@ -10,9 +6,9 @@ import {
 describe('memorySwr', () => {
   let cache: Map<string, MemoryCacheEntry<string>>;
   let fetchCount: number;
-  const fetcher = jest.fn(async () => {
+  const fetcher = jest.fn(() => {
     fetchCount++;
-    return `value-${fetchCount}`;
+    return Promise.resolve(`value-${fetchCount}`);
   });
 
   beforeEach(() => {
@@ -120,9 +116,9 @@ describe('memorySwr', () => {
 describe('redisSwr', () => {
   let mockRedis: { get: jest.Mock; setex: jest.Mock };
   let fetchCount: number;
-  const fetcher = jest.fn(async () => {
+  const fetcher = jest.fn(() => {
     fetchCount++;
-    return { count: fetchCount };
+    return Promise.resolve({ count: fetchCount });
   });
 
   beforeEach(() => {
