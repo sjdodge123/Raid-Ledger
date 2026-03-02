@@ -277,12 +277,22 @@ export class LiveNoShowService {
     const absent: typeof signups = [];
 
     for (const signup of signups) {
-      if (!signup.discordUserId) continue; // No Discord ID — can't check voice
+      // Fall back to users.discordId when signup doesn't have a discordUserId
+      let discordUserId = signup.discordUserId;
+      if (!discordUserId && signup.userId) {
+        const [user] = await this.db
+          .select({ discordId: schema.users.discordId })
+          .from(schema.users)
+          .where(eq(schema.users.id, signup.userId))
+          .limit(1);
+        discordUserId = user?.discordId ?? null;
+      }
+      if (!discordUserId) continue; // No Discord ID anywhere — can't check voice
 
       // Check voice presence via in-memory sessions
       const hasPresence = this.voiceAttendance!.isUserActive(
         eventId,
-        signup.discordUserId,
+        discordUserId,
       );
       if (hasPresence) continue;
 
@@ -295,7 +305,7 @@ export class LiveNoShowService {
         .where(
           and(
             eq(schema.eventVoiceSessions.eventId, eventId),
-            eq(schema.eventVoiceSessions.discordUserId, signup.discordUserId),
+            eq(schema.eventVoiceSessions.discordUserId, discordUserId),
           ),
         )
         .limit(1);
@@ -307,7 +317,7 @@ export class LiveNoShowService {
         continue; // Has sufficient voice presence
       }
 
-      absent.push(signup);
+      absent.push({ ...signup, discordUserId });
     }
 
     return absent;

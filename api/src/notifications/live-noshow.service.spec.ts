@@ -297,7 +297,9 @@ describe('LiveNoShowService', () => {
               { userId: 10, discordUserId: null, discordUsername: null },
             ]),
           }),
-        });
+        })
+        // Fallback user lookup — user also has no discordId
+        .mockReturnValueOnce(makeSelectFromWhereLimit([{ discordId: null }]));
 
       await service.checkNoShows();
 
@@ -1334,7 +1336,9 @@ describe('LiveNoShowService', () => {
                 { userId: 10, discordUserId: null, discordUsername: null },
               ]),
           }),
-        });
+        })
+        // Fallback user lookup — user also has no discordId
+        .mockReturnValueOnce(makeSelectFromWhereLimit([{ discordId: null }]));
 
       await service.checkNoShows();
 
