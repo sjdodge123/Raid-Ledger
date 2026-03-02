@@ -29,12 +29,14 @@ export type ConfirmationStatus = 'pending' | 'confirmed' | 'changed';
  * - tentative: User might attend
  * - declined: User gracefully declined (≥23h before event start)
  * - roached_out: User cancelled late (<23h before event start)
+ * - departed: User left voice mid-event and grace period expired (ROK-596)
  */
 export type SignupStatus =
   | 'signed_up'
   | 'tentative'
   | 'declined'
-  | 'roached_out';
+  | 'roached_out'
+  | 'departed';
 
 /**
  * Event signups table for tracking user participation in events.

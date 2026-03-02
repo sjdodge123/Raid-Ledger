@@ -162,8 +162,8 @@ export class SignupsService {
           )
           .limit(1);
 
-        // ROK-421/ROK-562: Reactivate cancelled signup (re-signup after cancel/decline)
-        if (existing.status === 'roached_out' || existing.status === 'declined') {
+        // ROK-421/ROK-562/ROK-596: Reactivate cancelled/departed signup (re-signup after cancel/decline/depart)
+        if (existing.status === 'roached_out' || existing.status === 'declined' || existing.status === 'departed') {
           const reactivated = hasCharacter ? 'confirmed' : 'pending';
           await tx
             .update(schema.eventSignups)
@@ -189,7 +189,7 @@ export class SignupsService {
         }
 
         // ROK-452: Update preferred roles on existing signup if provided
-        if (existing.status !== 'roached_out' && existing.status !== 'declined' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
+        if (existing.status !== 'roached_out' && existing.status !== 'declined' && existing.status !== 'departed' && dto?.preferredRoles && dto.preferredRoles.length > 0) {
           await tx
             .update(schema.eventSignups)
             .set({ preferredRoles: dto.preferredRoles })
@@ -723,6 +723,7 @@ export class SignupsService {
           eq(schema.eventSignups.discordUserId, discordUserId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .limit(1);
@@ -899,7 +900,7 @@ export class SignupsService {
    * @throws NotFoundException if signup doesn't exist
    */
   async cancel(eventId: number, userId: number): Promise<void> {
-    // Find the signup first to get its ID (exclude already cancelled statuses)
+    // Find the signup first to get its ID (exclude already cancelled/departed statuses)
     let [signup] = await this.db
       .select()
       .from(schema.eventSignups)
@@ -909,6 +910,7 @@ export class SignupsService {
           eq(schema.eventSignups.userId, userId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .limit(1);
@@ -932,6 +934,7 @@ export class SignupsService {
               eq(schema.eventSignups.discordUserId, user.discordId),
               ne(schema.eventSignups.status, 'roached_out'),
               ne(schema.eventSignups.status, 'declined'),
+              ne(schema.eventSignups.status, 'departed'),
             ),
           )
           .limit(1);
@@ -1082,7 +1085,7 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted)
+    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted, ROK-596: exclude departed)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1096,6 +1099,7 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);
@@ -1664,7 +1668,7 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get all signups with user and character data (exclude soft-deleted statuses)
+    // Get all signups with user and character data (exclude soft-deleted statuses, ROK-596: exclude departed)
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1678,6 +1682,7 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);

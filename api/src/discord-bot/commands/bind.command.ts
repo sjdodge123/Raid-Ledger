@@ -385,7 +385,11 @@ export class BindCommand
       .where(
         and(
           eq(schema.eventSignups.eventId, eventId),
-          notInArray(schema.eventSignups.status, ['declined', 'roached_out']),
+          notInArray(schema.eventSignups.status, [
+            'declined',
+            'roached_out',
+            'departed',
+          ]),
         ),
       );
     const signupCount = signupResult?.count ?? 0;

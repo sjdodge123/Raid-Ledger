@@ -38,8 +38,14 @@ import {
   AdHocGracePeriodQueueService,
   AD_HOC_GRACE_QUEUE,
 } from './queues/ad-hoc-grace-period.queue';
+import {
+  DepartureGraceQueueService,
+  DEPARTURE_GRACE_QUEUE,
+} from './queues/departure-grace.queue';
 import { EmbedSyncProcessor } from './processors/embed-sync.processor';
 import { AdHocGracePeriodProcessor } from './processors/ad-hoc-grace-period.processor';
+import { DepartureGraceProcessor } from './processors/departure-grace.processor';
+import { DepartureGraceService } from './services/departure-grace.service';
 import { RegisterCommandsService } from './commands/register-commands';
 import { EventCreateCommand } from './commands/event-create.command';
 import { EventsListCommand } from './commands/events-list.command';
@@ -71,6 +77,7 @@ import { PlayingCommand } from './commands/playing.command';
     CronJobModule,
     BullModule.registerQueue({ name: EMBED_SYNC_QUEUE }),
     BullModule.registerQueue({ name: AD_HOC_GRACE_QUEUE }),
+    BullModule.registerQueue({ name: DEPARTURE_GRACE_QUEUE }),
   ],
   controllers: [
     DiscordBotSettingsController,
@@ -95,6 +102,9 @@ import { PlayingCommand } from './commands/playing.command';
     EmbedSyncProcessor,
     AdHocGracePeriodQueueService,
     AdHocGracePeriodProcessor,
+    DepartureGraceQueueService,
+    DepartureGraceProcessor,
+    DepartureGraceService,
     InteractionListener,
     SignupInteractionListener,
     RoachOutInteractionListener,

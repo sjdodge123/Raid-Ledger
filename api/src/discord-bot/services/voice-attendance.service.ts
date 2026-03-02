@@ -800,6 +800,15 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     return count;
   }
 
+  /**
+   * Check if a specific user is currently active in voice for a scheduled event (ROK-596).
+   */
+  isUserActive(eventId: number, discordUserId: string): boolean {
+    const key = `${eventId}:${discordUserId}`;
+    const session = this.sessions.get(key);
+    return session?.isActive ?? false;
+  }
+
   // ─── Private helpers ───────────────────────────────────────
 
   private async getGraceMinutes(): Promise<number> {

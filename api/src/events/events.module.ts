@@ -76,6 +76,7 @@ import { AdHocEventsGateway } from './ad-hoc-events.gateway';
     PugsService,
     InviteService,
     AdHocEventsGateway,
+    BenchPromotionService,
   ],
 })
 export class EventsModule {}

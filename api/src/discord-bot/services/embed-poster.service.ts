@@ -268,7 +268,10 @@ export class EmbedPosterService {
       .where(eq(schema.eventSignups.eventId, eventId));
 
     const activeSignups = signupRows.filter(
-      (r) => r.status !== 'declined' && r.status !== 'roached_out',
+      (r) =>
+        r.status !== 'declined' &&
+        r.status !== 'roached_out' &&
+        r.status !== 'departed',
     );
 
     const roleRows = await this.db
