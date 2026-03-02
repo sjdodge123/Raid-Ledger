@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/unbound-method */
 /**
  * Tests for ScheduledEventService.updateEndTime() — ROK-576.
  * Kept in a separate file to avoid growing scheduled-event.service.spec.ts further.
@@ -15,8 +14,16 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 /** Build a DiscordAPIError mock that satisfies `instanceof DiscordAPIError` checks. */
 function makeDiscordApiError(code: number, message = 'Discord API error') {
   const err = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
-  Object.defineProperty(err, 'code', { value: code, writable: true, configurable: true });
-  Object.defineProperty(err, 'message', { value: message, writable: true, configurable: true });
+  Object.defineProperty(err, 'code', {
+    value: code,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(err, 'message', {
+    value: message,
+    writable: true,
+    configurable: true,
+  });
   return err;
 }
 
@@ -79,7 +86,9 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
         {
           provide: ChannelResolverService,
           useValue: {
-            resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue('vc-1'),
+            resolveVoiceChannelForScheduledEvent: jest
+              .fn()
+              .mockResolvedValue('vc-1'),
           },
         },
         {
@@ -93,7 +102,9 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
           useValue: {
             executeWithTracking: jest
               .fn()
-              .mockImplementation((_name: string, fn: () => Promise<void>) => fn()),
+              .mockImplementation((_name: string, fn: () => Promise<void>) =>
+                fn(),
+              ),
           },
         },
       ],
@@ -128,14 +139,19 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
 
       await service.updateEndTime(42, newEndTime);
 
-      const editArg = mockGuild.scheduledEvents.edit.mock.calls[0][1] as Record<string, unknown>;
+      const editArg = mockGuild.scheduledEvents.edit.mock.calls[0][1] as Record<
+        string,
+        unknown
+      >;
       expect(editArg).not.toHaveProperty('name');
       expect(editArg).not.toHaveProperty('status');
       expect(editArg).not.toHaveProperty('description');
     });
 
     it('skips when bot is not connected', async () => {
-      const clientService = service['clientService'] as jest.Mocked<DiscordBotClientService>;
+      const clientService = service[
+        'clientService'
+      ] as jest.Mocked<DiscordBotClientService>;
       (clientService.isConnected as jest.Mock).mockReturnValue(false);
 
       await service.updateEndTime(42, new Date());
@@ -145,7 +161,9 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
     });
 
     it('skips when no guild is available', async () => {
-      const clientService = service['clientService'] as jest.Mocked<DiscordBotClientService>;
+      const clientService = service[
+        'clientService'
+      ] as jest.Mocked<DiscordBotClientService>;
       (clientService.getGuild as jest.Mock).mockReturnValue(null);
 
       await service.updateEndTime(42, new Date());
@@ -155,7 +173,9 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
     });
 
     it('skips when DB has no discordScheduledEventId for the event', async () => {
-      mockDb.select.mockReturnValue(createSelectChain([{ discordScheduledEventId: null }]));
+      mockDb.select.mockReturnValue(
+        createSelectChain([{ discordScheduledEventId: null }]),
+      );
 
       await service.updateEndTime(42, new Date());
 
@@ -177,21 +197,30 @@ describe('ScheduledEventService — updateEndTime (ROK-576)', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      const unknownError = makeDiscordApiError(10070, 'Unknown Scheduled Event');
+      const unknownError = makeDiscordApiError(
+        10070,
+        'Unknown Scheduled Event',
+      );
       mockGuild.scheduledEvents.edit.mockRejectedValue(unknownError);
 
       await service.updateEndTime(42, new Date());
 
-      expect(updateChain.set).toHaveBeenCalledWith({ discordScheduledEventId: null });
+      expect(updateChain.set).toHaveBeenCalledWith({
+        discordScheduledEventId: null,
+      });
     });
 
     it('does not propagate errors on other Discord API failures — logs and swallows', async () => {
       mockDb.select.mockReturnValue(
         createSelectChain([{ discordScheduledEventId: 'se-1' }]),
       );
-      mockGuild.scheduledEvents.edit.mockRejectedValue(new Error('Rate limited'));
+      mockGuild.scheduledEvents.edit.mockRejectedValue(
+        new Error('Rate limited'),
+      );
 
-      await expect(service.updateEndTime(42, new Date())).resolves.not.toThrow();
+      await expect(
+        service.updateEndTime(42, new Date()),
+      ).resolves.not.toThrow();
     });
 
     it('passes the exact newEndTime Date object to Discord', async () => {

@@ -18,6 +18,7 @@ import { UsersService } from '../../users/users.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { VoiceAttendanceService } from './voice-attendance.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -112,6 +113,14 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
             emitEndTimeExtended: jest.fn(),
           },
         },
+        {
+          provide: VoiceAttendanceService,
+          useValue: {
+            handleJoin: jest.fn(),
+            handleLeave: jest.fn(),
+            getActiveCount: jest.fn().mockReturnValue(0),
+          },
+        },
       ],
     }).compile();
 
@@ -124,7 +133,7 @@ describe('AdHocEventService — general lobby (ROK-515)', () => {
   });
 
   afterEach(() => {
-    service.onModuleDestroy();
+    jest.clearAllMocks();
   });
 
   // ─── Composite key construction ────────────────────────────────────────────

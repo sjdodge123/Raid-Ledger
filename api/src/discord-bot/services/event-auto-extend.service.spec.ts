@@ -17,10 +17,14 @@ function makeCandidate(overrides: {
   extendedUntil?: Date | null;
   discordScheduledEventId?: string | null;
 }) {
-  const originalEnd = overrides.originalEnd ?? new Date(Date.now() + 5 * 60 * 1000);
+  const originalEnd =
+    overrides.originalEnd ?? new Date(Date.now() + 5 * 60 * 1000);
   return {
     id: overrides.id ?? 42,
-    duration: [new Date(originalEnd.getTime() - 2 * 60 * 60 * 1000), originalEnd] as [Date, Date],
+    duration: [
+      new Date(originalEnd.getTime() - 2 * 60 * 60 * 1000),
+      originalEnd,
+    ] as [Date, Date],
     extendedUntil: overrides.extendedUntil ?? null,
     discordScheduledEventId: overrides.discordScheduledEventId ?? null,
   };
@@ -78,7 +82,9 @@ describe('EventAutoExtendService', () => {
           useValue: {
             getEventAutoExtendEnabled: jest.fn().mockResolvedValue(true),
             getEventAutoExtendIncrementMinutes: jest.fn().mockResolvedValue(15),
-            getEventAutoExtendMaxOverageMinutes: jest.fn().mockResolvedValue(120),
+            getEventAutoExtendMaxOverageMinutes: jest
+              .fn()
+              .mockResolvedValue(120),
             getEventAutoExtendMinVoiceMembers: jest.fn().mockResolvedValue(2),
           },
         },
@@ -105,7 +111,9 @@ describe('EventAutoExtendService', () => {
           useValue: {
             executeWithTracking: jest
               .fn()
-              .mockImplementation((_name: string, fn: () => Promise<void>) => fn()),
+              .mockImplementation((_name: string, fn: () => Promise<void>) =>
+                fn(),
+              ),
           },
         },
       ],
@@ -201,7 +209,11 @@ describe('EventAutoExtendService', () => {
   describe('extension logic', () => {
     it('extends extendedUntil by the configured increment when threshold is met', async () => {
       const originalEnd = new Date();
-      const candidate = makeCandidate({ id: 42, originalEnd, extendedUntil: null });
+      const candidate = makeCandidate({
+        id: 42,
+        originalEnd,
+        extendedUntil: null,
+      });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -211,17 +223,25 @@ describe('EventAutoExtendService', () => {
 
       await service.checkAndExtendEvents();
 
-      const setCall = updateChain.set.mock.calls[0][0] as { extendedUntil: Date };
+      const setCall = updateChain.set.mock.calls[0][0] as {
+        extendedUntil: Date;
+      };
       // Should be ~15 min after originalEnd
       const expectedMs = originalEnd.getTime() + 15 * 60 * 1000;
-      expect(Math.abs(setCall.extendedUntil.getTime() - expectedMs)).toBeLessThan(5000);
+      expect(
+        Math.abs(setCall.extendedUntil.getTime() - expectedMs),
+      ).toBeLessThan(5000);
     });
 
     it('extends from extendedUntil (not originalEnd) when event is already extended', async () => {
       const originalEnd = new Date(Date.now() - 10 * 60 * 1000); // already passed
       const currentExtendedUntil = new Date(Date.now() + 3 * 60 * 1000); // still in window
 
-      const candidate = makeCandidate({ id: 42, originalEnd, extendedUntil: currentExtendedUntil });
+      const candidate = makeCandidate({
+        id: 42,
+        originalEnd,
+        extendedUntil: currentExtendedUntil,
+      });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -231,10 +251,14 @@ describe('EventAutoExtendService', () => {
 
       await service.checkAndExtendEvents();
 
-      const setCall = updateChain.set.mock.calls[0][0] as { extendedUntil: Date };
+      const setCall = updateChain.set.mock.calls[0][0] as {
+        extendedUntil: Date;
+      };
       // Should be ~15 min after currentExtendedUntil, not after originalEnd
       const expectedMs = currentExtendedUntil.getTime() + 15 * 60 * 1000;
-      expect(Math.abs(setCall.extendedUntil.getTime() - expectedMs)).toBeLessThan(5000);
+      expect(
+        Math.abs(setCall.extendedUntil.getTime() - expectedMs),
+      ).toBeLessThan(5000);
     });
 
     it('emits a WebSocket event with the new end time ISO string', async () => {
@@ -276,12 +300,16 @@ describe('EventAutoExtendService', () => {
       const maxOverageMinutes = 120;
       const originalEnd = new Date(Date.now() - 5 * 60 * 1000);
       // Already at exactly max overage
-      const extendedUntil = new Date(originalEnd.getTime() + maxOverageMinutes * 60 * 1000);
+      const extendedUntil = new Date(
+        originalEnd.getTime() + maxOverageMinutes * 60 * 1000,
+      );
 
       const candidate = makeCandidate({ id: 42, originalEnd, extendedUntil });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
 
-      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(maxOverageMinutes);
+      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(
+        maxOverageMinutes,
+      );
       voiceAttendanceService.getActiveCount.mockReturnValue(5);
 
       await service.checkAndExtendEvents();
@@ -301,13 +329,17 @@ describe('EventAutoExtendService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(maxOverageMinutes);
+      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(
+        maxOverageMinutes,
+      );
       settingsService.getEventAutoExtendIncrementMinutes.mockResolvedValue(15);
       voiceAttendanceService.getActiveCount.mockReturnValue(5);
 
       await service.checkAndExtendEvents();
 
-      const setCall = updateChain.set.mock.calls[0][0] as { extendedUntil: Date };
+      const setCall = updateChain.set.mock.calls[0][0] as {
+        extendedUntil: Date;
+      };
       const maxEnd = originalEnd.getTime() + maxOverageMinutes * 60 * 1000;
       expect(setCall.extendedUntil.getTime()).toBe(maxEnd);
     });
@@ -323,16 +355,22 @@ describe('EventAutoExtendService', () => {
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(maxOverageMinutes);
+      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(
+        maxOverageMinutes,
+      );
       settingsService.getEventAutoExtendIncrementMinutes.mockResolvedValue(15);
       voiceAttendanceService.getActiveCount.mockReturnValue(5);
 
       await service.checkAndExtendEvents();
 
       expect(mockDb.update).toHaveBeenCalled();
-      const setCall = updateChain.set.mock.calls[0][0] as { extendedUntil: Date };
+      const setCall = updateChain.set.mock.calls[0][0] as {
+        extendedUntil: Date;
+      };
       const expectedEnd = extendedUntil.getTime() + 15 * 60 * 1000;
-      expect(Math.abs(setCall.extendedUntil.getTime() - expectedEnd)).toBeLessThan(1000);
+      expect(
+        Math.abs(setCall.extendedUntil.getTime() - expectedEnd),
+      ).toBeLessThan(1000);
     });
   });
 
@@ -340,7 +378,10 @@ describe('EventAutoExtendService', () => {
 
   describe('Discord Scheduled Event end time update', () => {
     it('calls scheduledEventService.updateEndTime when event has a discordScheduledEventId', async () => {
-      const candidate = makeCandidate({ id: 42, discordScheduledEventId: 'discord-se-1' });
+      const candidate = makeCandidate({
+        id: 42,
+        discordScheduledEventId: 'discord-se-1',
+      });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -350,11 +391,17 @@ describe('EventAutoExtendService', () => {
       // Let the fire-and-forget .catch() chain resolve
       await Promise.resolve();
 
-      expect(scheduledEventService.updateEndTime).toHaveBeenCalledWith(42, expect.any(Date));
+      expect(scheduledEventService.updateEndTime).toHaveBeenCalledWith(
+        42,
+        expect.any(Date),
+      );
     });
 
     it('does NOT call scheduledEventService.updateEndTime when discordScheduledEventId is null', async () => {
-      const candidate = makeCandidate({ id: 42, discordScheduledEventId: null });
+      const candidate = makeCandidate({
+        id: 42,
+        discordScheduledEventId: null,
+      });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -367,13 +414,18 @@ describe('EventAutoExtendService', () => {
     });
 
     it('does not propagate errors from updateEndTime — fire and forget', async () => {
-      const candidate = makeCandidate({ id: 42, discordScheduledEventId: 'discord-se-1' });
+      const candidate = makeCandidate({
+        id: 42,
+        discordScheduledEventId: 'discord-se-1',
+      });
       mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
       voiceAttendanceService.getActiveCount.mockReturnValue(3);
 
-      scheduledEventService.updateEndTime.mockRejectedValue(new Error('Discord API failed'));
+      scheduledEventService.updateEndTime.mockRejectedValue(
+        new Error('Discord API failed'),
+      );
 
       await expect(service.checkAndExtendEvents()).resolves.not.toThrow();
     });
@@ -418,7 +470,10 @@ describe('EventAutoExtendService', () => {
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
       expect(adHocGateway.emitEndTimeExtended).toHaveBeenCalledTimes(1);
-      expect(adHocGateway.emitEndTimeExtended).toHaveBeenCalledWith(10, expect.any(String));
+      expect(adHocGateway.emitEndTimeExtended).toHaveBeenCalledWith(
+        10,
+        expect.any(String),
+      );
     });
 
     it('skips capped candidates while extending un-capped ones', async () => {
@@ -428,21 +483,34 @@ describe('EventAutoExtendService', () => {
       const cappedCandidate = makeCandidate({
         id: 10,
         originalEnd,
-        extendedUntil: new Date(originalEnd.getTime() + maxOverageMinutes * 60 * 1000),
+        extendedUntil: new Date(
+          originalEnd.getTime() + maxOverageMinutes * 60 * 1000,
+        ),
       });
-      const normalCandidate = makeCandidate({ id: 20, originalEnd, extendedUntil: null });
+      const normalCandidate = makeCandidate({
+        id: 20,
+        originalEnd,
+        extendedUntil: null,
+      });
 
-      mockDb.select.mockReturnValue(createSelectWhereChain([cappedCandidate, normalCandidate]));
+      mockDb.select.mockReturnValue(
+        createSelectWhereChain([cappedCandidate, normalCandidate]),
+      );
       const updateChain = createUpdateChain();
       mockDb.update.mockReturnValue(updateChain);
 
-      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(maxOverageMinutes);
+      settingsService.getEventAutoExtendMaxOverageMinutes.mockResolvedValue(
+        maxOverageMinutes,
+      );
       voiceAttendanceService.getActiveCount.mockReturnValue(5);
 
       await service.checkAndExtendEvents();
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
-      expect(adHocGateway.emitEndTimeExtended).toHaveBeenCalledWith(20, expect.any(String));
+      expect(adHocGateway.emitEndTimeExtended).toHaveBeenCalledWith(
+        20,
+        expect.any(String),
+      );
     });
   });
 

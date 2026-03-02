@@ -11,17 +11,18 @@ import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 
 /**
- * Auto-extends scheduled events when voice channel activity persists
- * past the event's end time (ROK-576).
+ * Auto-extends events (scheduled and ad-hoc) when voice channel activity
+ * persists past the event's end time (ROK-576).
  *
  * Runs every 60 seconds. For each eligible event approaching or past its
  * effective end time, checks if enough participants are still in voice.
  * If so, extends `extendedUntil` by the configured increment (default 15 min),
- * capped at a maximum overage (default 2 hours).
+ * capped at a maximum overage (default 12 hours).
  *
  * When voice activity drops below the threshold, the event is NOT extended
- * further — the classification cron will finalize it after the current
- * `extendedUntil` passes.
+ * further. For scheduled events, the classification cron finalizes after
+ * `extendedUntil` passes. For ad-hoc events, the grace period queue handles
+ * finalization when all members leave.
  */
 @Injectable()
 export class EventAutoExtendService {
@@ -67,9 +68,10 @@ export class EventAutoExtendService {
     const windowAhead = new Date(now.getTime() + 5 * 60 * 1000);
     const windowBehind = new Date(now.getTime() - 2 * 60 * 1000);
 
-    // Find scheduled (non-ad-hoc) events that are candidates for extension:
+    // Find events (scheduled and ad-hoc) that are candidates for extension:
     // - Not cancelled
     // - Start time has passed (event is live)
+    // - For ad-hoc: must still be in 'live' status (not grace_period/ended)
     // - Effective end time (COALESCE(extended_until, upper(duration))) is
     //   between windowBehind and windowAhead
     const candidates = await this.db
@@ -82,8 +84,8 @@ export class EventAutoExtendService {
       .from(schema.events)
       .where(
         and(
-          eq(schema.events.isAdHoc, false),
           sql`${schema.events.cancelledAt} IS NULL`,
+          sql`(${schema.events.isAdHoc} = false OR ${schema.events.adHocStatus} = 'live')`,
           sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
           sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${windowBehind.toISOString()}::timestamptz`,
           sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${windowAhead.toISOString()}::timestamptz`,
@@ -93,6 +95,7 @@ export class EventAutoExtendService {
     if (candidates.length === 0) return;
 
     for (const candidate of candidates) {
+      // Unified voice count — all events track via VoiceAttendanceService
       const activeCount = this.voiceAttendanceService.getActiveCount(
         candidate.id,
       );

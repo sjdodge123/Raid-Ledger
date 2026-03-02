@@ -92,9 +92,9 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
     mockDb.select
       .mockReturnValueOnce(makeSelectChain([mockRecord]))
       .mockReturnValueOnce(makeSelectChain([event]))
-      .mockReturnValueOnce(makeSelectChain([]))   // signups
-      .mockReturnValueOnce(makeSelectChain([]))   // roleRows
-      .mockReturnValueOnce(makeSelectChain([]));  // game (null → no gameId)
+      .mockReturnValueOnce(makeSelectChain([])) // signups
+      .mockReturnValueOnce(makeSelectChain([])) // roleRows
+      .mockReturnValueOnce(makeSelectChain([])); // game (null → no gameId)
     const updateChain = makeUpdateChain();
     mockDb.update.mockReturnValue(updateChain);
   };
@@ -120,7 +120,9 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
         {
           provide: DiscordEmbedFactory,
           useValue: {
-            buildEventUpdate: jest.fn().mockReturnValue({ embed: mockEmbed, row: mockRow }),
+            buildEventUpdate: jest
+              .fn()
+              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
           },
         },
         {
@@ -145,7 +147,9 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
         {
           provide: ChannelResolverService,
           useValue: {
-            resolveVoiceChannelForScheduledEvent: jest.fn().mockResolvedValue(null),
+            resolveVoiceChannelForScheduledEvent: jest
+              .fn()
+              .mockResolvedValue(null),
           },
         },
       ],
@@ -163,16 +167,20 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
 
   it('returns LIVE (not COMPLETED) when now < extendedUntil, even if now > original endTime', async () => {
     const startTime = new Date(Date.now() - 2 * 60 * 60 * 1000); // started 2h ago
-    const endTime = new Date(Date.now() - 5 * 60 * 1000);         // original end 5 min ago
-    const extendedUntil = new Date(Date.now() + 10 * 60 * 1000);  // extended 10 min into future
+    const endTime = new Date(Date.now() - 5 * 60 * 1000); // original end 5 min ago
+    const extendedUntil = new Date(Date.now() + 10 * 60 * 1000); // extended 10 min into future
 
     const event = makeEvent({ startTime, endTime, extendedUntil });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'extend' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'extend' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
-    const embedFactory = processor['embedFactory'] as jest.Mocked<DiscordEmbedFactory>;
+    const embedFactory = processor[
+      'embedFactory'
+    ] as jest.Mocked<DiscordEmbedFactory>;
     const buildCall = embedFactory.buildEventUpdate.mock.calls[0];
     const newState = buildCall[2];
 
@@ -181,16 +189,20 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
 
   it('returns COMPLETED when now >= extendedUntil (extension window has passed)', async () => {
     const startTime = new Date(Date.now() - 3 * 60 * 60 * 1000); // started 3h ago
-    const endTime = new Date(Date.now() - 30 * 60 * 1000);        // original end 30 min ago
-    const extendedUntil = new Date(Date.now() - 5 * 60 * 1000);   // extension also passed
+    const endTime = new Date(Date.now() - 30 * 60 * 1000); // original end 30 min ago
+    const extendedUntil = new Date(Date.now() - 5 * 60 * 1000); // extension also passed
 
     const event = makeEvent({ startTime, endTime, extendedUntil });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'extend' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'extend' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
-    const embedFactory = processor['embedFactory'] as jest.Mocked<DiscordEmbedFactory>;
+    const embedFactory = processor[
+      'embedFactory'
+    ] as jest.Mocked<DiscordEmbedFactory>;
     const newState = embedFactory.buildEventUpdate.mock.calls[0][2];
 
     expect(newState).toBe(EMBED_STATES.COMPLETED);
@@ -203,26 +215,34 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
     const event = makeEvent({ startTime, endTime, extendedUntil: null });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'cron' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'cron' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
-    const embedFactory = processor['embedFactory'] as jest.Mocked<DiscordEmbedFactory>;
+    const embedFactory = processor[
+      'embedFactory'
+    ] as jest.Mocked<DiscordEmbedFactory>;
     const newState = embedFactory.buildEventUpdate.mock.calls[0][2];
 
     expect(newState).toBe(EMBED_STATES.COMPLETED);
   });
 
   it('returns LIVE when event is in progress and extendedUntil is null', async () => {
-    const startTime = new Date(Date.now() - 30 * 60 * 1000);  // started 30 min ago
-    const endTime = new Date(Date.now() + 90 * 60 * 1000);    // ends in 90 min
+    const startTime = new Date(Date.now() - 30 * 60 * 1000); // started 30 min ago
+    const endTime = new Date(Date.now() + 90 * 60 * 1000); // ends in 90 min
 
     const event = makeEvent({ startTime, endTime, extendedUntil: null });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
-    const embedFactory = processor['embedFactory'] as jest.Mocked<DiscordEmbedFactory>;
+    const embedFactory = processor[
+      'embedFactory'
+    ] as jest.Mocked<DiscordEmbedFactory>;
     const newState = embedFactory.buildEventUpdate.mock.calls[0][2];
 
     expect(newState).toBe(EMBED_STATES.LIVE);
@@ -238,12 +258,16 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
     const event = makeEvent({ startTime, endTime, extendedUntil });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'extend' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'extend' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     await Promise.resolve(); // let fire-and-forget chain settle
 
-    expect(scheduledEventService.completeScheduledEvent).toHaveBeenCalledWith(42);
+    expect(scheduledEventService.completeScheduledEvent).toHaveBeenCalledWith(
+      42,
+    );
   });
 
   it('does NOT call completeScheduledEvent while event is still extended (LIVE state)', async () => {
@@ -254,7 +278,9 @@ describe('EmbedSyncProcessor — computeEmbedState with extendedUntil (ROK-576)'
     const event = makeEvent({ startTime, endTime, extendedUntil });
     setupDb(event);
 
-    const job = { data: { eventId: 42, reason: 'extend' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'extend' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     await Promise.resolve();
