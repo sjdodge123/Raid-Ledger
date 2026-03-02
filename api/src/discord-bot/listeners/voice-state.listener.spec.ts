@@ -669,6 +669,53 @@ describe('VoiceStateListener', () => {
       );
     });
 
+    it('calls bufferStart even when below minPlayers threshold (ROK-604)', async () => {
+      // Voice activity tracks independently of ad-hoc event creation.
+      // A linked user joining a game-bound channel should get a game_activity_session
+      // even if the channel is below threshold and no event is spawned.
+      mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+        {
+          id: 'bind-thresh',
+          channelId: 'voice-thresh',
+          bindingPurpose: 'game-voice-monitor',
+          gameId: 42,
+          gameName: 'Rise of Kingdoms',
+          config: { minPlayers: 3 },
+        },
+      ]);
+
+      // No active event — threshold check will block event creation
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      // Linked user
+      mockUsersService.findByDiscordId.mockResolvedValue({ id: 7 });
+
+      voiceHandler(
+        { channelId: null, id: 'user-solo' },
+        {
+          channelId: 'voice-thresh',
+          id: 'user-solo',
+          member: {
+            displayName: 'SoloPlayer',
+            user: { username: 'SoloPlayer', avatar: null },
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // bufferStart should fire even though no event was created
+      expect(mockGameActivityService.bufferStart).toHaveBeenCalledWith(
+        7,
+        'Rise of Kingdoms',
+        expect.any(Date),
+        'voice',
+      );
+
+      // But no ad-hoc event should be created (below threshold)
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+
     it('does NOT call bufferStop for untracked users on leave', async () => {
       // No prior join — leave an unbound channel
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
