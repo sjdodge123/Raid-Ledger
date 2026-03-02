@@ -445,22 +445,29 @@ export class VoiceStateListener {
       );
     }
 
-    // If event already exists, always add
-    // If no event, check threshold
-    if (!state && members.size < minPlayers) {
+    // If event already exists, always add the triggering member
+    if (state) {
+      const memberInfo: VoiceMemberInfo = {
+        ...discordMember,
+        userId: rlUser?.id ?? null,
+      };
+
+      await this.adHocEventService.handleVoiceJoin(
+        binding.bindingId,
+        memberInfo,
+        binding,
+      );
       return;
     }
 
-    const memberInfo: VoiceMemberInfo = {
-      ...discordMember,
-      userId: rlUser?.id ?? null,
-    };
+    // No event — check threshold
+    if (members.size < minPlayers) {
+      return;
+    }
 
-    await this.adHocEventService.handleVoiceJoin(
-      binding.bindingId,
-      memberInfo,
-      binding,
-    );
+    // ROK-611: Threshold met — roster ALL channel members, not just the trigger.
+    // This mirrors the general-lobby group detection pattern.
+    await this.handleGameSpecificGroupRoster(channelId, binding);
   }
 
   /**
@@ -560,6 +567,45 @@ export class VoiceStateListener {
       detected.gameId,
       detected.gameName,
     );
+  }
+
+  /**
+   * ROK-611: When a game-specific channel hits the minPlayers threshold,
+   * roster ALL members currently in the voice channel — not just the trigger.
+   * Mirrors the general-lobby group detection pattern.
+   */
+  private async handleGameSpecificGroupRoster(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): Promise<void> {
+    const client = this.clientService.getClient();
+    if (!client) return;
+
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return;
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return;
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased()) return;
+
+    for (const [memberId, guildMember] of channel.members) {
+      const rlUser = await this.usersService.findByDiscordId(memberId);
+      const memberInfo: VoiceMemberInfo = {
+        discordUserId: memberId,
+        discordUsername:
+          guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
+        discordAvatarHash: guildMember.user?.avatar ?? null,
+        userId: rlUser?.id ?? null,
+      };
+
+      await this.adHocEventService.handleVoiceJoin(
+        binding.bindingId,
+        memberInfo,
+        binding,
+      );
+    }
   }
 
   /**

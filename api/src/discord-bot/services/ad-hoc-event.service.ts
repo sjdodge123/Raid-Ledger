@@ -77,7 +77,6 @@ export class AdHocEventService implements OnModuleInit {
       this.activeEvents.set(key, {
         eventId: event.id,
         memberSet: new Set(),
-
         gameId: event.gameId,
       });
 

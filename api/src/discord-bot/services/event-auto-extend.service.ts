@@ -7,8 +7,15 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { ScheduledEventService } from './scheduled-event.service';
+import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+
+/** Look-ahead window: find events ending within the next 5 minutes (ms). */
+const WINDOW_AHEAD_MS = 5 * 60 * 1000;
+
+/** Look-behind window: catch events that ended within the last 2 minutes (ms). */
+const WINDOW_BEHIND_MS = 2 * 60 * 1000;
 
 /**
  * Auto-extends events (scheduled and ad-hoc) when voice channel activity
@@ -34,6 +41,7 @@ export class EventAutoExtendService {
     private readonly settingsService: SettingsService,
     private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly scheduledEventService: ScheduledEventService,
+    private readonly adHocNotificationService: AdHocNotificationService,
     private readonly adHocGateway: AdHocEventsGateway,
     private readonly cronJobService: CronJobService,
   ) {}
@@ -63,10 +71,10 @@ export class EventAutoExtendService {
       ]);
 
     const now = new Date();
-    // Look for events whose effective end time is within the next 5 minutes
-    // or has passed within the last 2 minutes (to catch events that just ended).
-    const windowAhead = new Date(now.getTime() + 5 * 60 * 1000);
-    const windowBehind = new Date(now.getTime() - 2 * 60 * 1000);
+    // Look for events whose effective end time is within the look-ahead window
+    // or has passed within the look-behind window (to catch events that just ended).
+    const windowAhead = new Date(now.getTime() + WINDOW_AHEAD_MS);
+    const windowBehind = new Date(now.getTime() - WINDOW_BEHIND_MS);
 
     // Find events (scheduled and ad-hoc) that are candidates for extension:
     // - Not cancelled
@@ -80,6 +88,8 @@ export class EventAutoExtendService {
         duration: schema.events.duration,
         extendedUntil: schema.events.extendedUntil,
         discordScheduledEventId: schema.events.discordScheduledEventId,
+        isAdHoc: schema.events.isAdHoc,
+        channelBindingId: schema.events.channelBindingId,
       })
       .from(schema.events)
       .where(
@@ -152,6 +162,14 @@ export class EventAutoExtendService {
         candidate.id,
         newExtendedUntil.toISOString(),
       );
+
+      // Update Discord embed for ad-hoc events so duration stays current
+      if (candidate.isAdHoc && candidate.channelBindingId) {
+        this.adHocNotificationService.queueUpdate(
+          candidate.id,
+          candidate.channelBindingId,
+        );
+      }
 
       // Update Discord Scheduled Event end time
       if (candidate.discordScheduledEventId) {

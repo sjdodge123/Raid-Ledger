@@ -443,21 +443,98 @@ describe('IgdbService', () => {
       expect(result.source).toBe('local');
     });
 
-    it('should throw when Twitch auth fails and no local games', async () => {
+    it('should retry with fresh token on 401 and succeed', async () => {
+      mockRedis.get.mockResolvedValueOnce(null);
+      let callCount = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            callCount++;
+            const data = callCount === 1 ? [] : mockGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      mockFetch
+        // First token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'stale-token', expires_in: 3600 }),
+        })
+        // IGDB search returns 401 (stale token)
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid token'),
+        })
+        // Fresh token fetch after invalidation
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'fresh-token', expires_in: 3600 }),
+        })
+        // Retry IGDB search succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve([
+              {
+                id: 1234,
+                name: 'Valheim',
+                slug: 'valheim',
+                cover: { image_id: 'abc123' },
+              },
+            ]),
+        });
+
+      const result = await service.searchGames('valheim');
+
+      expect(result.source).toBe('igdb');
+      // Token + 401 + fresh token + successful search = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+    });
+
+    it('should fall back to local when 401 retry also fails', async () => {
       mockRedis.get.mockResolvedValueOnce(null);
       selectResults = [];
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 401,
-        statusText: 'Unauthorized',
-        text: () => Promise.resolve('Invalid client'),
-      });
+      mockFetch
+        // First token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'stale-token', expires_in: 3600 }),
+        })
+        // IGDB search returns 401
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid token'),
+        })
+        // Fresh token fetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'also-bad', expires_in: 3600 }),
+        })
+        // Retry also returns 401
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 401,
+          statusText: 'Unauthorized',
+          text: () => Promise.resolve('Invalid client'),
+        });
 
       const result = await service.searchGames('valheim');
-      // Falls back to local (empty)
+      // Falls back to local after retry exhausted
       expect(result.source).toBe('local');
       expect(result.games).toEqual([]);
+      // Token + 401 + fresh token + 401 = 4 calls
+      expect(mockFetch).toHaveBeenCalledTimes(4);
     });
   });
 });
