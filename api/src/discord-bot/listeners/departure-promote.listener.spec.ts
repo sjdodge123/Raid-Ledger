@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/unbound-method */
 import { DeparturePromoteListener } from './departure-promote.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { NotificationService } from '../../notifications/notification.service';
@@ -82,9 +83,7 @@ describe('DeparturePromoteListener', () => {
       );
 
       // Bench player query
-      mockDb.limit.mockResolvedValueOnce([
-        { signupId: 20, userId: 5 },
-      ]);
+      mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
 
       // promoteFromBench returns successful placement
       mockSignupsService.promoteFromBench.mockResolvedValueOnce({
@@ -129,16 +128,15 @@ describe('DeparturePromoteListener', () => {
       );
 
       // Bench player query
-      mockDb.limit.mockResolvedValueOnce([
-        { signupId: 20, userId: 5 },
-      ]);
+      mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
 
       // promoteFromBench returns placement with warning
       mockSignupsService.promoteFromBench.mockResolvedValueOnce({
         role: 'healer',
         position: 1,
         username: 'DPSOnly',
-        warning: 'DPSOnly was placed in **healer** which is not in their preferred roles (dps).',
+        warning:
+          'DPSOnly was placed in **healer** which is not in their preferred roles (dps).',
       });
 
       // Event title for notification
@@ -156,16 +154,15 @@ describe('DeparturePromoteListener', () => {
       );
 
       // Bench player query
-      mockDb.limit.mockResolvedValueOnce([
-        { signupId: 20, userId: 5 },
-      ]);
+      mockDb.limit.mockResolvedValueOnce([{ signupId: 20, userId: 5 }]);
 
       // promoteFromBench returns bench (no suitable slot)
       mockSignupsService.promoteFromBench.mockResolvedValueOnce({
         role: 'bench',
         position: 1,
         username: 'BenchPlayer',
-        warning: 'Could not find a suitable roster slot for BenchPlayer based on their preferred roles.',
+        warning:
+          'Could not find a suitable roster slot for BenchPlayer based on their preferred roles.',
       });
 
       await (listener as any).handlePromote(interaction, 1);

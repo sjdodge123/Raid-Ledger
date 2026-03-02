@@ -58,7 +58,7 @@ function buildMockDb() {
         .fn()
         .mockImplementation(() => Promise.resolve(limitResults.shift() ?? [])),
       // support await .where() directly (roster assignments query)
-      then: (resolve: (v: unknown[]) => void, _reject: unknown) =>
+      then: (resolve: (v: unknown[]) => void) =>
         Promise.resolve(whereResults.shift() ?? []).then(resolve),
     })),
 
@@ -335,8 +335,9 @@ describe('DepartureGraceService', () => {
 
       it('cancels before checking for departed status', async () => {
         const callOrder: string[] = [];
-        mockGraceQueue.cancel.mockImplementation(async () => {
+        mockGraceQueue.cancel.mockImplementation(() => {
           callOrder.push('cancel');
+          return Promise.resolve();
         });
         mockDb._limitResults.push([]);
         mockDb.select.mockImplementation(() => {

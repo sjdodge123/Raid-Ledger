@@ -4,6 +4,8 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ComponentType,
+  EmbedBuilder,
   type ButtonInteraction,
 } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
@@ -241,15 +243,13 @@ export class DeparturePromoteListener {
       const originalEmbed = originalMessage.embeds[0];
 
       // Rebuild embed with appended result
-      const { EmbedBuilder: EB } = await import('discord.js');
       const updatedEmbed = originalEmbed
-        ? EB.from(originalEmbed).setDescription(
+        ? EmbedBuilder.from(originalEmbed).setDescription(
             `${originalEmbed.description ?? ''}\n\n${resultText}`,
           )
-        : new EB().setDescription(resultText);
+        : new EmbedBuilder().setDescription(resultText);
 
       // Disable all buttons
-      const { ComponentType } = await import('discord.js');
       const updatedComponents: ActionRowBuilder<ButtonBuilder>[] = [];
 
       for (const row of originalMessage.components) {

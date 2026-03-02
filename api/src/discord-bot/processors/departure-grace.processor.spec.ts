@@ -308,6 +308,7 @@ describe('DepartureGraceProcessor', () => {
           // bench slots query — terminal, resolve to empty array
           return Promise.resolve([]);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return originalWhere.call(this);
       });
     }
@@ -351,6 +352,7 @@ describe('DepartureGraceProcessor', () => {
           // Existing bench members at positions 1 and 2
           return Promise.resolve([{ position: 1 }, { position: 2 }]);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return originalWhere.call(this);
       });
 
@@ -382,8 +384,10 @@ describe('DepartureGraceProcessor', () => {
         // Bench player check for DM (returns bench players in .orderBy chain)
         if (whereCallCount === 7) {
           // Query chain for bench players: .where → .orderBy → .limit
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return originalWhere.call(this);
         }
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return originalWhere.call(this);
       });
     }
