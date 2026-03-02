@@ -178,8 +178,11 @@ describe('Cron-Job (integration)', () => {
       }
       await testApp.db.insert(schema.cronJobExecutions).values(execValues);
 
-      // Trigger a new execution (which invokes pruning in finally block)
+      // Pre-seed the execution counter to threshold - 1 so the next
+      // executeWithTracking call triggers pruning (pruning is periodic,
+      // not on every tick — ROK-607)
       const cronJobService = testApp.app.get(CronJobService);
+      (cronJobService as any).executionCounts.set(jobId, 49);
 
       await cronJobService.executeWithTracking(
         'test:prunable-job',
@@ -200,6 +203,41 @@ describe('Cron-Job (integration)', () => {
       // 55 existing + 1 new = 56, pruning keeps 50
       expect(remaining.length).toBeLessThanOrEqual(51);
       expect(remaining.length).toBeGreaterThanOrEqual(50);
+    });
+
+    it('should NOT prune when execution count is below threshold', async () => {
+      const jobId = await insertTestJob(testApp, 'test:no-prune-job');
+
+      // Insert 55 execution records directly
+      const execValues = [];
+      for (let i = 0; i < 55; i++) {
+        execValues.push({
+          cronJobId: jobId,
+          status: 'completed',
+          startedAt: new Date(Date.now() - (55 - i) * 60_000),
+          finishedAt: new Date(Date.now() - (55 - i) * 60_000 + 1000),
+          durationMs: 1000,
+        });
+      }
+      await testApp.db.insert(schema.cronJobExecutions).values(execValues);
+
+      // Counter starts at 0 — pruning should NOT run on this execution
+      const cronJobService = testApp.app.get(CronJobService);
+
+      await cronJobService.executeWithTracking(
+        'test:no-prune-job',
+        async () => {
+          // no-op
+        },
+      );
+
+      // All 55 + 1 new executions should still exist (no pruning)
+      const remaining = await testApp.db
+        .select()
+        .from(schema.cronJobExecutions)
+        .where(eq(schema.cronJobExecutions.cronJobId, jobId));
+
+      expect(remaining.length).toBe(56);
     });
   });
 

@@ -33,6 +33,7 @@ import {
 } from '@raid-ledger/contract';
 import { ZodError } from 'zod';
 import { RateLimit } from '../throttler/rate-limit.decorator';
+import { redisSwr } from '../common/swr-cache';
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
@@ -458,6 +459,7 @@ export class IgdbController {
   /**
    * GET /games/:id/streams
    * Live Twitch streams for a game.
+   * ROK-605: Uses SWR caching — serves stale data while refreshing in background.
    */
   @Get(':id/streams')
   async getGameStreams(
@@ -465,24 +467,28 @@ export class IgdbController {
   ): Promise<GameStreamsResponseDto> {
     const redis = this.igdbService.redisClient;
     const config = this.igdbService.config;
-
-    // Check cache first
     const cacheKey = `games:streams:${id}`;
-    try {
-      const cached = await redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(cached) as GameStreamsResponseDto;
-      }
-    } catch {
-      // Continue
-    }
 
+    const result = await redisSwr<GameStreamsResponseDto>({
+      redis,
+      key: cacheKey,
+      ttlSec: config.STREAMS_CACHE_TTL,
+      fetcher: () => this._fetchTwitchStreams(id),
+    });
+
+    return result ?? { streams: [], totalLive: 0 };
+  }
+
+  /** Fetch live Twitch streams for a game (no caching). */
+  private async _fetchTwitchStreams(
+    gameId: number,
+  ): Promise<GameStreamsResponseDto> {
     // Get the game to find Twitch game ID
     const db = this.igdbService.database;
     const gameRows = await db
       .select()
       .from(schema.games)
-      .where(eq(schema.games.id, id))
+      .where(eq(schema.games.id, gameId))
       .limit(1);
 
     if (gameRows.length === 0) {
@@ -493,8 +499,7 @@ export class IgdbController {
     const twitchGameId = game.twitchGameId;
 
     if (!twitchGameId) {
-      const result: GameStreamsResponseDto = { streams: [], totalLive: 0 };
-      return result;
+      return { streams: [], totalLive: 0 };
     }
 
     try {
@@ -534,7 +539,7 @@ export class IgdbController {
         pagination: { cursor?: string };
       };
 
-      const result: GameStreamsResponseDto = {
+      return {
         streams: data.data.map((s) => ({
           userName: s.user_name,
           title: s.title,
@@ -546,19 +551,6 @@ export class IgdbController {
         })),
         totalLive: data.data.length,
       };
-
-      // Cache for 5 minutes
-      try {
-        await redis.setex(
-          cacheKey,
-          config.STREAMS_CACHE_TTL,
-          JSON.stringify(result),
-        );
-      } catch {
-        // Non-fatal
-      }
-
-      return result;
     } catch (error) {
       this.logger.error(`Failed to fetch Twitch streams: ${error}`);
       return { streams: [], totalLive: 0 };

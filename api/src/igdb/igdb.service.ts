@@ -172,6 +172,12 @@ export class IgdbService {
   private tokenExpiry: Date | null = null;
   private tokenFetchPromise: Promise<string> | null = null;
 
+  /** ROK-608: In-flight request map for search coalescing */
+  private readonly inFlightSearches = new Map<string, Promise<SearchResult>>();
+
+  /** ROK-605: In-flight SWR refresh map — prevents duplicate concurrent refreshes */
+  private readonly inFlightRefreshes = new Map<string, Promise<void>>();
+
   // ROK-173: Sync & health tracking
   private _syncInProgress = false;
   private _lastApiCallAt: Date | null = null;
@@ -565,6 +571,31 @@ export class IgdbService {
    */
   async searchGames(query: string): Promise<SearchResult> {
     const normalizedQuery = this.normalizeQuery(query);
+
+    // ROK-608: Coalesce concurrent identical requests — if a search for this
+    // exact normalized query is already in-flight, piggyback on its promise
+    // instead of making a duplicate IGDB API call.
+    const existing = this.inFlightSearches.get(normalizedQuery);
+    if (existing) {
+      this.logger.debug(
+        `Coalescing search request for query: ${normalizedQuery}`,
+      );
+      return existing;
+    }
+
+    const promise = this._executeSearch(query, normalizedQuery).finally(() => {
+      this.inFlightSearches.delete(normalizedQuery);
+    });
+
+    this.inFlightSearches.set(normalizedQuery, promise);
+    return promise;
+  }
+
+  /** Core search implementation — called via searchGames coalescing wrapper. */
+  private async _executeSearch(
+    query: string,
+    normalizedQuery: string,
+  ): Promise<SearchResult> {
     const cacheKey = this.getCacheKey(query);
 
     // Build DB filters for hidden/banned/adult (reused across layers)
@@ -579,13 +610,24 @@ export class IgdbService {
     }
 
     // Layer 1: Check Redis cache — re-query DB with filters to enforce ban/hide/adult
+    // ROK-605: SWR — if the entry is in the stale window (last 20% of TTL),
+    // return cached data immediately and trigger a background refresh.
     try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) {
+      const raw = await this.redis.get(cacheKey);
+      if (raw) {
+        // Parse envelope (new format has { storedAt, games }, old format is a plain array)
+        const parsed = JSON.parse(raw) as
+          | { id: number }[]
+          | { storedAt: number; games: { id: number }[] };
+        const cachedGamesArr: { id: number }[] = Array.isArray(parsed)
+          ? parsed
+          : (parsed.games ?? []);
+        const storedAt: number | null = Array.isArray(parsed)
+          ? null
+          : (parsed.storedAt ?? null);
+
         this.logger.debug(`Redis cache hit for query: ${query}`);
-        const cachedIds = (JSON.parse(cached) as { id: number }[]).map(
-          (g) => g.id,
-        );
+        const cachedIds = cachedGamesArr.map((g) => g.id);
         if (cachedIds.length > 0) {
           const freshRows = await this.db
             .select()
@@ -599,6 +641,16 @@ export class IgdbService {
               ),
             )
             .limit(IGDB_CONFIG.SEARCH_LIMIT);
+
+          // ROK-605: Check stale window and trigger background refresh
+          if (storedAt) {
+            const ageMs = Date.now() - storedAt;
+            const ttlMs = IGDB_CONFIG.SEARCH_CACHE_TTL * 1000;
+            const staleAfterMs = ttlMs * 0.8; // stale at 80% of TTL
+            if (ageMs >= staleAfterMs) {
+              this._triggerSearchRefresh(query, normalizedQuery, cacheKey);
+            }
+          }
 
           return {
             games: freshRows.map((g) => this.mapDbRowToDetail(g)),
@@ -673,7 +725,8 @@ export class IgdbService {
   }
 
   /**
-   * Cache search results to Redis
+   * Cache search results to Redis.
+   * ROK-605: Stores a `storedAt` timestamp for SWR stale-window detection.
    * @param key - Redis cache key
    * @param games - Games to cache
    */
@@ -685,13 +738,64 @@ export class IgdbService {
       await this.redis.setex(
         key,
         IGDB_CONFIG.SEARCH_CACHE_TTL,
-        JSON.stringify(games),
+        JSON.stringify({ storedAt: Date.now(), games }),
       );
       this.logger.debug(`Cached ${games.length} games to Redis`);
     } catch (error) {
       this.logger.warn(`Failed to cache to Redis: ${error}`);
       // Non-fatal: continue without caching
     }
+  }
+
+  /**
+   * ROK-605: Fire-and-forget background refresh for IGDB search cache.
+   * Re-fetches from IGDB API and updates the Redis cache.
+   * Deduplicated per cache key — only one refresh in-flight at a time.
+   */
+  private _triggerSearchRefresh(
+    query: string,
+    normalizedQuery: string,
+    cacheKey: string,
+  ): void {
+    if (this.inFlightRefreshes.has(cacheKey)) {
+      this.logger.debug(`SWR search refresh already in-flight for: ${query}`);
+      return;
+    }
+
+    const promise = (async () => {
+      try {
+        const igdbGames = await this.fetchWithRetry(normalizedQuery);
+        if (igdbGames.length > 0) {
+          await this.upsertGamesFromApi(igdbGames);
+        }
+        // Re-read from DB and update Redis cache
+        const adultFilterEnabled = await this.isAdultFilterEnabled();
+        const dbFilters = [
+          ...buildWordMatchFilters(schema.games.name, normalizedQuery),
+          eq(schema.games.hidden, false),
+          eq(schema.games.banned, false),
+        ];
+        if (adultFilterEnabled) {
+          dbFilters.push(...this.buildAdultFilters());
+        }
+        const freshGames = await this.db
+          .select()
+          .from(schema.games)
+          .where(and(...dbFilters))
+          .limit(IGDB_CONFIG.SEARCH_LIMIT);
+        const games = freshGames.map((g) => this.mapDbRowToDetail(g));
+        if (games.length > 0) {
+          await this.cacheToRedis(cacheKey, games);
+        }
+        this.logger.debug(`SWR background refresh completed for: ${query}`);
+      } catch (err) {
+        this.logger.warn(`SWR background refresh failed for ${query}: ${err}`);
+      }
+    })().finally(() => {
+      this.inFlightRefreshes.delete(cacheKey);
+    });
+
+    this.inFlightRefreshes.set(cacheKey, promise);
   }
 
   /**

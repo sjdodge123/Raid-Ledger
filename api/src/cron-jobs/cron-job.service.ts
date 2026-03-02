@@ -24,6 +24,9 @@ import * as schema from '../drizzle/schema';
 /** Maximum execution history rows kept per job */
 const MAX_EXECUTIONS_PER_JOB = 50;
 
+/** Run retention cleanup every N executions per job (reduces DB overhead) */
+const PRUNE_EVERY_N_EXECUTIONS = 50;
+
 /**
  * Human-readable descriptions for the core @Cron jobs.
  * Keys match the NestJS SchedulerRegistry names (class.method format).
@@ -91,6 +94,9 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
 @Injectable()
 export class CronJobService implements OnApplicationBootstrap {
   private readonly logger = new Logger(CronJobService.name);
+
+  /** In-memory counter per cronJobId to decide when to run retention cleanup */
+  private readonly executionCounts = new Map<number, number>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -243,7 +249,7 @@ export class CronJobService implements OnApplicationBootstrap {
    *
    * - Checks if job is paused → logs "skipped" execution
    * - Times execution and records "completed" or "failed"
-   * - Prunes old execution history beyond MAX_EXECUTIONS_PER_JOB
+   * - Periodically prunes old execution history (every Nth execution)
    *
    * @param jobName - The unique job name (must match cron_jobs.name)
    * @param fn - The async handler function to execute
@@ -328,10 +334,16 @@ export class CronJobService implements OnApplicationBootstrap {
       // its own error handling before this wrapper was added.
       this.logger.error(`Cron job "${jobName}" failed: ${errorMessage}`);
     } finally {
-      // Prune old executions
-      await this.pruneExecutions(job.id).catch((err) =>
-        this.logger.warn(`Failed to prune executions for ${jobName}: ${err}`),
-      );
+      // Prune old executions periodically (every Nth execution, not every tick)
+      const count = (this.executionCounts.get(job.id) ?? 0) + 1;
+      this.executionCounts.set(job.id, count);
+
+      if (count >= PRUNE_EVERY_N_EXECUTIONS) {
+        this.executionCounts.set(job.id, 0);
+        await this.pruneExecutions(job.id).catch((err) =>
+          this.logger.warn(`Failed to prune executions for ${jobName}: ${err}`),
+        );
+      }
     }
   }
 
