@@ -176,7 +176,7 @@ describe('Events Dashboard, Embed & Advanced Queries (integration)', () => {
         gameId: testApp.seed.game.id,
       });
 
-      // Admin is auto-signed up with confirmationStatus 'pending' — that's 1 unconfirmed
+      // Admin (creator) is auto-confirmed (ROK-598), so only non-creator signups are unconfirmed
       const { token: t1 } = await createMemberAndLogin(
         testApp,
         'unconf_p1',
@@ -186,7 +186,16 @@ describe('Events Dashboard, Embed & Advanced Queries (integration)', () => {
         .post(`/events/${eventId}/signup`)
         .set('Authorization', `Bearer ${t1}`)
         .send({});
-      // Now 2 pending signups
+      const { token: t2 } = await createMemberAndLogin(
+        testApp,
+        'unconf_p2',
+        'unconf_p2@test.local',
+      );
+      await testApp.request
+        .post(`/events/${eventId}/signup`)
+        .set('Authorization', `Bearer ${t2}`)
+        .send({});
+      // 2 non-creator pending signups
 
       const res = await testApp.request
         .get('/events/my-dashboard')
