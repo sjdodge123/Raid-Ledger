@@ -60,15 +60,19 @@ describe('LiveNoShowService', () => {
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
 
-  const makeEvent = (overrides: Partial<{
-    id: number;
-    title: string;
-    creatorId: number;
-    startTime: Date;
-    endTime: Date;
-  }> = {}) => {
-    const startTime = overrides.startTime ?? new Date(Date.now() - 12 * 60 * 1000);
-    const endTime = overrides.endTime ?? new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
+  const makeEvent = (
+    overrides: Partial<{
+      id: number;
+      title: string;
+      creatorId: number;
+      startTime: Date;
+      endTime: Date;
+    }> = {},
+  ) => {
+    const startTime =
+      overrides.startTime ?? new Date(Date.now() - 12 * 60 * 1000);
+    const endTime =
+      overrides.endTime ?? new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
     return {
       id: overrides.id ?? 42,
       title: overrides.title ?? 'Raid Night',
@@ -89,7 +93,9 @@ describe('LiveNoShowService', () => {
     };
 
     mockCronJobService = {
-      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()),
+      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
+        fn(),
+      ),
     };
 
     mockVoiceAttendance = {
@@ -139,7 +145,8 @@ describe('LiveNoShowService', () => {
           // No VoiceAttendanceService provided — @Optional() means it's null
         ],
       }).compile();
-      const serviceWithoutVoice = module.get<LiveNoShowService>(LiveNoShowService);
+      const serviceWithoutVoice =
+        module.get<LiveNoShowService>(LiveNoShowService);
 
       await serviceWithoutVoice.checkNoShows();
 
@@ -163,9 +170,11 @@ describe('LiveNoShowService', () => {
 
   // ─── Phase 1: no-show reminders ──────────────────────────────────────────
 
-  describe('Phase 1 (no-show reminder at +10 min)', () => {
+  describe('Phase 1 (no-show reminder at +5 min)', () => {
     it('should send reminder DM to absent signed-up player', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       // findLiveEventsInNoShowWindow
       mockDb.select
@@ -185,15 +194,18 @@ describe('LiveNoShowService', () => {
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
             ]),
           }),
         })
         // getAbsentSignedUpPlayers: voice session query (.limit)
-        .mockReturnValueOnce(makeSelectFromWhereLimit([]))
-        // insertReminderDedup: hasReminderBeenSent (.limit) — not yet sent
-        // (handled by insert mock below)
-        ;
+        .mockReturnValueOnce(makeSelectFromWhereLimit([]));
+      // insertReminderDedup: hasReminderBeenSent (.limit) — not yet sent
+      // (handled by insert mock below)
 
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
@@ -222,13 +234,20 @@ describe('LiveNoShowService', () => {
     });
 
     it('should skip player with no userId (anonymous signup)', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
@@ -236,7 +255,11 @@ describe('LiveNoShowService', () => {
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
               // userId is null — anonymous Discord signup
-              { userId: null, discordUserId: 'discord-anon', discordUsername: 'AnonUser' },
+              {
+                userId: null,
+                discordUserId: 'discord-anon',
+                discordUsername: 'AnonUser',
+              },
             ]),
           }),
         })
@@ -250,13 +273,20 @@ describe('LiveNoShowService', () => {
     });
 
     it('should skip player with no discordUserId in signup', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
@@ -275,20 +305,31 @@ describe('LiveNoShowService', () => {
     });
 
     it('should not send Phase 1 reminder when player is currently active in voice', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
             ]),
           }),
         });
@@ -302,25 +343,38 @@ describe('LiveNoShowService', () => {
     });
 
     it('should not send Phase 1 reminder when player has sufficient voice session duration (>= 120s)', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
             ]),
           }),
         })
         // Voice session with 120 seconds total (at threshold)
-        .mockReturnValueOnce(makeSelectFromWhereLimit([{ totalDurationSec: 120 }]));
+        .mockReturnValueOnce(
+          makeSelectFromWhereLimit([{ totalDurationSec: 120 }]),
+        );
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
@@ -330,25 +384,38 @@ describe('LiveNoShowService', () => {
     });
 
     it('should send Phase 1 reminder when player had brief voice session (< 120s threshold)', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
             ]),
           }),
         })
         // Only 60 seconds — brief join/leave, below threshold
-        .mockReturnValueOnce(makeSelectFromWhereLimit([{ totalDurationSec: 60 }]));
+        .mockReturnValueOnce(
+          makeSelectFromWhereLimit([{ totalDurationSec: 60 }]),
+        );
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
 
@@ -366,26 +433,40 @@ describe('LiveNoShowService', () => {
         expect.objectContaining({
           userId: 10,
           type: 'event_reminder',
-          payload: expect.objectContaining({ noshowReminder: true }) as Record<string, unknown>,
+          payload: expect.objectContaining({ noshowReminder: true }) as Record<
+            string,
+            unknown
+          >,
         }),
       );
     });
 
     it('should not send duplicate Phase 1 reminder when dedup record already exists', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
             ]),
           }),
         })
@@ -408,21 +489,36 @@ describe('LiveNoShowService', () => {
     });
 
     it('should send Phase 1 reminders to multiple absent players', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: 'discord-10', discordUsername: 'PlayerOne' },
-              { userId: 11, discordUserId: 'discord-11', discordUsername: 'PlayerTwo' },
+              {
+                userId: 10,
+                discordUserId: 'discord-10',
+                discordUsername: 'PlayerOne',
+              },
+              {
+                userId: 11,
+                discordUserId: 'discord-11',
+                discordUsername: 'PlayerTwo',
+              },
             ]),
           }),
         })
@@ -460,15 +556,17 @@ describe('LiveNoShowService', () => {
      * Event is 16 min old (past both thresholds).
      * One player was reminded in Phase 1 and is still absent.
      */
-    const setupPhase2Flow = (options: {
-      alreadyEscalated?: boolean;
-      phase1Reminded?: number[];
-      voiceActiveForUser?: boolean;
-      userDiscordId?: string | null;
-      dbVoiceDuration?: number | null;
-      displayName?: string;
-      role?: string | null;
-    } = {}) => {
+    const setupPhase2Flow = (
+      options: {
+        alreadyEscalated?: boolean;
+        phase1Reminded?: number[];
+        voiceActiveForUser?: boolean;
+        userDiscordId?: string | null;
+        dbVoiceDuration?: number | null;
+        displayName?: string;
+        role?: string | null;
+      } = {},
+    ) => {
       const {
         alreadyEscalated = false,
         phase1Reminded = [10],
@@ -491,7 +589,12 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         }),
@@ -501,9 +604,11 @@ describe('LiveNoShowService', () => {
 
       // 2. hasReminderBeenSent (noshow_escalation) — .limit(1)
       selectMocks.push(
-        jest.fn().mockReturnValue(
-          makeSelectFromWhereLimit(alreadyEscalated ? [{ id: 99 }] : []),
-        ),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit(alreadyEscalated ? [{ id: 99 }] : []),
+          ),
       );
 
       if (!alreadyEscalated) {
@@ -511,9 +616,11 @@ describe('LiveNoShowService', () => {
         selectMocks.push(
           jest.fn().mockReturnValue({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue(
-                phase1Reminded.map((uid) => ({ userId: uid })),
-              ),
+              where: jest
+                .fn()
+                .mockResolvedValue(
+                  phase1Reminded.map((uid) => ({ userId: uid })),
+                ),
             }),
           }),
         );
@@ -521,30 +628,40 @@ describe('LiveNoShowService', () => {
         if (phase1Reminded.length > 0) {
           // 4. checkVoicePresence: user lookup (.limit)
           selectMocks.push(
-            jest.fn().mockReturnValue(
-              makeSelectFromWhereLimit(
-                userDiscordId !== null ? [{ discordId: userDiscordId }] : [],
+            jest
+              .fn()
+              .mockReturnValue(
+                makeSelectFromWhereLimit(
+                  userDiscordId !== null ? [{ discordId: userDiscordId }] : [],
+                ),
               ),
-            ),
           );
 
           if (userDiscordId && !voiceActiveForUser) {
             // 5. checkVoicePresence: voice session lookup (.limit)
             selectMocks.push(
-              jest.fn().mockReturnValue(
-                makeSelectFromWhereLimit(
-                  dbVoiceDuration !== null
-                    ? [{ totalDurationSec: dbVoiceDuration }]
-                    : [],
+              jest
+                .fn()
+                .mockReturnValue(
+                  makeSelectFromWhereLimit(
+                    dbVoiceDuration !== null
+                      ? [{ totalDurationSec: dbVoiceDuration }]
+                      : [],
+                  ),
                 ),
-              ),
             );
 
             // If still absent, getPlayerDisplayInfo
             if (dbVoiceDuration === null || dbVoiceDuration < 120) {
               // 6. user display name lookup
               selectMocks.push(
-                jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: displayName, displayName }])),
+                jest
+                  .fn()
+                  .mockReturnValue(
+                    makeSelectFromWhereLimit([
+                      { username: displayName, displayName },
+                    ]),
+                  ),
               );
 
               // 7. roster assignment lookup (with innerJoin + limit)
@@ -553,9 +670,9 @@ describe('LiveNoShowService', () => {
                   from: jest.fn().mockReturnValue({
                     innerJoin: jest.fn().mockReturnValue({
                       where: jest.fn().mockReturnValue({
-                        limit: jest.fn().mockResolvedValue(
-                          role ? [{ role }] : [],
-                        ),
+                        limit: jest
+                          .fn()
+                          .mockResolvedValue(role ? [{ role }] : []),
                       }),
                     }),
                   }),
@@ -581,7 +698,11 @@ describe('LiveNoShowService', () => {
         const mock = selectMocks[callIdx++];
         if (!mock) {
           // Default fallback for unexpected extra calls
-          return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         }
         return mock();
       });
@@ -610,7 +731,11 @@ describe('LiveNoShowService', () => {
           payload: expect.objectContaining({
             eventId: 42,
             absentPlayers: expect.arrayContaining([
-              expect.objectContaining({ userId: 10, displayName: 'PlayerOne', role: 'Tank' }),
+              expect.objectContaining({
+                userId: 10,
+                displayName: 'PlayerOne',
+                role: 'Tank',
+              }),
             ]) as unknown[],
           }) as Record<string, unknown>,
         }),
@@ -623,7 +748,7 @@ describe('LiveNoShowService', () => {
       await service.checkNoShows();
 
       // No missed_event_nudge should be sent
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -635,7 +760,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -648,7 +773,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -662,7 +787,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -682,12 +807,15 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCall = (mockNotificationService.create as jest.Mock).mock.calls.find(
+      const nudgeCall = mockNotificationService.create.mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
       expect(nudgeCall).toBeDefined();
-      const callArg = nudgeCall![0] as { message: string; payload: { absentPlayers: Array<{ role: string | null }> } };
+      const callArg = nudgeCall![0] as {
+        message: string;
+        payload: { absentPlayers: Array<{ role: string | null }> };
+      };
       expect(callArg.message).toContain('Healer');
       expect(callArg.payload.absentPlayers[0].role).toBe('Healer');
     });
@@ -705,17 +833,23 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCall = (mockNotificationService.create as jest.Mock).mock.calls.find(
+      const nudgeCall = mockNotificationService.create.mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
       expect(nudgeCall).toBeDefined();
-      const callArg = nudgeCall![0] as { payload: { absentPlayers: Array<{ role: string | null }> } };
+      const callArg = nudgeCall![0] as {
+        payload: { absentPlayers: Array<{ role: string | null }> };
+      };
       expect(callArg.payload.absentPlayers[0].role).toBeNull();
     });
 
     it('should use singular message format for single absent player', async () => {
-      setupPhase2Flow({ phase1Reminded: [10], displayName: 'PlayerOne', role: 'Tank' });
+      setupPhase2Flow({
+        phase1Reminded: [10],
+        displayName: 'PlayerOne',
+        role: 'Tank',
+      });
 
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
@@ -727,7 +861,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCall = (mockNotificationService.create as jest.Mock).mock.calls.find(
+      const nudgeCall = mockNotificationService.create.mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -751,7 +885,12 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: 1, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: 1,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         }),
@@ -764,11 +903,21 @@ describe('LiveNoShowService', () => {
           }),
         }),
         // checkVoicePresence: user lookup
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: 'discord-creator' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([{ discordId: 'discord-creator' }]),
+          ),
         // checkVoicePresence: voice session — no session
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPlayerDisplayInfo: user
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'CreatorUser', displayName: 'CreatorUser' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'CreatorUser', displayName: 'CreatorUser' },
+            ]),
+          ),
         // getPlayerDisplayInfo: roster assignment
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
@@ -790,7 +939,12 @@ describe('LiveNoShowService', () => {
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m) return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+        if (!m)
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         return m();
       });
 
@@ -806,7 +960,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCall = (mockNotificationService.create as jest.Mock).mock.calls.find(
+      const nudgeCall = mockNotificationService.create.mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -819,8 +973,12 @@ describe('LiveNoShowService', () => {
       setupPhase2Flow();
 
       const returningMock = jest.fn().mockResolvedValue([{ id: 5 }]);
-      const onConflictMock = jest.fn().mockReturnValue({ returning: returningMock });
-      const valuesMock = jest.fn().mockReturnValue({ onConflictDoNothing: onConflictMock });
+      const onConflictMock = jest
+        .fn()
+        .mockReturnValue({ returning: returningMock });
+      const valuesMock = jest
+        .fn()
+        .mockReturnValue({ onConflictDoNothing: onConflictMock });
       mockDb.insert.mockReturnValue({ values: valuesMock });
 
       await service.checkNoShows();
@@ -843,12 +1001,19 @@ describe('LiveNoShowService', () => {
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         })
         // Phase 2: hasReminderBeenSent — already escalated, skip rest of Phase 2
-        .mockReturnValueOnce(jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ id: 99 }]))())
+        .mockReturnValueOnce(
+          jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ id: 99 }]))(),
+        )
         // Phase 1: signups query
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
@@ -863,7 +1028,7 @@ describe('LiveNoShowService', () => {
       expect(mockDb.select).toHaveBeenCalledTimes(3);
     });
 
-    it('should only run Phase 1 when event is between 10-15 min old', async () => {
+    it('should only run Phase 1 when event is between 5-15 min old', async () => {
       const startTime = new Date(Date.now() - 12 * 60 * 1000); // 12 min old
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
 
@@ -872,7 +1037,12 @@ describe('LiveNoShowService', () => {
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         })
@@ -903,7 +1073,12 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid Night', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid Night',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         }),
@@ -912,34 +1087,60 @@ describe('LiveNoShowService', () => {
         // getPhase1RemindedUserIds — two players
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
+            where: jest
+              .fn()
+              .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
           }),
         }),
         // checkVoicePresence for player 10: user lookup
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: 'discord-10' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([{ discordId: 'discord-10' }]),
+          ),
         // checkVoicePresence for player 10: voice session — absent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPlayerDisplayInfo for player 10: user
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'PlayerOne', displayName: 'PlayerOne' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'PlayerOne', displayName: 'PlayerOne' },
+            ]),
+          ),
         // getPlayerDisplayInfo for player 10: roster assignment
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([{ role: 'Tank' }]) }),
+              where: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue([{ role: 'Tank' }]),
+              }),
             }),
           }),
         }),
         // checkVoicePresence for player 11: user lookup
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: 'discord-11' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([{ discordId: 'discord-11' }]),
+          ),
         // checkVoicePresence for player 11: voice session — absent
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPlayerDisplayInfo for player 11: user
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'PlayerTwo', displayName: 'PlayerTwo' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'PlayerTwo', displayName: 'PlayerTwo' },
+            ]),
+          ),
         // getPlayerDisplayInfo for player 11: roster assignment
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([{ role: 'Healer' }]) }),
+              where: jest.fn().mockReturnValue({
+                limit: jest.fn().mockResolvedValue([{ role: 'Healer' }]),
+              }),
             }),
           }),
         }),
@@ -954,7 +1155,12 @@ describe('LiveNoShowService', () => {
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m) return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+        if (!m)
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         return m();
       });
 
@@ -971,13 +1177,17 @@ describe('LiveNoShowService', () => {
       await service.checkNoShows();
 
       // Should be exactly ONE creator DM (batched)
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
       expect(nudgeCalls).toHaveLength(1);
 
-      const payload = (nudgeCalls[0][0] as { payload: { absentPlayers: Array<{ userId: number }> } }).payload;
+      const payload = (
+        nudgeCalls[0][0] as {
+          payload: { absentPlayers: Array<{ userId: number }> };
+        }
+      ).payload;
       expect(payload.absentPlayers).toHaveLength(2);
       expect(payload.absentPlayers.map((p) => p.userId)).toEqual(
         expect.arrayContaining([10, 11]),
@@ -992,43 +1202,83 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid Night', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid Night',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         }),
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])), // hasReminderBeenSent
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
+            where: jest
+              .fn()
+              .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
           }),
         }),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: 'discord-10' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([{ discordId: 'discord-10' }]),
+          ),
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'Alpha', displayName: 'Alpha' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'Alpha', displayName: 'Alpha' },
+            ]),
+          ),
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
+              where: jest
+                .fn()
+                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
             }),
           }),
         }),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: 'discord-11' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([{ discordId: 'discord-11' }]),
+          ),
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'Beta', displayName: 'Beta' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'Beta', displayName: 'Beta' },
+            ]),
+          ),
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
+              where: jest
+                .fn()
+                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
             }),
           }),
         }),
-        jest.fn().mockReturnValue({ from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) }),
+        jest.fn().mockReturnValue({
+          from: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+        }),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m) return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+        if (!m)
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         return m();
       });
 
@@ -1044,7 +1294,7 @@ describe('LiveNoShowService', () => {
 
       await service.checkNoShows();
 
-      const nudgeCall = (mockNotificationService.create as jest.Mock).mock.calls.find(
+      const nudgeCall = mockNotificationService.create.mock.calls.find(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -1059,21 +1309,30 @@ describe('LiveNoShowService', () => {
 
   describe('edge cases', () => {
     it('should skip Phase 1 for players without discordUserId', async () => {
-      const event = makeEvent({ startTime: new Date(Date.now() - 11 * 60 * 1000) });
+      const event = makeEvent({
+        startTime: new Date(Date.now() - 11 * 60 * 1000),
+      });
 
       mockDb.select
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: event.id, title: event.title, creatorId: event.creatorId, duration: [event.startTime, event.endTime] },
+              {
+                id: event.id,
+                title: event.title,
+                creatorId: event.creatorId,
+                duration: [event.startTime, event.endTime],
+              },
             ]),
           }),
         })
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
-            where: jest.fn().mockResolvedValue([
-              { userId: 10, discordUserId: null, discordUsername: null },
-            ]),
+            where: jest
+              .fn()
+              .mockResolvedValue([
+                { userId: 10, discordUserId: null, discordUsername: null },
+              ]),
           }),
         });
 
@@ -1095,7 +1354,12 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid Night', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid Night',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         }),
@@ -1108,25 +1372,44 @@ describe('LiveNoShowService', () => {
           }),
         }),
         // checkVoicePresence: user has null discordId → returns false (absent)
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ discordId: null }])),
+        jest
+          .fn()
+          .mockReturnValue(makeSelectFromWhereLimit([{ discordId: null }])),
         // getPlayerDisplayInfo: user lookup
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([{ username: 'PlayerOne', displayName: 'PlayerOne' }])),
+        jest
+          .fn()
+          .mockReturnValue(
+            makeSelectFromWhereLimit([
+              { username: 'PlayerOne', displayName: 'PlayerOne' },
+            ]),
+          ),
         // getPlayerDisplayInfo: roster assignment
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
+              where: jest
+                .fn()
+                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
             }),
           }),
         }),
         // Phase 1 signups
-        jest.fn().mockReturnValue({ from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) }),
+        jest.fn().mockReturnValue({
+          from: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+        }),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m) return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+        if (!m)
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         return m();
       });
 
@@ -1143,7 +1426,7 @@ describe('LiveNoShowService', () => {
       // Should not throw — user with no discordId is treated as absent and included in nudge
       await service.checkNoShows();
 
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
@@ -1162,7 +1445,12 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 42, title: 'Raid Night', creatorId: 1, duration: [startTime, endTime] },
+              {
+                id: 42,
+                title: 'Raid Night',
+                creatorId: 1,
+                duration: [startTime, endTime],
+              },
             ]),
           }),
         }),
@@ -1182,18 +1470,29 @@ describe('LiveNoShowService', () => {
         jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({
             innerJoin: jest.fn().mockReturnValue({
-              where: jest.fn().mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
+              where: jest
+                .fn()
+                .mockReturnValue({ limit: jest.fn().mockResolvedValue([]) }),
             }),
           }),
         }),
         // Phase 1 signups
-        jest.fn().mockReturnValue({ from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) }),
+        jest.fn().mockReturnValue({
+          from: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+        }),
       ];
 
       let callIdx = 0;
       mockDb.select.mockImplementation(() => {
         const m = selectCalls[callIdx++];
-        if (!m) return { from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) };
+        if (!m)
+          return {
+            from: jest
+              .fn()
+              .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+          };
         return m();
       });
 
@@ -1210,37 +1509,63 @@ describe('LiveNoShowService', () => {
       // Should not throw
       await service.checkNoShows();
 
-      const nudgeCalls = (mockNotificationService.create as jest.Mock).mock.calls.filter(
+      const nudgeCalls = mockNotificationService.create.mock.calls.filter(
         (call: unknown[]) =>
           (call[0] as { type: string }).type === 'missed_event_nudge',
       );
       // Creator still receives a nudge with "Unknown" as display name
       expect(nudgeCalls).toHaveLength(1);
-      const payload = (nudgeCalls[0][0] as { payload: { absentPlayers: Array<{ displayName: string }> } }).payload;
+      const payload = (
+        nudgeCalls[0][0] as {
+          payload: { absentPlayers: Array<{ displayName: string }> };
+        }
+      ).payload;
       expect(payload.absentPlayers[0].displayName).toBe('Unknown');
     });
 
     it('should process multiple live events independently', async () => {
       const now = Date.now();
       const event1StartTime = new Date(now - 11 * 60 * 1000);
-      const event1EndTime = new Date(event1StartTime.getTime() + 2 * 60 * 60 * 1000);
+      const event1EndTime = new Date(
+        event1StartTime.getTime() + 2 * 60 * 60 * 1000,
+      );
       const event2StartTime = new Date(now - 12 * 60 * 1000);
-      const event2EndTime = new Date(event2StartTime.getTime() + 2 * 60 * 60 * 1000);
+      const event2EndTime = new Date(
+        event2StartTime.getTime() + 2 * 60 * 60 * 1000,
+      );
 
       mockDb.select
         // findLiveEventsInNoShowWindow — returns 2 events
         .mockReturnValueOnce({
           from: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue([
-              { id: 1, title: 'Event One', creatorId: 10, duration: [event1StartTime, event1EndTime] },
-              { id: 2, title: 'Event Two', creatorId: 20, duration: [event2StartTime, event2EndTime] },
+              {
+                id: 1,
+                title: 'Event One',
+                creatorId: 10,
+                duration: [event1StartTime, event1EndTime],
+              },
+              {
+                id: 2,
+                title: 'Event Two',
+                creatorId: 20,
+                duration: [event2StartTime, event2EndTime],
+              },
             ]),
           }),
         })
         // Phase 1 for event 1: signups — no absent players
-        .mockReturnValueOnce({ from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) })
+        .mockReturnValueOnce({
+          from: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+        })
         // Phase 1 for event 2: signups — no absent players
-        .mockReturnValueOnce({ from: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue([]) }) });
+        .mockReturnValueOnce({
+          from: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
+        });
 
       await service.checkNoShows();
 

@@ -11,8 +11,8 @@ import { CronJobService } from '../cron-jobs/cron-job.service';
 /** Minimum voice presence (seconds) to count as "showed up". */
 const PRESENCE_THRESHOLD_SEC = 120;
 
-/** Phase 1 fires at startTime + 10 minutes. */
-const PHASE1_OFFSET_MS = 10 * 60 * 1000;
+/** Phase 1 fires at startTime + 5 minutes. */
+const PHASE1_OFFSET_MS = 5 * 60 * 1000;
 
 /** Phase 2 fires at startTime + 15 minutes. */
 const PHASE2_OFFSET_MS = 15 * 60 * 1000;
@@ -23,7 +23,7 @@ const PHASE2_OFFSET_MS = 15 * 60 * 1000;
  * During a live scheduled event, monitors voice channel presence for registered
  * attendees. Two phases:
  *
- * Phase 1 (startTime + 10 min): DM absent players a reminder to join voice.
+ * Phase 1 (startTime + 5 min): DM absent players a reminder to join voice.
  * Phase 2 (startTime + 15 min): DM the event creator listing absent players
  *   whose slots are available to PUG.
  */
@@ -68,7 +68,7 @@ export class LiveNoShowService {
             await this.checkPhase2(event);
           }
 
-          // Phase 1: >= 10 min after start (always run — sends reminder to anyone not yet reminded)
+          // Phase 1: >= 5 min after start (always run — sends reminder to anyone not yet reminded)
           if (msSinceStart >= PHASE1_OFFSET_MS) {
             await this.checkPhase1(event);
           }
@@ -90,7 +90,7 @@ export class LiveNoShowService {
       endTime: Date;
     }>
   > {
-    // Events where: not ad-hoc, not cancelled, started at least 10 min ago,
+    // Events where: not ad-hoc, not cancelled, started at least 5 min ago,
     // effective end (or extendedUntil) is still in the future
     const phase1Threshold = new Date(now.getTime() - PHASE1_OFFSET_MS);
 
@@ -106,7 +106,7 @@ export class LiveNoShowService {
         and(
           eq(schema.events.isAdHoc, false),
           sql`${schema.events.cancelledAt} IS NULL`,
-          // Event started at least 10 min ago
+          // Event started at least 5 min ago
           sql`lower(${schema.events.duration}) <= ${phase1Threshold.toISOString()}::timestamptz`,
           // Event hasn't ended yet (effective end is still in the future)
           sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
@@ -150,7 +150,7 @@ export class LiveNoShowService {
         userId: player.userId,
         type: 'event_reminder',
         title: 'Are you joining?',
-        message: `Your event **${event.title}** started 10 minutes ago \u2014 hop in the voice channel!`,
+        message: `Your event **${event.title}** started 5 minutes ago \u2014 hop in the voice channel!`,
         payload: {
           eventId: event.id,
           startTime: event.startTime.toISOString(),
