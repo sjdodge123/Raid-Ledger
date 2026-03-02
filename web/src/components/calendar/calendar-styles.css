@@ -190,6 +190,11 @@
     background: transparent !important;
 }
 
+/* Month view: subtle emerald tint on today's cell */
+.rbc-month-view .rbc-day-bg.rbc-today {
+    background: rgba(16, 185, 129, 0.08) !important;
+}
+
 /* Scope the today border to the day-slot column only, not individual events */
 .rbc-day-slot.rbc-today::before {
     content: '';
@@ -1287,6 +1292,10 @@
 
 [data-scheme="light"] .rbc-off-range-bg {
     background: rgba(248, 250, 252, 0.7);
+}
+
+[data-scheme="light"] .rbc-month-view .rbc-day-bg.rbc-today {
+    background: rgba(16, 185, 129, 0.1) !important;
 }
 
 [data-scheme="light"] .rbc-date-cell>a {

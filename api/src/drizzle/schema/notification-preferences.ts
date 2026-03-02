@@ -17,6 +17,7 @@ export const NOTIFICATION_TYPES = [
   'event_cancelled',
   'roster_reassigned',
   'tentative_displaced',
+  'member_returned',
   'system',
 ] as const;
 
@@ -48,6 +49,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   event_cancelled: { inApp: true, push: true, discord: true },
   roster_reassigned: { inApp: true, push: true, discord: true },
   tentative_displaced: { inApp: true, push: true, discord: true },
+  member_returned: { inApp: true, push: true, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

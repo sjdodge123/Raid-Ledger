@@ -221,6 +221,7 @@ export class DiscordNotificationEmbedService {
       case 'subscribed_game':
         return EMBED_COLORS.ANNOUNCEMENT;
       case 'slot_vacated':
+      case 'member_returned':
       case 'bench_promoted':
       case 'roster_reassigned':
       case 'tentative_displaced':
@@ -249,6 +250,8 @@ export class DiscordNotificationEmbedService {
         return '🎮';
       case 'slot_vacated':
         return '🚪';
+      case 'member_returned':
+        return '🔙';
       case 'bench_promoted':
         return '🎉';
       case 'roster_reassigned':
@@ -280,6 +283,8 @@ export class DiscordNotificationEmbedService {
         return 'Game Activity';
       case 'slot_vacated':
         return 'Slot Vacated';
+      case 'member_returned':
+        return 'Member Returned';
       case 'bench_promoted':
         return 'Bench Promoted';
       case 'roster_reassigned':
@@ -351,6 +356,7 @@ export class DiscordNotificationEmbedService {
         }
         break;
       case 'slot_vacated':
+      case 'member_returned':
         if (payload.slotName) {
           embed.addFields({
             name: 'Slot',
@@ -507,6 +513,7 @@ export class DiscordNotificationEmbedService {
         }
         break;
       case 'slot_vacated':
+      case 'member_returned':
       case 'bench_promoted':
       case 'roster_reassigned':
       case 'tentative_displaced':

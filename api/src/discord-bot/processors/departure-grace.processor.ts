@@ -2,7 +2,7 @@ import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Job } from 'bullmq';
-import { eq, and, sql, asc } from 'drizzle-orm';
+import { eq, and, sql, asc, notInArray } from 'drizzle-orm';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -241,7 +241,11 @@ export class DepartureGraceProcessor extends WorkerHost {
           and(
             eq(schema.rosterAssignments.eventId, event.id),
             eq(schema.rosterAssignments.role, 'bench'),
-            sql`${schema.eventSignups.status} NOT IN ('departed', 'declined', 'roached_out')`,
+            notInArray(schema.eventSignups.status, [
+              'departed',
+              'declined',
+              'roached_out',
+            ]),
           ),
         )
         .orderBy(asc(schema.eventSignups.signedUpAt))
