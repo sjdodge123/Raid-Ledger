@@ -41,7 +41,6 @@ interface FormState {
     slotDps: number;
     slotFlex: number;
     slotPlayer: number;
-    slotBench: number;
     maxAttendees: string;
     autoUnbench: boolean;
     pollDurationHours: number;
@@ -79,7 +78,6 @@ export function PlanEventForm() {
         slotDps: MMO_DEFAULTS.dps!,
         slotFlex: MMO_DEFAULTS.flex!,
         slotPlayer: GENERIC_DEFAULTS.player!,
-        slotBench: GENERIC_DEFAULTS.bench!,
         maxAttendees: '',
         autoUnbench: true,
         pollDurationHours: 24,
@@ -158,13 +156,11 @@ export function PlanEventForm() {
                 healer: form.slotHealer,
                 dps: form.slotDps,
                 flex: form.slotFlex,
-                bench: form.slotBench,
             };
         }
         return {
             type: 'generic',
             player: form.slotPlayer,
-            bench: form.slotBench,
         };
     }
 
@@ -424,7 +420,6 @@ export function PlanEventForm() {
                     slotDps={form.slotDps}
                     slotFlex={form.slotFlex}
                     slotPlayer={form.slotPlayer}
-                    slotBench={form.slotBench}
                     maxAttendees={form.maxAttendees}
                     autoUnbench={form.autoUnbench}
                     maxAttendeesId="planMaxAttendees"
@@ -434,7 +429,6 @@ export function PlanEventForm() {
                     onSlotDpsChange={(v) => updateField('slotDps', v)}
                     onSlotFlexChange={(v) => updateField('slotFlex', v)}
                     onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
-                    onSlotBenchChange={(v) => updateField('slotBench', v)}
                     onMaxAttendeesChange={(v) => updateField('maxAttendees', v)}
                     onAutoUnbenchChange={(v) => updateField('autoUnbench', v)}
                 />

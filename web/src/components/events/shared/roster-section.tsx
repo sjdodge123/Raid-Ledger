@@ -9,7 +9,6 @@ export interface RosterSectionProps {
     slotDps: number;
     slotFlex: number;
     slotPlayer: number;
-    slotBench: number;
     maxAttendees: string;
     autoUnbench: boolean;
     maxAttendeesError?: string;
@@ -20,7 +19,6 @@ export interface RosterSectionProps {
     onSlotDpsChange: (v: number) => void;
     onSlotFlexChange: (v: number) => void;
     onSlotPlayerChange: (v: number) => void;
-    onSlotBenchChange: (v: number) => void;
     onMaxAttendeesChange: (v: string) => void;
     onAutoUnbenchChange: (v: boolean) => void;
 }
@@ -32,7 +30,6 @@ export function RosterSection({
     slotDps,
     slotFlex,
     slotPlayer,
-    slotBench,
     maxAttendees,
     autoUnbench,
     maxAttendeesError,
@@ -43,16 +40,15 @@ export function RosterSection({
     onSlotDpsChange,
     onSlotFlexChange,
     onSlotPlayerChange,
-    onSlotBenchChange,
     onMaxAttendeesChange,
     onAutoUnbenchChange,
 }: RosterSectionProps) {
     const totalSlots = useMemo(() => {
         if (slotType === 'mmo') {
-            return slotTank + slotHealer + slotDps + slotFlex + slotBench;
+            return slotTank + slotHealer + slotDps + slotFlex;
         }
-        return slotPlayer + slotBench;
-    }, [slotType, slotTank, slotHealer, slotDps, slotFlex, slotPlayer, slotBench]);
+        return slotPlayer;
+    }, [slotType, slotTank, slotHealer, slotDps, slotFlex, slotPlayer]);
 
     return (
         <>
@@ -97,14 +93,10 @@ export function RosterSection({
                 ) : (
                     <SlotStepper label="Players" value={slotPlayer} onChange={onSlotPlayerChange} color="bg-indigo-500" />
                 )}
-                <SlotStepper label="Bench" value={slotBench} onChange={onSlotBenchChange} color="bg-gray-500" />
             </div>
 
             <div className="text-sm text-muted">
                 Total slots: <span className="text-emerald-400 font-medium">{totalSlots}</span>
-                {slotBench > 0 && (
-                    <span className="text-dim"> (incl. {slotBench} bench)</span>
-                )}
             </div>
 
             {/* Max Attendees */}

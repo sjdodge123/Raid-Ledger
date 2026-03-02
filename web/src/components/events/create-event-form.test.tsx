@@ -151,24 +151,25 @@ describe('CreateEventForm — SlotStepper behavior', () => {
 
     it('decrement button is disabled when value is at minimum (0)', () => {
         renderForm();
-        // Find the Bench row's decrement button
-        const benchLabel = screen.getByText('Bench');
-        const benchRow = benchLabel.closest('.flex.items-center.justify-between');
-        expect(benchRow).not.toBeNull();
-        const buttons = benchRow!.querySelectorAll('button[type="button"]');
+        // Find the Flex row's decrement button (Flex defaults to 5 for MMO)
+        fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
+        const flexLabel = screen.getByText('Flex');
+        const flexRow = flexLabel.closest('.flex.items-center.justify-between');
+        expect(flexRow).not.toBeNull();
+        const buttons = flexRow!.querySelectorAll('button[type="button"]');
         // First button in the row is decrement (-), last is increment (+)
-        const benchDecrement = buttons[0] as HTMLButtonElement;
-        const benchInput = benchRow!.querySelector('input[type="number"]') as HTMLInputElement;
-        expect(benchDecrement).not.toBeUndefined();
+        const flexDecrement = buttons[0] as HTMLButtonElement;
+        const flexInput = flexRow!.querySelector('input[type="number"]') as HTMLInputElement;
+        expect(flexDecrement).not.toBeUndefined();
 
         // Click decrement until we reach 0
-        const initialVal = parseInt(benchInput.value);
+        const initialVal = parseInt(flexInput.value);
         for (let i = 0; i < initialVal; i++) {
-            fireEvent.click(benchDecrement);
+            fireEvent.click(flexDecrement);
         }
 
-        expect(parseInt(benchInput.value)).toBe(0);
-        expect(benchDecrement).toBeDisabled();
+        expect(parseInt(flexInput.value)).toBe(0);
+        expect(flexDecrement).toBeDisabled();
     });
 });
 
@@ -220,12 +221,12 @@ describe('CreateEventForm — MMO vs generic slot toggle', () => {
         expect(screen.getByText('Players')).toBeInTheDocument();
     });
 
-    it('always shows Bench stepper regardless of slot type', () => {
+    it('does not show Bench stepper (bench is now dynamic)', () => {
         renderForm();
-        expect(screen.getByText('Bench')).toBeInTheDocument();
+        expect(screen.queryByText('Bench')).not.toBeInTheDocument();
 
         fireEvent.click(screen.getByRole('button', { name: 'MMO Roles' }));
-        expect(screen.getByText('Bench')).toBeInTheDocument();
+        expect(screen.queryByText('Bench')).not.toBeInTheDocument();
     });
 });
 

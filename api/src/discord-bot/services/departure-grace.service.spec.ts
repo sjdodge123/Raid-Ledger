@@ -505,10 +505,9 @@ describe('DepartureGraceService', () => {
     it('does not displace existing slot occupants (no-displacement rule)', async () => {
       const mmoSlotConfig = {
         type: 'mmo',
-        roles: [
-          { role: 'tank', count: 1 },
-          { role: 'healer', count: 1 },
-        ],
+        tank: 1,
+        healer: 1,
+        dps: 0,
       };
       // All slots occupied (excluding bench assignment)
       const existingAssignments = [
@@ -531,10 +530,9 @@ describe('DepartureGraceService', () => {
     it('moves from bench to first available MMO role slot when one is free', async () => {
       const mmoSlotConfig = {
         type: 'mmo',
-        roles: [
-          { role: 'tank', count: 2 },
-          { role: 'dps', count: 3 },
-        ],
+        tank: 2,
+        healer: 0,
+        dps: 3,
       };
       // tank:1 occupied, tank:2 is free
       const existingAssignments = [
@@ -585,7 +583,9 @@ describe('DepartureGraceService', () => {
     it('includes slot info in notification when slot was assigned', async () => {
       const mmoSlotConfig = {
         type: 'mmo',
-        roles: [{ role: 'healer', count: 1 }],
+        tank: 0,
+        healer: 1,
+        dps: 0,
       };
       setupWithSlotConfig(mmoSlotConfig, [benchAssignment]); // healer:1 free
 
@@ -614,7 +614,9 @@ describe('DepartureGraceService', () => {
       // Only one dps slot, currently empty — returning member gets it
       const mmoSlotConfig = {
         type: 'mmo',
-        roles: [{ role: 'dps', count: 1 }],
+        tank: 0,
+        healer: 0,
+        dps: 1,
       };
       setupWithSlotConfig(mmoSlotConfig, [benchAssignment]);
 
