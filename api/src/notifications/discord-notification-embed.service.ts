@@ -234,7 +234,7 @@ export class DiscordNotificationEmbedService {
       case 'level_up':
         return EMBED_COLORS.SIGNUP_CONFIRMATION;
       case 'missed_event_nudge':
-        return EMBED_COLORS.SYSTEM;
+        return EMBED_COLORS.REMINDER;
       default:
         return EMBED_COLORS.SYSTEM;
     }
@@ -423,6 +423,15 @@ export class DiscordNotificationEmbedService {
           });
         }
         break;
+      case 'missed_event_nudge':
+        if (payload.eventTitle) {
+          embed.addFields({
+            name: 'Event',
+            value: toStr(payload.eventTitle),
+            inline: true,
+          });
+        }
+        break;
     }
   }
 
@@ -520,6 +529,16 @@ export class DiscordNotificationEmbedService {
         if (eventId) {
           return new ButtonBuilder()
             .setLabel('View Roster')
+            .setStyle(ButtonStyle.Link)
+            .setURL(
+              `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
+            );
+        }
+        break;
+      case 'missed_event_nudge':
+        if (eventId) {
+          return new ButtonBuilder()
+            .setLabel('View Event')
             .setStyle(ButtonStyle.Link)
             .setURL(
               `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
