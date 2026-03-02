@@ -172,6 +172,9 @@ export class IgdbService {
   private tokenExpiry: Date | null = null;
   private tokenFetchPromise: Promise<string> | null = null;
 
+  /** ROK-608: In-flight request map for search coalescing */
+  private readonly inFlightSearches = new Map<string, Promise<SearchResult>>();
+
   // ROK-173: Sync & health tracking
   private _syncInProgress = false;
   private _lastApiCallAt: Date | null = null;
@@ -565,6 +568,31 @@ export class IgdbService {
    */
   async searchGames(query: string): Promise<SearchResult> {
     const normalizedQuery = this.normalizeQuery(query);
+
+    // ROK-608: Coalesce concurrent identical requests — if a search for this
+    // exact normalized query is already in-flight, piggyback on its promise
+    // instead of making a duplicate IGDB API call.
+    const existing = this.inFlightSearches.get(normalizedQuery);
+    if (existing) {
+      this.logger.debug(
+        `Coalescing search request for query: ${normalizedQuery}`,
+      );
+      return existing;
+    }
+
+    const promise = this._executeSearch(query, normalizedQuery).finally(() => {
+      this.inFlightSearches.delete(normalizedQuery);
+    });
+
+    this.inFlightSearches.set(normalizedQuery, promise);
+    return promise;
+  }
+
+  /** Core search implementation — called via searchGames coalescing wrapper. */
+  private async _executeSearch(
+    query: string,
+    normalizedQuery: string,
+  ): Promise<SearchResult> {
     const cacheKey = this.getCacheKey(query);
 
     // Build DB filters for hidden/banned/adult (reused across layers)
