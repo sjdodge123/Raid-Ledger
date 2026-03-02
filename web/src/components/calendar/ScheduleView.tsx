@@ -20,6 +20,8 @@ interface ScheduleViewProps {
     onDateChange: (date: Date) => void;
     onSelectEvent: (event: CalendarEvent) => void;
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
+    /** When true, a background fetch is in progress — suppresses the empty state */
+    isFetching?: boolean;
 }
 
 /** Horizontal line with dot indicating current time, rendered among today's events. */
@@ -131,6 +133,7 @@ export function ScheduleView({
     currentDate,
     onDateChange,
     onSelectEvent,
+    isFetching,
 }: ScheduleViewProps) {
     const touchStartX = useRef(0);
     const touchStartY = useRef(0);
@@ -213,6 +216,14 @@ export function ScheduleView({
     }, []);
 
     if (events.length === 0) {
+        if (isFetching) {
+            return (
+                <div className="flex items-center justify-center py-16 gap-2 text-muted">
+                    <div className="loading-spinner" />
+                    <span>Loading events...</span>
+                </div>
+            );
+        }
         return (
             <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="text-4xl mb-3 text-dim">
