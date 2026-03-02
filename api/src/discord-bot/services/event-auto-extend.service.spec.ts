@@ -4,6 +4,7 @@ import { EventAutoExtendService } from './event-auto-extend.service';
 import { SettingsService } from '../../settings/settings.service';
 import { VoiceAttendanceService } from './voice-attendance.service';
 import { ScheduledEventService } from './scheduled-event.service';
+import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -16,6 +17,8 @@ function makeCandidate(overrides: {
   originalEnd?: Date;
   extendedUntil?: Date | null;
   discordScheduledEventId?: string | null;
+  isAdHoc?: boolean;
+  channelBindingId?: string | null;
 }) {
   const originalEnd =
     overrides.originalEnd ?? new Date(Date.now() + 5 * 60 * 1000);
@@ -27,6 +30,8 @@ function makeCandidate(overrides: {
     ] as [Date, Date],
     extendedUntil: overrides.extendedUntil ?? null,
     discordScheduledEventId: overrides.discordScheduledEventId ?? null,
+    isAdHoc: overrides.isAdHoc ?? false,
+    channelBindingId: overrides.channelBindingId ?? null,
   };
 }
 
@@ -57,6 +62,7 @@ describe('EventAutoExtendService', () => {
   let settingsService: jest.Mocked<SettingsService>;
   let voiceAttendanceService: jest.Mocked<VoiceAttendanceService>;
   let scheduledEventService: jest.Mocked<ScheduledEventService>;
+  let adHocNotificationService: jest.Mocked<AdHocNotificationService>;
   let adHocGateway: jest.Mocked<AdHocEventsGateway>;
   let cronJobService: jest.Mocked<CronJobService>;
   let mockDb: {
@@ -101,6 +107,12 @@ describe('EventAutoExtendService', () => {
           },
         },
         {
+          provide: AdHocNotificationService,
+          useValue: {
+            queueUpdate: jest.fn(),
+          },
+        },
+        {
           provide: AdHocEventsGateway,
           useValue: {
             emitEndTimeExtended: jest.fn(),
@@ -123,6 +135,7 @@ describe('EventAutoExtendService', () => {
     settingsService = module.get(SettingsService);
     voiceAttendanceService = module.get(VoiceAttendanceService);
     scheduledEventService = module.get(ScheduledEventService);
+    adHocNotificationService = module.get(AdHocNotificationService);
     adHocGateway = module.get(AdHocEventsGateway);
     cronJobService = module.get(CronJobService);
   });
@@ -511,6 +524,61 @@ describe('EventAutoExtendService', () => {
         20,
         expect.any(String),
       );
+    });
+  });
+
+  // ─── Ad-hoc Discord embed update (ROK-612) ─────────────────────────────
+
+  describe('ad-hoc Discord embed update', () => {
+    it('queues a Discord embed update when extending an ad-hoc event with a binding', async () => {
+      const candidate = makeCandidate({
+        id: 42,
+        isAdHoc: true,
+        channelBindingId: 'binding-abc',
+      });
+      mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
+      const updateChain = createUpdateChain();
+      mockDb.update.mockReturnValue(updateChain);
+      voiceAttendanceService.getActiveCount.mockReturnValue(3);
+
+      await service.checkAndExtendEvents();
+
+      expect(adHocNotificationService.queueUpdate).toHaveBeenCalledWith(
+        42,
+        'binding-abc',
+      );
+    });
+
+    it('does NOT queue a Discord embed update for scheduled (non-ad-hoc) events', async () => {
+      const candidate = makeCandidate({
+        id: 42,
+        isAdHoc: false,
+        channelBindingId: null,
+      });
+      mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
+      const updateChain = createUpdateChain();
+      mockDb.update.mockReturnValue(updateChain);
+      voiceAttendanceService.getActiveCount.mockReturnValue(3);
+
+      await service.checkAndExtendEvents();
+
+      expect(adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
+    });
+
+    it('does NOT queue a Discord embed update when ad-hoc event has no binding', async () => {
+      const candidate = makeCandidate({
+        id: 42,
+        isAdHoc: true,
+        channelBindingId: null,
+      });
+      mockDb.select.mockReturnValue(createSelectWhereChain([candidate]));
+      const updateChain = createUpdateChain();
+      mockDb.update.mockReturnValue(updateChain);
+      voiceAttendanceService.getActiveCount.mockReturnValue(3);
+
+      await service.checkAndExtendEvents();
+
+      expect(adHocNotificationService.queueUpdate).not.toHaveBeenCalled();
     });
   });
 

@@ -146,12 +146,13 @@ export class AdHocNotificationService implements OnModuleDestroy {
   }
 
   /**
-   * Post the final completion summary embed.
+   * Update the existing embed in-place to show the completed state (ROK-612).
+   * No second "completed" message is posted — the original embed is edited.
    */
   async notifyCompleted(
     eventId: number,
     bindingId: string,
-    event: {
+    _event: {
       id: number;
       title: string;
       gameName?: string;
@@ -164,8 +165,14 @@ export class AdHocNotificationService implements OnModuleDestroy {
       totalDurationSeconds: number | null;
     }>,
   ): Promise<void> {
-    const channelId = await this.resolveNotificationChannel(bindingId);
-    if (!channelId) return;
+    const tracked = this.messageIds.get(eventId);
+    if (!tracked) {
+      this.logger.debug(
+        `notifyCompleted: no tracked message for event ${eventId}, skipping`,
+      );
+      this.pendingUpdates.delete(eventId);
+      return;
+    }
 
     const context = await this.buildContext();
     const embedData = await this.buildEmbedEventData(
@@ -177,7 +184,11 @@ export class AdHocNotificationService implements OnModuleDestroy {
       })),
     );
 
-    if (!embedData) return;
+    if (!embedData) {
+      this.messageIds.delete(eventId);
+      this.pendingUpdates.delete(eventId);
+      return;
+    }
 
     const { embed, row } = this.embedFactory.buildEventEmbed(
       embedData,
@@ -186,10 +197,15 @@ export class AdHocNotificationService implements OnModuleDestroy {
     );
 
     try {
-      await this.clientService.sendEmbed(channelId, embed, row);
+      await this.clientService.editEmbed(
+        tracked.channelId,
+        tracked.messageId,
+        embed,
+        row,
+      );
     } catch (err) {
       this.logger.error(
-        `Failed to send ad-hoc completion for event ${eventId}: ${err}`,
+        `Failed to edit ad-hoc completion embed for event ${eventId}: ${err}`,
       );
     }
 
@@ -312,11 +328,15 @@ export class AdHocNotificationService implements OnModuleDestroy {
     // Only count active participants for the signup count
     const activeCount = participants.filter((p) => p.isActive).length;
 
+    // Use extendedUntil when available so the embed duration reflects
+    // the actual session length, not just the initial 1h window (ROK-612).
+    const effectiveEnd = event.extendedUntil ?? event.duration[1];
+
     const embedData: EmbedEventData = {
       id: event.id,
       title: event.title,
       startTime: event.duration[0].toISOString(),
-      endTime: event.duration[1].toISOString(),
+      endTime: effectiveEnd.toISOString(),
       signupCount: activeCount,
       maxAttendees: event.maxAttendees,
       slotConfig: event.slotConfig as EmbedEventData['slotConfig'],

@@ -257,11 +257,33 @@ describe('AdHocNotificationService', () => {
   });
 
   describe('notifyCompleted', () => {
-    it('sends completion embed to notification channel', async () => {
+    /** Helper: spawn an event so a tracked message is registered for edit-in-place. */
+    async function spawnEvent(eventId: number) {
       mockChannelBindingsService.getBindingById.mockResolvedValue({
         id: 'binding-complete',
         config: { notificationChannelId: 'complete-channel' },
       });
+      mockBuildEmbedData({ id: eventId });
+
+      await service.notifySpawn(
+        eventId,
+        'binding-complete',
+        { id: eventId, title: 'WoW — Quick Play', gameName: 'WoW' },
+        [{ discordUserId: 'user-1', discordUsername: 'Player1' }],
+      );
+
+      // Reset mocks so completion assertions are clean
+      mockClientService.sendEmbed.mockClear();
+      mockClientService.editEmbed.mockClear();
+      mockEmbedFactory.buildEventEmbed.mockClear();
+      mockEmbedFactory.buildEventEmbed.mockReturnValue({
+        embed: fakeEmbed,
+        row: undefined,
+      });
+    }
+
+    it('edits the existing embed in-place instead of posting a new message (ROK-612)', async () => {
+      await spawnEvent(60);
       mockBuildEmbedData({ id: 60 });
 
       await service.notifyCompleted(
@@ -288,27 +310,27 @@ describe('AdHocNotificationService', () => {
         expect.any(Object),
         expect.objectContaining({ state: 'completed', buttons: 'none' }),
       );
-      expect(mockClientService.sendEmbed).toHaveBeenCalledWith(
+      // Should edit, NOT send a new message
+      expect(mockClientService.editEmbed).toHaveBeenCalledWith(
         'complete-channel',
+        'msg-1',
         expect.any(Object),
         undefined,
       );
+      expect(mockClientService.sendEmbed).not.toHaveBeenCalled();
     });
 
     it('cleans up pending updates after completion', async () => {
-      mockChannelBindingsService.getBindingById.mockResolvedValue({
-        id: 'binding-cleanup',
-        config: { notificationChannelId: 'cleanup-channel' },
-      });
+      await spawnEvent(70);
       mockBuildEmbedData({ id: 70 });
 
       // Queue an update
-      service.queueUpdate(70, 'binding-cleanup');
+      service.queueUpdate(70, 'binding-complete');
 
       // Complete the event — should clear pending updates
       await service.notifyCompleted(
         70,
-        'binding-cleanup',
+        'binding-complete',
         {
           id: 70,
           title: 'Cleanup Test',
@@ -318,22 +340,19 @@ describe('AdHocNotificationService', () => {
         [],
       );
 
-      // Verify sendEmbed was called for the completion
-      expect(mockClientService.sendEmbed).toHaveBeenCalledTimes(1);
+      // Should have edited the embed
+      expect(mockClientService.editEmbed).toHaveBeenCalledTimes(1);
     });
 
-    it('handles errors gracefully', async () => {
-      mockChannelBindingsService.getBindingById.mockResolvedValue({
-        id: 'binding-err',
-        config: { notificationChannelId: 'err-channel' },
-      });
+    it('handles edit errors gracefully', async () => {
+      await spawnEvent(80);
       mockBuildEmbedData({ id: 80 });
-      mockClientService.sendEmbed.mockRejectedValue(new Error('fail'));
+      mockClientService.editEmbed.mockRejectedValue(new Error('fail'));
 
       await expect(
         service.notifyCompleted(
           80,
-          'binding-err',
+          'binding-complete',
           {
             id: 80,
             title: 'Error Test',
@@ -345,15 +364,14 @@ describe('AdHocNotificationService', () => {
       ).resolves.not.toThrow();
     });
 
-    it('does nothing when binding not found', async () => {
-      mockChannelBindingsService.getBindingById.mockResolvedValue(null);
-
+    it('skips when no tracked message exists for the event', async () => {
+      // No spawnEvent call — no tracked message
       await service.notifyCompleted(
         90,
         'nonexistent',
         {
           id: 90,
-          title: 'No Binding',
+          title: 'No Tracked Message',
           startTime: '2026-02-10T18:00:00Z',
           endTime: '2026-02-10T20:00:00Z',
         },
@@ -361,6 +379,7 @@ describe('AdHocNotificationService', () => {
       );
 
       expect(mockClientService.sendEmbed).not.toHaveBeenCalled();
+      expect(mockClientService.editEmbed).not.toHaveBeenCalled();
     });
   });
 });
