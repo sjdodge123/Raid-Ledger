@@ -63,7 +63,8 @@ export class EventReminderService {
    * For each reminder window, finds events whose start time is within the
    * window and sends DM reminders to all confirmed attendees with Discord linked.
    */
-  @Cron('0 */1 * * * *', { name: 'EventReminderService_handleReminders' })
+  // Stagger: offset to second 20 to avoid collision with EventAutoExtend at second 0 (ROK-606).
+  @Cron('20 */1 * * * *', { name: 'EventReminderService_handleReminders' })
   async handleReminders(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'EventReminderService_handleReminders',
