@@ -304,21 +304,11 @@ export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: (
                                                 onClick={() =>
                                                     setCategory(cat.value)
                                                 }
-                                                className="rounded-full px-3 py-2.5 text-sm font-medium transition-all"
-                                                style={{
-                                                    backgroundColor:
-                                                        category === cat.value
-                                                            ? 'var(--color-accent)'
-                                                            : 'var(--color-overlay)',
-                                                    color:
-                                                        category === cat.value
-                                                            ? 'white'
-                                                            : 'var(--color-foreground)',
-                                                    border:
-                                                        category === cat.value
-                                                            ? '1px solid var(--color-accent)'
-                                                            : '1px solid var(--color-border)',
-                                                }}
+                                                className={`rounded-full px-3 py-2.5 text-sm font-medium transition-colors ${
+                                                    category === cat.value
+                                                        ? 'bg-emerald-600 text-white border border-emerald-600 shadow-[0_0_0_2px_rgba(5,150,105,0.3)]'
+                                                        : 'bg-overlay text-foreground border border-edge'
+                                                }`}
                                             >
                                                 <span className="mr-1">
                                                     {cat.icon}
