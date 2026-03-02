@@ -1,7 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DepartureGraceService } from './departure-grace.service';
-import { DepartureGraceQueueService } from '../queues/departure-grace.queue';
+import {
+  DepartureGraceQueueService,
+  DEPARTURE_GRACE_DELAY_MS,
+} from '../queues/departure-grace.queue';
 import { NotificationService } from '../../notifications/notification.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { createMockEvent, createMockSignup, createMockUser } from '../../common/testing/factories';
@@ -272,9 +275,6 @@ describe('DepartureGraceService', () => {
 
     describe('grace timer details', () => {
       it('passes the DEPARTURE_GRACE_DELAY_MS constant as the delay', async () => {
-        const { DEPARTURE_GRACE_DELAY_MS } = await import(
-          '../queues/departure-grace.queue'
-        );
         mockDb._limitResults.push([scheduledEvent], [activeSignup]);
 
         await service.onMemberLeave(EVENT_ID, DISCORD_USER_ID);
