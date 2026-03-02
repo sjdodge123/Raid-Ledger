@@ -58,7 +58,6 @@ interface FormState {
     slotDps: number;
     slotFlex: number;
     slotPlayer: number;
-    slotBench: number;
     // Capacity
     maxAttendees: string;
     autoUnbench: boolean;
@@ -126,7 +125,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 slotDps: sc?.dps ?? MMO_DEFAULTS.dps!,
                 slotFlex: sc?.flex ?? MMO_DEFAULTS.flex!,
                 slotPlayer: sc?.player ?? GENERIC_DEFAULTS.player!,
-                slotBench: sc?.bench ?? GENERIC_DEFAULTS.bench!,
                 maxAttendees: editEvent.maxAttendees ? String(editEvent.maxAttendees) : '',
                 autoUnbench: editEvent.autoUnbench ?? true,
                 recurrenceFrequency: '',
@@ -154,7 +152,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             slotDps: MMO_DEFAULTS.dps!,
             slotFlex: MMO_DEFAULTS.flex!,
             slotPlayer: GENERIC_DEFAULTS.player!,
-            slotBench: GENERIC_DEFAULTS.bench!,
             maxAttendees: '',
             autoUnbench: true,
             recurrenceFrequency: '',
@@ -199,7 +196,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
             slotDps: config.slotConfig?.dps ?? prev.slotDps,
             slotFlex: config.slotConfig?.flex ?? prev.slotFlex,
             slotPlayer: config.slotConfig?.player ?? prev.slotPlayer,
-            slotBench: config.slotConfig?.bench ?? prev.slotBench,
             maxAttendees: config.maxAttendees ? String(config.maxAttendees) : prev.maxAttendees,
             autoUnbench: config.autoUnbench ?? prev.autoUnbench,
             recurrenceFrequency: config.recurrence?.frequency ?? prev.recurrenceFrequency,
@@ -310,13 +306,11 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                 healer: form.slotHealer,
                 dps: form.slotDps,
                 flex: form.slotFlex,
-                bench: form.slotBench,
             };
         }
         return {
             type: 'generic',
             player: form.slotPlayer,
-            bench: form.slotBench,
         };
     }
 
@@ -611,7 +605,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     slotDps={form.slotDps}
                     slotFlex={form.slotFlex}
                     slotPlayer={form.slotPlayer}
-                    slotBench={form.slotBench}
                     maxAttendees={form.maxAttendees}
                     autoUnbench={form.autoUnbench}
                     maxAttendeesError={errors.maxAttendees}
@@ -622,7 +615,6 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
                     onSlotDpsChange={(v) => updateField('slotDps', v)}
                     onSlotFlexChange={(v) => updateField('slotFlex', v)}
                     onSlotPlayerChange={(v) => updateField('slotPlayer', v)}
-                    onSlotBenchChange={(v) => updateField('slotBench', v)}
                     onMaxAttendeesChange={(v) => {
                         updateField('maxAttendees', v);
                         setErrors((prev) => ({ ...prev, maxAttendees: undefined }));
