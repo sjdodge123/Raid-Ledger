@@ -55,12 +55,14 @@ interface AssignmentPopupProps {
     onGenerateInviteLink?: () => void;
     /** ROK-402: Called when admin removes a signup from the event entirely */
     onRemoveFromEvent?: (signupId: number, username: string) => void;
-    /** ROK-390: Called when admin reassigns occupant to another slot (move or swap) */
+    /** ROK-390: Called when admin reassigns a player to another slot (move or swap) */
     onReassignToSlot?: (
         fromSignupId: number,
         toRole: RosterRole,
         toPosition: number,
     ) => void;
+    /** ROK-596: All currently-assigned players (for "move here" from any slot) */
+    assigned?: RosterAssignmentResponse[];
     /** ROK-461: Game ID for fetching player's characters */
     gameId?: number;
     /** ROK-461: Whether this is an MMO event with roles */
@@ -95,6 +97,7 @@ export function AssignmentPopup({
     onGenerateInviteLink,
     onRemoveFromEvent,
     onReassignToSlot,
+    assigned = [],
     gameId,
     isMMO,
     currentUserId,
@@ -681,13 +684,53 @@ export function AssignmentPopup({
                 )}
 
                 {/* Empty state — AC-5: clear messaging */}
-                {matching.length === 0 && other.length === 0 && (
+                {matching.length === 0 && other.length === 0 && !assigned.some(a => !(a.slot === slotRole && a.position === slotPosition)) && (
                     <div className="assignment-popup__empty">
                         {search
                             ? 'No players match your search.'
                             : 'All players are assigned to slots \u2713'}
                     </div>
                 )}
+
+                {/* ROK-596: Roster players — move an already-assigned player to this slot */}
+                {!isBrowseAll && slotRole && slotPosition > 0 && onReassignToSlot && (() => {
+                    const lowerSearch = search.toLowerCase();
+                    const rosterPlayers = assigned.filter(a =>
+                        // Exclude the current slot's occupant
+                        !(a.slot === slotRole && a.position === slotPosition) &&
+                        // Apply search filter
+                        (!search || a.username.toLowerCase().includes(lowerSearch) ||
+                            a.character?.name?.toLowerCase().includes(lowerSearch))
+                    );
+                    if (rosterPlayers.length === 0) return null;
+                    return (
+                        <div className="assignment-popup__section">
+                            <h4 className="assignment-popup__section-title">
+                                Roster Players
+                            </h4>
+                            {rosterPlayers.map(player => (
+                                <div key={player.signupId} className="flex items-center gap-2">
+                                    <div className="min-w-0 flex-1">
+                                        <PlayerCard
+                                            player={player}
+                                            size="compact"
+                                            showRole
+                                        />
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            onReassignToSlot(player.signupId, slotRole, slotPosition);
+                                            handleClose();
+                                        }}
+                                        className="assignment-popup__assign-btn shrink-0"
+                                    >
+                                        Move here
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })()}
 
                 {/* ROK-263: Invite a PUG button (targeted mode, MMO roles only) */}
                 {canInvitePug && (

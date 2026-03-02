@@ -610,7 +610,8 @@ export const RosterBuilder = memo(function RosterBuilder({
                     onGenerateInviteLink(assignmentTarget.role);
                 } : undefined}
                 onRemoveFromEvent={onRemoveFromEvent}
-                onReassignToSlot={assignmentTarget?.occupant ? handleReassignToSlot : undefined}
+                onReassignToSlot={handleReassignToSlot}
+                assigned={assignments}
                 gameId={gameId}
                 isMMO={isMMOEvent}
                 currentUserId={currentUserId}
