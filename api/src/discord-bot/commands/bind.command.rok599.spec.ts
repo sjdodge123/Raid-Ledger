@@ -31,6 +31,14 @@ describe('BindCommand — ROK-599 event bind', () => {
     return chain;
   };
 
+  /** Select chain that resolves at .where() (no .limit()) — for count queries. */
+  const makeCountSelectChain = (rows: unknown[] = []) => {
+    const chain: Record<string, jest.Mock> = {};
+    chain.from = jest.fn().mockReturnValue(chain);
+    chain.where = jest.fn().mockResolvedValue(rows);
+    return chain;
+  };
+
   const makeUpdateChain = () => {
     const chain: Record<string, jest.Mock> = {};
     chain.set = jest.fn().mockReturnValue(chain);
@@ -292,7 +300,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent])) // event lookup
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser])) // user lookup
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent])); // re-fetch after update
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent])) // re-fetch after update
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 3 }])); // signup count
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({
@@ -322,7 +331,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockAdminUser]))
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({
@@ -348,7 +358,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockOperatorUser]))
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({
@@ -408,7 +419,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 3 }]));
       mockDb.update = jest.fn().mockReturnValue(updateChain);
 
       const channelOption = {
@@ -440,7 +452,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(updateChain);
 
       const channelOption = {
@@ -478,7 +491,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([updatedEventWithOverride]));
+        .mockReturnValueOnce(makeSelectChain([updatedEventWithOverride]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 5 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const channelOption = {
@@ -509,7 +523,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([mockUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const channelOption = {
@@ -551,7 +566,8 @@ describe('BindCommand — ROK-599 event bind', () => {
               events: { ...mockUpdatedEvent.events, gameId: null },
             },
           ]),
-        );
+        )
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(updateChain);
 
       const interaction = mockEventBindInteraction({ gameOption: 'none' });
@@ -580,7 +596,8 @@ describe('BindCommand — ROK-599 event bind', () => {
               events: { ...mockUpdatedEvent.events, gameId: null },
             },
           ]),
-        );
+        )
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(updateChain);
 
       const interaction = mockEventBindInteraction({ gameOption: 'General' });
@@ -605,7 +622,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([updatedNoGame]));
+        .mockReturnValueOnce(makeSelectChain([updatedNoGame]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({ gameOption: 'none' });
@@ -641,7 +659,8 @@ describe('BindCommand — ROK-599 event bind', () => {
               games: { name: 'Final Fantasy XIV', coverUrl: null },
             },
           ]),
-        );
+        )
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 2 }])); // signup count
       mockDb.update = jest.fn().mockReturnValue(updateChain);
 
       const interaction = mockEventBindInteraction({
@@ -700,7 +719,8 @@ describe('BindCommand — ROK-599 event bind', () => {
               games: { name: 'Final Fantasy XIV', coverUrl: null },
             },
           ]),
-        );
+        )
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 4 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({
@@ -735,7 +755,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([updatedNoGame]));
+        .mockReturnValueOnce(makeSelectChain([updatedNoGame]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({ gameOption: 'none' });
@@ -768,7 +789,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .fn()
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
-        .mockReturnValueOnce(makeSelectChain([updatedNoGame]));
+        .mockReturnValueOnce(makeSelectChain([updatedNoGame]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 0 }]));
       mockDb.update = jest.fn().mockReturnValue(makeUpdateChain());
 
       const interaction = mockEventBindInteraction({ gameOption: 'none' });
@@ -815,7 +837,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
         .mockReturnValueOnce(makeSelectChain([mockGame]))
-        .mockReturnValueOnce(makeSelectChain([combinedUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([combinedUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 3 }]));
 
       const channelOption = {
         id: 'override-channel-999',
@@ -864,7 +887,8 @@ describe('BindCommand — ROK-599 event bind', () => {
         .mockReturnValueOnce(makeSelectChain([mockEvent]))
         .mockReturnValueOnce(makeSelectChain([mockCreatorUser]))
         .mockReturnValueOnce(makeSelectChain([mockGame]))
-        .mockReturnValueOnce(makeSelectChain([combinedUpdatedEvent]));
+        .mockReturnValueOnce(makeSelectChain([combinedUpdatedEvent]))
+        .mockReturnValueOnce(makeCountSelectChain([{ count: 1 }]));
 
       const channelOption = {
         id: 'override-channel-999',

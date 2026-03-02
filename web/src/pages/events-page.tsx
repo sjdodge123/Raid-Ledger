@@ -138,15 +138,16 @@ export function EventsPage() {
         e.game?.name?.toLowerCase().includes(q)
       );
     }
-    if (overlapSet) {
+    if (overlapSet && activeTab !== 'past') {
       // ROK-603: Stable sort — game-time overlaps first, then preserve
-      // chronological startTime order within each group (ASC for upcoming/mine, DESC for past)
-      const timeDirection = activeTab === 'past' ? -1 : 1;
+      // chronological startTime order (ASC for upcoming/mine).
+      // Past events skip this sort to preserve the backend's DESC order
+      // since game-time relevance doesn't apply to completed events (ROK-613).
       result = [...result].sort((a, b) => {
         const aOverlaps = overlapSet.has(a.id) ? 0 : 1;
         const bOverlaps = overlapSet.has(b.id) ? 0 : 1;
         if (aOverlaps !== bOverlaps) return aOverlaps - bOverlaps;
-        return (new Date(a.startTime).getTime() - new Date(b.startTime).getTime()) * timeDirection;
+        return new Date(a.startTime).getTime() - new Date(b.startTime).getTime();
       });
     }
     if (filterGameTime && overlapSet) {

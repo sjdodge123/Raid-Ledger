@@ -275,7 +275,13 @@ describe('ScheduledEventService', () => {
     });
 
     it('uses notificationChannelOverride instead of resolver when provided (ROK-599)', async () => {
-      await service.createScheduledEvent(42, baseEventData, 99, false, 'override-vc-456');
+      await service.createScheduledEvent(
+        42,
+        baseEventData,
+        99,
+        false,
+        'override-vc-456',
+      );
 
       expect(
         channelResolver.resolveVoiceChannelForScheduledEvent,
