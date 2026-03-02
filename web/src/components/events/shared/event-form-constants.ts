@@ -10,10 +10,10 @@ export const DURATION_PRESETS = [
 ] as const;
 
 /** Default slot counts for MMO mode */
-export const MMO_DEFAULTS: SlotConfigDto = { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 5, bench: 0 };
+export const MMO_DEFAULTS: SlotConfigDto = { type: 'mmo', tank: 2, healer: 4, dps: 14, flex: 5 };
 
 /** Default slot counts for generic mode */
-export const GENERIC_DEFAULTS: SlotConfigDto = { type: 'generic', player: 10, bench: 5 };
+export const GENERIC_DEFAULTS: SlotConfigDto = { type: 'generic', player: 10 };
 
 /** Roster slot state shape used by both forms */
 export interface SlotState {
@@ -23,7 +23,6 @@ export interface SlotState {
     slotDps: number;
     slotFlex: number;
     slotPlayer: number;
-    slotBench: number;
     maxAttendees: string;
     durationMinutes: number;
     customDuration: boolean;
@@ -33,23 +32,23 @@ export interface SlotState {
  * Map a player cap to MMO composition slot counts.
  * Known breakpoints use hand-tuned values; unknown caps use proportional scaling.
  */
-export function getCompositionForCap(cap: number): Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex' | 'slotBench'> {
-    const known: Record<number, Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex' | 'slotBench'>> = {
-        5:  { slotTank: 1, slotHealer: 1, slotDps: 3, slotFlex: 0, slotBench: 0 },
-        8:  { slotTank: 1, slotHealer: 2, slotDps: 5, slotFlex: 0, slotBench: 0 },
-        10: { slotTank: 2, slotHealer: 2, slotDps: 5, slotFlex: 1, slotBench: 0 },
-        20: { slotTank: 2, slotHealer: 4, slotDps: 12, slotFlex: 2, slotBench: 0 },
-        24: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 2, slotBench: 0 },
-        25: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 3, slotBench: 0 },
-        30: { slotTank: 2, slotHealer: 6, slotDps: 18, slotFlex: 4, slotBench: 0 },
-        40: { slotTank: 4, slotHealer: 10, slotDps: 22, slotFlex: 4, slotBench: 0 },
+export function getCompositionForCap(cap: number): Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex'> {
+    const known: Record<number, Pick<SlotState, 'slotTank' | 'slotHealer' | 'slotDps' | 'slotFlex'>> = {
+        5:  { slotTank: 1, slotHealer: 1, slotDps: 3, slotFlex: 0 },
+        8:  { slotTank: 1, slotHealer: 2, slotDps: 5, slotFlex: 0 },
+        10: { slotTank: 2, slotHealer: 2, slotDps: 5, slotFlex: 1 },
+        20: { slotTank: 2, slotHealer: 4, slotDps: 12, slotFlex: 2 },
+        24: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 2 },
+        25: { slotTank: 2, slotHealer: 5, slotDps: 15, slotFlex: 3 },
+        30: { slotTank: 2, slotHealer: 6, slotDps: 18, slotFlex: 4 },
+        40: { slotTank: 4, slotHealer: 10, slotDps: 22, slotFlex: 4 },
     };
     if (known[cap]) return known[cap];
     const tank = Math.max(1, Math.round(cap * 0.1));
     const healer = Math.max(1, Math.round(cap * 0.2));
     const flex = Math.round(cap * 0.15);
     const dps = cap - tank - healer - flex;
-    return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: flex, slotBench: 0 };
+    return { slotTank: tank, slotHealer: healer, slotDps: Math.max(1, dps), slotFlex: flex };
 }
 
 /** Event type definition shape (subset used by applyEventTypeDefaults) */
@@ -78,7 +77,6 @@ export function applyEventTypeDefaults(
             slotDps: MMO_DEFAULTS.dps!,
             slotFlex: MMO_DEFAULTS.flex!,
             slotPlayer: GENERIC_DEFAULTS.player!,
-            slotBench: GENERIC_DEFAULTS.bench!,
             maxAttendees: '',
         };
     }
@@ -98,7 +96,6 @@ export function applyEventTypeDefaults(
         } else {
             updates.slotType = 'generic';
             updates.slotPlayer = eventType.defaultPlayerCap;
-            updates.slotBench = 0;
         }
     }
 
