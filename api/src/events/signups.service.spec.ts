@@ -36,7 +36,7 @@ describe('SignupsService', () => {
     discordId: '123',
     role: 'member',
   };
-  const mockEvent = { id: 1, title: 'Test Event', creatorId: 1 };
+  const mockEvent = { id: 1, title: 'Test Event', creatorId: 99 };
   const mockSignup = {
     id: 1,
     eventId: 1,

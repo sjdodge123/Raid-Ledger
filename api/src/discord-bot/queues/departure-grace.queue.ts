@@ -5,7 +5,7 @@ import { Queue } from 'bullmq';
 export const DEPARTURE_GRACE_QUEUE = 'departure-grace';
 
 /** Default grace period before a departed member's slot is freed (ms). */
-export const DEPARTURE_GRACE_DELAY_MS = 30 * 1000; // 30s for dev testing — revert to 5 * 60 * 1000 before shipping
+export const DEPARTURE_GRACE_DELAY_MS = 5 * 60 * 1000;
 
 export interface DepartureGraceJobData {
   eventId: number;
