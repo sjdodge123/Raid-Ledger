@@ -388,6 +388,12 @@ export function EventDetailPage() {
     const handleSlotClick = (role: RosterRole, position: number) => {
         if (!isAuthenticated || signup.isPending) return;
 
+        // ROK-596: Bench clicks skip character selection — direct assignment
+        if (role === 'bench') {
+            doSignup({ slotRole: 'bench', slotPosition: position });
+            return;
+        }
+
         // ROK-600: Only show character modal for MMO games or games where user has characters
         if (shouldShowCharacterModal) {
             // Pre-select role if it's an MMO role (tank/healer/dps)

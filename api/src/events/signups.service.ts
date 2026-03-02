@@ -212,7 +212,8 @@ export class SignupsService {
             existing.preferredRoles && existing.preferredRoles.length > 0;
           const hasSingleSlotRoleDup = !hasPreferredRolesDup && dto?.slotRole && !autoBench;
 
-          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench) {
+          // ROK-596: Bench is always a direct assignment — skip auto-allocation
+          if (isMMODup && (hasPreferredRolesDup || hasSingleSlotRoleDup) && !autoBench && dto?.slotRole !== 'bench') {
             if (hasSingleSlotRoleDup && dto?.slotRole) {
               await tx
                 .update(schema.eventSignups)
@@ -308,7 +309,8 @@ export class SignupsService {
         dto?.preferredRoles && dto.preferredRoles.length > 0;
       const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
 
-      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench) {
+      // ROK-596: Bench is always a direct assignment — skip auto-allocation
+      if (isMMO && (hasPreferredRoles || hasSingleSlotRole) && !autoBench && dto?.slotRole !== 'bench') {
         // Ensure the signup has preferred roles stored for the algorithm
         if (hasSingleSlotRole && dto?.slotRole) {
           await tx
