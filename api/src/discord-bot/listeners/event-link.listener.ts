@@ -97,9 +97,10 @@ export class EventLinkListener {
       return;
     }
 
-    const clientUrl = (
-      process.env.CLIENT_URL || process.env.CORS_ORIGIN
-    )?.replace(/\/+$/, ''); // strip trailing slash(es)
+    const rawClientUrl =
+      process.env.CLIENT_URL || process.env.CORS_ORIGIN || '';
+    const clientUrl =
+      rawClientUrl !== 'auto' ? rawClientUrl.replace(/\/+$/, '') : '';
     if (!clientUrl) {
       this.logger.warn(
         'Neither CLIENT_URL nor CORS_ORIGIN is set — link unfurl disabled',
@@ -277,7 +278,10 @@ export class EventLinkListener {
     ]);
     return {
       communityName: branding.communityName,
-      clientUrl: process.env.CLIENT_URL || process.env.CORS_ORIGIN || null,
+      clientUrl:
+        (process.env.CLIENT_URL || process.env.CORS_ORIGIN || null) === 'auto'
+          ? null
+          : process.env.CLIENT_URL || process.env.CORS_ORIGIN || null,
       timezone,
     };
   }

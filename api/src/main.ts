@@ -95,6 +95,36 @@ async function bootstrap() {
     httpAdapter.getInstance().set('trust proxy', 1);
   }
 
+  // Auto-detect CLIENT_URL from the first external HTTP request when CORS_ORIGIN=auto.
+  // The all-in-one Docker image runs frontend + API behind nginx on any hostname,
+  // so CLIENT_URL can't be known at build time. We capture the hostname from the
+  // first real request (skipping Docker health-check localhost calls).
+  if (isAutoOrigin && !process.env.CLIENT_URL) {
+    app.use(
+      (
+        req: { headers: Record<string, string | string[] | undefined> },
+        _res: unknown,
+        next: () => void,
+      ) => {
+        if (!process.env.CLIENT_URL) {
+          const host = req.headers.host as string | undefined;
+          if (
+            host &&
+            !host.startsWith('localhost') &&
+            !host.startsWith('127.0.0.1')
+          ) {
+            const proto =
+              ((req.headers['x-forwarded-proto'] as string) || 'http')
+                .split(',')[0]
+                .trim() || 'http';
+            process.env.CLIENT_URL = `${proto}://${host}`;
+          }
+        }
+        next();
+      },
+    );
+  }
+
   // Serve uploaded avatars as static files (ROK-220)
   const avatarDir =
     process.env.AVATAR_UPLOAD_DIR ||
