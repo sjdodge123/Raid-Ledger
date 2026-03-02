@@ -551,8 +551,8 @@ export const RosterBuilder = memo(function RosterBuilder({
                 {roleSlots.map(({ role, label, color }) => {
                     const count = getSlotCount(role);
                     const assigned = assignments.filter((a) => a.slot === role);
-                    // Skip roles with 0 slots
-                    if (count === 0) return null;
+                    // Skip roles with 0 slots (bench handled separately below)
+                    if (count === 0 || role === 'bench') return null;
 
                     return (
                         <div key={role} className="rounded-lg border border-edge bg-surface/50 p-2 sm:p-4">
@@ -587,6 +587,64 @@ export const RosterBuilder = memo(function RosterBuilder({
                         </div>
                     );
                 })}
+
+                {/* ROK-596: Always-visible Bench section */}
+                {(() => {
+                    const benchCount = getSlotCount('bench' as RosterRole);
+                    const benchAssigned = assignments.filter((a) => a.slot === 'bench');
+                    return (
+                        <div className="rounded-lg border border-dashed border-edge bg-surface/30 p-2 sm:p-4">
+                            <h4 className="mb-2 sm:mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-secondary">
+                                <RoleIcon role={'bench' as RosterRole} size="w-4 h-4" />
+                                Bench {benchCount > 0 ? `(${benchAssigned.length}/${benchCount})` : `(${benchAssigned.length})`}
+                            </h4>
+                            {benchCount > 0 ? (
+                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                                    {Array.from({ length: benchCount }, (_, i) => {
+                                        const position = i + 1;
+                                        const assignedItem = benchAssigned.find((a) => a.position === position);
+                                        return (
+                                            <RosterSlot
+                                                key={`slot-bench-${position}`}
+                                                role={'bench' as RosterRole}
+                                                position={position}
+                                                item={assignedItem}
+                                                color={BENCH_SLOT.color}
+                                                onJoinClick={canJoin && !assignedItem ? onSlotClick : undefined}
+                                                isCurrentUser={currentUserId != null && assignedItem?.userId === currentUserId}
+                                                onAdminClick={canEdit ? handleAdminSlotClick : undefined}
+                                                onRemove={canEdit ? handleRemoveFromSlot : undefined}
+                                                onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && assignedItem?.userId === currentUserId ? onSelfRemove : undefined}
+                                                isPending={pendingSlotKey === `bench-${position}`}
+                                                onPendingChange={(pending) => setPendingSlotKey(pending ? `bench-${position}` : null)}
+                                            />
+                                        );
+                                    })}
+                                </div>
+                            ) : benchAssigned.length > 0 ? (
+                                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3">
+                                    {benchAssigned.map((item) => (
+                                        <RosterSlot
+                                            key={`slot-bench-${item.position}`}
+                                            role={'bench' as RosterRole}
+                                            position={item.position}
+                                            item={item}
+                                            color={BENCH_SLOT.color}
+                                            isCurrentUser={currentUserId != null && item.userId === currentUserId}
+                                            onAdminClick={canEdit ? handleAdminSlotClick : undefined}
+                                            onRemove={canEdit ? handleRemoveFromSlot : undefined}
+                                            onSelfRemove={!canEdit && onSelfRemove && currentUserId != null && item.userId === currentUserId ? onSelfRemove : undefined}
+                                            isPending={false}
+                                            onPendingChange={() => {}}
+                                        />
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-xs text-dim italic">No players on bench</p>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* ROK-208: Assignment Popup */}
@@ -610,6 +668,8 @@ export const RosterBuilder = memo(function RosterBuilder({
                 onReassignToSlot={assignmentTarget?.occupant ? handleReassignToSlot : undefined}
                 gameId={gameId}
                 isMMO={isMMOEvent}
+                currentUserId={currentUserId}
+                onSelfSlotClick={onSlotClick}
             />
         </div>
     );

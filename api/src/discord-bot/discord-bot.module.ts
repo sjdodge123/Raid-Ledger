@@ -27,6 +27,7 @@ import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
+import { DeparturePromoteListener } from './listeners/departure-promote.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
 import { ActivityListener } from './listeners/activity.listener';
 import { VoiceStateListener } from './listeners/voice-state.listener';
@@ -108,6 +109,7 @@ import { PlayingCommand } from './commands/playing.command';
     InteractionListener,
     SignupInteractionListener,
     RoachOutInteractionListener,
+    DeparturePromoteListener,
     PugInviteListener,
     ActivityListener,
     VoiceStateListener,

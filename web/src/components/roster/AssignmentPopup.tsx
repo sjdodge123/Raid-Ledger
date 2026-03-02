@@ -65,6 +65,10 @@ interface AssignmentPopupProps {
     gameId?: number;
     /** ROK-461: Whether this is an MMO event with roles */
     isMMO?: boolean;
+    /** Current user's ID — used to detect self-assignment and redirect to role selection flow */
+    currentUserId?: number;
+    /** Called when admin assigns themselves — redirects to the signup confirmation modal flow */
+    onSelfSlotClick?: (role: RosterRole, position: number) => void;
 }
 
 
@@ -93,6 +97,8 @@ export function AssignmentPopup({
     onReassignToSlot,
     gameId,
     isMMO,
+    currentUserId,
+    onSelfSlotClick,
 }: AssignmentPopupProps) {
     const [search, setSearch] = useState('');
     // For browse-all: selected player ID to show slot picker
@@ -167,6 +173,13 @@ export function AssignmentPopup({
 
     // ROK-461: Enter character selection step for a player
     const enterSelectionStep = (player: RosterAssignmentResponse) => {
+        // Self-assignment: redirect to signup confirmation modal for role preference
+        if (currentUserId && player.userId === currentUserId && onSelfSlotClick && slotRole && slotPosition > 0) {
+            onClose();
+            onSelfSlotClick(slotRole, slotPosition);
+            return;
+        }
+
         // Skip character selection for non-MMO / generic rosters (ROK-486)
         if (!gameId || !isMMO) {
             if (isBrowseAll && onAssignToSlot && availableSlots) {

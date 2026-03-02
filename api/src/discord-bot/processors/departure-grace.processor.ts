@@ -2,14 +2,24 @@ import { Inject, Logger } from '@nestjs/common';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Job } from 'bullmq';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, asc } from 'drizzle-orm';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+} from 'discord.js';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
-import { BenchPromotionService } from '../../events/bench-promotion.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
-import { SIGNUP_EVENTS } from '../discord-bot.constants';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import {
+  SIGNUP_EVENTS,
+  DEPARTURE_PROMOTE_BUTTON_IDS,
+  EMBED_COLORS,
+} from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
 import {
   DEPARTURE_GRACE_QUEUE,
@@ -23,9 +33,9 @@ import {
  * 1. Verify the user is still NOT in voice
  * 2. Verify the event is still live
  * 3. Set signup status to 'departed'
- * 4. Delete the roster assignment (free the slot)
- * 5. Notify the event organizer
- * 6. Schedule bench promotion for the vacated slot
+ * 4. Move the roster assignment to bench (free the slot)
+ * 5. Notify the event organizer (in-app)
+ * 6. Send Discord DM to creator with Promote/Dismiss buttons
  * 7. Emit events for Discord embed + WebSocket sync
  */
 @Processor(DEPARTURE_GRACE_QUEUE)
@@ -37,7 +47,7 @@ export class DepartureGraceProcessor extends WorkerHost {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly voiceAttendanceService: VoiceAttendanceService,
     private readonly notificationService: NotificationService,
-    private readonly benchPromotionService: BenchPromotionService,
+    private readonly clientService: DiscordBotClientService,
     private readonly eventEmitter: EventEmitter2,
   ) {
     super();
@@ -167,15 +177,11 @@ export class DepartureGraceProcessor extends WorkerHost {
       });
     }
 
-    // 8. Schedule bench promotion for the vacated non-bench slot
-    if (
-      assignment &&
-      assignment.role &&
-      assignment.role !== 'bench' &&
-      (await this.benchPromotionService.isEligible(eventId))
-    ) {
-      await this.benchPromotionService.schedulePromotion(
-        eventId,
+    // 8. Send Discord DM to creator with Promote/Dismiss buttons
+    if (assignment && assignment.role && assignment.role !== 'bench') {
+      await this.sendCreatorPromoteDM(
+        event,
+        displayName,
         assignment.role,
         assignment.position,
       );
@@ -207,5 +213,85 @@ export class DepartureGraceProcessor extends WorkerHost {
       if (user) return user.username;
     }
     return signup.discordUserId ?? 'Unknown';
+  }
+
+  /**
+   * Send a Discord DM to the event creator with Promote/Dismiss buttons (ROK-596).
+   * Skips silently if: no bench players, creator has no Discord, bot not connected.
+   */
+  private async sendCreatorPromoteDM(
+    event: typeof schema.events.$inferSelect,
+    departedName: string,
+    vacatedRole: string,
+    vacatedPosition: number,
+  ): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      if (!event.creatorId) return;
+
+      // Check if bench players exist (excluding departed status)
+      const benchPlayers = await this.db
+        .select({ id: schema.rosterAssignments.id })
+        .from(schema.rosterAssignments)
+        .innerJoin(
+          schema.eventSignups,
+          eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+        )
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, event.id),
+            eq(schema.rosterAssignments.role, 'bench'),
+            sql`${schema.eventSignups.status} NOT IN ('departed', 'declined', 'roached_out')`,
+          ),
+        )
+        .orderBy(asc(schema.eventSignups.signedUpAt))
+        .limit(1);
+
+      if (benchPlayers.length === 0) return;
+
+      // Look up creator's Discord ID
+      const [creator] = await this.db
+        .select({ discordId: schema.users.discordId })
+        .from(schema.users)
+        .where(eq(schema.users.id, event.creatorId))
+        .limit(1);
+
+      if (!creator?.discordId) return;
+
+      // Build embed
+      const embed = new EmbedBuilder()
+        .setColor(EMBED_COLORS.ROSTER_UPDATE)
+        .setTitle('Slot Vacated')
+        .setDescription(
+          `**${departedName}** departed from the **${vacatedRole}** slot (position ${vacatedPosition}) in **${event.title}**.\n\nWould you like to promote a bench player to fill it?`,
+        );
+
+      // Build button row
+      const customIdBase = `${event.id}:${vacatedRole}:${vacatedPosition}`;
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(
+            `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:${customIdBase}`,
+          )
+          .setLabel('Promote from Bench')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(
+            `${DEPARTURE_PROMOTE_BUTTON_IDS.DISMISS}:${customIdBase}`,
+          )
+          .setLabel('Leave Empty')
+          .setStyle(ButtonStyle.Secondary),
+      );
+
+      await this.clientService.sendEmbedDM(creator.discordId, embed, row);
+      this.logger.log(
+        `Sent promote DM to creator ${creator.discordId} for event ${event.id} slot ${vacatedRole}:${vacatedPosition}`,
+      );
+    } catch (error) {
+      // DM failures should not break the departure flow
+      this.logger.warn(
+        `Failed to send promote DM for event ${event.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
   }
 }

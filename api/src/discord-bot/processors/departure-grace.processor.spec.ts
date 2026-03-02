@@ -1,7 +1,7 @@
 import { DepartureGraceProcessor } from './departure-grace.processor';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { NotificationService } from '../../notifications/notification.service';
-import { BenchPromotionService } from '../../events/bench-promotion.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
@@ -22,9 +22,9 @@ describe('DepartureGraceProcessor', () => {
     resolveVoiceChannelForEvent: jest.Mock;
     create: jest.Mock;
   };
-  let mockBenchPromotionService: {
-    isEligible: jest.Mock;
-    schedulePromotion: jest.Mock;
+  let mockClientService: {
+    isConnected: jest.Mock;
+    sendEmbedDM: jest.Mock;
   };
   let mockEventEmitter: { emit: jest.Mock };
 
@@ -59,9 +59,9 @@ describe('DepartureGraceProcessor', () => {
       resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('channel-123'),
       create: jest.fn().mockResolvedValue(undefined),
     };
-    mockBenchPromotionService = {
-      isEligible: jest.fn().mockResolvedValue(false),
-      schedulePromotion: jest.fn().mockResolvedValue(undefined),
+    mockClientService = {
+      isConnected: jest.fn().mockReturnValue(true),
+      sendEmbedDM: jest.fn().mockResolvedValue(undefined),
     };
     mockEventEmitter = { emit: jest.fn() };
 
@@ -69,7 +69,7 @@ describe('DepartureGraceProcessor', () => {
       mockDb as never,
       mockVoiceAttendanceService as unknown as VoiceAttendanceService,
       mockNotificationService as unknown as NotificationService,
-      mockBenchPromotionService as unknown as BenchPromotionService,
+      mockClientService as unknown as DiscordBotClientService,
       mockEventEmitter as unknown as EventEmitter2,
     );
   });
@@ -245,10 +245,10 @@ describe('DepartureGraceProcessor', () => {
       );
     });
 
-    it('does not trigger bench promotion when no roster assignment exists', async () => {
+    it('does not send promote DM when no roster assignment exists', async () => {
       await processor.process(makeJob(jobData));
 
-      expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
     });
 
     it('does not send notification when event has no creatorId', async () => {
@@ -277,6 +277,12 @@ describe('DepartureGraceProcessor', () => {
      * The bench-slots query terminates at .where() (no .limit), so we override
      * .where on the 5th call to resolve to an array.
      */
+    beforeEach(() => {
+      // These tests focus on roster slot movement, not DM behavior.
+      // Disconnect the bot so sendCreatorPromoteDM exits early.
+      mockClientService.isConnected.mockReturnValue(false);
+    });
+
     function setupRosterMocks(assignment: Record<string, unknown>) {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
@@ -308,43 +314,6 @@ describe('DepartureGraceProcessor', () => {
       );
     });
 
-    it('triggers bench promotion for non-bench slots when eligible', async () => {
-      const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
-      mockBenchPromotionService.isEligible.mockResolvedValue(true);
-      setupRosterMocks(assignment);
-
-      await processor.process(makeJob(jobData));
-
-      expect(mockBenchPromotionService.schedulePromotion).toHaveBeenCalledWith(
-        jobData.eventId,
-        assignment.role,
-        assignment.position,
-      );
-    });
-
-    it('does NOT trigger bench promotion for bench-role slots', async () => {
-      const benchAssignment = { id: 56, role: 'bench', position: 1, signupId: 10, eventId: 1 };
-      mockBenchPromotionService.isEligible.mockResolvedValue(true);
-      mockDb.limit
-        .mockResolvedValueOnce([liveEvent])
-        .mockResolvedValueOnce([activeSignup])
-        .mockResolvedValueOnce([benchAssignment]);
-
-      await processor.process(makeJob(jobData));
-
-      expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
-    });
-
-    it('does NOT trigger bench promotion when not eligible', async () => {
-      const assignment = { id: 57, role: 'healer', position: 1, signupId: 10, eventId: 1 };
-      mockBenchPromotionService.isEligible.mockResolvedValue(false);
-      setupRosterMocks(assignment);
-
-      await processor.process(makeJob(jobData));
-
-      expect(mockBenchPromotionService.schedulePromotion).not.toHaveBeenCalled();
-    });
-
     it('places departed user at next bench position after existing bench members', async () => {
       const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
       mockDb.limit
@@ -368,6 +337,112 @@ describe('DepartureGraceProcessor', () => {
       expect(mockDb.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'bench', position: 3 }),
       );
+    });
+  });
+
+  // ─── Discord DM to creator ────────────────────────────────────────────────
+
+  describe('creator promote DM', () => {
+    function setupWithRoster(assignment: Record<string, unknown>) {
+      mockDb.limit
+        .mockResolvedValueOnce([liveEvent])
+        .mockResolvedValueOnce([activeSignup])
+        .mockResolvedValueOnce([assignment]);
+
+      let whereCallCount = 0;
+      const originalWhere = mockDb.where;
+      mockDb.where = jest.fn().mockImplementation(function (this: unknown) {
+        whereCallCount++;
+        if (whereCallCount === 5) {
+          // bench slots query
+          return Promise.resolve([]);
+        }
+        // Bench player check for DM (returns bench players in .orderBy chain)
+        if (whereCallCount === 7) {
+          // Query chain for bench players: .where → .orderBy → .limit
+          return originalWhere.call(this);
+        }
+        return originalWhere.call(this);
+      });
+    }
+
+    it('sends Discord DM when roster slot is vacated and bench players exist', async () => {
+      const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
+      setupWithRoster(assignment);
+
+      // Bench player check: returns a bench player
+      mockDb.limit
+        .mockResolvedValueOnce([{ id: 88 }])   // bench players exist
+        .mockResolvedValueOnce([{ discordId: 'creator-discord-123' }]); // creator lookup
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
+        'creator-discord-123',
+        expect.anything(), // EmbedBuilder
+        expect.anything(), // ActionRowBuilder
+      );
+    });
+
+    it('does NOT send DM when bot is not connected', async () => {
+      mockClientService.isConnected.mockReturnValue(false);
+      const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
+      setupWithRoster(assignment);
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('does NOT send DM when bench slot assignment (not a vacated role slot)', async () => {
+      const benchAssignment = { id: 56, role: 'bench', position: 1, signupId: 10, eventId: 1 };
+      mockDb.limit
+        .mockResolvedValueOnce([liveEvent])
+        .mockResolvedValueOnce([activeSignup])
+        .mockResolvedValueOnce([benchAssignment]);
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('does NOT send DM when no bench players exist', async () => {
+      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      setupWithRoster(assignment);
+
+      // Bench player check: none found
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('does NOT send DM when creator has no Discord ID', async () => {
+      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      setupWithRoster(assignment);
+
+      mockDb.limit
+        .mockResolvedValueOnce([{ id: 88 }])      // bench players exist
+        .mockResolvedValueOnce([{ discordId: null }]); // creator has no discord
+
+      await processor.process(makeJob(jobData));
+
+      expect(mockClientService.sendEmbedDM).not.toHaveBeenCalled();
+    });
+
+    it('does not throw if DM fails (failure is non-blocking)', async () => {
+      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      setupWithRoster(assignment);
+
+      mockDb.limit
+        .mockResolvedValueOnce([{ id: 88 }])
+        .mockResolvedValueOnce([{ discordId: 'creator-discord-123' }]);
+      mockClientService.sendEmbedDM.mockRejectedValue(new Error('DM blocked'));
+
+      // Should not throw
+      await expect(processor.process(makeJob(jobData))).resolves.toBeUndefined();
+      expect(mockEventEmitter.emit).toHaveBeenCalled();
     });
   });
 

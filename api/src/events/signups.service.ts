@@ -381,6 +381,18 @@ export class SignupsService {
         }
       }
 
+      // Auto-confirm creator signups — creator is confirmed by definition
+      if (
+        event[0].creatorId === userId &&
+        inserted.confirmationStatus !== 'confirmed'
+      ) {
+        await tx
+          .update(schema.eventSignups)
+          .set({ confirmationStatus: 'confirmed' })
+          .where(eq(schema.eventSignups.id, inserted.id));
+        inserted.confirmationStatus = 'confirmed';
+      }
+
       return { isDuplicate: false as const, signup: inserted };
     });
 
@@ -1085,7 +1097,8 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted, ROK-596: exclude departed)
+    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted)
+    // ROK-596: Include departed signups so frontend can display them in the Departed section
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1099,7 +1112,6 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
-          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);
@@ -1668,7 +1680,8 @@ export class SignupsService {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get all signups with user and character data (exclude soft-deleted statuses, ROK-596: exclude departed)
+    // Get all signups with user and character data (exclude soft-deleted statuses)
+    // ROK-596: Include departed signups so frontend can display them in the Departed section
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1682,7 +1695,6 @@ export class SignupsService {
           eq(schema.eventSignups.eventId, eventId),
           ne(schema.eventSignups.status, 'roached_out'),
           ne(schema.eventSignups.status, 'declined'),
-          ne(schema.eventSignups.status, 'departed'),
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);
