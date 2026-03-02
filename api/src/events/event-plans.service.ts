@@ -952,7 +952,7 @@ export class EventPlansService {
       .setColor(0x8b5cf6); // EMBED_COLORS.ROSTER_UPDATE (purple — planning context)
 
     const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
-    if (clientUrl) {
+    if (clientUrl && clientUrl !== 'auto') {
       embed.setURL(`${clientUrl}/events?tab=plans`);
     }
 
