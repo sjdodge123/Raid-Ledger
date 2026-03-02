@@ -7,6 +7,7 @@ import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
+import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
 import {
   DepartureGraceQueueService,
   DEPARTURE_GRACE_DELAY_MS,
@@ -220,41 +221,8 @@ export class DepartureGraceService {
         .map((a) => `${a.role}:${a.position}`),
     );
 
-    // Parse slot config to find available slots
     const slotConfig = event.slotConfig as Record<string, unknown> | null;
-    let availableSlot: { role: string; position: number } | null = null;
-
-    if (slotConfig?.type === 'mmo') {
-      // MMO events: look for open role-based slots
-      const roles = slotConfig.roles as
-        | Array<{ role: string; count: number }>
-        | undefined;
-      if (roles) {
-        for (const roleConfig of roles) {
-          for (let pos = 1; pos <= roleConfig.count; pos++) {
-            if (!occupiedSlots.has(`${roleConfig.role}:${pos}`)) {
-              availableSlot = { role: roleConfig.role, position: pos };
-              break;
-            }
-          }
-          if (availableSlot) break;
-        }
-      }
-    } else {
-      // Generic events: look for open player slots
-      const maxPlayers =
-        (slotConfig?.maxPlayers as number) ??
-        (slotConfig?.count as number) ??
-        0;
-      if (maxPlayers > 0) {
-        for (let pos = 1; pos <= maxPlayers; pos++) {
-          if (!occupiedSlots.has(`player:${pos}`)) {
-            availableSlot = { role: 'player', position: pos };
-            break;
-          }
-        }
-      }
-    }
+    const availableSlot = findFirstAvailableSlot(slotConfig, occupiedSlots);
 
     if (availableSlot) {
       // Move from bench back to the available slot
