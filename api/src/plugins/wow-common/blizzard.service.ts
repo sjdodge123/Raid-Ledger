@@ -4,6 +4,7 @@ import {
   SettingsService,
   SETTINGS_EVENTS,
 } from '../../settings/settings.service';
+import { memorySwr, type MemoryCacheEntry } from '../../common/swr-cache';
 import type { WowGameVariant } from '@raid-ledger/contract';
 
 /** Equipment item from the Blizzard API */
@@ -187,11 +188,6 @@ export interface WowRealm {
   name: string;
   slug: string;
   id: number;
-}
-
-interface RealmCache {
-  realms: WowRealm[];
-  expiresAt: number;
 }
 
 /** WoW dungeon/raid instance from the Journal API */
@@ -502,16 +498,11 @@ const CLASSIC_INSTANCE_LEVELS: Record<
   'Dragon Soul': { minimumLevel: 85, maximumLevel: 85 },
 };
 
-interface InstanceListCache {
-  dungeons: WowInstance[];
-  raids: WowInstance[];
-  expiresAt: number;
-}
-
-interface InstanceDetailCache {
-  detail: WowInstanceDetail;
-  expiresAt: number;
-}
+/** ROK-605: In-memory cache types now use MemoryCacheEntry for SWR support */
+type RealmCacheEntry = MemoryCacheEntry<WowRealm[]>;
+type InstanceListCacheData = { dungeons: WowInstance[]; raids: WowInstance[] };
+type InstanceListCacheEntry = MemoryCacheEntry<InstanceListCacheData>;
+type InstanceDetailCacheEntry = MemoryCacheEntry<WowInstanceDetail>;
 
 @Injectable()
 export class BlizzardService {
@@ -519,9 +510,9 @@ export class BlizzardService {
   private accessToken: string | null = null;
   private tokenExpiry: Date | null = null;
   private tokenFetchPromise: Promise<string> | null = null;
-  private realmCache = new Map<string, RealmCache>();
-  private instanceListCache = new Map<string, InstanceListCache>();
-  private instanceDetailCache = new Map<string, InstanceDetailCache>();
+  private realmCache = new Map<string, RealmCacheEntry>();
+  private instanceListCache = new Map<string, InstanceListCacheEntry>();
+  private instanceDetailCache = new Map<string, InstanceDetailCacheEntry>();
 
   constructor(private readonly settingsService: SettingsService) {}
 
@@ -1083,17 +1074,26 @@ export class BlizzardService {
   /**
    * Fetch the list of WoW realms for a region.
    * Results are cached in memory for 1 hour since realms rarely change.
+   * ROK-605: Uses SWR caching — serves stale data while refreshing in background.
    */
   async fetchRealmList(
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<WowRealm[]> {
     const cacheKey = `${region}:${gameVariant}`;
-    const cached = this.realmCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.realms;
-    }
+    return memorySwr({
+      cache: this.realmCache,
+      key: cacheKey,
+      ttlMs: REALM_CACHE_TTL,
+      fetcher: () => this._fetchRealmListFromApi(region, gameVariant),
+    });
+  }
 
+  /** Fetch realm list from Blizzard API (no caching). */
+  private async _fetchRealmListFromApi(
+    region: string,
+    gameVariant: WowGameVariant,
+  ): Promise<WowRealm[]> {
     const token = await this.getAccessToken(region);
     const { dynamic: dynamicPrefix } = getNamespacePrefixes(gameVariant);
     const url = `https://${region}.api.blizzard.com/data/wow/realm/index?namespace=${dynamicPrefix}-${region}&locale=en_US`;
@@ -1118,12 +1118,9 @@ export class BlizzardService {
       .map((r) => ({ name: r.name, slug: r.slug, id: r.id }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    this.realmCache.set(cacheKey, {
-      realms,
-      expiresAt: Date.now() + REALM_CACHE_TTL,
-    });
-
-    this.logger.log(`Cached ${realms.length} realms for ${cacheKey}`);
+    this.logger.log(
+      `Fetched ${realms.length} realms for ${region}:${gameVariant}`,
+    );
     return realms;
   }
 
@@ -1131,17 +1128,26 @@ export class BlizzardService {
    * Fetch all dungeon and raid instances for a WoW variant.
    * Orchestrates: expansion index → parallel expansion details → merged flat lists.
    * Results are cached in memory for 24 hours.
+   * ROK-605: Uses SWR caching — serves stale data while refreshing in background.
    */
   async fetchAllInstances(
     region: string,
     gameVariant: WowGameVariant = 'retail',
   ): Promise<{ dungeons: WowInstance[]; raids: WowInstance[] }> {
     const cacheKey = `${region}:${gameVariant}`;
-    const cached = this.instanceListCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return { dungeons: cached.dungeons, raids: cached.raids };
-    }
+    return memorySwr({
+      cache: this.instanceListCache,
+      key: cacheKey,
+      ttlMs: INSTANCE_CACHE_TTL,
+      fetcher: () => this._fetchAllInstancesFromApi(region, gameVariant),
+    });
+  }
 
+  /** Fetch all instances from Blizzard API (no caching). */
+  private async _fetchAllInstancesFromApi(
+    region: string,
+    gameVariant: WowGameVariant,
+  ): Promise<InstanceListCacheData> {
     const token = await this.getAccessToken(region);
     // Journal API only exists in the retail static namespace — Classic variants
     // don't have their own journal endpoints, so we always use retail static
@@ -1257,14 +1263,8 @@ export class BlizzardService {
     dungeons = dungeons.map(enrichInstance);
     raids = raids.map(enrichInstance);
 
-    this.instanceListCache.set(cacheKey, {
-      dungeons,
-      raids,
-      expiresAt: Date.now() + INSTANCE_CACHE_TTL,
-    });
-
     this.logger.debug(
-      `Cached ${dungeons.length} dungeons + ${raids.length} raids for ${cacheKey}`,
+      `Fetched ${dungeons.length} dungeons + ${raids.length} raids for ${region}:${gameVariant}`,
     );
     return { dungeons, raids };
   }
@@ -1308,6 +1308,7 @@ export class BlizzardService {
   /**
    * Fetch detail for a specific instance (level requirements, player count).
    * Results are cached individually for 24 hours.
+   * ROK-605: Uses SWR caching — serves stale data while refreshing in background.
    */
   async fetchInstanceDetail(
     instanceId: number,
@@ -1315,11 +1316,21 @@ export class BlizzardService {
     gameVariant: WowGameVariant = 'retail',
   ): Promise<WowInstanceDetail> {
     const cacheKey = `${region}:${gameVariant}:${instanceId}`;
-    const cached = this.instanceDetailCache.get(cacheKey);
-    if (cached && Date.now() < cached.expiresAt) {
-      return cached.detail;
-    }
+    return memorySwr({
+      cache: this.instanceDetailCache,
+      key: cacheKey,
+      ttlMs: INSTANCE_CACHE_TTL,
+      fetcher: () =>
+        this._fetchInstanceDetailFromApi(instanceId, region, gameVariant),
+    });
+  }
 
+  /** Fetch instance detail from Blizzard API (no caching). */
+  private async _fetchInstanceDetailFromApi(
+    instanceId: number,
+    region: string,
+    gameVariant: WowGameVariant,
+  ): Promise<WowInstanceDetail> {
     // Synthetic IDs (from sub-instance expansion) are > 10000 — return hardcoded data
     if (instanceId > 10000) {
       const parentId = Math.floor(instanceId / 100);
@@ -1327,8 +1338,10 @@ export class BlizzardService {
       for (const [parentName, subs] of Object.entries(CLASSIC_SUB_INSTANCES)) {
         for (const sub of subs) {
           if (sub.idSuffix === suffix) {
-            // Verify it matches a known parent by checking if any cached list has this parent
-            const detail: WowInstanceDetail = {
+            this.logger.debug(
+              `Resolved synthetic instance ${instanceId} → ${parentName} / ${sub.name}`,
+            );
+            return {
               id: instanceId,
               name: sub.name,
               shortName: sub.shortName,
@@ -1338,14 +1351,6 @@ export class BlizzardService {
               maxPlayers: 5,
               category: 'dungeon',
             };
-            this.instanceDetailCache.set(cacheKey, {
-              detail,
-              expiresAt: Date.now() + INSTANCE_CACHE_TTL,
-            });
-            this.logger.debug(
-              `Resolved synthetic instance ${instanceId} → ${parentName} / ${sub.name}`,
-            );
-            return detail;
           }
         }
       }
@@ -1397,7 +1402,7 @@ export class BlizzardService {
     const levelOverride =
       gameVariant !== 'retail' ? CLASSIC_INSTANCE_LEVELS[data.name] : undefined;
 
-    const detail: WowInstanceDetail = {
+    return {
       id: data.id,
       name: data.name,
       shortName: getShortName(data.name),
@@ -1407,13 +1412,6 @@ export class BlizzardService {
       maxPlayers,
       category,
     };
-
-    this.instanceDetailCache.set(cacheKey, {
-      detail,
-      expiresAt: Date.now() + INSTANCE_CACHE_TTL,
-    });
-
-    return detail;
   }
 
   /**
