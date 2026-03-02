@@ -290,10 +290,14 @@ export class EventsController {
     guildId: string | null;
   }> {
     const event = await this.eventsService.findOne(id);
+
+    // ROK-599: Per-event override → series binding → game binding → default
     const channelId =
-      await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
+      event.notificationChannelOverride ??
+      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
         event.game?.id ?? null,
-      );
+        event.recurrenceGroupId ?? null,
+      ));
 
     if (!channelId) {
       return { channelId: null, channelName: null, guildId: null };

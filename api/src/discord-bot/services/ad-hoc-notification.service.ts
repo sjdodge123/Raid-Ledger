@@ -301,11 +301,13 @@ export class AdHocNotificationService implements OnModuleDestroy {
       if (gameRow) game = gameRow;
     }
 
-    // ROK-597: Resolve voice channel for the ad-hoc event's game
+    // ROK-597/ROK-599: Resolve voice channel — per-event override takes priority
     const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+      event.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
         event.gameId,
-      );
+        event.recurrenceGroupId,
+      ));
 
     // Only count active participants for the signup count
     const activeCount = participants.filter((p) => p.isActive).length;

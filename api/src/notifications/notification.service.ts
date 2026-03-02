@@ -355,13 +355,21 @@ export class NotificationService {
   async resolveVoiceChannelForEvent(eventId: number): Promise<string | null> {
     if (!this.channelResolver) return null;
     const [event] = await this.db
-      .select({ gameId: schema.events.gameId })
+      .select({
+        gameId: schema.events.gameId,
+        recurrenceGroupId: schema.events.recurrenceGroupId,
+        notificationChannelOverride: schema.events.notificationChannelOverride,
+      })
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
       .limit(1);
     if (!event) return null;
+    // ROK-599: Per-event channel override takes priority
+    if (event.notificationChannelOverride)
+      return event.notificationChannelOverride;
     return this.channelResolver.resolveVoiceChannelForScheduledEvent(
       event.gameId,
+      event.recurrenceGroupId,
     );
   }
 

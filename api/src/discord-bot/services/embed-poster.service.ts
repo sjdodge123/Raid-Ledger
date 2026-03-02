@@ -56,6 +56,7 @@ export class EmbedPosterService {
     event: EmbedEventData,
     gameId?: number | null,
     recurrenceGroupId?: string | null,
+    notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     if (!this.clientService.isConnected()) {
       this.logger.debug('Bot not connected, skipping embed post');
@@ -65,6 +66,7 @@ export class EmbedPosterService {
     const channelId = await this.channelResolver.resolveChannelForEvent(
       gameId,
       recurrenceGroupId,
+      notificationChannelOverride,
     );
     if (!channelId) return false;
 
@@ -94,9 +96,13 @@ export class EmbedPosterService {
       // Enrich with live roster data so the embed reflects current signups
       const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
 
-      // ROK-507: Resolve voice channel for the event's game
+      // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
       const voiceChannelId =
-        await this.channelResolver.resolveVoiceChannelForScheduledEvent(gameId);
+        notificationChannelOverride ??
+        (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+          gameId,
+          recurrenceGroupId,
+        ));
       if (voiceChannelId) {
         enrichedEvent.voiceChannelId = voiceChannelId;
       }
@@ -114,6 +120,9 @@ export class EmbedPosterService {
           existingRecord,
           embed,
           row,
+          gameId,
+          recurrenceGroupId,
+          notificationChannelOverride,
         );
       }
 
@@ -150,6 +159,9 @@ export class EmbedPosterService {
     record: { id: string; channelId: string; messageId: string },
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
+    gameId?: number | null,
+    recurrenceGroupId?: string | null,
+    notificationChannelOverride?: string | null,
   ): Promise<boolean> {
     try {
       await this.clientService.editEmbed(
@@ -185,7 +197,11 @@ export class EmbedPosterService {
       const guildId = this.clientService.getGuildId();
       if (!guildId) return false;
 
-      const channelId = await this.channelResolver.resolveChannelForEvent();
+      const channelId = await this.channelResolver.resolveChannelForEvent(
+        gameId,
+        recurrenceGroupId,
+        notificationChannelOverride,
+      );
       if (!channelId) return false;
 
       const message = await this.clientService.sendEmbed(channelId, embed, row);

@@ -92,6 +92,12 @@ export const events = pgTable(
      *  a scheduled event's original end time, this is set instead of mutating
      *  `duration` so that attendance metrics stay based on the original schedule. */
     extendedUntil: timestamp('extended_until'),
+    /** ROK-599: Per-event notification channel override (Discord channel ID).
+     *  When set, embeds for this event post to this channel instead of
+     *  the game/series/default channel. */
+    notificationChannelOverride: varchar('notification_channel_override', {
+      length: 255,
+    }),
     /** Soft-cancel timestamp. Non-null means the event is cancelled (ROK-374). */
     cancelledAt: timestamp('cancelled_at'),
     /** Optional reason provided when the event was cancelled (ROK-374). */

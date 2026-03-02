@@ -172,6 +172,7 @@ describe('DiscordEventListener', () => {
         mockPayload.event,
         101,
         undefined,
+        undefined,
       );
     });
 
@@ -256,6 +257,7 @@ describe('DiscordEventListener', () => {
         42,
         mockPayload.event,
         101,
+        undefined,
         undefined,
       );
     });

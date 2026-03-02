@@ -64,6 +64,8 @@ export class EmbedSchedulerService {
         description: schema.events.description,
         gameId: schema.events.gameId,
         recurrenceRule: schema.events.recurrenceRule,
+        recurrenceGroupId: schema.events.recurrenceGroupId,
+        notificationChannelOverride: schema.events.notificationChannelOverride,
         maxAttendees: schema.events.maxAttendees,
         slotConfig: schema.events.slotConfig,
       })
@@ -142,6 +144,8 @@ export class EmbedSchedulerService {
         event.id,
         eventData,
         event.gameId,
+        event.recurrenceGroupId,
+        event.notificationChannelOverride,
       );
 
       if (success) {
