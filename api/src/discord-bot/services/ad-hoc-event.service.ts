@@ -1,9 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  OnModuleInit,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { eq, and, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -94,7 +89,6 @@ export class AdHocEventService implements OnModuleInit {
         `Recovered ${liveEvents.length} live ad-hoc event(s) on startup`,
       );
     }
-
   }
 
   /**
