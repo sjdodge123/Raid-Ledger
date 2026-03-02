@@ -291,14 +291,13 @@ export class EventsController {
   }> {
     const event = await this.eventsService.findOne(id);
 
-    // ROK-530/ROK-599: Resolve the voice channel using the standard 3-tier fallback.
-    // notificationChannelOverride is a TEXT channel override and must NOT be used here;
-    // this endpoint is specifically for resolving the voice channel to display to users.
+    // ROK-599: Per-event override → series binding → game binding → default
     const channelId =
-      await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
+      event.notificationChannelOverride ??
+      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
         event.game?.id ?? null,
         event.recurrenceGroupId ?? null,
-      );
+      ));
 
     if (!channelId) {
       return { channelId: null, channelName: null, guildId: null };

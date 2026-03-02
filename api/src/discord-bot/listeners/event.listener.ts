@@ -112,6 +112,7 @@ export class DiscordEventListener {
         payload.event,
         payload.gameId,
         payload.isAdHoc,
+        payload.notificationChannelOverride,
       )
       .catch((err: unknown) => {
         this.logger.warn(
