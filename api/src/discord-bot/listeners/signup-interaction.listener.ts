@@ -127,10 +127,7 @@ export class SignupInteractionListener {
 
     const parts = customId.split(':');
     if (parts.length !== 2) {
-      this.logger.warn(
-        `Unexpected customId format (expected 2 parts, got ${parts.length}): ${customId}`,
-      );
-      return;
+      return; // Not a signup button (may belong to another listener)
     }
 
     const [action, eventIdStr] = parts;

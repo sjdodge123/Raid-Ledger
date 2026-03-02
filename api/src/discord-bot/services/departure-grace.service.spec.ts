@@ -7,7 +7,11 @@ import {
 } from '../queues/departure-grace.queue';
 import { NotificationService } from '../../notifications/notification.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { createMockEvent, createMockSignup, createMockUser } from '../../common/testing/factories';
+import {
+  createMockEvent,
+  createMockSignup,
+  createMockUser,
+} from '../../common/testing/factories';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 
 /**
@@ -43,16 +47,16 @@ function buildMockDb() {
     delete: deleteFn,
 
     // Chain methods that resolve at limit()
-    limit: jest.fn().mockImplementation(() =>
-      Promise.resolve(limitResults.shift() ?? []),
-    ),
+    limit: jest
+      .fn()
+      .mockImplementation(() => Promise.resolve(limitResults.shift() ?? [])),
 
     // where terminates the rosterAssignments query; otherwise is mid-chain
     where: jest.fn().mockImplementation(() => ({
       // support .where().limit()
-      limit: jest.fn().mockImplementation(() =>
-        Promise.resolve(limitResults.shift() ?? []),
-      ),
+      limit: jest
+        .fn()
+        .mockImplementation(() => Promise.resolve(limitResults.shift() ?? [])),
       // support await .where() directly (roster assignments query)
       then: (resolve: (v: unknown[]) => void, _reject: unknown) =>
         Promise.resolve(whereResults.shift() ?? []).then(resolve),
@@ -175,8 +179,8 @@ describe('DepartureGraceService', () => {
       it('does not enqueue when user has no signup and no RL user found', async () => {
         mockDb._limitResults.push(
           [scheduledEvent], // event query
-          [],               // direct discord match — none
-          [],               // user lookup — not found
+          [], // direct discord match — none
+          [], // user lookup — not found
         );
 
         await service.onMemberLeave(EVENT_ID, DISCORD_USER_ID);
@@ -214,8 +218,8 @@ describe('DepartureGraceService', () => {
 
         mockDb._limitResults.push(
           [scheduledEvent],
-          [],           // direct discord match — none
-          [rlUser],     // user lookup
+          [], // direct discord match — none
+          [rlUser], // user lookup
           [signupViaUser], // signup via userId
         );
 
@@ -323,7 +327,10 @@ describe('DepartureGraceService', () => {
 
         await service.onMemberRejoin(EVENT_ID, DISCORD_USER_ID);
 
-        expect(mockGraceQueue.cancel).toHaveBeenCalledWith(EVENT_ID, DISCORD_USER_ID);
+        expect(mockGraceQueue.cancel).toHaveBeenCalledWith(
+          EVENT_ID,
+          DISCORD_USER_ID,
+        );
       });
 
       it('cancels before checking for departed status', async () => {
@@ -363,7 +370,13 @@ describe('DepartureGraceService', () => {
     });
 
     describe('when member WAS departed (priority rejoin)', () => {
-      const benchAssignment = { id: 77, role: 'bench', position: 1, signupId: departedSignup.id, eventId: EVENT_ID };
+      const benchAssignment = {
+        id: 77,
+        role: 'bench',
+        position: 1,
+        signupId: departedSignup.id,
+        eventId: EVENT_ID,
+      };
 
       function setupPriorityRejoin(eventOverrides = {}) {
         const event = createMockEvent({
@@ -376,10 +389,10 @@ describe('DepartureGraceService', () => {
 
         // findSignupByStatus: departed signup found directly
         mockDb._limitResults.push(
-          [departedSignup],    // departed direct match
-          [benchAssignment],   // tryRosterReassignment: bench assignment lookup
-          [event],             // tryRosterReassignment: event select
-          [event],             // handlePriorityRejoin: event for notification
+          [departedSignup], // departed direct match
+          [benchAssignment], // tryRosterReassignment: bench assignment lookup
+          [event], // tryRosterReassignment: event select
+          [event], // handlePriorityRejoin: event for notification
         );
         // rosterAssignments select terminates at .where()
         mockDb._whereResults.push([]);
@@ -449,9 +462,18 @@ describe('DepartureGraceService', () => {
   // ─── priority rejoin: roster reassignment ─────────────────────────────────
 
   describe('priority rejoin: roster reassignment', () => {
-    const benchAssignment = { id: 77, role: 'bench', position: 1, signupId: departedSignup.id, eventId: EVENT_ID };
+    const benchAssignment = {
+      id: 77,
+      role: 'bench',
+      position: 1,
+      signupId: departedSignup.id,
+      eventId: EVENT_ID,
+    };
 
-    function setupWithSlotConfig(slotConfig: unknown, existingAssignments: unknown[]) {
+    function setupWithSlotConfig(
+      slotConfig: unknown,
+      existingAssignments: unknown[],
+    ) {
       const event = createMockEvent({
         id: EVENT_ID,
         creatorId: 5,
@@ -460,10 +482,10 @@ describe('DepartureGraceService', () => {
       });
 
       mockDb._limitResults.push(
-        [departedSignup],    // departed signup found
-        [benchAssignment],   // tryRosterReassignment: bench assignment lookup
-        [event],             // tryRosterReassignment: event select
-        [event],             // handlePriorityRejoin: event for notification
+        [departedSignup], // departed signup found
+        [benchAssignment], // tryRosterReassignment: bench assignment lookup
+        [event], // tryRosterReassignment: event select
+        [event], // handlePriorityRejoin: event for notification
       );
       mockDb._whereResults.push(existingAssignments);
 
@@ -630,8 +652,8 @@ describe('DepartureGraceService', () => {
 
       mockDb._limitResults.push(
         [scheduledEvent],
-        [],           // no direct discord match
-        [rlUser],     // user found
+        [], // no direct discord match
+        [rlUser], // user found
         [linkedSignup], // signup via userId
       );
 
@@ -648,9 +670,9 @@ describe('DepartureGraceService', () => {
 
       mockDb._limitResults.push(
         [scheduledEvent],
-        [],         // no direct discord match
+        [], // no direct discord match
         [rlUser],
-        [],         // no signup via userId
+        [], // no signup via userId
       );
 
       await service.onMemberLeave(EVENT_ID, DISCORD_USER_ID);

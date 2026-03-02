@@ -1998,6 +1998,128 @@ export class SignupsService {
   }
 
   /**
+   * ROK-596: Promote a bench player using the role calculation engine.
+   * Removes the bench assignment and runs autoAllocateSignup to find the
+   * optimal slot (including chain rearrangements).
+   *
+   * @returns Object with the resulting role/position and any warnings, or null if promotion failed.
+   */
+  async promoteFromBench(
+    eventId: number,
+    signupId: number,
+  ): Promise<{
+    role: string;
+    position: number;
+    username: string;
+    chainMoves?: string[];
+    warning?: string;
+  } | null> {
+    return this.db.transaction(async (tx) => {
+      // 1. Get the event's slot config
+      const [event] = await tx
+        .select({ slotConfig: schema.events.slotConfig })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+
+      if (!event?.slotConfig) return null;
+
+      const slotConfig = event.slotConfig as Record<string, unknown>;
+      if (slotConfig.type !== 'mmo') {
+        // Generic games don't use role calculation — direct assign to first open slot
+        return null;
+      }
+
+      // 2. Get the signup's preferred roles and username
+      const [signup] = await tx
+        .select({
+          preferredRoles: schema.eventSignups.preferredRoles,
+          userId: schema.eventSignups.userId,
+        })
+        .from(schema.eventSignups)
+        .where(eq(schema.eventSignups.id, signupId))
+        .limit(1);
+
+      if (!signup) return null;
+
+      let username = 'Bench player';
+      if (signup.userId) {
+        const [user] = await tx
+          .select({ username: schema.users.username })
+          .from(schema.users)
+          .where(eq(schema.users.id, signup.userId))
+          .limit(1);
+        if (user) username = user.username;
+      }
+
+      // 3. Delete the bench assignment
+      await tx
+        .delete(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.signupId, signupId),
+            eq(schema.rosterAssignments.role, 'bench'),
+          ),
+        );
+
+      // 4. Run the role calculation engine
+      await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
+
+      // 5. Check where they ended up
+      const [newAssignment] = await tx
+        .select({
+          role: schema.rosterAssignments.role,
+          position: schema.rosterAssignments.position,
+        })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            eq(schema.rosterAssignments.signupId, signupId),
+          ),
+        )
+        .limit(1);
+
+      if (!newAssignment || newAssignment.role === 'bench') {
+        // Allocation failed — put them back on bench
+        if (!newAssignment) {
+          await tx.insert(schema.rosterAssignments).values({
+            eventId,
+            signupId,
+            role: 'bench',
+            position: 1,
+          });
+        }
+        return {
+          role: 'bench',
+          position: 1,
+          username,
+          warning: `Could not find a suitable roster slot for ${username} based on their preferred roles.`,
+        };
+      }
+
+      // 6. Check if assigned role matches preferences
+      const prefs = (signup.preferredRoles as string[]) ?? [];
+      let warning: string | undefined;
+      if (
+        prefs.length > 0 &&
+        newAssignment.role &&
+        !prefs.includes(newAssignment.role)
+      ) {
+        warning = `${username} was placed in **${newAssignment.role}** which is not in their preferred roles (${prefs.join(', ')}).`;
+      }
+
+      return {
+        role: newAssignment.role ?? 'bench',
+        position: newAssignment.position,
+        username,
+        warning,
+      };
+    });
+  }
+
+  /**
    * ROK-452: Auto-allocate a new signup to the best available slot based on
    * preferred roles. Uses a greedy algorithm that prioritizes rigid players
    * (fewer preferred roles) and rearranges flexible players to maximize filled slots.

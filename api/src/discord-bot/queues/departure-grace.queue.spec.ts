@@ -134,7 +134,11 @@ describe('DepartureGraceQueueService', () => {
     });
 
     it('includes job data payload verbatim', async () => {
-      const specificData = { eventId: 99, discordUserId: 'u-999', signupId: 42 };
+      const specificData = {
+        eventId: 99,
+        discordUserId: 'u-999',
+        signupId: 42,
+      };
       await service.enqueue(specificData, 300_000);
 
       expect(mockQueue.add).toHaveBeenCalledWith(

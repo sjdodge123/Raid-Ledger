@@ -1,9 +1,16 @@
 import { DeparturePromoteListener } from './departure-promote.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { NotificationService } from '../../notifications/notification.service';
+import { SignupsService } from '../../events/signups.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { SIGNUP_EVENTS, DEPARTURE_PROMOTE_BUTTON_IDS } from '../discord-bot.constants';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
+import {
+  SIGNUP_EVENTS,
+  DEPARTURE_PROMOTE_BUTTON_IDS,
+} from '../discord-bot.constants';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
 import type { ButtonInteraction, Message } from 'discord.js';
 
 function makeMockInteraction(
@@ -36,6 +43,7 @@ describe('DeparturePromoteListener', () => {
     resolveVoiceChannelForEvent: jest.Mock;
     create: jest.Mock;
   };
+  let mockSignupsService: { promoteFromBench: jest.Mock };
   let mockEventEmitter: { emit: jest.Mock };
 
   beforeEach(() => {
@@ -49,12 +57,16 @@ describe('DeparturePromoteListener', () => {
       resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockResolvedValue(undefined),
     };
+    mockSignupsService = {
+      promoteFromBench: jest.fn(),
+    };
     mockEventEmitter = { emit: jest.fn() };
 
     listener = new DeparturePromoteListener(
       mockDb as never,
       mockClientService as unknown as DiscordBotClientService,
       mockNotificationService as unknown as NotificationService,
+      mockSignupsService as unknown as SignupsService,
       mockEventEmitter as unknown as EventEmitter2,
     );
   });
@@ -64,28 +76,30 @@ describe('DeparturePromoteListener', () => {
   });
 
   describe('promote', () => {
-    it('promotes FIFO bench player to vacated slot', async () => {
+    it('promotes bench player via role calculation engine', async () => {
       const interaction = makeMockInteraction(
         `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
       );
 
-      // Slot empty check
-      mockDb.limit.mockResolvedValueOnce([]);
       // Bench player query
       mockDb.limit.mockResolvedValueOnce([
-        { assignmentId: 88, signupId: 20, userId: 5 },
+        { signupId: 20, userId: 5 },
       ]);
+
+      // promoteFromBench returns successful placement
+      mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+        role: 'tank',
+        position: 1,
+        username: 'BenchPlayer',
+      });
+
       // Event title for notification
       mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
-      // Promoted player name
-      mockDb.limit.mockResolvedValueOnce([{ username: 'BenchPlayer' }]);
 
-      // Access private method via prototype
-      await (listener as any).handlePromote(interaction, 1, 'tank', 1);
+      await (listener as any).handlePromote(interaction, 1);
 
-      // Should update roster assignment
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith({ role: 'tank', position: 1 });
+      // Should call role calculation engine
+      expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
 
       // Should notify the promoted player
       expect(mockNotificationService.create).toHaveBeenCalledWith(
@@ -109,17 +123,55 @@ describe('DeparturePromoteListener', () => {
       expect(interaction.message.edit).toHaveBeenCalled();
     });
 
-    it('returns "slot already filled" when slot is occupied', async () => {
+    it('shows warning when role calc places player in non-preferred role', async () => {
+      const interaction = makeMockInteraction(
+        `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:healer:1`,
+      );
+
+      // Bench player query
+      mockDb.limit.mockResolvedValueOnce([
+        { signupId: 20, userId: 5 },
+      ]);
+
+      // promoteFromBench returns placement with warning
+      mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+        role: 'healer',
+        position: 1,
+        username: 'DPSOnly',
+        warning: 'DPSOnly was placed in **healer** which is not in their preferred roles (dps).',
+      });
+
+      // Event title for notification
+      mockDb.limit.mockResolvedValueOnce([{ title: 'Test Raid' }]);
+
+      await (listener as any).handlePromote(interaction, 1);
+
+      expect(mockSignupsService.promoteFromBench).toHaveBeenCalledWith(1, 20);
+      expect(interaction.message.edit).toHaveBeenCalled();
+    });
+
+    it('returns message when role calc cannot place player', async () => {
       const interaction = makeMockInteraction(
         `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
       );
 
-      // Slot occupied
-      mockDb.limit.mockResolvedValueOnce([{ id: 99, role: 'tank', position: 1 }]);
+      // Bench player query
+      mockDb.limit.mockResolvedValueOnce([
+        { signupId: 20, userId: 5 },
+      ]);
 
-      await (listener as any).handlePromote(interaction, 1, 'tank', 1);
+      // promoteFromBench returns bench (no suitable slot)
+      mockSignupsService.promoteFromBench.mockResolvedValueOnce({
+        role: 'bench',
+        position: 1,
+        username: 'BenchPlayer',
+        warning: 'Could not find a suitable roster slot for BenchPlayer based on their preferred roles.',
+      });
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      await (listener as any).handlePromote(interaction, 1);
+
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+      expect(mockEventEmitter.emit).not.toHaveBeenCalled();
       expect(interaction.message.edit).toHaveBeenCalled();
     });
 
@@ -128,14 +180,12 @@ describe('DeparturePromoteListener', () => {
         `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:1:tank:1`,
       );
 
-      // Slot empty
-      mockDb.limit.mockResolvedValueOnce([]);
       // No bench players
       mockDb.limit.mockResolvedValueOnce([]);
 
-      await (listener as any).handlePromote(interaction, 1, 'tank', 1);
+      await (listener as any).handlePromote(interaction, 1);
 
-      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mockSignupsService.promoteFromBench).not.toHaveBeenCalled();
       expect(interaction.message.edit).toHaveBeenCalled();
     });
   });
@@ -146,7 +196,7 @@ describe('DeparturePromoteListener', () => {
         `${DEPARTURE_PROMOTE_BUTTON_IDS.DISMISS}:1:healer:2`,
       );
 
-      await (listener as any).handleDismiss(interaction, 1, 'healer', 2);
+      await (listener as any).handleDismiss(interaction, 'healer', 2);
 
       expect(interaction.message.edit).toHaveBeenCalled();
     });

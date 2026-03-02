@@ -4,8 +4,14 @@ import { NotificationService } from '../../notifications/notification.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
-import { createDrizzleMock, type MockDb } from '../../common/testing/drizzle-mock';
-import { createMockEvent, createMockSignup } from '../../common/testing/factories';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../common/testing/drizzle-mock';
+import {
+  createMockEvent,
+  createMockSignup,
+} from '../../common/testing/factories';
 import type { Job } from 'bullmq';
 import type { DepartureGraceJobData } from '../queues/departure-grace.queue';
 
@@ -53,9 +59,13 @@ describe('DepartureGraceProcessor', () => {
 
   beforeEach(() => {
     mockDb = createDrizzleMock();
-    mockVoiceAttendanceService = { isUserActive: jest.fn().mockReturnValue(false) };
+    mockVoiceAttendanceService = {
+      isUserActive: jest.fn().mockReturnValue(false),
+    };
     mockNotificationService = {
-      getDiscordEmbedUrl: jest.fn().mockResolvedValue('https://discord.com/embed/1'),
+      getDiscordEmbedUrl: jest
+        .fn()
+        .mockResolvedValue('https://discord.com/embed/1'),
       resolveVoiceChannelForEvent: jest.fn().mockResolvedValue('channel-123'),
       create: jest.fn().mockResolvedValue(undefined),
     };
@@ -124,7 +134,7 @@ describe('DepartureGraceProcessor', () => {
     it('skips departure if signup record no longer exists', async () => {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent]) // event query
-        .mockResolvedValueOnce([]);          // signup query — not found
+        .mockResolvedValueOnce([]); // signup query — not found
 
       await processor.process(makeJob(jobData));
 
@@ -155,7 +165,7 @@ describe('DepartureGraceProcessor', () => {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([activeSignup])
-        .mockResolvedValueOnce([])  // roster assignment query
+        .mockResolvedValueOnce([]) // roster assignment query
         .mockResolvedValueOnce([]); // display name user query (no userId match needed)
 
       await processor.process(makeJob(jobData));
@@ -173,7 +183,7 @@ describe('DepartureGraceProcessor', () => {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([tentativeSignup])
-        .mockResolvedValueOnce([])  // roster assignment
+        .mockResolvedValueOnce([]) // roster assignment
         .mockResolvedValueOnce([]); // display name user query
 
       await processor.process(makeJob(jobData));
@@ -303,7 +313,13 @@ describe('DepartureGraceProcessor', () => {
     }
 
     it('moves the roster assignment to bench when one exists', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'tank',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       setupRosterMocks(assignment);
 
       await processor.process(makeJob(jobData));
@@ -315,7 +331,13 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('places departed user at next bench position after existing bench members', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'tank',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([activeSignup])
@@ -367,12 +389,18 @@ describe('DepartureGraceProcessor', () => {
     }
 
     it('sends Discord DM when roster slot is vacated and bench players exist', async () => {
-      const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'dps',
+        position: 2,
+        signupId: 10,
+        eventId: 1,
+      };
       setupWithRoster(assignment);
 
       // Bench player check: returns a bench player
       mockDb.limit
-        .mockResolvedValueOnce([{ id: 88 }])   // bench players exist
+        .mockResolvedValueOnce([{ id: 88 }]) // bench players exist
         .mockResolvedValueOnce([{ discordId: 'creator-discord-123' }]); // creator lookup
 
       await processor.process(makeJob(jobData));
@@ -386,7 +414,13 @@ describe('DepartureGraceProcessor', () => {
 
     it('does NOT send DM when bot is not connected', async () => {
       mockClientService.isConnected.mockReturnValue(false);
-      const assignment = { id: 55, role: 'dps', position: 2, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'dps',
+        position: 2,
+        signupId: 10,
+        eventId: 1,
+      };
       setupWithRoster(assignment);
 
       await processor.process(makeJob(jobData));
@@ -395,7 +429,13 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('does NOT send DM when bench slot assignment (not a vacated role slot)', async () => {
-      const benchAssignment = { id: 56, role: 'bench', position: 1, signupId: 10, eventId: 1 };
+      const benchAssignment = {
+        id: 56,
+        role: 'bench',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([activeSignup])
@@ -407,7 +447,13 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('does NOT send DM when no bench players exist', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'tank',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       setupWithRoster(assignment);
 
       // Bench player check: none found
@@ -419,11 +465,17 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('does NOT send DM when creator has no Discord ID', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'tank',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       setupWithRoster(assignment);
 
       mockDb.limit
-        .mockResolvedValueOnce([{ id: 88 }])      // bench players exist
+        .mockResolvedValueOnce([{ id: 88 }]) // bench players exist
         .mockResolvedValueOnce([{ discordId: null }]); // creator has no discord
 
       await processor.process(makeJob(jobData));
@@ -432,7 +484,13 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('does not throw if DM fails (failure is non-blocking)', async () => {
-      const assignment = { id: 55, role: 'tank', position: 1, signupId: 10, eventId: 1 };
+      const assignment = {
+        id: 55,
+        role: 'tank',
+        position: 1,
+        signupId: 10,
+        eventId: 1,
+      };
       setupWithRoster(assignment);
 
       mockDb.limit
@@ -441,7 +499,9 @@ describe('DepartureGraceProcessor', () => {
       mockClientService.sendEmbedDM.mockRejectedValue(new Error('DM blocked'));
 
       // Should not throw
-      await expect(processor.process(makeJob(jobData))).resolves.toBeUndefined();
+      await expect(
+        processor.process(makeJob(jobData)),
+      ).resolves.toBeUndefined();
       expect(mockEventEmitter.emit).toHaveBeenCalled();
     });
   });
@@ -482,7 +542,7 @@ describe('DepartureGraceProcessor', () => {
       mockDb.limit
         .mockResolvedValueOnce([liveEvent])
         .mockResolvedValueOnce([signupWithoutDiscordName])
-        .mockResolvedValueOnce([])  // no roster
+        .mockResolvedValueOnce([]) // no roster
         .mockResolvedValueOnce([{ username: 'RLUser' }]); // user lookup
 
       await processor.process(makeJob(jobData));
@@ -552,20 +612,26 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('includes discordUrl in payload when available', async () => {
-      mockNotificationService.getDiscordEmbedUrl.mockResolvedValue('https://discord.com/embed');
+      mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(
+        'https://discord.com/embed',
+      );
 
       await processor.process(makeJob(jobData));
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ discordUrl: 'https://discord.com/embed' }),
+          payload: expect.objectContaining({
+            discordUrl: 'https://discord.com/embed',
+          }),
         }),
       );
     });
 
     it('omits discordUrl from payload when not available', async () => {
       mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(null);
-      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(null);
+      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+        null,
+      );
 
       await processor.process(makeJob(jobData));
 
@@ -574,7 +640,9 @@ describe('DepartureGraceProcessor', () => {
     });
 
     it('includes voiceChannelId in payload when available', async () => {
-      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue('vc-999');
+      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+        'vc-999',
+      );
 
       await processor.process(makeJob(jobData));
 
@@ -587,7 +655,9 @@ describe('DepartureGraceProcessor', () => {
 
     it('omits voiceChannelId from payload when not available', async () => {
       mockNotificationService.getDiscordEmbedUrl.mockResolvedValue(null);
-      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(null);
+      mockNotificationService.resolveVoiceChannelForEvent.mockResolvedValue(
+        null,
+      );
 
       await processor.process(makeJob(jobData));
 

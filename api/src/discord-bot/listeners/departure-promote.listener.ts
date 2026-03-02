@@ -6,11 +6,12 @@ import {
   ButtonBuilder,
   type ButtonInteraction,
 } from 'discord.js';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { NotificationService } from '../../notifications/notification.service';
+import { SignupsService } from '../../events/signups.service';
 import {
   DISCORD_BOT_EVENTS,
   DEPARTURE_PROMOTE_BUTTON_IDS,
@@ -41,6 +42,7 @@ export class DeparturePromoteListener {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly notificationService: NotificationService,
+    private readonly signupsService: SignupsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -95,9 +97,9 @@ export class DeparturePromoteListener {
 
     try {
       if (action === DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE) {
-        await this.handlePromote(interaction, eventId, role, position);
+        await this.handlePromote(interaction, eventId);
       } else {
-        await this.handleDismiss(interaction, eventId, role, position);
+        await this.handleDismiss(interaction, role, position);
       }
     } catch (error) {
       this.logger.error(
@@ -113,40 +115,17 @@ export class DeparturePromoteListener {
   }
 
   /**
-   * Promote the longest-waiting bench player to the vacated slot.
-   * Mirrors BenchPromotionProcessor.process() logic.
+   * Promote a bench player using the role calculation engine.
+   * Finds the FIFO bench player, runs autoAllocateSignup for optimal placement,
+   * and notifies the promoted player.
    */
   private async handlePromote(
     interaction: ButtonInteraction,
     eventId: number,
-    vacatedRole: string,
-    vacatedPosition: number,
   ): Promise<void> {
-    // 1. Verify slot is still empty
-    const [existing] = await this.db
-      .select()
-      .from(schema.rosterAssignments)
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          eq(schema.rosterAssignments.role, vacatedRole),
-          eq(schema.rosterAssignments.position, vacatedPosition),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      await this.editDMResult(
-        interaction,
-        'This slot has already been filled.',
-      );
-      return;
-    }
-
-    // 2. Find FIFO bench player (exclude departed/declined)
+    // 1. Find FIFO bench player (exclude departed/declined)
     const benchPlayers = await this.db
       .select({
-        assignmentId: schema.rosterAssignments.id,
         signupId: schema.rosterAssignments.signupId,
         userId: schema.eventSignups.userId,
       })
@@ -162,7 +141,7 @@ export class DeparturePromoteListener {
           eq(schema.eventSignups.status, 'signed_up'),
         ),
       )
-      .orderBy(asc(schema.eventSignups.signedUpAt))
+      .orderBy(schema.eventSignups.signedUpAt)
       .limit(1);
 
     if (benchPlayers.length === 0) {
@@ -172,17 +151,26 @@ export class DeparturePromoteListener {
 
     const benchPlayer = benchPlayers[0];
 
-    // 3. Move bench assignment to vacated slot
-    await this.db
-      .update(schema.rosterAssignments)
-      .set({ role: vacatedRole, position: vacatedPosition })
-      .where(eq(schema.rosterAssignments.id, benchPlayer.assignmentId));
-
-    this.logger.log(
-      `Creator promoted bench player (signup ${benchPlayer.signupId}) to ${vacatedRole}:${vacatedPosition} for event ${eventId}`,
+    // 2. Use role calculation engine for optimal placement
+    const result = await this.signupsService.promoteFromBench(
+      eventId,
+      benchPlayer.signupId,
     );
 
-    // 4. Notify the promoted player
+    if (!result || result.role === 'bench') {
+      await this.editDMResult(
+        interaction,
+        result?.warning ??
+          `Could not find a suitable roster slot for the bench player.`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `Creator promoted ${result.username} (signup ${benchPlayer.signupId}) to ${result.role}:${result.position} for event ${eventId} via role calculation`,
+    );
+
+    // 3. Notify the promoted player
     if (benchPlayer.userId) {
       const [event] = await this.db
         .select({ title: schema.events.title })
@@ -199,18 +187,18 @@ export class DeparturePromoteListener {
         userId: benchPlayer.userId,
         type: 'bench_promoted',
         title: 'Promoted from Bench!',
-        message: `A slot opened up in "${event?.title ?? 'event'}" and you've been moved from the bench to the roster!`,
+        message: `A slot opened up in "${event?.title ?? 'event'}" and you've been moved from the bench to the roster as **${result.role}**!`,
         payload: {
           eventId,
-          role: vacatedRole,
-          position: vacatedPosition,
+          role: result.role,
+          position: result.position,
           ...(discordUrl ? { discordUrl } : {}),
           ...(voiceChannelId ? { voiceChannelId } : {}),
         },
       });
     }
 
-    // 5. Emit signup event for Discord embed sync
+    // 4. Emit signup event for Discord embed sync
     this.eventEmitter.emit(SIGNUP_EVENTS.UPDATED, {
       eventId,
       userId: benchPlayer.userId,
@@ -218,22 +206,13 @@ export class DeparturePromoteListener {
       action: 'bench_promoted',
     } satisfies SignupEventPayload);
 
-    // 6. Edit original DM to show result
-    // Look up the promoted player's name
-    let promotedName = 'Bench player';
-    if (benchPlayer.userId) {
-      const [user] = await this.db
-        .select({ username: schema.users.username })
-        .from(schema.users)
-        .where(eq(schema.users.id, benchPlayer.userId))
-        .limit(1);
-      if (user) promotedName = user.username;
+    // 5. Edit original DM to show result
+    let dmText = `**${result.username}** has been promoted to **${result.role}** (position ${result.position}).`;
+    if (result.warning) {
+      dmText += `\n\n⚠️ ${result.warning}`;
     }
 
-    await this.editDMResult(
-      interaction,
-      `**${promotedName}** has been promoted to **${vacatedRole}** (position ${vacatedPosition}).`,
-    );
+    await this.editDMResult(interaction, dmText);
   }
 
   /**
@@ -241,7 +220,6 @@ export class DeparturePromoteListener {
    */
   private async handleDismiss(
     interaction: ButtonInteraction,
-    _eventId: number,
     vacatedRole: string,
     vacatedPosition: number,
   ): Promise<void> {
