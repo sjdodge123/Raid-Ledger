@@ -71,6 +71,10 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
     description:
       'Auto-starts Discord scheduled events when their start time arrives every 30 seconds',
   },
+  EventAutoExtendService_checkExtensions: {
+    description:
+      'Auto-extends scheduled events when voice channel activity persists past the end time every 60 seconds',
+  },
 };
 
 /**

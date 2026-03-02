@@ -56,6 +56,7 @@ import { EmbedSchedulerService } from './services/embed-scheduler.service';
 import { ScheduledEventService } from './services/scheduled-event.service';
 import { PresenceGameDetectorService } from './services/presence-game-detector.service';
 import { VoiceAttendanceService } from './services/voice-attendance.service';
+import { EventAutoExtendService } from './services/event-auto-extend.service';
 import { PlayingCommand } from './commands/playing.command';
 
 @Module({
@@ -103,6 +104,7 @@ import { PlayingCommand } from './commands/playing.command';
     GameActivityService,
     PresenceGameDetectorService,
     VoiceAttendanceService,
+    EventAutoExtendService,
     EventLinkListener,
     EmbedPosterService,
     EmbedSchedulerService,

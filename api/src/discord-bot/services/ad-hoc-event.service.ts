@@ -2,7 +2,6 @@ import {
   Inject,
   Injectable,
   Logger,
-  OnModuleDestroy,
   OnModuleInit,
 } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
@@ -21,25 +20,19 @@ import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { VoiceAttendanceService } from './voice-attendance.service';
 import { APP_EVENT_EVENTS } from '../discord-bot.constants';
 import type { AdHocRosterResponseDto } from '@raid-ledger/contract';
-
-/** Minimum interval between end-time extensions (ms). */
-const EXTEND_THROTTLE_MS = 5 * 60 * 1000;
-
-/** Interval for periodic end-time extension checks (ms). */
-const EXTEND_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 
 /** In-memory state for an active ad-hoc event. */
 interface ActiveAdHocState {
   eventId: number;
   memberSet: Set<string>; // Discord user IDs currently in the channel
-  lastExtendedAt: number; // epoch ms
   gameId?: number | null; // For general-lobby composite key recovery
 }
 
 @Injectable()
-export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
+export class AdHocEventService implements OnModuleInit {
   private readonly logger = new Logger(AdHocEventService.name);
 
   /**
@@ -51,9 +44,6 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
    */
   private activeEvents = new Map<string, ActiveAdHocState>();
 
-  /** Periodic timer for extending end times of occupied events. */
-  private extendInterval: ReturnType<typeof setInterval> | null = null;
-
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
@@ -64,6 +54,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     private readonly channelBindingsService: ChannelBindingsService,
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
     private readonly gateway: AdHocEventsGateway,
+    private readonly voiceAttendanceService: VoiceAttendanceService,
   ) {}
 
   /**
@@ -91,7 +82,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       this.activeEvents.set(key, {
         eventId: event.id,
         memberSet: new Set(),
-        lastExtendedAt: Date.now(),
+
         gameId: event.gameId,
       });
 
@@ -104,42 +95,6 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       );
     }
 
-    this.startExtendInterval();
-  }
-
-  onModuleDestroy(): void {
-    this.stopExtendInterval();
-  }
-
-  /**
-   * Start the periodic interval that extends end times for occupied events.
-   * AC-8: Event end time continuously extends while the channel is occupied.
-   */
-  private startExtendInterval(): void {
-    this.stopExtendInterval();
-    this.extendInterval = setInterval(() => {
-      this.extendAllActiveEvents().catch((err) => {
-        this.logger.error(`Periodic end-time extension failed: ${err}`);
-      });
-    }, EXTEND_CHECK_INTERVAL_MS);
-  }
-
-  private stopExtendInterval(): void {
-    if (this.extendInterval) {
-      clearInterval(this.extendInterval);
-      this.extendInterval = null;
-    }
-  }
-
-  /**
-   * Extend end times for all active events that still have members.
-   */
-  private async extendAllActiveEvents(): Promise<void> {
-    for (const [, state] of this.activeEvents) {
-      if (state.memberSet.size > 0) {
-        await this.maybeExtendEndTime(state);
-      }
-    }
   }
 
   /**
@@ -206,6 +161,13 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       } else {
         // AC-11: Add to existing live event
         state.memberSet.add(member.discordUserId);
+        this.voiceAttendanceService.handleJoin(
+          state.eventId,
+          member.discordUserId,
+          member.discordUsername,
+          null,
+          member.discordAvatarHash,
+        );
 
         // Cancel any pending grace period
         await this.gracePeriodQueue.cancel(state.eventId);
@@ -233,9 +195,6 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
         // Notify Discord embed + WebSocket clients
         this.notificationService.queueUpdate(state.eventId, bindingId);
         await this.emitRosterToClients(state.eventId);
-
-        // Extend end time if throttle elapsed
-        await this.maybeExtendEndTime(state);
 
         return;
       }
@@ -315,9 +274,17 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     this.activeEvents.set(eventKey, {
       eventId,
       memberSet: tempMembers,
-      lastExtendedAt: Date.now(),
       gameId: effectiveGameId,
     });
+
+    // Register first member with unified voice attendance tracking
+    this.voiceAttendanceService.handleJoin(
+      eventId,
+      member.discordUserId,
+      member.discordUsername,
+      null,
+      member.discordAvatarHash,
+    );
 
     // Add the first participant + auto-signup for slot grid
     await this.participantService.addParticipant(eventId, member);
@@ -381,6 +348,7 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
     if (!state) return;
 
     state.memberSet.delete(discordUserId);
+    this.voiceAttendanceService.handleLeave(state.eventId, discordUserId);
 
     // Verify event still exists and is active
     const event = await this.getEvent(state.eventId);
@@ -679,38 +647,6 @@ export class AdHocEventService implements OnModuleInit, OnModuleDestroy {
       .returning();
 
     return event.id;
-  }
-
-  /**
-   * Extend the end time if the throttle interval has elapsed.
-   */
-  private async maybeExtendEndTime(state: ActiveAdHocState): Promise<void> {
-    const now = Date.now();
-    if (now - state.lastExtendedAt < EXTEND_THROTTLE_MS) return;
-
-    state.lastExtendedAt = now;
-
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, state.eventId))
-      .limit(1);
-
-    if (!event) return;
-
-    // Extend end time to 1 hour from now
-    const newEnd = new Date(now + 60 * 60 * 1000);
-    await this.db
-      .update(schema.events)
-      .set({
-        duration: [event.duration[0], newEnd] as [Date, Date],
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.events.id, state.eventId));
-
-    this.gateway.emitEndTimeExtended(state.eventId, newEnd.toISOString());
-
-    this.logger.debug(`Extended end time for ad-hoc event ${state.eventId}`);
   }
 
   /**

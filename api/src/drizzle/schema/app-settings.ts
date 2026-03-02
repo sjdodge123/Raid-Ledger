@@ -69,6 +69,15 @@ export const SETTING_KEYS = {
   DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',
   /** ROK-490: Grace minutes for voice attendance classification */
   VOICE_ATTENDANCE_GRACE_MINUTES: 'voice_attendance_grace_minutes',
+  /** ROK-576: Whether auto-extension of events based on voice activity is enabled */
+  EVENT_AUTO_EXTEND_ENABLED: 'event_auto_extend_enabled',
+  /** ROK-576: Minutes to extend per rolling increment */
+  EVENT_AUTO_EXTEND_INCREMENT_MINUTES: 'event_auto_extend_increment_minutes',
+  /** ROK-576: Maximum total overage minutes allowed */
+  EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES:
+    'event_auto_extend_max_overage_minutes',
+  /** ROK-576: Minimum voice members required to trigger extension */
+  EVENT_AUTO_EXTEND_MIN_VOICE_MEMBERS: 'event_auto_extend_min_voice_members',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

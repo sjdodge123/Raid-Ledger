@@ -658,4 +658,45 @@ export class SettingsService implements OnModuleInit {
     );
     this.logger.log(`Ad-hoc events ${enabled ? 'enabled' : 'disabled'}`);
   }
+
+  /**
+   * Get whether event auto-extension is enabled (ROK-576).
+   */
+  async getEventAutoExtendEnabled(): Promise<boolean> {
+    const value = await this.get(SETTING_KEYS.EVENT_AUTO_EXTEND_ENABLED);
+    return value === null ? true : value === 'true';
+  }
+
+  /**
+   * Get the auto-extend increment in minutes (ROK-576).
+   */
+  async getEventAutoExtendIncrementMinutes(): Promise<number> {
+    const value = await this.get(
+      SETTING_KEYS.EVENT_AUTO_EXTEND_INCREMENT_MINUTES,
+    );
+    const parsed = value ? parseInt(value, 10) : NaN;
+    return isNaN(parsed) ? 15 : parsed;
+  }
+
+  /**
+   * Get the maximum overage in minutes (ROK-576).
+   */
+  async getEventAutoExtendMaxOverageMinutes(): Promise<number> {
+    const value = await this.get(
+      SETTING_KEYS.EVENT_AUTO_EXTEND_MAX_OVERAGE_MINUTES,
+    );
+    const parsed = value ? parseInt(value, 10) : NaN;
+    return isNaN(parsed) ? 720 : parsed;
+  }
+
+  /**
+   * Get the minimum voice members required for extension (ROK-576).
+   */
+  async getEventAutoExtendMinVoiceMembers(): Promise<number> {
+    const value = await this.get(
+      SETTING_KEYS.EVENT_AUTO_EXTEND_MIN_VOICE_MEMBERS,
+    );
+    const parsed = value ? parseInt(value, 10) : NaN;
+    return isNaN(parsed) ? 2 : parsed;
+  }
 }

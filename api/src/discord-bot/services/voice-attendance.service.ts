@@ -186,12 +186,10 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   /**
    * Find active scheduled events for a given voice channel.
    * Resolves: channelId → channel_bindings (game-voice-monitor) → events with matching gameId
-   *           that are currently within their scheduled time window.
+   *           that are currently within their scheduled time window OR extended via extendedUntil.
    *
-   * Note: This intentionally does NOT consider `extendedUntil` — voice tracking
-   * is scoped to the originally scheduled time window. Users who join during an
-   * extension period are not tracked because the extension is a grace period for
-   * wrap-up, not an extension of the tracked attendance window.
+   * ROK-576: Also considers `extendedUntil` — when an event has been auto-extended,
+   * voice tracking continues until the extended end time so late participants are captured.
    */
   async findActiveScheduledEvents(
     channelId: string,
@@ -218,7 +216,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             eq(schema.events.isAdHoc, false),
             sql`${schema.events.cancelledAt} IS NULL`,
             sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+            sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
           ),
         );
 
@@ -242,7 +240,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             eq(schema.events.isAdHoc, false),
             sql`${schema.events.cancelledAt} IS NULL`,
             sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-            sql`upper(${schema.events.duration}) >= ${now.toISOString()}::timestamptz`,
+            sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
           ),
         );
 
@@ -622,6 +620,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         const now = new Date();
         const lookbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
+        // ROK-576: Use COALESCE(extended_until, upper(duration)) so that
+        // extended events are not prematurely classified as completed.
         const endedEvents = await this.db
           .select({ id: schema.events.id })
           .from(schema.events)
@@ -629,9 +629,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             and(
               eq(schema.events.isAdHoc, false),
               sql`${schema.events.cancelledAt} IS NULL`,
-              // Event ended between lookback window start and now
-              sql`upper(${schema.events.duration}) >= ${lookbackStart.toISOString()}::timestamptz`,
-              sql`upper(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
+              // Event effective end between lookback window start and now
+              sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${lookbackStart.toISOString()}::timestamptz`,
+              sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${now.toISOString()}::timestamptz`,
             ),
           );
 

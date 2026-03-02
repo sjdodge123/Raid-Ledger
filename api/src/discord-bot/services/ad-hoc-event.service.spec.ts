@@ -7,6 +7,7 @@ import { UsersService } from '../../users/users.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
+import { VoiceAttendanceService } from './voice-attendance.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -116,6 +117,14 @@ describe('AdHocEventService', () => {
             emitEndTimeExtended: jest.fn(),
           },
         },
+        {
+          provide: VoiceAttendanceService,
+          useValue: {
+            handleJoin: jest.fn(),
+            handleLeave: jest.fn(),
+            getActiveCount: jest.fn().mockReturnValue(0),
+          },
+        },
       ],
     }).compile();
 
@@ -129,8 +138,7 @@ describe('AdHocEventService', () => {
   });
 
   afterEach(() => {
-    // Clean up any intervals started by onModuleInit
-    service.onModuleDestroy();
+    jest.clearAllMocks();
   });
 
   describe('isEnabled', () => {
@@ -614,118 +622,9 @@ describe('AdHocEventService', () => {
     });
   });
 
-  describe('periodic end-time extension', () => {
-    it('extends end time for occupied events on interval tick', async () => {
-      jest.useFakeTimers();
-
-      // Create an active event
-      mockSettingsService.get.mockResolvedValue('true');
-      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
-      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: 900 }]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 900,
-          title: 'WoW — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-periodic',
-        },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-
-      await service.handleVoiceJoin(
-        'binding-periodic',
-        baseMember,
-        baseBinding,
-      );
-
-      // Start the interval
-      mockDb.where.mockResolvedValueOnce([]); // onModuleInit recovery
-      await service.onModuleInit();
-
-      // Force the throttle to be expired for the next extend call
-      const state = service.getActiveState('binding-periodic', 1);
-      expect(state).toBeDefined();
-      state!.lastExtendedAt = Date.now() - 6 * 60 * 1000;
-
-      // Mock the DB calls for maybeExtendEndTime
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 900,
-          duration: [new Date(), new Date()],
-        },
-      ]);
-
-      // Advance timer to trigger interval
-      jest.advanceTimersByTime(5 * 60 * 1000);
-
-      // Allow async callbacks to settle
-      await jest.advanceTimersByTimeAsync(0);
-
-      expect(mockDb.update).toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
-
-    it('does not extend end time for events with no members', async () => {
-      jest.useFakeTimers();
-
-      // Create an active event
-      mockSettingsService.get.mockResolvedValue('true');
-      mockDb.limit.mockResolvedValueOnce([]); // scheduled overlap check
-      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-      mockDb.returning.mockResolvedValueOnce([{ id: 901 }]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: 901,
-          title: 'WoW — Quick Play',
-          gameId: 1,
-          channelBindingId: 'binding-empty',
-        },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ name: 'WoW' }]);
-
-      await service.handleVoiceJoin('binding-empty', baseMember, baseBinding);
-
-      // Remove the member
-      const state = service.getActiveState('binding-empty', 1);
-      state!.memberSet.clear();
-
-      // Start the interval
-      mockDb.where.mockResolvedValueOnce([]);
-      await service.onModuleInit();
-
-      // Reset mock call counts
-      mockDb.update.mockClear();
-
-      // Advance timer
-      jest.advanceTimersByTime(5 * 60 * 1000);
-      await jest.advanceTimersByTimeAsync(0);
-
-      // update should not have been called for end time extension
-      // (it may have been called during handleVoiceJoin, but we cleared it)
-      expect(mockDb.update).not.toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
-
-    it('cleans up interval on module destroy', async () => {
-      jest.useFakeTimers();
-
-      mockDb.where.mockResolvedValueOnce([]);
-      await service.onModuleInit();
-
-      service.onModuleDestroy();
-
-      // Advancing timers should not trigger any extension
-      mockDb.update.mockClear();
-      jest.advanceTimersByTime(10 * 60 * 1000);
-
-      expect(mockDb.update).not.toHaveBeenCalled();
-
-      jest.useRealTimers();
-    });
-  });
+  // Note: Periodic end-time extension was removed in ROK-576.
+  // Extension is now handled by EventAutoExtendService (cron-based, unified
+  // for both scheduled and ad-hoc events).
 
   describe('onModuleInit', () => {
     it('recovers live ad-hoc events from database', async () => {
