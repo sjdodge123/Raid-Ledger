@@ -28,6 +28,10 @@ import {
 /** Interval for flushing in-memory sessions to DB (ms). */
 const FLUSH_INTERVAL_MS = 30 * 1000;
 
+/** Yield to the event loop so health checks, HTTP, and other crons can run. */
+const yieldToEventLoop = (): Promise<void> =>
+  new Promise((resolve) => setImmediate(resolve));
+
 /** In-memory session state for a single user in a single event. */
 interface InMemorySession {
   eventId: number;
@@ -60,6 +64,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   /** Periodic flush timer */
   private flushTimer: ReturnType<typeof setInterval> | null = null;
+
+  /** Guard to prevent overlapping classifyCompletedEvents runs */
+  private classifyRunning = false;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -610,96 +617,116 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     waitForCompletion: true,
   })
   async classifyCompletedEvents(): Promise<void> {
-    await this.cronJobService.executeWithTracking(
-      'VoiceAttendanceService_classifyCompletedEvents',
-      async () => {
-        // Look back 24 hours for events that ended but haven't been classified.
-        // A wide window ensures events are still classified after API downtime
-        // (e.g. restart, outage). The "already classified" guard below prevents
-        // re-processing events that were handled in a prior run.
-        const now = new Date();
-        const lookbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    // Guard: prevent overlapping executions if cron fires while still running
+    if (this.classifyRunning) {
+      this.logger.warn(
+        'classifyCompletedEvents: previous run still in progress, skipping',
+      );
+      return;
+    }
 
-        // ROK-576: Use COALESCE(extended_until, upper(duration)) so that
-        // extended events are not prematurely classified as completed.
-        const endedEvents = await this.db
-          .select({ id: schema.events.id })
-          .from(schema.events)
-          .where(
-            and(
-              eq(schema.events.isAdHoc, false),
-              sql`${schema.events.cancelledAt} IS NULL`,
-              // Event effective end between lookback window start and now
-              sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${lookbackStart.toISOString()}::timestamptz`,
-              sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${now.toISOString()}::timestamptz`,
-            ),
-          );
+    this.classifyRunning = true;
+    try {
+      await this.cronJobService.executeWithTracking(
+        'VoiceAttendanceService_classifyCompletedEvents',
+        async () => {
+          // Look back 24 hours for events that ended but haven't been classified.
+          // A wide window ensures events are still classified after API downtime
+          // (e.g. restart, outage). The "already classified" guard below prevents
+          // re-processing events that were handled in a prior run.
+          const now = new Date();
+          const lookbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-        if (endedEvents.length === 0) return;
-
-        // Flush any remaining in-memory sessions first
-        await this.flushToDb();
-
-        // Close any still-active in-memory sessions for these events
-        for (const event of endedEvents) {
-          for (const [, session] of this.sessions) {
-            if (session.eventId === event.id && session.isActive) {
-              this.handleLeave(event.id, session.discordUserId);
-            }
-          }
-        }
-
-        // Flush the closed sessions
-        await this.flushToDb();
-
-        for (const event of endedEvents) {
-          // Check if already fully classified (all sessions have a classification)
-          const [unclassified] = await this.db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(schema.eventVoiceSessions)
+          // ROK-576: Use COALESCE(extended_until, upper(duration)) so that
+          // extended events are not prematurely classified as completed.
+          const endedEvents = await this.db
+            .select({ id: schema.events.id })
+            .from(schema.events)
             .where(
               and(
-                eq(schema.eventVoiceSessions.eventId, event.id),
-                isNull(schema.eventVoiceSessions.classification),
+                eq(schema.events.isAdHoc, false),
+                sql`${schema.events.cancelledAt} IS NULL`,
+                // Event effective end between lookback window start and now
+                sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${lookbackStart.toISOString()}::timestamptz`,
+                sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${now.toISOString()}::timestamptz`,
               ),
             );
 
-          // Check if there are signups that might need no_show classification
-          const [signupCount] = await this.db
-            .select({ count: sql<number>`count(*)::int` })
-            .from(schema.eventSignups)
-            .where(eq(schema.eventSignups.eventId, event.id));
+          if (endedEvents.length === 0) return;
 
-          const hasUnclassifiedSessions =
-            unclassified && unclassified.count > 0;
-          const hasSignups = signupCount && signupCount.count > 0;
+          // Flush any remaining in-memory sessions first
+          await this.flushToDb();
 
-          // Skip if no unclassified sessions AND no signups to check for no-shows
-          if (!hasUnclassifiedSessions && !hasSignups) continue;
-
-          // Skip if already processed (sessions exist, all classified, and no-shows already created)
-          if (!hasUnclassifiedSessions && hasSignups) {
-            const [sessionCount] = await this.db
-              .select({ count: sql<number>`count(*)::int` })
-              .from(schema.eventVoiceSessions)
-              .where(eq(schema.eventVoiceSessions.eventId, event.id));
-            // If we already have sessions (including no_show records), skip
-            if (sessionCount && sessionCount.count > 0) continue;
-          }
-
-          this.logger.log(`Classifying voice attendance for event ${event.id}`);
-          await this.classifyEvent(event.id);
-          await this.autoPopulateAttendance(event.id);
-
-          // Clean up in-memory sessions for this event
-          for (const key of this.sessions.keys()) {
-            if (key.startsWith(`${event.id}:`)) {
-              this.sessions.delete(key);
+          // Close any still-active in-memory sessions for these events
+          for (const event of endedEvents) {
+            for (const [, session] of this.sessions) {
+              if (session.eventId === event.id && session.isActive) {
+                this.handleLeave(event.id, session.discordUserId);
+              }
             }
           }
-        }
-      },
-    );
+
+          // Flush the closed sessions
+          await this.flushToDb();
+
+          // Process events one at a time, yielding to the event loop between
+          // each to avoid blocking health checks, HTTP requests, and other crons.
+          for (const event of endedEvents) {
+            // Yield before each event so the event loop can service other work
+            await yieldToEventLoop();
+
+            // Check if already fully classified (all sessions have a classification)
+            const [unclassified] = await this.db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(schema.eventVoiceSessions)
+              .where(
+                and(
+                  eq(schema.eventVoiceSessions.eventId, event.id),
+                  isNull(schema.eventVoiceSessions.classification),
+                ),
+              );
+
+            // Check if there are signups that might need no_show classification
+            const [signupCount] = await this.db
+              .select({ count: sql<number>`count(*)::int` })
+              .from(schema.eventSignups)
+              .where(eq(schema.eventSignups.eventId, event.id));
+
+            const hasUnclassifiedSessions =
+              unclassified && unclassified.count > 0;
+            const hasSignups = signupCount && signupCount.count > 0;
+
+            // Skip if no unclassified sessions AND no signups to check for no-shows
+            if (!hasUnclassifiedSessions && !hasSignups) continue;
+
+            // Skip if already processed (sessions exist, all classified, and no-shows already created)
+            if (!hasUnclassifiedSessions && hasSignups) {
+              const [sessionCount] = await this.db
+                .select({ count: sql<number>`count(*)::int` })
+                .from(schema.eventVoiceSessions)
+                .where(eq(schema.eventVoiceSessions.eventId, event.id));
+              // If we already have sessions (including no_show records), skip
+              if (sessionCount && sessionCount.count > 0) continue;
+            }
+
+            this.logger.log(
+              `Classifying voice attendance for event ${event.id}`,
+            );
+            await this.classifyEvent(event.id);
+            await this.autoPopulateAttendance(event.id);
+
+            // Clean up in-memory sessions for this event
+            for (const key of this.sessions.keys()) {
+              if (key.startsWith(`${event.id}:`)) {
+                this.sessions.delete(key);
+              }
+            }
+          }
+        },
+      );
+    } finally {
+      this.classifyRunning = false;
+    }
   }
 
   // ─── API methods ───────────────────────────────────────────
