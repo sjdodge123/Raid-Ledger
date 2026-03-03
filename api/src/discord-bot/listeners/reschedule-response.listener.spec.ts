@@ -8,10 +8,9 @@ import { SignupsService } from '../../events/signups.service';
 import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import { DISCORD_BOT_EVENTS, RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
+import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
-import { ComponentType } from 'discord.js';
 import {
   createDrizzleMock,
   type MockDb,
