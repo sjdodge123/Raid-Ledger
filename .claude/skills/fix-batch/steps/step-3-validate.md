@@ -76,9 +76,9 @@ Update state: `gates.integration: PASS` (or `FAIL`)
 
 ---
 
-## 3f. Smoke Tests (if any story has UI changes)
+## 3f. Playwright Smoke Tests (MANDATORY)
 
-Check if any story in the batch touches `web/src/` files. If yes:
+Run the Playwright smoke suite against the deployed app. This is required for every batch — not just UI changes — because backend changes can break UI flows.
 
 1. Deploy locally:
    ```bash
@@ -87,7 +87,7 @@ Check if any story in the batch touches `web/src/` files. If yes:
 
 2. Verify health:
    ```bash
-   curl -s http://localhost:3000/api/health | head -20
+   curl -s http://localhost:3000/system/status | head -20
    ```
 
 3. Run smoke tests:
@@ -95,9 +95,11 @@ Check if any story in the batch touches `web/src/` files. If yes:
    npx playwright test
    ```
 
-If no stories touch UI files, mark smoke as SKIP.
+If Playwright fails:
+- **Selector/flake failures:** Fix the test or the UI, commit as `fix: resolve Playwright issues`
+- **Real regressions:** Diagnose which story broke the flow, fix or re-spawn dev.
 
-Update state: `gates.smoke: PASS` (or `FAIL` or `SKIP`)
+Update state: `gates.playwright: PASS` (or `FAIL`)
 
 ---
 
@@ -120,7 +122,7 @@ pipeline:
   gates:
     ci: PASS
     integration: PASS
-    smoke: PASS | SKIP
+    playwright: PASS
     pr: PENDING
 ```
 

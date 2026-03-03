@@ -1,14 +1,11 @@
-## Summary
-<!-- 1-3 bullet points describing what changed and why -->
+## What
+<!-- What does this PR do? -->
 
-## Story
-<!-- Link to Linear issue: [ROK-XXX](https://linear.app/roknuas-projects/issue/ROK-XXX) -->
+## Why
+<!-- What problem does it solve? Link to issue/story if applicable -->
 
-## Changes
-<!-- Key files modified -->
+## Acceptance criteria
+<!-- How do we know this works? -->
 
-## Test Plan
-- [ ] TypeScript compiles clean (`npx tsc --noEmit`)
-- [ ] Lint passes (`npm run lint`)
-- [ ] Unit tests pass (`npm run test`)
-- [ ] Manual smoke test (`deploy_dev.sh --branch <feature-branch>`)
+## Test plan
+<!-- What was tested? What should reviewers verify? -->

@@ -26,7 +26,6 @@ _bmad-output/
 .windsurf/
 .claude/*
 !.claude/skills/
-CLAUDE.md
 planning-artifacts/
 implementation-artifacts/
 scripts/*
@@ -35,6 +34,7 @@ scripts/*
 !scripts/fix-migration-order.sh
 !scripts/setup-branch-protection.sh
 !scripts/verify-ui.spec.ts
+!scripts/playwright-global-setup.ts
 !/api/scripts/
 implementation_plan.md
 walkthrough.md
@@ -70,7 +70,6 @@ uploads/
 
 # Project state
 task.md
-project-context.md
 
 # Test coverage
 coverage/

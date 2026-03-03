@@ -58,6 +58,24 @@ If the deploy fails, diagnose and fix. If it needs `--fresh` (DB wipe), get oper
 
 ---
 
+## 3c.5. Playwright Smoke Tests (MANDATORY)
+
+After deploying locally (step 3c), run the full Playwright smoke suite:
+
+```bash
+cd $WORKTREE && npx playwright test
+```
+
+The smoke tests verify auth flows, calendar, events, notifications, and navigation against live seed data. They require the API and web server to be running (deploy_dev.sh handles this).
+
+If Playwright fails:
+- **Selector/flake failures:** Fix the test or the UI, commit as `fix: resolve Playwright issues (ROK-XXX)`
+- **Real regressions:** Diagnose which story broke the flow, fix or re-spawn dev.
+
+Update state: `gates.playwright: PASS` (or `FAIL`)
+
+---
+
 ## 3d. Update Linear to "In Review"
 
 ```

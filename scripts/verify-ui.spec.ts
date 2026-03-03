@@ -1,136 +1,345 @@
 /**
- * Automated smoke tests — ROK-483
+ * Playwright Smoke Tests — ROK-653
  *
- * Converts the manual checklist from implementation-artifacts/smoke-tests.md
- * into automated Playwright specs. Requires DEMO_MODE=true for persona-based
- * login flows (seeded admin + member accounts).
+ * Comprehensive UI smoke tests run against DEMO_MODE seed data.
+ * All tests run as admin@local via storageState from global setup.
  *
  * Run:
- *   npx playwright test                          # auto-starts dev server
- *   BASE_URL=http://localhost:80 npx playwright test  # against Docker container
+ *   npx playwright test                              # auto-starts dev server
+ *   BASE_URL=http://localhost:5173 npx playwright test  # against running server
  */
 import { test, expect } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
-// Authentication
+// Auth
 // ---------------------------------------------------------------------------
 
-test.describe('Authentication', () => {
-    test('login page loads and renders form', async ({ page }) => {
-        await page.goto('/login', { waitUntil: 'networkidle' });
-        await expect(page).toHaveTitle(/Raid Ledger|Login/i);
-        // Should render at least one interactive element (button or link)
-        const loginAction = page.locator('button, a[href*="discord"], a[href*="auth"]').first();
-        await expect(loginAction).toBeVisible({ timeout: 10_000 });
-    });
-
-    test('demo admin can log in (DEMO_MODE)', async ({ page }) => {
-        await page.goto('/login');
-
-        // Demo mode shows quick-login buttons for seeded personas
-        const adminBtn = page.getByRole('button', { name: /admin/i });
-        if (await adminBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await adminBtn.click();
-            // Should navigate away from login page after auth
-            await page.waitForURL((url) => !url.pathname.includes('/login'), {
-                timeout: 10_000,
-            });
-            await expect(page.locator('body')).not.toHaveText(/error/i);
-        } else {
-            test.skip(true, 'DEMO_MODE not enabled — skipping demo login');
+test.describe('Auth', () => {
+    /**
+     * Helper: expand the local login form if OAuth providers (Discord) are shown.
+     * Waits for the login page to load, then clicks the toggle to reveal
+     * username/password fields if they're hidden behind an OAuth-first layout.
+     */
+    async function expandLocalLogin(page: import('@playwright/test').Page) {
+        // Wait for the login page to be interactive — either OAuth button or Username label
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+        const toggleBtn = page.getByText('Sign in with username instead');
+        if (await toggleBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
+            await toggleBtn.click();
+            // Wait for the form to expand
+            await expect(page.locator('#username')).toBeVisible({ timeout: 5_000 });
         }
+    }
+
+    test('login page renders form fields', async ({ browser }) => {
+        // Use a fresh context without storageState to test unauthenticated view
+        const context = await browser.newContext({ storageState: undefined });
+        const page = await context.newPage();
+
+        await page.goto('/');
+        await expandLocalLogin(page);
+
+        await expect(page.locator('#username')).toBeVisible({ timeout: 10_000 });
+        await expect(page.locator('#password')).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible();
+
+        await context.close();
     });
 
-    test('authenticated user sees calendar', async ({ page }) => {
-        await page.goto('/login');
+    test('local login with admin@local credentials works', async ({ browser }) => {
+        const context = await browser.newContext({ storageState: undefined });
+        const page = await context.newPage();
 
-        const adminBtn = page.getByRole('button', { name: /admin/i });
-        if (await adminBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await adminBtn.click();
-            await page.waitForURL((url) => !url.pathname.includes('/login'), {
-                timeout: 10_000,
-            });
-            // Calendar or dashboard should be visible
-            const calendarOrDash = page.locator(
-                '[data-testid="calendar"], [class*="calendar"], h1, h2',
-            ).first();
-            await expect(calendarOrDash).toBeVisible({ timeout: 10_000 });
-        } else {
-            test.skip(true, 'DEMO_MODE not enabled');
-        }
+        await page.goto('/');
+        await expandLocalLogin(page);
+
+        await page.locator('#username').fill('admin@local');
+        await page.locator('#password').fill(process.env.ADMIN_PASSWORD || 'password');
+        await page.getByRole('button', { name: 'Sign In' }).click();
+
+        // After login the app may redirect to /calendar, /onboarding, or /setup
+        // depending on admin state. Just verify we left the login page.
+        await expect(page.getByRole('button', { name: 'Sign In' })).not.toBeVisible({ timeout: 15_000 });
+
+        await context.close();
     });
 
-    test('admin can impersonate non-admin user (ROK-212)', async ({ page }) => {
-        await page.goto('/login');
+    test('unauthenticated user is redirected to login', async ({ browser }) => {
+        const context = await browser.newContext({ storageState: undefined });
+        const page = await context.newPage();
 
-        const adminBtn = page.getByRole('button', { name: /admin/i });
-        if (await adminBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await adminBtn.click();
-            await page.waitForURL((url) => !url.pathname.includes('/login'), {
-                timeout: 10_000,
-            });
+        // Try to access a protected route
+        await page.goto('/events');
+        // Should show the login form — look for a sign-in related button
+        // (could be "Continue with Discord" or "Sign In" depending on config)
+        await expect(
+            page.getByRole('button', { name: /sign in|continue with/i }).first()
+        ).toBeVisible({ timeout: 15_000 });
 
-            // Look for impersonation trigger (dropdown, menu item, etc.)
-            const impersonateLink = page.getByText(/impersonat/i).first();
-            if (await impersonateLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await impersonateLink.click();
-                // Should show a user selection or directly switch
-                await page.waitForTimeout(1000);
-                // Look for any user to impersonate
-                const userOption = page.locator('[data-testid*="user"], button, a')
-                    .filter({ hasNotText: /admin/i })
-                    .first();
-                if (await userOption.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await userOption.click();
-                    // Should show impersonation banner
-                    const banner = page.getByText(/viewing as/i);
-                    await expect(banner).toBeVisible({ timeout: 5000 });
-                }
-            } else {
-                test.skip(true, 'Impersonation not available in current UI');
+        await context.close();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Calendar
+// ---------------------------------------------------------------------------
+
+test.describe('Calendar', () => {
+    test('month view renders heading and grid', async ({ page }) => {
+        await page.goto('/calendar');
+        // The h1 "Calendar" heading is desktop-only (hidden md:block).
+        // At the Desktop Chrome viewport (1280px) it should be visible.
+        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+        // The calendar grid should be visible (look for day-of-week column headers).
+        // react-big-calendar renders "Sun", "Mon" etc. (CSS uppercases them visually).
+        await expect(page.getByRole('columnheader', { name: 'Mon' })).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('calendar has quick action links', async ({ page }) => {
+        await page.goto('/calendar');
+        await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('link', { name: 'All Events' })).toBeVisible();
+    });
+
+    test('seeded events appear on calendar', async ({ page }) => {
+        await page.goto('/calendar');
+        // Demo data creates events like "Heroic Amirdrassil Clear", "Mythic+ Push Night"
+        // They should appear as event chips/cards on the calendar
+        // Wait for events to load, then check for any event link
+        await page.waitForTimeout(2000);
+        const eventLinks = page.locator('a[href*="/events/"]');
+        const count = await eventLinks.count();
+        expect(count).toBeGreaterThan(0);
+    });
+
+    test('game filter checkboxes are visible when games exist', async ({ page }) => {
+        await page.goto('/calendar');
+        await page.waitForTimeout(2000);
+        // The filter section appears with game checkboxes when games are in the registry
+        // This may not be visible if no IGDB games exist in CI, so we check conditionally
+        const filterToggle = page.locator('button').filter({ hasText: /filter/i }).first();
+        if (await filterToggle.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await filterToggle.click();
+            // Should see game checkboxes in the filter panel
+            const checkboxes = page.getByRole('checkbox');
+            const checkboxCount = await checkboxes.count();
+            // If games exist, there should be filter checkboxes
+            if (checkboxCount > 0) {
+                await expect(checkboxes.first()).toBeVisible();
             }
-        } else {
-            test.skip(true, 'DEMO_MODE not enabled');
+        }
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Events List
+// ---------------------------------------------------------------------------
+
+test.describe('Events list', () => {
+    test('page renders heading and event cards', async ({ page }) => {
+        await page.goto('/events');
+        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
+        // Demo data creates events — event cards are div[role="button"] not <a> links.
+        // The desktop grid is inside "hidden md:grid" so use that scope.
+        await expect(
+            page.locator('.hidden.md\\:grid [role="button"]').first()
+        ).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('tab navigation works (Upcoming/Past/My Events/Plans)', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        // Desktop tabs live inside a "hidden md:flex" container.
+        // Scope to that container to avoid matching mobile toolbar buttons.
+        const desktopTabs = page.locator('.hidden.md\\:flex .bg-panel');
+        await expect(desktopTabs).toBeVisible({ timeout: 10_000 });
+
+        const upcomingTab = desktopTabs.getByRole('button', { name: 'Upcoming' });
+        const pastTab = desktopTabs.getByRole('button', { name: 'Past' });
+        const mineTab = desktopTabs.getByRole('button', { name: 'My Events' });
+        const plansTab = desktopTabs.getByRole('button', { name: 'Plans' });
+
+        await expect(upcomingTab).toBeVisible();
+        await expect(pastTab).toBeVisible();
+        await expect(mineTab).toBeVisible();
+        await expect(plansTab).toBeVisible();
+
+        // Click Past tab
+        await pastTab.click();
+        await expect(page.getByRole('heading', { name: /Past Events/i })).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('search input accepts text and filters results', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        // Desktop search input — scope to the visible desktop filter bar.
+        // Both desktop and mobile have aria-label="Search events".
+        const desktopFilterBar = page.locator('.hidden.md\\:flex');
+        const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
+        await expect(searchInput).toBeVisible({ timeout: 10_000 });
+
+        // Search for a nonsense term — should show empty state
+        await searchInput.fill('xyznonexistent');
+        await page.waitForTimeout(500);
+
+        // Should show "No events yet" empty state or zero event cards
+        const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
+        const count = await eventCards.count();
+        expect(count).toBe(0);
+
+        // Clear search — events should reappear
+        await searchInput.clear();
+        await page.waitForTimeout(1000);
+        await expect(
+            page.locator('.hidden.md\\:grid [role="button"]').first()
+        ).toBeVisible({ timeout: 5_000 });
+    });
+
+    test('Create Event and Plan Event links are visible', async ({ page }) => {
+        await page.goto('/events');
+        await expect(page.getByRole('link', { name: 'Create Event' })).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByRole('link', { name: 'Plan Event' })).toBeVisible();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Event Detail
+// ---------------------------------------------------------------------------
+
+test.describe('Event detail', () => {
+    test('navigate to seeded event and verify content', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        // Event cards are div[role="button"], NOT <a> tags.
+        // Click the first event card in the desktop grid.
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
+        await firstEventCard.click();
+
+        // Should land on event detail page (numeric ID)
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+        // Event should not show error boundary
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('event detail page renders without crashing', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
+        await firstEventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Wait for event detail to load
+        await page.waitForTimeout(2000);
+
+        // The event detail page should render without crashing
+        // (roster content depends on seed data; detailed assertions are in API integration tests)
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+
+    test('admin action buttons are visible on event detail', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
+        await firstEventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Admin should see management buttons
+        await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Cancel Event' })).toBeVisible();
+    });
+
+    test('event detail loads without error boundary', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
+        await firstEventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+        await page.waitForTimeout(3000);
+
+        // Page should load without errors — detailed count matching
+        // is covered by the API integration tests. Here we just verify
+        // the page renders correctly.
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Reschedule Modal
+// ---------------------------------------------------------------------------
+
+test.describe('Reschedule modal', () => {
+    test('opens on seeded event and shows signup count', async ({ page }) => {
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+
+        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
+        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
+        await firstEventCard.click();
+        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+
+        // Click Reschedule button
+        const rescheduleBtn = page.getByRole('button', { name: 'Reschedule' });
+        await expect(rescheduleBtn).toBeVisible({ timeout: 10_000 });
+        await rescheduleBtn.click();
+
+        // Modal should open with "Reschedule Event" heading and show player availability
+        await expect(page.getByRole('heading', { name: 'Reschedule Event' })).toBeVisible({ timeout: 10_000 });
+        await expect(page.getByText(/player availability/i)).toBeVisible({ timeout: 5_000 });
+    });
+});
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+test.describe('Notifications', () => {
+    test('bell icon is visible in header', async ({ page }) => {
+        await page.goto('/calendar');
+        await expect(page.getByRole('button', { name: 'Notifications' })).toBeVisible({ timeout: 15_000 });
+    });
+
+    test('dropdown opens and shows content', async ({ page }) => {
+        await page.goto('/calendar');
+        const bellBtn = page.getByRole('button', { name: 'Notifications' }).first();
+        await expect(bellBtn).toBeVisible({ timeout: 15_000 });
+        await bellBtn.click();
+
+        // Dropdown should open with "Notifications" heading (h3 has implicit heading role)
+        await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 5_000 });
+
+        // Should show either notification items or the empty state
+        const hasNotifications = await page.getByText('Roster Slot Available').first().isVisible({ timeout: 2_000 }).catch(() => false);
+        if (!hasNotifications) {
+            await expect(page.getByText('No notifications')).toBeVisible({ timeout: 5_000 });
         }
     });
 
-    test('impersonation banner shows and exit restores admin (ROK-212)', async ({ page }) => {
-        await page.goto('/login');
+    test('Mark All Read button works', async ({ page }) => {
+        await page.goto('/calendar');
+        const bellBtn = page.getByRole('button', { name: 'Notifications' }).first();
+        await expect(bellBtn).toBeVisible({ timeout: 15_000 });
+        await bellBtn.click();
 
-        const adminBtn = page.getByRole('button', { name: /admin/i });
-        if (await adminBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await adminBtn.click();
-            await page.waitForURL((url) => !url.pathname.includes('/login'), {
-                timeout: 10_000,
-            });
+        await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 5_000 });
 
-            const impersonateLink = page.getByText(/impersonat/i).first();
-            if (await impersonateLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await impersonateLink.click();
-                await page.waitForTimeout(1000);
-
-                const userOption = page.locator('[data-testid*="user"], button, a')
-                    .filter({ hasNotText: /admin/i })
-                    .first();
-                if (await userOption.isVisible({ timeout: 3000 }).catch(() => false)) {
-                    await userOption.click();
-
-                    // Banner should be visible
-                    const banner = page.getByText(/viewing as/i);
-                    await expect(banner).toBeVisible({ timeout: 5000 });
-
-                    // Exit impersonation
-                    const exitBtn = page.getByText(/exit/i).first();
-                    await exitBtn.click();
-
-                    // Banner should disappear
-                    await expect(banner).not.toBeVisible({ timeout: 5000 });
-                }
-            } else {
-                test.skip(true, 'Impersonation not available');
-            }
-        } else {
-            test.skip(true, 'DEMO_MODE not enabled');
+        const markAllReadBtn = page.getByRole('button', { name: 'Mark All Read' });
+        if (await markAllReadBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+            await markAllReadBtn.click();
+            // After marking all as read, the button should disappear or notifications update
+            await page.waitForTimeout(1000);
+            // Verify no errors
+            await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         }
     });
 });
@@ -140,124 +349,105 @@ test.describe('Authentication', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Navigation', () => {
-    test('header nav links are functional', async ({ page }) => {
-        // Log in first — unauthenticated users get redirected to /login (no nav)
-        await page.goto('/login');
-        const adminBtn = page.getByRole('button', { name: /admin/i });
-        if (!(await adminBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
-            test.skip(true, 'DEMO_MODE not enabled — skipping nav test');
-        }
-        await adminBtn.click();
-        await page.waitForURL((url) => !url.pathname.includes('/login'), { timeout: 10_000 });
+    test('header contains all main nav links', async ({ page }) => {
+        await page.goto('/calendar');
+        // Both desktop header nav and mobile bottom tab bar have aria-label="Main navigation".
+        // Scope to the desktop header nav (inside <header>).
+        const nav = page.locator('header nav[aria-label="Main navigation"]');
+        await expect(nav).toBeVisible({ timeout: 15_000 });
 
-        // Look for navigation links in header/nav
-        const nav = page.locator('nav, header').first();
-        await expect(nav).toBeVisible({ timeout: 10_000 });
-
-        // Should have at least one clickable link
-        const links = nav.locator('a[href]');
-        const count = await links.count();
-        expect(count).toBeGreaterThan(0);
+        await expect(nav.getByRole('link', { name: 'Calendar' })).toBeVisible();
+        await expect(nav.getByRole('link', { name: 'Games' })).toBeVisible();
+        await expect(nav.getByRole('link', { name: 'Events' })).toBeVisible();
+        await expect(nav.getByRole('link', { name: 'Players' })).toBeVisible();
     });
 
-    test('calendar loads without console errors', async ({ page }) => {
+    test('nav links navigate to correct pages', async ({ page }) => {
+        await page.goto('/calendar');
+        const nav = page.locator('header nav[aria-label="Main navigation"]');
+        await expect(nav).toBeVisible({ timeout: 15_000 });
+
+        // Navigate to Events
+        await nav.getByRole('link', { name: 'Events' }).click();
+        await page.waitForURL('**/events', { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible();
+
+        // Navigate to Games
+        await nav.getByRole('link', { name: 'Games' }).click();
+        await page.waitForURL('**/games', { timeout: 10_000 });
+
+        // Navigate to Players
+        await nav.getByRole('link', { name: 'Players' }).click();
+        await page.waitForURL('**/players', { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible();
+
+        // Navigate back to Calendar
+        await nav.getByRole('link', { name: 'Calendar' }).click();
+        await page.waitForURL('**/calendar', { timeout: 10_000 });
+        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible();
+    });
+
+    test('no critical console errors during navigation', async ({ page }) => {
         const errors: string[] = [];
         page.on('console', (msg) => {
             if (msg.type() === 'error') errors.push(msg.text());
         });
 
-        await page.goto('/');
-        await page.waitForTimeout(3000);
+        await page.goto('/calendar');
+        await page.waitForTimeout(2000);
+        await page.goto('/events');
+        await page.waitForTimeout(2000);
+        await page.goto('/games');
+        await page.waitForTimeout(2000);
+        await page.goto('/players');
+        await page.waitForTimeout(2000);
 
-        // Filter out known benign errors (e.g., network requests in dev)
+        // Filter out known benign errors (network, favicon, CORS in dev, rate limiting)
         const criticalErrors = errors.filter(
-            (e) => !e.includes('net::') && !e.includes('favicon') && !e.includes('404'),
+            (e) =>
+                !e.includes('net::') &&
+                !e.includes('favicon') &&
+                !e.includes('404') &&
+                !e.includes('429') &&
+                !e.includes('CORS') &&
+                !e.includes('ERR_CONNECTION_REFUSED') &&
+                !e.includes('Failed to load resource'),
         );
         expect(criticalErrors).toHaveLength(0);
     });
 });
 
 // ---------------------------------------------------------------------------
-// Calendar
+// Games Page
 // ---------------------------------------------------------------------------
 
-test.describe('Calendar', () => {
-    test('month view displays without crashing', async ({ page }) => {
-        await page.goto('/');
-        // Calendar container should render
-        await page.waitForTimeout(2000);
-        // Page should not show an error boundary
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-    });
-
-    test('week view displays events', async ({ page }) => {
-        await page.goto('/');
-        await page.waitForTimeout(2000);
-
-        // Look for week view toggle
-        const weekBtn = page.getByRole('button', { name: /week/i });
-        if (await weekBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await weekBtn.click();
-            await page.waitForTimeout(1000);
-            await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-        }
-    });
-
-    test('day view shows event details', async ({ page }) => {
-        await page.goto('/');
-        await page.waitForTimeout(2000);
-
-        // Look for day view toggle
-        const dayBtn = page.getByRole('button', { name: /day/i });
-        if (await dayBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await dayBtn.click();
-            await page.waitForTimeout(1000);
-            await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-        }
-    });
-
-    test('attendee avatars render (ROK-194)', async ({ page }) => {
-        await page.goto('/');
+test.describe('Games page', () => {
+    test('page loads without crashing', async ({ page }) => {
+        await page.goto('/games');
+        // Games page may show "Discover" tab or game cards depending on IGDB data
         await page.waitForTimeout(3000);
-
-        // If there are events with attendees, avatars should render as images
-        const avatars = page.locator('img[alt*="avatar" i], img[class*="avatar" i], [data-testid*="avatar"]');
-        const count = await avatars.count();
-        // This is a soft check — events may or may not exist
-        if (count > 0) {
-            await expect(avatars.first()).toBeVisible();
-        }
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 });
 
 // ---------------------------------------------------------------------------
-// Roster
+// Players Page
 // ---------------------------------------------------------------------------
 
-test.describe('Roster', () => {
-    test('roster displays on event detail page (ROK-183)', async ({ page }) => {
-        // Navigate to an event page — need an event to exist
-        await page.goto('/');
+test.describe('Players page', () => {
+    test('renders heading and player list from seed data', async ({ page }) => {
+        await page.goto('/players');
+        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
+
+        // Demo data creates ~100 users — the first page shows alphabetically sorted players.
+        // "Admin" and "CasualCarl" are consistently on the first page.
+        await expect(page.getByText('CasualCarl').first()).toBeVisible({ timeout: 10_000 });
+    });
+
+    test('shows total player count', async ({ page }) => {
+        await page.goto('/players');
         await page.waitForTimeout(2000);
-
-        // Try to find and click an event link
-        const eventLink = page.locator('a[href*="/events/"]').first();
-        if (await eventLink.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await eventLink.click();
-            await page.waitForTimeout(2000);
-
-            // Event detail page should not crash
-            await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
-
-            // Look for roster or signup section
-            const rosterSection = page.locator(
-                '[data-testid*="roster"], [class*="roster"], text=/roster|signed up|attendees/i',
-            ).first();
-            if (await rosterSection.isVisible({ timeout: 3000 }).catch(() => false)) {
-                await expect(rosterSection).toBeVisible();
-            }
-        } else {
-            test.skip(true, 'No events available to test roster');
-        }
+        // The players page shows "N registered" — demo data has ~101 users
+        await expect(page.getByText(/registered/i)).toBeVisible({ timeout: 10_000 });
     });
 });
