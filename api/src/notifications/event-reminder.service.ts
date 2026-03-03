@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, inArray, isNull } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -73,8 +73,11 @@ export class EventReminderService {
 
         const now = new Date();
 
-        // Fetch all non-cancelled future events (using schema-level read for proper tsrange→Date).
-        // Include reminder config columns to know which windows are enabled per event.
+        // ROK-658: Bound to events starting within [-90s, +24h] from now.
+        // Covers all reminder windows (15m, 1h, 24h) plus 90s cron jitter buffer.
+        const lowerBound = new Date(now.getTime() - 90_000);
+        const upperBound = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
         const candidateEvents = await this.db
           .select({
             id: schema.events.id,
@@ -87,7 +90,17 @@ export class EventReminderService {
             cancelledAt: schema.events.cancelledAt,
           })
           .from(schema.events)
-          .where(isNull(schema.events.cancelledAt));
+          .where(
+            and(
+              isNull(schema.events.cancelledAt),
+              sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
+              sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
+            ),
+          );
+
+        // ROK-658: Hoist getDefaultTimezone() once per cron run
+        const defaultTimezone =
+          (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
 
         // For each reminder window, find events in that window
         for (const window of REMINDER_WINDOWS) {
@@ -113,6 +126,7 @@ export class EventReminderService {
             window.type,
             window.label,
             now,
+            defaultTimezone,
           );
         }
       },
@@ -132,6 +146,7 @@ export class EventReminderService {
     windowType: ReminderWindowType,
     windowLabel: string,
     now: Date,
+    defaultTimezone: string,
   ): Promise<void> {
     const eventIds = events.map((e) => e.id);
 
@@ -171,7 +186,8 @@ export class EventReminderService {
     const userMap = new Map(users.map((u) => [u.id, u]));
 
     // Batch fetch per-user timezone preferences for time formatting (ROK-544)
-    const userTimezones = await this.getUserTimezones();
+    // ROK-658: Filter by signed-up user IDs instead of scanning all preferences
+    const userTimezones = await this.getUserTimezones(allUserIds);
     const tzMap = new Map(userTimezones.map((ut) => [ut.userId, ut.timezone]));
 
     // Batch fetch characters for signed-up users
@@ -206,6 +222,13 @@ export class EventReminderService {
         Math.round((startTime.getTime() - now.getTime()) / 60000),
       );
 
+      // ROK-658: Hoist per-event lookups outside the per-user loop
+      const discordUrl = await this.notificationService.getDiscordEmbedUrl(
+        event.id,
+      );
+      const voiceChannelId =
+        await this.notificationService.resolveVoiceChannelId(event.gameId);
+
       for (const userId of userIds) {
         const user = userMap.get(userId);
         if (!user) continue; // User not found — skip
@@ -230,7 +253,9 @@ export class EventReminderService {
           minutesUntil,
           characterDisplay: charDisplay,
           timezone: tzMap.get(userId),
-          gameId: event.gameId,
+          defaultTimezone,
+          discordUrl,
+          voiceChannelId,
         });
       }
     }
@@ -251,6 +276,12 @@ export class EventReminderService {
     minutesUntil: number;
     characterDisplay: string | null;
     timezone?: string;
+    /** ROK-658: Pre-resolved default timezone (hoisted to once per cron run). */
+    defaultTimezone?: string;
+    /** ROK-658: Pre-resolved Discord embed URL (hoisted to once per event). */
+    discordUrl?: string | null;
+    /** ROK-658: Pre-resolved voice channel ID (hoisted to once per event). */
+    voiceChannelId?: string | null;
     gameId?: number | null;
   }): Promise<boolean> {
     const result = await this.db
@@ -274,11 +305,8 @@ export class EventReminderService {
       return false;
     }
 
-    // Resolve timezone: per-user preference → system default → UTC
-    const timezone =
-      input.timezone ??
-      (await this.settingsService.getDefaultTimezone()) ??
-      'UTC';
+    // Resolve timezone: per-user preference → pre-resolved default → fallback UTC
+    const timezone = input.timezone ?? input.defaultTimezone ?? 'UTC';
 
     // Build the time display string
     const timeStr = input.startTime.toLocaleTimeString('en-US', {
@@ -296,15 +324,9 @@ export class EventReminderService {
       input.minutesUntil,
     );
 
-    // ROK-538: Look up Discord embed URL for the event
-    const discordUrl = await this.notificationService.getDiscordEmbedUrl(
-      input.eventId,
-    );
-
-    // ROK-507: Resolve voice channel for the event's game
-    const voiceChannelId = await this.notificationService.resolveVoiceChannelId(
-      input.gameId,
-    );
+    // ROK-658: Use pre-resolved per-event values (hoisted from per-user loop)
+    const discordUrl = input.discordUrl ?? null;
+    const voiceChannelId = input.voiceChannelId ?? null;
 
     // Build a dynamic title that matches the body's time calculation
     const titleTimeLabel = this.buildTitleTimeLabel(input.minutesUntil);
@@ -352,15 +374,23 @@ export class EventReminderService {
 
   /**
    * Batch query user timezone preferences.
+   * ROK-658: Filter by user IDs to avoid full table scan.
    */
-  async getUserTimezones(): Promise<{ userId: number; timezone: string }[]> {
+  async getUserTimezones(
+    userIds?: number[],
+  ): Promise<{ userId: number; timezone: string }[]> {
+    const conditions = [eq(schema.userPreferences.key, 'timezone')];
+    if (userIds && userIds.length > 0) {
+      conditions.push(inArray(schema.userPreferences.userId, userIds));
+    }
+
     const rows = await this.db
       .select({
         userId: schema.userPreferences.userId,
         value: schema.userPreferences.value,
       })
       .from(schema.userPreferences)
-      .where(eq(schema.userPreferences.key, 'timezone'));
+      .where(and(...conditions));
 
     return rows.map((row) => {
       const tz = row.value as string;
