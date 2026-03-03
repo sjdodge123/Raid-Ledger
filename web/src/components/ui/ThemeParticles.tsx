@@ -220,7 +220,7 @@ function rand(min: number, max: number) {
 
 function spawnParticle(cfg: ParticleConfig, w: number, h: number): Particle {
     const speed = rand(cfg.minSpeed, cfg.maxSpeed);
-    let x = rand(0, w);
+    const x = rand(0, w);
     let y: number;
     let vy: number;
     let vx = rand(-cfg.drift, cfg.drift);
