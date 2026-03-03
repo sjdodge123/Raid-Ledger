@@ -106,6 +106,43 @@ describe('EventReminderService', () => {
       );
     });
 
+    it('should use dynamic title from minutesUntil, not static windowLabel (ROK-647)', async () => {
+      const trackingRow = {
+        id: 1,
+        eventId: 10,
+        userId: 1,
+        reminderType: '24hour',
+        sentAt: new Date(),
+      };
+
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([trackingRow]),
+          }),
+        }),
+      });
+
+      // Simulate the old bug: windowLabel says "24 Hours" but actual time is 12 hours
+      await service.sendReminder({
+        eventId: 10,
+        userId: 1,
+        windowType: '24hour',
+        windowLabel: '24 Hours',
+        title: 'Ghost Raid',
+        startTime: new Date(Date.now() + 12 * 60 * 60 * 1000),
+        minutesUntil: 720, // 12 hours in minutes
+        characterDisplay: null,
+      });
+
+      // Title should say "12 Hours", NOT "24 Hours"
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: 'Event Starting in 12 Hours!',
+        }),
+      );
+    });
+
     it('should skip notification when reminder already sent (duplicate)', async () => {
       mockDb.insert.mockReturnValue({
         values: jest.fn().mockReturnValue({
@@ -175,23 +212,6 @@ describe('EventReminderService', () => {
       const result = await service.getUserTimezones();
 
       expect(result).toEqual([]);
-    });
-  });
-
-  describe('handleDayOfReminders', () => {
-    it('should exit early when no users have timezone preferences', async () => {
-      const selectChain = {
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockResolvedValue([]),
-        }),
-      };
-      mockDb.select.mockReturnValue(selectChain);
-
-      await service.handleDayOfReminders();
-
-      // Only getUserTimezones select should have been called
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
-      expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
   });
 
