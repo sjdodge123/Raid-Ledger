@@ -103,6 +103,7 @@ jest.mock('discord.js', () => {
       Link: 5,
       Danger: 4,
       Secondary: 2,
+      Success: 3,
     },
   };
 });
@@ -912,7 +913,7 @@ describe('DiscordNotificationEmbedService', () => {
       expect(rows).toBeUndefined();
     });
 
-    it('should return undefined rows for event_rescheduled type', async () => {
+    it('should return rows with Confirm and Decline buttons for event_rescheduled with eventId (ROK-537)', async () => {
       const { rows } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-5',
@@ -920,6 +921,43 @@ describe('DiscordNotificationEmbedService', () => {
           title: 'Rescheduled',
           message: 'Event rescheduled',
           payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeDefined();
+      expect(rows).toHaveLength(1);
+      const rowJson = rows![0].toJSON() as unknown as {
+        components: Array<{ customId: string; label: string; style: number }>;
+      };
+      expect(rowJson.components).toHaveLength(2);
+
+      const confirmBtn = rowJson.components.find(
+        (c) => c.label === 'Confirm',
+      );
+      const declineBtn = rowJson.components.find(
+        (c) => c.label === "Can't Make It",
+      );
+
+      expect(confirmBtn).toBeDefined();
+      expect(confirmBtn?.customId).toBe('reschedule_confirm:42');
+      // ButtonStyle.Success = 3
+      expect(confirmBtn?.style).toBe(3);
+
+      expect(declineBtn).toBeDefined();
+      expect(declineBtn?.customId).toBe('reschedule_decline:42');
+      // ButtonStyle.Danger = 4
+      expect(declineBtn?.style).toBe(4);
+    });
+
+    it('should return undefined rows for event_rescheduled without eventId', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-5b',
+          type: 'event_rescheduled',
+          title: 'Rescheduled',
+          message: 'Event rescheduled',
+          // no payload / no eventId
         },
         'Community',
       );
