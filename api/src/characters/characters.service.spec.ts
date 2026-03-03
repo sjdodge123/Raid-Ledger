@@ -8,6 +8,7 @@ import {
 import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { EnrichmentsService } from '../enrichments/enrichments.service';
 
 /**
  * Helper: build a mock tx.select chain that resolves to `rows`.
@@ -183,6 +184,13 @@ describe('CharactersService', () => {
         CharactersService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: EnrichmentsService,
+          useValue: {
+            getEnrichmentsForEntity: jest.fn().mockResolvedValue([]),
+            enqueueCharacterEnrichments: jest.fn().mockResolvedValue(0),
+          },
+        },
       ],
     }).compile();
 

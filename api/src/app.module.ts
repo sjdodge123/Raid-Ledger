@@ -33,6 +33,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import { SentryEnvModule } from './sentry/sentry-env.module';
 import { CronJobModule } from './cron-jobs/cron-job.module';
 import { BackupModule } from './backup/backup.module';
+import { EnrichmentsModule } from './enrichments/enrichments.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { BackupModule } from './backup/backup.module';
     SystemModule,
     SettingsModule,
     NotificationModule,
+    EnrichmentsModule,
     WowCommonModule,
     DiscordModule,
     RelayModule,

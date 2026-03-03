@@ -801,6 +801,111 @@ describe('PluginRegistryService', () => {
     });
   });
 
+  describe('registerMultiAdapter()', () => {
+    it('should store multiple adapters for same extension point and game slug', () => {
+      const enricherA = { key: 'raider-io', enrichCharacter: jest.fn() };
+      const enricherB = { key: 'warcraftlogs', enrichCharacter: jest.fn() };
+
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricherA,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricherB,
+      );
+
+      const result = service.getMultiAdapters(
+        'data-enricher',
+        'world-of-warcraft',
+      );
+      expect(result).toHaveLength(2);
+      expect(result).toContain(enricherA);
+      expect(result).toContain(enricherB);
+    });
+
+    it('should return empty array for unregistered extension point', () => {
+      const result = service.getMultiAdapters('data-enricher', 'nonexistent');
+      expect(result).toEqual([]);
+    });
+
+    it('should keep adapters separate per game slug', () => {
+      const enricherWow = { key: 'raider-io' };
+      const enricherFfxiv = { key: 'fflogs' };
+
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricherWow,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'final-fantasy-xiv',
+        enricherFfxiv,
+      );
+
+      expect(
+        service.getMultiAdapters('data-enricher', 'world-of-warcraft'),
+      ).toEqual([enricherWow]);
+      expect(
+        service.getMultiAdapters('data-enricher', 'final-fantasy-xiv'),
+      ).toEqual([enricherFfxiv]);
+    });
+  });
+
+  describe('removeAdaptersForPlugin() — multi-adapters', () => {
+    it('should remove multi-adapters for specified game slugs', () => {
+      const enricher = { key: 'raider-io' };
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft-classic',
+        enricher,
+      );
+
+      service.removeAdaptersForPlugin([
+        'world-of-warcraft',
+        'world-of-warcraft-classic',
+      ]);
+
+      expect(
+        service.getMultiAdapters('data-enricher', 'world-of-warcraft'),
+      ).toEqual([]);
+      expect(
+        service.getMultiAdapters('data-enricher', 'world-of-warcraft-classic'),
+      ).toEqual([]);
+    });
+
+    it('should not affect multi-adapters for other game slugs', () => {
+      const enricher = { key: 'raider-io' };
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'final-fantasy-xiv',
+        enricher,
+      );
+
+      service.removeAdaptersForPlugin(['world-of-warcraft']);
+
+      expect(
+        service.getMultiAdapters('data-enricher', 'world-of-warcraft'),
+      ).toEqual([]);
+      expect(
+        service.getMultiAdapters('data-enricher', 'final-fantasy-xiv'),
+      ).toEqual([enricher]);
+    });
+  });
+
   describe('manifest without gameSlugs (ROK-265)', () => {
     it('should register manifest without gameSlugs', () => {
       service.registerManifest(noGameManifest);
