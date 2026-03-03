@@ -52,6 +52,7 @@ RUN apk add --no-cache \
   nginx \
   postgresql16 \
   postgresql16-contrib \
+  postgresql16-client \
   redis \
   supervisor \
   bash \
@@ -67,7 +68,7 @@ WORKDIR /app
 # ==================
 # Persistent data volume — mount as -v raid-ledger-data:/data
 # ==================
-RUN mkdir -p /data/postgresql /data/redis /run/postgresql /run/redis && \
+RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /run/postgresql /run/redis && \
   chown -R postgres:postgres /data/postgresql /run/postgresql && \
   chown -R redis:redis /data/redis /run/redis
 VOLUME /data
@@ -257,7 +258,7 @@ set -e
 
 # Ensure /data subdirectories exist and have correct ownership
 # (volume mounts may arrive as root-owned empty dirs)
-mkdir -p /data/postgresql /data/redis
+mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations
 chown -R postgres:postgres /data/postgresql
 chown -R redis:redis /data/redis
 
@@ -285,6 +286,7 @@ ENV JWT_SECRET=raid-ledger-default-secret-change-in-production
 ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=auto
 ENV CLIENT_URL=
+ENV BACKUP_DIR=/data/backups
 ENV ADMIN_PASSWORD=
 
 # Expose port (nginx)
