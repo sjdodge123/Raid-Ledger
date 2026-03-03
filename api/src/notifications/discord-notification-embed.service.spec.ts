@@ -936,9 +936,7 @@ describe('DiscordNotificationEmbedService', () => {
       const tentativeBtn = rowJson.components.find(
         (c) => c.label === 'Tentative',
       );
-      const declineBtn = rowJson.components.find(
-        (c) => c.label === 'Decline',
-      );
+      const declineBtn = rowJson.components.find((c) => c.label === 'Decline');
 
       expect(confirmBtn).toBeDefined();
       expect(confirmBtn?.customId).toBe('reschedule_confirm:42');
