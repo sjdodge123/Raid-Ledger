@@ -22,6 +22,18 @@ function makeSelectFromWhereLimit(resolvedValue: unknown[]) {
   };
 }
 
+/**
+ * Build a select chain where .from().where() is the terminal (no .limit()).
+ * Used for batch queries that return all matching rows.
+ */
+function makeSelectFromWhere(resolvedValue: unknown[]) {
+  return {
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockResolvedValue(resolvedValue),
+    }),
+  };
+}
+
 describe('LiveNoShowService', () => {
   let service: LiveNoShowService;
   let mockDb: Record<string, jest.Mock>;
@@ -597,59 +609,66 @@ describe('LiveNoShowService', () => {
         );
 
         if (phase1Reminded.length > 0) {
-          // 4. checkVoicePresence: user lookup (.limit)
+          // 4. Batch-fetch discord IDs for all reminded users
           selectMocks.push(
-            jest
-              .fn()
-              .mockReturnValue(
-                makeSelectFromWhereLimit(
-                  userDiscordId !== null ? [{ discordId: userDiscordId }] : [],
-                ),
+            jest.fn().mockReturnValue(
+              makeSelectFromWhere(
+                phase1Reminded.map((uid) => ({
+                  id: uid,
+                  discordId: userDiscordId,
+                })),
               ),
+            ),
           );
 
-          if (userDiscordId && !voiceActiveForUser) {
-            // 5. checkVoicePresence: voice session lookup (.limit)
+          // 5. Batch-fetch all voice sessions for this event
+          selectMocks.push(
+            jest.fn().mockReturnValue(
+              makeSelectFromWhere(
+                userDiscordId && dbVoiceDuration !== null
+                  ? [
+                      {
+                        discordUserId: userDiscordId,
+                        totalDurationSec: dbVoiceDuration,
+                      },
+                    ]
+                  : [],
+              ),
+            ),
+          );
+
+          // User is absent if: no discordId (can't verify), or has discordId but not in voice and below threshold
+          const isAbsent =
+            userDiscordId === null ||
+            (!voiceActiveForUser &&
+              (dbVoiceDuration === null || dbVoiceDuration < 120));
+
+          if (isAbsent) {
+            // 6. user display name lookup
             selectMocks.push(
               jest
                 .fn()
                 .mockReturnValue(
-                  makeSelectFromWhereLimit(
-                    dbVoiceDuration !== null
-                      ? [{ totalDurationSec: dbVoiceDuration }]
-                      : [],
-                  ),
+                  makeSelectFromWhereLimit([
+                    { username: displayName, displayName },
+                  ]),
                 ),
             );
 
-            // If still absent, getPlayerDisplayInfo
-            if (dbVoiceDuration === null || dbVoiceDuration < 120) {
-              // 6. user display name lookup
-              selectMocks.push(
-                jest
-                  .fn()
-                  .mockReturnValue(
-                    makeSelectFromWhereLimit([
-                      { username: displayName, displayName },
-                    ]),
-                  ),
-              );
-
-              // 7. roster assignment lookup (with innerJoin + limit)
-              selectMocks.push(
-                jest.fn().mockReturnValue({
-                  from: jest.fn().mockReturnValue({
-                    innerJoin: jest.fn().mockReturnValue({
-                      where: jest.fn().mockReturnValue({
-                        limit: jest
-                          .fn()
-                          .mockResolvedValue(role ? [{ role }] : []),
-                      }),
+            // 7. roster assignment lookup (with innerJoin + limit)
+            selectMocks.push(
+              jest.fn().mockReturnValue({
+                from: jest.fn().mockReturnValue({
+                  innerJoin: jest.fn().mockReturnValue({
+                    where: jest.fn().mockReturnValue({
+                      limit: jest
+                        .fn()
+                        .mockResolvedValue(role ? [{ role }] : []),
                     }),
                   }),
                 }),
-              );
-            }
+              }),
+            );
           }
         }
       }
@@ -873,14 +892,14 @@ describe('LiveNoShowService', () => {
             where: jest.fn().mockResolvedValue([{ userId: 1 }]),
           }),
         }),
-        // checkVoicePresence: user lookup
+        // Batch-fetch discord IDs for reminded users
         jest
           .fn()
           .mockReturnValue(
-            makeSelectFromWhereLimit([{ discordId: 'discord-creator' }]),
+            makeSelectFromWhere([{ id: 1, discordId: 'discord-creator' }]),
           ),
-        // checkVoicePresence: voice session — no session
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // Batch-fetch voice sessions — no session
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // getPlayerDisplayInfo: user
         jest
           .fn()
@@ -1063,14 +1082,15 @@ describe('LiveNoShowService', () => {
               .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
           }),
         }),
-        // checkVoicePresence for player 10: user lookup
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([{ discordId: 'discord-10' }]),
-          ),
-        // checkVoicePresence for player 10: voice session — absent
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // Batch-fetch discord IDs for reminded users
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            { id: 10, discordId: 'discord-10' },
+            { id: 11, discordId: 'discord-11' },
+          ]),
+        ),
+        // Batch-fetch voice sessions — both absent
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // getPlayerDisplayInfo for player 10: user
         jest
           .fn()
@@ -1089,14 +1109,6 @@ describe('LiveNoShowService', () => {
             }),
           }),
         }),
-        // checkVoicePresence for player 11: user lookup
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([{ discordId: 'discord-11' }]),
-          ),
-        // checkVoicePresence for player 11: voice session — absent
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPlayerDisplayInfo for player 11: user
         jest
           .fn()
@@ -1190,12 +1202,15 @@ describe('LiveNoShowService', () => {
               .mockResolvedValue([{ userId: 10 }, { userId: 11 }]),
           }),
         }),
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([{ discordId: 'discord-10' }]),
-          ),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // Batch-fetch discord IDs for reminded users
+        jest.fn().mockReturnValue(
+          makeSelectFromWhere([
+            { id: 10, discordId: 'discord-10' },
+            { id: 11, discordId: 'discord-11' },
+          ]),
+        ),
+        // Batch-fetch voice sessions — both absent
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         jest
           .fn()
           .mockReturnValue(
@@ -1212,12 +1227,6 @@ describe('LiveNoShowService', () => {
             }),
           }),
         }),
-        jest
-          .fn()
-          .mockReturnValue(
-            makeSelectFromWhereLimit([{ discordId: 'discord-11' }]),
-          ),
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         jest
           .fn()
           .mockReturnValue(
@@ -1344,10 +1353,12 @@ describe('LiveNoShowService', () => {
             where: jest.fn().mockResolvedValue([{ userId: 10 }]),
           }),
         }),
-        // checkVoicePresence: user has null discordId → returns false (absent)
+        // Batch-fetch discord IDs — user has null discordId
         jest
           .fn()
-          .mockReturnValue(makeSelectFromWhereLimit([{ discordId: null }])),
+          .mockReturnValue(makeSelectFromWhere([{ id: 10, discordId: null }])),
+        // Batch-fetch voice sessions — no sessions
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // getPlayerDisplayInfo: user lookup
         jest
           .fn()
@@ -1408,7 +1419,7 @@ describe('LiveNoShowService', () => {
     });
 
     it('should handle user not found in users table during Phase 2 voice check', async () => {
-      // When user record is not found, checkVoicePresence returns false (treated as absent).
+      // When user record is not found in batch, they have no discordId → treated as absent.
       // The service still calls getPlayerDisplayInfo and sends the nudge.
       const startTime = new Date(Date.now() - 16 * 60 * 1000);
       const endTime = new Date(startTime.getTime() + 2 * 60 * 60 * 1000);
@@ -1435,8 +1446,10 @@ describe('LiveNoShowService', () => {
             where: jest.fn().mockResolvedValue([{ userId: 10 }]),
           }),
         }),
-        // checkVoicePresence: user not found in users table → returns false (absent)
-        jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
+        // Batch-fetch discord IDs — user not found (empty result)
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
+        // Batch-fetch voice sessions — no sessions
+        jest.fn().mockReturnValue(makeSelectFromWhere([])),
         // getPlayerDisplayInfo: user lookup (also not found — falls back to 'Unknown')
         jest.fn().mockReturnValue(makeSelectFromWhereLimit([])),
         // getPlayerDisplayInfo: roster assignment

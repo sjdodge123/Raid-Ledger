@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and, sql, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -198,7 +198,35 @@ export class LiveNoShowService {
     const phase1Reminded = await this.getPhase1RemindedUserIds(event.id);
     if (phase1Reminded.length === 0) return;
 
-    // Re-check voice presence for these players
+    // Batch-fetch discord IDs for all reminded users
+    const usersWithDiscord = await this.db
+      .select({
+        id: schema.users.id,
+        discordId: schema.users.discordId,
+      })
+      .from(schema.users)
+      .where(inArray(schema.users.id, phase1Reminded));
+
+    const discordIdByUserId = new Map(
+      usersWithDiscord
+        .filter((u) => u.discordId !== null)
+        .map((u) => [u.id, u.discordId!]),
+    );
+
+    // Batch-fetch all voice sessions for this event in a single query
+    const allVoiceSessions = await this.db
+      .select({
+        discordUserId: schema.eventVoiceSessions.discordUserId,
+        totalDurationSec: schema.eventVoiceSessions.totalDurationSec,
+      })
+      .from(schema.eventVoiceSessions)
+      .where(eq(schema.eventVoiceSessions.eventId, event.id));
+
+    const voiceSessionByDiscordId = new Map(
+      allVoiceSessions.map((s) => [s.discordUserId, s.totalDurationSec]),
+    );
+
+    // Re-check voice presence for these players using in-memory lookups
     const stillAbsent: Array<{
       userId: number;
       displayName: string;
@@ -206,8 +234,17 @@ export class LiveNoShowService {
     }> = [];
 
     for (const userId of phase1Reminded) {
-      const isPresent = await this.checkVoicePresence(event.id, userId);
-      if (isPresent) continue;
+      const discordId = discordIdByUserId.get(userId);
+
+      if (discordId) {
+        // Check in-memory active session
+        if (this.voiceAttendance!.isUserActive(event.id, discordId)) continue;
+
+        // Check batched voice session for sufficient duration
+        const totalDuration = voiceSessionByDiscordId.get(discordId) ?? 0;
+        if (totalDuration >= PRESENCE_THRESHOLD_SEC) continue;
+      }
+      // No discordId → can't verify voice presence, treat as absent
 
       // Look up display name and role
       const playerInfo = await this.getPlayerDisplayInfo(event.id, userId);
