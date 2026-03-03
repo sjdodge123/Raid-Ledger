@@ -336,14 +336,24 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   /**
    * Classify voice attendance for a completed event.
    * Called by cron job after an event's end time has passed.
+   *
+   * Accepts pre-fetched event data and cached graceMs to avoid redundant
+   * DB queries when called in a loop (ROK-659).
    */
-  async classifyEvent(eventId: number): Promise<void> {
-    // Load the event
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
+  async classifyEvent(
+    eventId: number,
+    eventData?: typeof schema.events.$inferSelect,
+    cachedGraceMs?: number,
+  ): Promise<void> {
+    // Use pre-fetched event data or fall back to DB lookup
+    const event =
+      eventData ??
+      (await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1)
+        .then((rows) => rows[0]));
 
     if (!event) return;
 
@@ -355,9 +365,8 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
     if (eventDurationSec <= 0) return;
 
-    // Get the grace period setting
-    const graceMinutes = await this.getGraceMinutes();
-    const graceMs = graceMinutes * 60 * 1000;
+    // Use cached grace period or fetch
+    const graceMs = cachedGraceMs ?? (await this.getGraceMinutes()) * 60 * 1000;
 
     // Load all voice sessions for this event
     const sessions = await this.db
@@ -365,24 +374,40 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
 
-    // Classify each session
-    for (const session of sessions) {
-      const classification = this.classifySession(
-        session,
-        eventStart,
-        eventEnd,
-        eventDurationSec,
-        graceMs,
-      );
+    if (sessions.length > 0) {
+      // Classify all sessions in memory, then batch UPDATE
+      const classifications = sessions.map((session) => ({
+        id: session.id,
+        classification: this.classifySession(
+          session,
+          eventStart,
+          eventEnd,
+          eventDurationSec,
+          graceMs,
+        ),
+      }));
+
+      // Batch UPDATE using CASE WHEN ... END
+      const ids = classifications.map((c) => c.id);
+      const caseClauses = classifications
+        .map(
+          (c) =>
+            sql`WHEN ${schema.eventVoiceSessions.id} = ${c.id} THEN ${c.classification}`,
+        )
+        .reduce((acc, clause) => sql`${acc} ${clause}`);
 
       await this.db
         .update(schema.eventVoiceSessions)
-        .set({ classification })
-        .where(eq(schema.eventVoiceSessions.id, session.id));
+        .set({
+          classification: sql`CASE ${caseClauses} END`,
+        })
+        .where(
+          sql`${schema.eventVoiceSessions.id} IN (${sql.join(ids, sql`, `)})`,
+        );
     }
 
     // Also classify users who signed up but never joined (no_show)
-    await this.classifyNoShows(eventId, sessions);
+    await this.classifyNoShows(eventId, sessions, event);
 
     this.logger.log(
       `Classified ${sessions.length} voice session(s) for event ${eventId}`,
@@ -414,10 +439,12 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   /**
    * Create no_show entries for signed-up users who have no voice session.
+   * Accepts pre-fetched event data to avoid redundant DB lookups (ROK-659).
    */
   private async classifyNoShows(
     eventId: number,
     existingSessions: Array<typeof schema.eventVoiceSessions.$inferSelect>,
+    eventData?: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const trackedDiscordIds = new Set(
       existingSessions.map((s) => s.discordUserId),
@@ -435,36 +462,44 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         ),
       );
 
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
+    // Use pre-fetched event data or fall back to DB lookup
+    const event =
+      eventData ??
+      (await this.db
+        .select()
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1)
+        .then((rows) => rows[0]));
 
     if (!event) return;
 
-    for (const signup of signups) {
-      if (
-        !signup.discordUserId ||
-        trackedDiscordIds.has(signup.discordUserId)
-      ) {
-        continue;
-      }
+    // Collect all no-show rows to insert in bulk
+    const noShowRows = signups
+      .filter(
+        (signup) =>
+          signup.discordUserId && !trackedDiscordIds.has(signup.discordUserId),
+      )
+      .map((signup) => ({
+        eventId,
+        userId: signup.userId,
+        discordUserId: signup.discordUserId!,
+        discordUsername: signup.discordUsername ?? 'Unknown',
+        firstJoinAt: event.duration[0],
+        lastLeaveAt: event.duration[0],
+        totalDurationSec: 0,
+        segments: [] as Array<{
+          joinAt: string;
+          leaveAt: string | null;
+          durationSec: number;
+        }>,
+        classification: 'no_show',
+      }));
 
-      // Create a no_show voice session
+    if (noShowRows.length > 0) {
       await this.db
         .insert(schema.eventVoiceSessions)
-        .values({
-          eventId,
-          userId: signup.userId,
-          discordUserId: signup.discordUserId,
-          discordUsername: signup.discordUsername ?? 'Unknown',
-          firstJoinAt: event.duration[0],
-          lastLeaveAt: event.duration[0],
-          totalDurationSec: 0,
-          segments: [],
-          classification: 'no_show',
-        })
+        .values(noShowRows)
         .onConflictDoNothing();
     }
   }
@@ -472,6 +507,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   /**
    * Auto-populate event_signups.attendanceStatus from voice classifications.
    * Only updates signups where attendanceStatus is NULL (preserves manual overrides).
+   * Uses batched UPDATEs: one for 'attended' sessions and one for 'no_show' (ROK-659).
    */
   async autoPopulateAttendance(eventId: number): Promise<void> {
     const sessions = await this.db
@@ -484,21 +520,52 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
         ),
       );
 
-    for (const session of sessions) {
-      const attendanceStatus =
-        session.classification === 'no_show' ? 'no_show' : 'attended';
+    if (sessions.length === 0) {
+      this.logger.log(
+        `Auto-populated attendance for event ${eventId} from 0 voice session(s)`,
+      );
+      return;
+    }
 
-      // Only update signups where attendanceStatus is NULL
+    // Partition sessions into attended vs no_show
+    const noShowDiscordIds = sessions
+      .filter((s) => s.classification === 'no_show')
+      .map((s) => s.discordUserId);
+    const attendedDiscordIds = sessions
+      .filter((s) => s.classification !== 'no_show')
+      .map((s) => s.discordUserId);
+
+    const now = new Date();
+
+    // Batch update all 'attended' signups in one query
+    if (attendedDiscordIds.length > 0) {
       await this.db
         .update(schema.eventSignups)
         .set({
-          attendanceStatus,
-          attendanceRecordedAt: new Date(),
+          attendanceStatus: 'attended',
+          attendanceRecordedAt: now,
         })
         .where(
           and(
             eq(schema.eventSignups.eventId, eventId),
-            eq(schema.eventSignups.discordUserId, session.discordUserId),
+            sql`${schema.eventSignups.discordUserId} IN (${sql.join(attendedDiscordIds, sql`, `)})`,
+            isNull(schema.eventSignups.attendanceStatus),
+          ),
+        );
+    }
+
+    // Batch update all 'no_show' signups in one query
+    if (noShowDiscordIds.length > 0) {
+      await this.db
+        .update(schema.eventSignups)
+        .set({
+          attendanceStatus: 'no_show',
+          attendanceRecordedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            sql`${schema.eventSignups.discordUserId} IN (${sql.join(noShowDiscordIds, sql`, `)})`,
             isNull(schema.eventSignups.attendanceStatus),
           ),
         );
@@ -639,8 +706,10 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
           // ROK-576: Use COALESCE(extended_until, upper(duration)) so that
           // extended events are not prematurely classified as completed.
+          // ROK-659: Select full event rows upfront to avoid re-fetching inside
+          // classifyEvent() and classifyNoShows().
           const endedEvents = await this.db
-            .select({ id: schema.events.id })
+            .select()
             .from(schema.events)
             .where(
               and(
@@ -653,6 +722,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             );
 
           if (endedEvents.length === 0) return;
+
+          // ROK-659: Cache grace period once per cron run instead of per-event
+          const graceMs = (await this.getGraceMinutes()) * 60 * 1000;
 
           // Flush any remaining in-memory sessions first
           await this.flushToDb();
@@ -712,7 +784,7 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
             this.logger.log(
               `Classifying voice attendance for event ${event.id}`,
             );
-            await this.classifyEvent(event.id);
+            await this.classifyEvent(event.id, event, graceMs);
             await this.autoPopulateAttendance(event.id);
 
             // Clean up in-memory sessions for this event
