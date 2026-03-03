@@ -31,7 +31,7 @@ export function Layout({ children }: LayoutProps) {
 
     const isDesktop = useMediaQuery('(min-width: 1024px)');
     const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
-    const showSpaceEffects = isDesktop && prefersMotion;
+    const showAmbientEffects = isDesktop && prefersMotion;
 
     const [moreDrawerOpen, setMoreDrawerOpen] = useState(false);
     const openMoreDrawer = useCallback(() => setMoreDrawerOpen(true), []);
@@ -49,8 +49,8 @@ export function Layout({ children }: LayoutProps) {
     return (
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
             <CurrentUserAvatarSync />
-            {showSpaceEffects && <SpaceEffects />}
-            {showSpaceEffects && <UnderwaterAmbience />}
+            {showAmbientEffects && <SpaceEffects />}
+            {showAmbientEffects && <UnderwaterAmbience />}
             <ImpersonationBanner />
             <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />
