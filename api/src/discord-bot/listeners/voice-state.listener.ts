@@ -96,6 +96,14 @@ export class VoiceStateListener implements OnApplicationShutdown {
     { gameName: string; userId: number }
   >();
 
+  /**
+   * ROK-651: Pending presence re-check timers per user.
+   * When a user joins a general-lobby channel with no game detected,
+   * we schedule a delayed re-check to catch the race condition where
+   * Discord delivers the voice state update before the presence update.
+   */
+  private pendingRechecks = new Map<string, NodeJS.Timeout>();
+
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
@@ -184,6 +192,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
     this.debounceTimers.clear();
 
+    // ROK-651: Clear pending presence re-check timers
+    for (const timer of this.pendingRechecks.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingRechecks.clear();
+
     if (this.cacheSweepTimer) {
       clearInterval(this.cacheSweepTimer);
       this.cacheSweepTimer = null;
@@ -208,6 +222,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+
+    // ROK-651: Clear pending presence re-check timers
+    for (const timer of this.pendingRechecks.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingRechecks.clear();
 
     if (this.cacheSweepTimer) {
       clearInterval(this.cacheSweepTimer);
@@ -537,6 +557,20 @@ export class VoiceStateListener implements OnApplicationShutdown {
         this.logger.debug(
           `General lobby: no game detected for ${discordMember.discordUserId}, tracking for presence changes only`,
         );
+
+        // ROK-651: Schedule a delayed re-check to catch the race condition where
+        // Discord delivers the voice state update before the presence update.
+        // If the user's presence arrives within the window, handlePresenceChange
+        // will fire separately — this re-check covers the gap.
+        if (guildMember) {
+          this.schedulePresenceRecheck(
+            channelId,
+            binding,
+            discordMember,
+            guildMember,
+          );
+        }
+
         return;
       }
       // Rename to "Just Chatting" for clarity
@@ -602,6 +636,73 @@ export class VoiceStateListener implements OnApplicationShutdown {
       binding,
       detected.gameId,
       detected.gameName,
+    );
+  }
+
+  /**
+   * ROK-651: Schedule a delayed presence re-check for a user who joined a
+   * general-lobby channel with no detected game activity. Discord can deliver
+   * voice state updates before presence updates, so the user's game activity
+   * may not be available at voice join time. This re-check fires after a short
+   * delay to catch the late-arriving presence data.
+   */
+  private schedulePresenceRecheck(
+    channelId: string,
+    binding: ResolvedBinding,
+    discordMember: {
+      discordUserId: string;
+      discordUsername: string;
+      discordAvatarHash: string | null;
+    },
+    guildMember: GuildMember,
+  ): void {
+    // Cancel any existing re-check for this user
+    const existing = this.pendingRechecks.get(discordMember.discordUserId);
+    if (existing) {
+      clearTimeout(existing);
+    }
+
+    const timer = setTimeout(() => {
+      this.pendingRechecks.delete(discordMember.discordUserId);
+
+      // Verify the user is still in this channel
+      if (this.userChannelMap.get(discordMember.discordUserId) !== channelId) {
+        return;
+      }
+
+      this.presenceDetector
+        .detectGameForMember(guildMember)
+        .then(async (detected) => {
+          if (detected.gameId === null) {
+            this.logger.debug(
+              `ROK-651 re-check: still no game for ${discordMember.discordUserId} after delay, giving up`,
+            );
+            return;
+          }
+
+          this.logger.log(
+            `ROK-651 re-check: detected game "${detected.gameName}" (id=${detected.gameId}) for ${discordMember.discordUserId} on delayed re-check`,
+          );
+
+          // Re-run the general-lobby join path now that a game is detected
+          await this.handleGeneralLobbyJoin(
+            channelId,
+            binding,
+            discordMember,
+            guildMember,
+          );
+        })
+        .catch((err) => {
+          this.logger.error(
+            `ROK-651 re-check failed for ${discordMember.discordUserId}: ${err}`,
+          );
+        });
+    }, 7000);
+
+    this.pendingRechecks.set(discordMember.discordUserId, timer);
+
+    this.logger.debug(
+      `ROK-651: scheduled presence re-check for ${discordMember.discordUserId} in 7s`,
     );
   }
 
@@ -766,6 +867,13 @@ export class VoiceStateListener implements OnApplicationShutdown {
     channelId: string,
     discordUserId: string,
   ): Promise<void> {
+    // ROK-651: Cancel any pending presence re-check for this user
+    const pendingRecheck = this.pendingRechecks.get(discordUserId);
+    if (pendingRecheck) {
+      clearTimeout(pendingRecheck);
+      this.pendingRechecks.delete(discordUserId);
+    }
+
     // ROK-591: Voice→activity bridge — stop tracking game activity on leave
     const voiceGame = this.voiceGameTracker.get(discordUserId);
     if (voiceGame) {
