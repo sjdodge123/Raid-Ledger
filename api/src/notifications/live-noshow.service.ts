@@ -78,7 +78,7 @@ export class LiveNoShowService {
   }
 
   /**
-   * Find live scheduled events where now >= startTime + 10 min and the event
+   * Find live scheduled events where now >= startTime + 5 min and the event
    * has not ended or been cancelled. Excludes ad-hoc events.
    */
   private async findLiveEventsInNoShowWindow(now: Date): Promise<

@@ -80,7 +80,7 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
   },
   LiveNoShowService_checkNoShows: {
     description:
-      'Detects no-show attendees during live events and sends reminder DMs (10 min) and creator escalation (15 min) every 60 seconds',
+      'Detects no-show attendees during live events and sends reminder DMs (5 min) and creator escalation (15 min) every 60 seconds',
   },
 };
 

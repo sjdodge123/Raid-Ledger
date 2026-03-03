@@ -6,37 +6,6 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 
 /**
- * Minimal deep mock for queries that terminate before .limit()
- * (e.g., .where().limit() chains where limit is the terminal).
- * Returns a chainable object that resolves when awaited.
- */
-function makeLimitChain(resolvedValue: unknown[]) {
-  const chain = {
-    where: jest.fn(),
-    limit: jest.fn().mockResolvedValue(resolvedValue),
-    innerJoin: jest.fn(),
-  };
-  chain.where.mockReturnValue(chain);
-  chain.innerJoin.mockReturnValue(chain);
-  return chain;
-}
-
-function makeSelectChain(resolvedValue: unknown[]) {
-  return {
-    from: jest.fn().mockReturnValue(makeLimitChain(resolvedValue)),
-  };
-}
-
-/** Build a select mock that supports .from().where() termination (no limit). */
-function makeSelectWhereFinalChain(resolvedValue: unknown[]) {
-  return {
-    from: jest.fn().mockReturnValue({
-      where: jest.fn().mockResolvedValue(resolvedValue),
-    }),
-  };
-}
-
-/**
  * Build a select chain where .from().where().limit() is the terminal,
  * with support for optional .innerJoin() in the middle.
  */
@@ -706,7 +675,7 @@ describe('LiveNoShowService', () => {
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
         }
-        return mock();
+        return mock() as unknown;
       });
 
       return event;
@@ -947,7 +916,7 @@ describe('LiveNoShowService', () => {
               .fn()
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
-        return m();
+        return m() as unknown;
       });
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -1163,7 +1132,7 @@ describe('LiveNoShowService', () => {
               .fn()
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
-        return m();
+        return m() as unknown;
       });
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -1281,7 +1250,7 @@ describe('LiveNoShowService', () => {
               .fn()
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
-        return m();
+        return m() as unknown;
       });
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -1414,7 +1383,7 @@ describe('LiveNoShowService', () => {
               .fn()
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
-        return m();
+        return m() as unknown;
       });
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
@@ -1497,7 +1466,7 @@ describe('LiveNoShowService', () => {
               .fn()
               .mockReturnValue({ where: jest.fn().mockResolvedValue([]) }),
           };
-        return m();
+        return m() as unknown;
       });
 
       mockVoiceAttendance.isUserActive.mockReturnValue(false);
