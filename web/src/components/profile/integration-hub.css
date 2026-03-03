@@ -125,6 +125,6 @@
     display: block;
 }
 
-[data-scheme="light"] .avatar-selector-option {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .avatar-selector-option {
     background: rgba(241, 245, 249, 0.8);
 }

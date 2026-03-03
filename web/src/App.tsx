@@ -19,6 +19,7 @@ import { RootRedirect } from './components/RootRedirect';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
+import { ThemeParticles } from './components/ui/ThemeParticles';
 
 // Seed auth cache from localStorage for instant return visits.
 // Runs at module load (before React renders) so AuthGuard never
@@ -166,6 +167,7 @@ function App() {
 
   return (
     <StartupGate>
+      <ThemeParticles />
       <BrowserRouter>
         <ScrollToTop />
         <Toaster

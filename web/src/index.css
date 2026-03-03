@@ -72,7 +72,7 @@ html {
 }
 
 /* Light theme overrides (ROK-124, contrast fixes ROK-464) */
-[data-scheme="light"] {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
     --color-backdrop: #f8fafc;
     --color-surface: #ffffff;
     --color-panel: #f1f5f9;
@@ -577,7 +577,7 @@ html {
     color-scheme: dark;
 }
 
-html[data-scheme="light"] {
+html:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
     color-scheme: light;
 }
 
@@ -619,12 +619,12 @@ body {
 }
 
 /* Light mode glass-card: opaque with subtle shadow */
-[data-scheme="light"] .glass-card {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card {
     background: color-mix(in srgb, var(--color-surface) 90%, transparent);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-[data-scheme="light"] .glass-card:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card:hover {
     background: color-mix(in srgb, var(--color-surface) 95%, transparent);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
@@ -633,91 +633,91 @@ body {
    Light Mode — Status Color Contrast Fixes (ROK-464)
    Tailwind -400 shades (~3:1 on white) bumped to
    -600/-700 shades (>4.5:1) for WCAG AA compliance.
-   Only active under [data-scheme="light"].
+   Only active under :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]).
    ============================================ */
 
 /* --- Text colors: bump from -400 to -600/-700 for AA on white --- */
-[data-scheme="light"] .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
-[data-scheme="light"] .text-amber-400 { color: #d97706; }       /* amber-600: 4.3:1 */
-[data-scheme="light"] .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
-[data-scheme="light"] .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
-[data-scheme="light"] .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
-[data-scheme="light"] .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
-[data-scheme="light"] .text-emerald-400 { color: #059669; }     /* emerald-600: 4.5:1 */
-[data-scheme="light"] .text-emerald-300 { color: #059669; }     /* emerald-600 */
-[data-scheme="light"] .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
-[data-scheme="light"] .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
-[data-scheme="light"] .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
-[data-scheme="light"] .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
-[data-scheme="light"] .text-cyan-400 { color: #0891b2; }        /* cyan-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #d97706; }       /* amber-600: 4.3:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #059669; }     /* emerald-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #0891b2; }        /* cyan-600: 4.5:1 */
 
 /* Opacity variants of status text colors */
-[data-scheme="light"] .text-red-400\/80 { color: rgba(220, 38, 38, 0.85); }   /* red-600 */
-[data-scheme="light"] .text-red-400\/70 { color: rgba(220, 38, 38, 0.75); }
-[data-scheme="light"] .text-red-400\/60 { color: rgba(220, 38, 38, 0.65); }
-[data-scheme="light"] .text-amber-400\/80 { color: rgba(217, 119, 6, 0.85); } /* amber-600 */
-[data-scheme="light"] .text-amber-400\/70 { color: rgba(217, 119, 6, 0.75); }
-[data-scheme="light"] .text-amber-400\/60 { color: rgba(217, 119, 6, 0.65); }
-[data-scheme="light"] .text-amber-500\/80 { color: rgba(180, 83, 9, 0.85); }  /* amber-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/80 { color: rgba(220, 38, 38, 0.85); }   /* red-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/70 { color: rgba(220, 38, 38, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/60 { color: rgba(220, 38, 38, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/80 { color: rgba(217, 119, 6, 0.85); } /* amber-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/70 { color: rgba(217, 119, 6, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/60 { color: rgba(217, 119, 6, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-500\/80 { color: rgba(180, 83, 9, 0.85); }  /* amber-700 */
 
 /* Hover state colors: in light mode, hover should darken (not lighten) */
-[data-scheme="light"] .hover\:text-red-300:hover { color: #b91c1c; }            /* red-700 */
-[data-scheme="light"] .hover\:text-amber-300:hover { color: #b45309; }          /* amber-700 */
-[data-scheme="light"] .hover\:text-yellow-300:hover { color: #a16207; }         /* yellow-700 */
-[data-scheme="light"] .hover\:text-green-300:hover { color: #15803d; }          /* green-700 */
-[data-scheme="light"] .hover\:text-emerald-300:hover { color: #047857; }        /* emerald-700 */
-[data-scheme="light"] .hover\:text-cyan-300:hover { color: #0e7490; }           /* cyan-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-red-300:hover { color: #b91c1c; }            /* red-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-amber-300:hover { color: #b45309; }          /* amber-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-yellow-300:hover { color: #a16207; }         /* yellow-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-green-300:hover { color: #15803d; }          /* green-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-emerald-300:hover { color: #047857; }        /* emerald-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-cyan-300:hover { color: #0e7490; }           /* cyan-700 */
 
 /* --- Background tints: dark-mode-specific opacity tints need light-mode equivalents --- */
-[data-scheme="light"] .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
-[data-scheme="light"] .bg-red-500\/10 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
-[data-scheme="light"] .bg-red-500\/20 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
-[data-scheme="light"] .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
-[data-scheme="light"] .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
-[data-scheme="light"] .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
-[data-scheme="light"] .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
-[data-scheme="light"] .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-500\/20 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/30 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/50 { background-color: rgba(167, 243, 208, 0.6); }   /* emerald-200 */
-[data-scheme="light"] .bg-green-500\/10 { background-color: rgba(220, 252, 231, 0.5); }     /* green-100 */
-[data-scheme="light"] .bg-green-500\/20 { background-color: rgba(220, 252, 231, 0.7); }     /* green-100 */
-[data-scheme="light"] .bg-yellow-500\/20 { background-color: rgba(254, 249, 195, 0.6); }    /* yellow-100 */
-[data-scheme="light"] .bg-yellow-900\/30 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
-[data-scheme="light"] .bg-red-600\/15 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
-[data-scheme="light"] .bg-red-600\/25 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
-[data-scheme="light"] .bg-indigo-500\/10 { background-color: rgba(224, 231, 255, 0.5); }    /* indigo-100 */
-[data-scheme="light"] .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
-[data-scheme="light"] .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
-[data-scheme="light"] .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/10 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/20 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/20 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/30 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/50 { background-color: rgba(167, 243, 208, 0.6); }   /* emerald-200 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/10 { background-color: rgba(220, 252, 231, 0.5); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/20 { background-color: rgba(220, 252, 231, 0.7); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/20 { background-color: rgba(254, 249, 195, 0.6); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-900\/30 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/15 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/25 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-indigo-500\/10 { background-color: rgba(224, 231, 255, 0.5); }    /* indigo-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
 
 /* Hover backgrounds */
-[data-scheme="light"] .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
-[data-scheme="light"] .hover\:bg-red-500\/20:hover { background-color: rgba(254, 202, 202, 0.5); }
-[data-scheme="light"] .hover\:bg-red-500\/30:hover { background-color: rgba(254, 202, 202, 0.6); }
-[data-scheme="light"] .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
-[data-scheme="light"] .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
-[data-scheme="light"] .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
-[data-scheme="light"] .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
-[data-scheme="light"] .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
-[data-scheme="light"] .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/20:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/30:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
 
 /* --- Border colors: dark-mode tinted borders need visible light equivalents --- */
-[data-scheme="light"] .border-red-900 { border-color: #fca5a5; }             /* red-300 */
-[data-scheme="light"] .border-red-500\/20 { border-color: rgba(252, 165, 165, 0.6); }
-[data-scheme="light"] .border-red-500\/30 { border-color: rgba(252, 165, 165, 0.7); }
-[data-scheme="light"] .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.5); }
-[data-scheme="light"] .border-red-600\/50 { border-color: rgba(248, 113, 113, 0.5); }
-[data-scheme="light"] .border-amber-500\/30 { border-color: rgba(252, 211, 77, 0.5); }
-[data-scheme="light"] .border-amber-500\/40 { border-color: rgba(252, 211, 77, 0.6); }
-[data-scheme="light"] .border-yellow-500\/30 { border-color: rgba(253, 224, 71, 0.5); }
-[data-scheme="light"] .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
-[data-scheme="light"] .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
-[data-scheme="light"] .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
-[data-scheme="light"] .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
-[data-scheme="light"] .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-900 { border-color: #fca5a5; }             /* red-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/20 { border-color: rgba(252, 165, 165, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/30 { border-color: rgba(252, 165, 165, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-600\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/30 { border-color: rgba(252, 211, 77, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/40 { border-color: rgba(252, 211, 77, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-500\/30 { border-color: rgba(253, 224, 71, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
 
 /* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
    Badges overlaid on dark game-cover images must keep light text/bg regardless
@@ -726,22 +726,22 @@ body {
    cards). The :is(.badge-overlay, .badge-overlay *) pattern matches both
    cases with enough specificity to beat the light-mode overrides above,
    so no !important is needed. */
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
 /* --- Solid-color button text: force white on colored backgrounds --- */
-[data-scheme="light"] :is(
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
     .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
     .bg-\[\#5865F2\]
@@ -750,9 +750,9 @@ body {
 }
 
 /* --- Panel/card shadow for light mode panel-on-surface distinction --- */
-[data-scheme="light"] .bg-panel,
-[data-scheme="light"] .bg-panel\/50,
-[data-scheme="light"] .bg-panel\/80 {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/50,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/80 {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
@@ -792,19 +792,19 @@ body {
 }
 
 /* Light mode: reduced glows */
-[data-scheme="light"] .glow-emerald {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald {
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
 }
 
-[data-scheme="light"] .glow-emerald:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald:hover {
     box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
 }
 
-[data-scheme="light"] .glow-indigo {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo {
     box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
 }
 
-[data-scheme="light"] .glow-indigo:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo:hover {
     box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
 }
 
@@ -1151,7 +1151,7 @@ body {
    Quest Log Theme — Parchment & Scroll (ROK-291)
    Light sub-theme using data-variant="quest-log"
    on top of data-scheme="light". Inherits all
-   existing [data-scheme="light"] rules.
+   existing :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) rules.
    ============================================ */
 
 [data-variant="quest-log"] {

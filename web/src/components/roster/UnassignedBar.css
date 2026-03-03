@@ -106,31 +106,31 @@
    Light Theme Overrides (ROK-124)
    ============================================ */
 
-[data-scheme="light"] .unassigned-bar {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar {
     background: rgba(241, 245, 249, 0.9);
     border-color: rgba(203, 213, 225, 0.6);
 }
 
-[data-scheme="light"] .unassigned-bar:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar:hover {
     background: rgba(226, 232, 240, 0.95);
     border-color: rgba(99, 102, 241, 0.4);
 }
 
-[data-scheme="light"] .unassigned-bar--readonly:hover,
-[data-scheme="light"] .unassigned-bar--empty:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar--readonly:hover,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar--empty:hover {
     background: rgba(241, 245, 249, 0.9);
     border-color: rgba(203, 213, 225, 0.6);
 }
 
-[data-scheme="light"] .unassigned-bar__label {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar__label {
     color: #64748b;
 }
 
-[data-scheme="light"] .unassigned-bar__avatar {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar__avatar {
     border-color: rgba(255, 255, 255, 0.9);
 }
 
-[data-scheme="light"] .unassigned-bar__overflow {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .unassigned-bar__overflow {
     color: #64748b;
     background: rgba(226, 232, 240, 0.7);
 }

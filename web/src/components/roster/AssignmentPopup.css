@@ -372,111 +372,111 @@
    Light Theme Overrides (ROK-124)
    ============================================ */
 
-[data-scheme="light"] .assignment-popup__search-wrapper {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__search-wrapper {
     background: var(--color-surface, #ffffff);
 }
 
-[data-scheme="light"] .assignment-popup__search {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__search {
     background: rgba(241, 245, 249, 0.8);
     border-color: rgba(203, 213, 225, 0.6);
     color: #0f172a;
 }
 
-[data-scheme="light"] .assignment-popup__search::placeholder {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__search::placeholder {
     color: #94a3b8;
 }
 
-[data-scheme="light"] .assignment-popup__section-title {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__section-title {
     color: #64748b;
     border-bottom-color: rgba(203, 213, 225, 0.5);
 }
 
-[data-scheme="light"] .assignment-popup__player-row:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__player-row:hover {
     background: rgba(241, 245, 249, 0.7);
 }
 
-[data-scheme="light"] .assignment-popup__player-name {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__player-name {
     color: #0f172a;
 }
 
-[data-scheme="light"] .assignment-popup__player-character {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__player-character {
     color: #64748b;
 }
 
-[data-scheme="light"] .assignment-popup__role-badge--tank {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__role-badge--tank {
     background: rgba(37, 99, 235, 0.12);
     color: #2563eb;
 }
 
-[data-scheme="light"] .assignment-popup__role-badge--healer {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__role-badge--healer {
     background: rgba(22, 163, 74, 0.12);
     color: #16a34a;
 }
 
-[data-scheme="light"] .assignment-popup__role-badge--dps {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__role-badge--dps {
     background: rgba(220, 38, 38, 0.12);
     color: #dc2626;
 }
 
-[data-scheme="light"] .assignment-popup__reassign-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__reassign-btn {
     color: #b45309;
     background: rgba(245, 158, 11, 0.1);
     border-color: rgba(245, 158, 11, 0.3);
 }
 
-[data-scheme="light"] .assignment-popup__reassign-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__reassign-btn:hover {
     background: rgba(245, 158, 11, 0.2);
     color: #92400e;
 }
 
-[data-scheme="light"] .assignment-popup__remove-event-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__remove-event-btn {
     color: #dc2626;
     background: rgba(239, 68, 68, 0.06);
     border-color: rgba(239, 68, 68, 0.2);
 }
 
-[data-scheme="light"] .assignment-popup__remove-event-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__remove-event-btn:hover {
     background: rgba(239, 68, 68, 0.15);
     color: #b91c1c;
 }
 
-[data-scheme="light"] .assignment-popup__empty {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__empty {
     color: #94a3b8;
 }
 
-[data-scheme="light"] .assignment-popup__self-assign-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__self-assign-btn {
     color: #6366f1;
 }
 
-[data-scheme="light"] .assignment-popup__self-assign-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__self-assign-btn:hover {
     color: #4f46e5;
 }
 
-[data-scheme="light"] .assignment-popup__back-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__back-btn {
     color: #64748b;
 }
 
-[data-scheme="light"] .assignment-popup__back-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__back-btn:hover {
     color: #0f172a;
 }
 
-[data-scheme="light"] .assignment-popup__section-title--pug {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__section-title--pug {
     color: #d97706;
 }
 
-[data-scheme="light"] .assignment-popup__add-pug-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__add-pug-btn {
     color: #b45309;
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.08));
     border-color: rgba(217, 119, 6, 0.35);
 }
 
-[data-scheme="light"] .assignment-popup__add-pug-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__add-pug-btn:hover {
     color: #92400e;
     background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(217, 119, 6, 0.15));
     border-color: rgba(217, 119, 6, 0.5);
 }
 
-[data-scheme="light"] .assignment-popup__selected-player {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .assignment-popup__selected-player {
     background: rgba(241, 245, 249, 0.7);
     border-color: rgba(203, 213, 225, 0.5);
 }

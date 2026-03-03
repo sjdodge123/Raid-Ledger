@@ -27,12 +27,7 @@ describe('findFirstAvailableSlot', () => {
     });
 
     it('returns dps slot when tank and healer are full', () => {
-      const occupied = new Set([
-        'tank:1',
-        'tank:2',
-        'healer:1',
-        'healer:2',
-      ]);
+      const occupied = new Set(['tank:1', 'tank:2', 'healer:1', 'healer:2']);
       expect(findFirstAvailableSlot(mmoConfig, occupied)).toEqual({
         role: 'dps',
         position: 1,
