@@ -38,7 +38,7 @@ import { EnrichmentsModule } from './enrichments/enrichments.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
-    EventEmitterModule.forRoot(),
+    EventEmitterModule.forRoot({ maxListeners: 50 }),
     ScheduleModule.forRoot(),
     RateLimitModule,
     QueueModule,

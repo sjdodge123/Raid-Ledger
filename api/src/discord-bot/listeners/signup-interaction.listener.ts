@@ -6,7 +6,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } from 'discord.js';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -27,6 +26,10 @@ import {
 } from '../services/discord-embed.factory';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
 import { SettingsService } from '../../settings/settings.service';
+import {
+  showCharacterSelect as sharedShowCharacterSelect,
+  showRoleSelect as sharedShowRoleSelect,
+} from '../utils/signup-dropdown-builders';
 
 /**
  * Rate-limit tracker for signup button interactions.
@@ -869,58 +872,13 @@ export class SignupInteractionListener {
     characterInfo?: { name: string; role: string | null },
     signupStatus?: 'tentative',
   ): Promise<void> {
-    let customId = characterId
-      ? `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
-      : `${SIGNUP_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
-    if (signupStatus) {
-      customId += `:${signupStatus}`;
-    }
-
-    // ROK-452: Allow multi-role selection (1-3 roles)
-    // ROK-465: Use custom WoW role emojis when available
-    const roleOptions: Array<{
-      label: string;
-      value: string;
-      emoji?: import('discord.js').ComponentEmojiResolvable;
-    }> = [
-      {
-        label: 'Tank',
-        value: 'tank',
-        emoji: this.emojiService.getRoleEmojiComponent('tank'),
-      },
-      {
-        label: 'Healer',
-        value: 'healer',
-        emoji: this.emojiService.getRoleEmojiComponent('healer'),
-      },
-      {
-        label: 'DPS',
-        value: 'dps',
-        emoji: this.emojiService.getRoleEmojiComponent('dps'),
-      },
-    ];
-
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder('Select your preferred role(s)')
-      .setMinValues(1)
-      .setMaxValues(3)
-      .addOptions(roleOptions);
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      selectMenu,
-    );
-
-    const roleHint = characterInfo?.role
-      ? ` (current: ${characterInfo.role})`
-      : '';
-    const content = characterInfo
-      ? `Signing up as **${characterInfo.name}**${roleHint} — select your preferred role(s):`
-      : 'Select your preferred role(s):';
-
-    await interaction.editReply({
-      content,
-      components: [row],
+    await sharedShowRoleSelect(interaction, {
+      customIdPrefix: SIGNUP_BUTTON_IDS.ROLE_SELECT,
+      eventId,
+      emojiService: this.emojiService,
+      characterId,
+      characterInfo,
+      customIdSuffix: signupStatus,
     });
   }
 
@@ -939,53 +897,13 @@ export class SignupInteractionListener {
     characters: import('@raid-ledger/contract').CharacterDto[],
     signupStatus?: 'tentative',
   ): Promise<void> {
-    const mainChar = characters.find((c) => c.isMain);
-
-    const options = characters.slice(0, 25).map((char) => {
-      const parts: string[] = [];
-      if (char.class) {
-        parts.push(char.spec ? `${char.class} (${char.spec})` : char.class);
-      }
-      if (char.level) {
-        parts.push(`Level ${char.level}`);
-      }
-      if (char.isMain) {
-        parts.push('\u2B50');
-      }
-
-      // ROK-465: Class emoji in character select dropdown
-      const classEmoji = char.class
-        ? this.emojiService.getClassEmojiComponent(char.class)
-        : undefined;
-
-      return {
-        label: char.name,
-        value: char.id,
-        description: parts.join(' \u2014 ') || undefined,
-        emoji: classEmoji,
-        // Only pre-select main when there are multiple characters.
-        // With 1 character, pre-selecting prevents Discord from firing
-        // the interaction (no "change" detected on click).
-        default: characters.length > 1 && mainChar?.id === char.id,
-      };
-    });
-
-    const customId = signupStatus
-      ? `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}:${signupStatus}`
-      : `${SIGNUP_BUTTON_IDS.CHARACTER_SELECT}:${eventId}`;
-
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder('Select a character')
-      .addOptions(options);
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      selectMenu,
-    );
-
-    await interaction.editReply({
-      content: `Pick a character for **${eventTitle}**`,
-      components: [row],
+    await sharedShowCharacterSelect(interaction, {
+      customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+      eventId,
+      eventTitle,
+      characters,
+      emojiService: this.emojiService,
+      customIdSuffix: signupStatus,
     });
   }
 
