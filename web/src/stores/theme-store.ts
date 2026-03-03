@@ -53,6 +53,14 @@ const THEME_REGISTRY: ThemeDefinition[] = [
         preview: { surface: '#f4e8c1', accent: '#c9a84c' },
         tokens: {},
     },
+    {
+        id: 'underwater',
+        name: 'Deep Sea',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#0f1f35', accent: '#22d3a0' },
+        tokens: {},
+    },
 ];
 
 export { THEME_REGISTRY };
@@ -117,6 +125,7 @@ const SUB_THEME_CONFIG: Record<
 > = {
     space: { scheme: 'space', colorScheme: 'dark' },
     'quest-log': { scheme: 'light', colorScheme: 'light', variant: 'quest-log' },
+    underwater: { scheme: 'underwater', colorScheme: 'dark' },
 };
 
 function applyTheme(theme: ThemeDefinition, previousTokens: string[]) {
@@ -157,8 +166,8 @@ function persistToLocalStorage(
     // Space theme uses 'space' data-scheme even though its mode is 'dark'
     const sub = SUB_THEME_CONFIG[resolvedThemeId];
     const schemeForFlashScript =
-        sub?.scheme === 'space'
-            ? 'space'
+        sub?.scheme && sub.scheme !== sub.colorScheme
+            ? sub.scheme
             : mode === 'auto'
                 ? resolveSystemScheme()
                 : mode;

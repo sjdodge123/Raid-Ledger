@@ -24,15 +24,16 @@
       var lightTheme = localStorage.getItem('raid_ledger_light_theme') || 'default-light';
       var scheme;
       var variant = null;
+      var darkSubSchemes = { space: 'space', underwater: 'underwater' };
       if (mode === 'light') {
         scheme = 'light';
         if (lightTheme === 'quest-log') variant = 'quest-log';
       } else if (mode === 'dark') {
-        scheme = darkTheme === 'space' ? 'space' : 'dark';
+        scheme = darkSubSchemes[darkTheme] || 'dark';
       } else if (mode === 'auto') {
         var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
         if (prefersDark) {
-          scheme = darkTheme === 'space' ? 'space' : 'dark';
+          scheme = darkSubSchemes[darkTheme] || 'dark';
         } else {
           scheme = 'light';
           if (lightTheme === 'quest-log') variant = 'quest-log';
@@ -46,7 +47,7 @@
         }
       }
       document.documentElement.setAttribute('data-scheme', scheme);
-      document.documentElement.style.colorScheme = scheme === 'space' ? 'dark' : scheme;
+      document.documentElement.style.colorScheme = (scheme === 'space' || scheme === 'underwater') ? 'dark' : scheme;
       if (variant) {
         document.documentElement.setAttribute('data-variant', variant);
       }
