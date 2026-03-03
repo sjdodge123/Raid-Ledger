@@ -221,7 +221,7 @@ export class DiscordNotificationEmbedService {
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
           .setCustomId(`${RESCHEDULE_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
-          .setLabel("Can't Make It")
+          .setLabel('Decline')
           .setStyle(ButtonStyle.Danger),
       );
 

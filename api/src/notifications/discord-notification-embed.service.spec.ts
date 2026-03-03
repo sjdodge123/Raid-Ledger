@@ -932,11 +932,9 @@ describe('DiscordNotificationEmbedService', () => {
       };
       expect(rowJson.components).toHaveLength(2);
 
-      const confirmBtn = rowJson.components.find(
-        (c) => c.label === 'Confirm',
-      );
+      const confirmBtn = rowJson.components.find((c) => c.label === 'Confirm');
       const declineBtn = rowJson.components.find(
-        (c) => c.label === "Can't Make It",
+        (c) => c.label === 'Decline',
       );
 
       expect(confirmBtn).toBeDefined();
