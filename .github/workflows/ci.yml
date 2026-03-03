@@ -176,7 +176,9 @@ jobs:
       CLIENT_URL: http://localhost:5173
       CORS_ORIGIN: http://localhost:5173
       DEMO_MODE: 'true'
+      ADMIN_PASSWORD: playwright-ci-password
       BASE_URL: http://localhost:5173
+      API_URL: http://localhost:3000
 
     steps:
       - name: Checkout code
@@ -207,8 +209,14 @@ jobs:
       - name: Build API
         run: npm run build -w api
 
+      - name: Build web
+        run: npm run build -w web
+
       - name: Run database migrations
         run: npm run db:migrate -w api
+
+      - name: Bootstrap admin account
+        run: npx ts-node api/scripts/bootstrap-admin.ts
 
       - name: Start API server
         run: node api/dist/src/main.js &
@@ -225,6 +233,22 @@ jobs:
             sleep 1
           done
           echo "API failed to start within 30s"
+          exit 1
+
+      - name: Start web preview server
+        run: npx vite preview --port 5173 &
+        working-directory: web
+
+      - name: Wait for web server to be ready
+        run: |
+          for i in $(seq 1 15); do
+            if curl -sf http://localhost:5173 > /dev/null 2>&1; then
+              echo "Web server is ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Web server failed to start within 15s"
           exit 1
 
       - name: Run Playwright smoke tests

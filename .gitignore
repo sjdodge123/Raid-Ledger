@@ -35,6 +35,7 @@ scripts/*
 !scripts/fix-migration-order.sh
 !scripts/setup-branch-protection.sh
 !scripts/verify-ui.spec.ts
+!scripts/playwright-global-setup.ts
 !/api/scripts/
 implementation_plan.md
 walkthrough.md

@@ -37,15 +37,15 @@ npm run build -w api
 npm run build -w web
 ```
 
-### 3. Playwright Smoke Tests (if available)
+### 3. Playwright Smoke Tests (MANDATORY)
 
-If `scripts/verify-ui.spec.ts` exists (the existing Playwright smoke suite), run it:
+Run the Playwright smoke suite against the deployed app:
 
 ```bash
-npx playwright test scripts/verify-ui.spec.ts
+npx playwright test
 ```
 
-This covers core flows: login, navigation, basic feature interactions.
+This covers core flows: auth, calendar, events list, event detail, notifications, navigation, games, and players. All tests must pass — Playwright failures are blocking.
 
 ### 4. Cross-Story Impact Check
 

@@ -1,19 +1,27 @@
 import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
- * Playwright configuration for UI verification (ROK-162)
- * 
+ * Playwright configuration for UI smoke tests (ROK-653)
+ *
  * Usage:
  *   npx playwright test                    # Run all tests
  *   npx playwright test --ui               # Interactive UI mode
  *   npx playwright test --reporter=list    # Simple list output
+ *
+ * Requires:
+ *   - API running on :3000 with demo data seeded
+ *   - Web running on :5173 (auto-started locally via webServer below)
  */
 export default defineConfig({
     testDir: './scripts',
     testMatch: /verify-ui\.spec\.ts$/,
 
-    /* Run tests in parallel */
-    fullyParallel: false, // Sequential for UI verification
+    /* Global setup: authenticate admin and save storageState */
+    globalSetup: path.resolve('scripts/playwright-global-setup.ts'),
+
+    /* Run tests sequentially — smoke tests share auth state */
+    fullyParallel: false,
 
     /* Fail the build on CI if you accidentally left test.only in the source code */
     forbidOnly: !!process.env.CI,
@@ -30,6 +38,9 @@ export default defineConfig({
     /* Shared settings for all the projects below */
     use: {
         baseURL: process.env.BASE_URL || 'http://localhost:5173',
+
+        /* Reuse authenticated state from global setup */
+        storageState: path.resolve('scripts/.auth/admin.json'),
 
         /* Collect trace when retrying the failed test */
         trace: 'on-first-retry',
