@@ -84,6 +84,7 @@ export class RescheduleResponseListener {
 
     if (
       action !== RESCHEDULE_BUTTON_IDS.CONFIRM &&
+      action !== RESCHEDULE_BUTTON_IDS.TENTATIVE &&
       action !== RESCHEDULE_BUTTON_IDS.DECLINE
     ) {
       return;
@@ -103,6 +104,8 @@ export class RescheduleResponseListener {
     try {
       if (action === RESCHEDULE_BUTTON_IDS.CONFIRM) {
         await this.handleConfirm(interaction, eventId);
+      } else if (action === RESCHEDULE_BUTTON_IDS.TENTATIVE) {
+        await this.handleTentative(interaction, eventId);
       } else {
         await this.handleDecline(interaction, eventId);
       }
@@ -256,6 +259,59 @@ export class RescheduleResponseListener {
     });
     await this.editDmEmbed(interaction, 'confirmed');
     await this.embedSyncQueue.enqueue(event.id, 'reschedule-confirm');
+  }
+
+  // ─── Tentative flow ────────────────────────────────────────────────
+
+  private async handleTentative(
+    interaction: ButtonInteraction,
+    eventId: number,
+  ): Promise<void> {
+    const event = await this.lookupEvent(eventId);
+    if (!event) {
+      await interaction.editReply({ content: 'Event not found.' });
+      return;
+    }
+    if (event.cancelledAt) {
+      await interaction.editReply({
+        content: 'This event has been cancelled.',
+      });
+      return;
+    }
+
+    const existingSignup = await this.signupsService.findByDiscordUser(
+      eventId,
+      interaction.user.id,
+    );
+    if (!existingSignup) {
+      await interaction.editReply({
+        content: "You're not signed up for this event.",
+      });
+      return;
+    }
+
+    // Set status to tentative
+    await this.signupsService.updateStatus(
+      eventId,
+      existingSignup.discordUserId
+        ? { discordUserId: existingSignup.discordUserId }
+        : { userId: existingSignup.user.id },
+      { status: 'tentative' },
+    );
+
+    await interaction.editReply({
+      content: `You're marked as **tentative** for **${event.title}**.`,
+    });
+
+    await this.editDmEmbed(interaction, 'tentative');
+    await this.embedSyncQueue.enqueue(eventId, 'reschedule-tentative');
+
+    this.logger.log(
+      'Discord user %s marked tentative for rescheduled event %d (%s)',
+      interaction.user.id,
+      eventId,
+      event.title,
+    );
   }
 
   // ─── Decline flow ──────────────────────────────────────────────────
@@ -714,7 +770,7 @@ export class RescheduleResponseListener {
    */
   private async editDmEmbed(
     interaction: ButtonInteraction,
-    state: 'confirmed' | 'declined',
+    state: 'confirmed' | 'tentative' | 'declined',
   ): Promise<void> {
     try {
       const originalMessage = interaction.message;
@@ -724,10 +780,12 @@ export class RescheduleResponseListener {
       const { EmbedBuilder } = await import('discord.js');
       const updatedEmbed = EmbedBuilder.from(originalEmbed);
 
-      const stateText =
-        state === 'confirmed'
-          ? '\n\n**\u2705 Confirmed for new time**'
-          : '\n\n**\u274C Declined**';
+      const stateLabels: Record<string, string> = {
+        confirmed: '\n\n**\u2705 Confirmed for new time**',
+        tentative: '\n\n**\u2753 Tentative**',
+        declined: '\n\n**\u274C Declined**',
+      };
+      const stateText = stateLabels[state];
       const originalDescription = originalEmbed.description ?? '';
       updatedEmbed.setDescription(`${originalDescription}${stateText}`);
 

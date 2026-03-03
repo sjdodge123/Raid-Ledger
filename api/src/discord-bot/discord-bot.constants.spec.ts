@@ -8,6 +8,10 @@ describe('RESCHEDULE_BUTTON_IDS (ROK-537)', () => {
     expect(RESCHEDULE_BUTTON_IDS.CONFIRM).toBe('reschedule_confirm');
   });
 
+  it('has the correct TENTATIVE prefix', () => {
+    expect(RESCHEDULE_BUTTON_IDS.TENTATIVE).toBe('reschedule_tentative');
+  });
+
   it('has the correct DECLINE prefix', () => {
     expect(RESCHEDULE_BUTTON_IDS.DECLINE).toBe('reschedule_decline');
   });

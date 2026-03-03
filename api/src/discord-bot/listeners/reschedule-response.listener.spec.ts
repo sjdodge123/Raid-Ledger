@@ -92,6 +92,7 @@ describe('RescheduleResponseListener', () => {
   let mockSignupsService: {
     findByDiscordUser: jest.Mock;
     confirmSignup: jest.Mock;
+    updateStatus: jest.Mock;
   };
   let mockEventsService: object;
   let mockCharactersService: {
@@ -120,7 +121,13 @@ describe('RescheduleResponseListener', () => {
     slotConfig: null,
   };
 
-  const mockSignup = { id: 101, eventId: 42, status: 'signed_up' };
+  const mockSignup = {
+    id: 101,
+    eventId: 42,
+    status: 'signed_up',
+    discordUserId: 'discord-user-1',
+    user: { id: 41 },
+  };
 
   beforeEach(async () => {
     mockDb = createDrizzleMock();
@@ -132,6 +139,7 @@ describe('RescheduleResponseListener', () => {
     mockSignupsService = {
       findByDiscordUser: jest.fn().mockResolvedValue(null),
       confirmSignup: jest.fn().mockResolvedValue({ id: 101 }),
+      updateStatus: jest.fn().mockResolvedValue(undefined),
     };
 
     mockEventsService = {};
@@ -494,6 +502,97 @@ describe('RescheduleResponseListener', () => {
           components: expect.any(Array),
         }),
       );
+    });
+  });
+
+  // ─── Tentative flow ──────────────────────────────────────────────────
+
+  describe('handleTentative', () => {
+    it('sets signup status to tentative via signupsService.updateStatus', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]);
+      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleButtonInteraction'](interaction);
+
+      expect(mockSignupsService.updateStatus).toHaveBeenCalledWith(
+        42,
+        { discordUserId: 'discord-user-1' },
+        { status: 'tentative' },
+      );
+    });
+
+    it('replies with tentative confirmation message', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]);
+      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleButtonInteraction'](interaction);
+
+      expect(interaction.editReply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          content: expect.stringContaining('tentative'),
+        }),
+      );
+    });
+
+    it('enqueues embed sync after marking tentative', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]);
+      mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleButtonInteraction'](interaction);
+
+      expect(mockEmbedSyncQueue.enqueue).toHaveBeenCalledWith(
+        42,
+        'reschedule-tentative',
+      );
+    });
+
+    it('replies "Event not found." when event does not exist', async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleTentative'](interaction, 42);
+
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: 'Event not found.',
+      });
+    });
+
+    it('replies "This event has been cancelled." for cancelled events', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockCancelledEvent]);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleTentative'](interaction, 42);
+
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: 'This event has been cancelled.',
+      });
+    });
+
+    it('replies "You\'re not signed up" when user has no signup', async () => {
+      mockDb.limit.mockResolvedValueOnce([mockEvent]);
+      mockSignupsService.findByDiscordUser.mockResolvedValue(null);
+
+      const interaction = makeButtonInteraction(
+        `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
+      );
+      await listener['handleTentative'](interaction, 42);
+
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: "You're not signed up for this event.",
+      });
     });
   });
 

@@ -913,7 +913,7 @@ describe('DiscordNotificationEmbedService', () => {
       expect(rows).toBeUndefined();
     });
 
-    it('should return rows with Confirm and Decline buttons for event_rescheduled with eventId (ROK-537)', async () => {
+    it('should return rows with Confirm, Tentative, and Decline buttons for event_rescheduled with eventId (ROK-537)', async () => {
       const { rows } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-5',
@@ -930,9 +930,12 @@ describe('DiscordNotificationEmbedService', () => {
       const rowJson = rows![0].toJSON() as unknown as {
         components: Array<{ customId: string; label: string; style: number }>;
       };
-      expect(rowJson.components).toHaveLength(2);
+      expect(rowJson.components).toHaveLength(3);
 
       const confirmBtn = rowJson.components.find((c) => c.label === 'Confirm');
+      const tentativeBtn = rowJson.components.find(
+        (c) => c.label === 'Tentative',
+      );
       const declineBtn = rowJson.components.find(
         (c) => c.label === 'Decline',
       );
@@ -941,6 +944,11 @@ describe('DiscordNotificationEmbedService', () => {
       expect(confirmBtn?.customId).toBe('reschedule_confirm:42');
       // ButtonStyle.Success = 3
       expect(confirmBtn?.style).toBe(3);
+
+      expect(tentativeBtn).toBeDefined();
+      expect(tentativeBtn?.customId).toBe('reschedule_tentative:42');
+      // ButtonStyle.Secondary = 2
+      expect(tentativeBtn?.style).toBe(2);
 
       expect(declineBtn).toBeDefined();
       expect(declineBtn?.customId).toBe('reschedule_decline:42');

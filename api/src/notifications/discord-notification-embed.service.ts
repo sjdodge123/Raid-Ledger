@@ -220,6 +220,10 @@ export class DiscordNotificationEmbedService {
           .setLabel('Confirm')
           .setStyle(ButtonStyle.Success),
         new ButtonBuilder()
+          .setCustomId(`${RESCHEDULE_BUTTON_IDS.TENTATIVE}:${toStr(eventId)}`)
+          .setLabel('Tentative')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
           .setCustomId(`${RESCHEDULE_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
           .setLabel('Decline')
           .setStyle(ButtonStyle.Danger),

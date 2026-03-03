@@ -148,6 +148,7 @@ export const DEPARTURE_PROMOTE_BUTTON_IDS = {
  */
 export const RESCHEDULE_BUTTON_IDS = {
   CONFIRM: 'reschedule_confirm',
+  TENTATIVE: 'reschedule_tentative',
   DECLINE: 'reschedule_decline',
   CHARACTER_SELECT: 'reschedule_char_select',
   ROLE_SELECT: 'reschedule_role_select',

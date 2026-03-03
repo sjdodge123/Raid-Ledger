@@ -489,10 +489,7 @@ describe('IgdbService', () => {
     }
 
     it('should backfill covers for games where IGDB now has art', async () => {
-      const missingCoverGames = [
-        { igdbId: 111 },
-        { igdbId: 222 },
-      ];
+      const missingCoverGames = [{ igdbId: 111 }, { igdbId: 222 }];
       const igdbCoverResponse = [
         { id: 111, cover: { image_id: 'co_abc' } },
         { id: 222, cover: { image_id: 'co_def' } },
