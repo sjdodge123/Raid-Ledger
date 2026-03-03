@@ -6,10 +6,8 @@ import { UsersService } from '../users/users.service';
  * Generate short-lived authenticated links for Discord -> web transitions.
  * Used by slash commands to provide pre-authenticated links to the web app.
  *
- * TODO(ROK-373): The `?token=JWT` param appended to magic link URLs is not
- * consumed by the frontend. Already-authenticated users navigate fine, but
- * unauthenticated users get no auto-auth benefit. Follow-up: implement
- * token consumption on the frontend to auto-authenticate via the magic link.
+ * The frontend consumes `?token=JWT` at module load time (App.tsx) to
+ * auto-authenticate unauthenticated users arriving via magic links (ROK-657).
  */
 @Injectable()
 export class MagicLinkService {
