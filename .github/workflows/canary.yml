@@ -1,0 +1,43 @@
+name: Canary Tests
+
+on:
+  schedule:
+    # Daily at 10:00 UTC (5:00 AM EST)
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache node_modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: ${{ runner.os }}-node-modules-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-modules-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run canary tests
+        env:
+          CANARY_DISCORD_BOT_TOKEN: ${{ secrets.CANARY_DISCORD_BOT_TOKEN }}
+          CANARY_IGDB_CLIENT_ID: ${{ secrets.CANARY_IGDB_CLIENT_ID }}
+          CANARY_IGDB_CLIENT_SECRET: ${{ secrets.CANARY_IGDB_CLIENT_SECRET }}
+          CANARY_BLIZZARD_CLIENT_ID: ${{ secrets.CANARY_BLIZZARD_CLIENT_ID }}
+          CANARY_BLIZZARD_CLIENT_SECRET: ${{ secrets.CANARY_BLIZZARD_CLIENT_SECRET }}
+        run: npx tsx api/src/canary/canary-cli.ts --report-github
