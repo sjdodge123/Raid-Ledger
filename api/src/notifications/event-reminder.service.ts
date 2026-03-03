@@ -1,6 +1,6 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, inArray, isNull, and } from 'drizzle-orm';
+import { eq, inArray, isNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -306,11 +306,14 @@ export class EventReminderService {
       input.gameId,
     );
 
+    // Build a dynamic title that matches the body's time calculation
+    const titleTimeLabel = this.buildTitleTimeLabel(input.minutesUntil);
+
     // Create in-app notification (this also dispatches to Discord DM via the standard pipeline)
     await this.notificationService.create({
       userId: input.userId,
       type: 'event_reminder',
-      title: `Event Starting in ${input.windowLabel}!`,
+      title: `Event Starting ${titleTimeLabel}!`,
       message: messageText,
       payload: {
         eventId: input.eventId,
@@ -348,52 +351,6 @@ export class EventReminderService {
   }
 
   /**
-   * Legacy compatibility: kept for existing day-of reminders.
-   * Now delegates to handleReminders for the 24-hour window.
-   */
-  @Cron('45 */15 * * * *', {
-    name: 'EventReminderService_handleDayOfReminders',
-  })
-  async handleDayOfReminders(): Promise<void> {
-    await this.cronJobService.executeWithTracking(
-      'EventReminderService_handleDayOfReminders',
-      async () => {
-        this.logger.debug('Running day-of reminder check...');
-
-        const userTimezones = await this.getUserTimezones();
-        if (userTimezones.length === 0) return;
-
-        const now = new Date();
-
-        // Find users whose local time is currently in the target hour (9am)
-        const eligibleUserIds: number[] = [];
-        for (const { userId, timezone } of userTimezones) {
-          if (this.isTargetHour(now, timezone, 9)) {
-            eligibleUserIds.push(userId);
-          }
-        }
-
-        if (eligibleUserIds.length === 0) return;
-
-        this.logger.debug(
-          `Day-of: ${eligibleUserIds.length} users at target hour`,
-        );
-
-        for (const { userId, timezone } of userTimezones) {
-          if (!eligibleUserIds.includes(userId)) continue;
-
-          const todayRange = this.getTodayRange(now, timezone);
-          await this.sendDayOfRemindersForUser(
-            userId,
-            todayRange.start,
-            todayRange.end,
-          );
-        }
-      },
-    );
-  }
-
-  /**
    * Batch query user timezone preferences.
    */
   async getUserTimezones(): Promise<{ userId: number; timezone: string }[]> {
@@ -415,113 +372,14 @@ export class EventReminderService {
   }
 
   /**
-   * Check if the current time in the given timezone is at the target hour.
+   * Build a human-readable time label for the notification title,
+   * matching the body's time calculation so they always agree (ROK-647).
    */
-  private isTargetHour(
-    now: Date,
-    timezone: string,
-    targetHour: number,
-  ): boolean {
-    try {
-      const localTime = new Date(
-        now.toLocaleString('en-US', { timeZone: timezone }),
-      );
-      return localTime.getHours() === targetHour && localTime.getMinutes() < 15;
-    } catch {
-      const utcHour = now.getUTCHours();
-      return utcHour === targetHour && now.getUTCMinutes() < 15;
-    }
-  }
-
-  /**
-   * Get the start and end of "today" in a given timezone, as UTC Date objects.
-   */
-  private getTodayRange(
-    now: Date,
-    timezone: string,
-  ): { start: Date; end: Date } {
-    try {
-      const localDateStr = now.toLocaleDateString('en-CA', {
-        timeZone: timezone,
-      });
-      const startLocal = new Date(`${localDateStr}T00:00:00`);
-      const endLocal = new Date(`${localDateStr}T23:59:59.999`);
-
-      const formatter = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        timeZoneName: 'shortOffset',
-      });
-      const parts = formatter.formatToParts(now);
-      const offsetPart = parts.find((p) => p.type === 'timeZoneName');
-      const offsetStr = offsetPart?.value ?? 'GMT';
-
-      const offsetMatch = offsetStr.match(/GMT([+-]?)(\d+)?(?::(\d+))?/);
-      let offsetMinutes = 0;
-      if (offsetMatch) {
-        const sign = offsetMatch[1] === '-' ? -1 : 1;
-        const hours = parseInt(offsetMatch[2] || '0', 10);
-        const minutes = parseInt(offsetMatch[3] || '0', 10);
-        offsetMinutes = sign * (hours * 60 + minutes);
-      }
-
-      return {
-        start: new Date(startLocal.getTime() - offsetMinutes * 60000),
-        end: new Date(endLocal.getTime() - offsetMinutes * 60000),
-      };
-    } catch {
-      const utcDateStr = now.toISOString().slice(0, 10);
-      return {
-        start: new Date(`${utcDateStr}T00:00:00Z`),
-        end: new Date(`${utcDateStr}T23:59:59.999Z`),
-      };
-    }
-  }
-
-  /**
-   * Send day-of reminders for a single user.
-   */
-  private async sendDayOfRemindersForUser(
-    userId: number,
-    rangeStart: Date,
-    rangeEnd: Date,
-  ): Promise<void> {
-    const userEvents = await this.db
-      .select({
-        eventId: schema.events.id,
-        title: schema.events.title,
-        duration: schema.events.duration,
-        cancelledAt: schema.events.cancelledAt,
-      })
-      .from(schema.eventSignups)
-      .innerJoin(
-        schema.events,
-        eq(schema.eventSignups.eventId, schema.events.id),
-      )
-      .where(
-        and(
-          eq(schema.eventSignups.userId, userId),
-          isNull(schema.events.cancelledAt),
-        ),
-      );
-
-    const todayEvents = userEvents.filter((row) => {
-      const startTime = row.duration[0];
-      return startTime >= rangeStart && startTime <= rangeEnd;
-    });
-
-    for (const row of todayEvents) {
-      const startTime = row.duration[0];
-
-      await this.sendReminder({
-        eventId: row.eventId,
-        userId,
-        windowType: '24hour',
-        windowLabel: '24 Hours',
-        title: row.title,
-        startTime,
-        minutesUntil: Math.round((startTime.getTime() - Date.now()) / 60000),
-        characterDisplay: null,
-      });
-    }
+  private buildTitleTimeLabel(minutesUntil: number): string {
+    if (minutesUntil <= 1) return 'Now';
+    if (minutesUntil <= 60) return `in ${minutesUntil} Minutes`;
+    const hours = Math.round(minutesUntil / 60);
+    if (hours === 1) return 'in 1 Hour';
+    return `in ${hours} Hours`;
   }
 }
