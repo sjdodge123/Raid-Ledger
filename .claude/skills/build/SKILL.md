@@ -33,8 +33,8 @@ Apply this directly when assessing stories:
 | Scope | Criteria | Testing | Gates |
 |-------|----------|---------|-------|
 | **light** | Config, copy, style-only, docs | Lint + type check only | dev → ci → operator → smoke |
-| **standard** | Single-module feature, bug fix, straightforward | Unit tests required | dev → test_agent → ci (incl. review) → operator → smoke |
-| **full** | Cross-module, migrations, contract changes, complex | Full test suite + planner + architect | dev → test_agent → ci (incl. review) → operator → architect_final → smoke |
+| **standard** | Single-module feature, bug fix, straightforward | Unit tests required | dev → test_agent → ci → operator → reviewer → smoke |
+| **full** | Cross-module, migrations, contract changes, complex | Full test suite + planner + architect | dev → test_agent → ci → operator → reviewer → architect_final → smoke |
 
 **Scope decision rules:**
 - Touches `packages/contract` → full
@@ -54,21 +54,20 @@ Dev completes → Test Agent (if standard/full) → CI passes → Push branch
   → Commit operator changes (MANDATORY before review)
   → Operator moves to "Code Review" or "Changes Requested"
     → Changes Requested: re-spawn dev, loop back
-    → Code Review: CI reviewer runs automatically on push
+    → Code Review: spawn Reviewer
   → Optional: Architect final check (if needs_architect, SEQUENTIAL)
   → Lead runs smoke tests (full suite — NEVER skipped)
   → ONLY AFTER all gates pass → Create PR → Auto-merge (LAST action)
   → Linear "Done"
 ```
 
-**Five gates before PR:**
+**Six gates before PR:**
 1. **Test Agent** — unit tests (skipped for light)
-2. **CI** — build + type check + lint + tests + automated Claude Code review
+2. **CI** — build + type check + lint + tests
 3. **Operator** — manual testing approval via Linear
-4. **Architect final** — alignment check (only if `needs_architect`)
-5. **Smoke test** — Lead runs full suite (NEVER skipped)
-
-*Note: Code review is handled automatically by the CI-based Claude Code reviewer (`claude-review` job in `.github/workflows/ci.yml`). The lead no longer needs to spawn a reviewer agent or route verdicts.*
+4. **Reviewer** — code review after operator approves
+5. **Architect final** — alignment check (only if `needs_architect`)
+6. **Smoke test** — Lead runs full suite (NEVER skipped)
 
 ---
 
@@ -100,7 +99,7 @@ If in doubt whether an operation is destructive, it is. Ask first.
 
 ## Standing Rules (for all worktree agents)
 
-These apply to ALL agents working in worktrees (dev, test agent):
+These apply to ALL agents working in worktrees (dev, test agent, reviewer):
 
 1. **NEVER push to remote** — only the Lead pushes
 2. **NEVER create pull requests** — only the Lead creates PRs
@@ -142,7 +141,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 | 1 | `steps/step-1-setup.md` | Cleanup, fetch stories, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Create worktrees, optional planner/architect, spawn devs + test agents |
 | 3 | `steps/step-3-validate.md` | CI, push, deploy, Linear "In Review", FULL STOP for operator |
-| 4 | `steps/step-4-review.md` | Poll Linear, handle rework/approval, CI review + architect + smoke |
+| 4 | `steps/step-4-review.md` | Poll Linear, handle rework/approval, reviewer + architect + smoke |
 | 5 | `steps/step-5-ship.md` | Rebase, PR, auto-merge, Linear "Done", cleanup, summary |
 
 ---
@@ -153,8 +152,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 |-------|----------|------|-------|----------|
 | Dev | `templates/dev.md` | Step 2 (new work + rework) | opus | Per-story |
 | Test Agent | `templates/test-agent.md` | Step 2 (after dev completes) | sonnet | Per-story |
+| Reviewer | `templates/reviewer.md` | Step 4 (after operator approves) | sonnet | Per-story |
 | Architect | `templates/architect.md` | Step 2 pre-dev / Step 4 post-review (one-shot) | opus | One-shot |
 | Planner | `templates/planner.md` | Step 2 pre-dev (full scope only, one-shot) | opus | One-shot |
 | Wiki Updater | `templates/wiki-updater.md` | Step 5i (after tech debt, feat: stories only) | — | One-shot |
-
-*Code review is now handled by CI (`claude-review` job) — no reviewer agent needed.*
