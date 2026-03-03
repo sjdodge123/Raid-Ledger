@@ -12,7 +12,7 @@ import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
 import { useConnectivityStore } from './stores/connectivity-store';
 import { queryClient } from './lib/query-client';
-import { getAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
+import { getAuthToken, setAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { Layout } from './components/layout';
 import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
@@ -20,6 +20,16 @@ import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
+
+// ROK-657: Consume magic link token from URL before React renders.
+// Magic links arrive as ?token=JWT from Discord slash command embeds.
+// Storing the token here ensures fetchCurrentUser (below) picks it up
+// and AuthGuard sees the user as authenticated on first render.
+const _magicLinkParams = new URLSearchParams(window.location.search);
+const _magicLinkToken = _magicLinkParams.get('token');
+if (_magicLinkToken && !getAuthToken()) {
+  setAuthToken(_magicLinkToken);
+}
 
 // Seed auth cache from localStorage for instant return visits.
 // Runs at module load (before React renders) so AuthGuard never
@@ -121,6 +131,27 @@ import './plugins/discord/register';
 import './App.css';
 
 /**
+ * ROK-657: Strip ?token= from the URL after magic link consumption.
+ * Runs once on mount inside BrowserRouter so it has access to navigation.
+ * Uses replaceState to avoid a history entry.
+ */
+function MagicLinkCleanup() {
+  const { search, pathname, hash } = useLocation();
+
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    if (params.has('token')) {
+      params.delete('token');
+      const cleaned = params.toString();
+      const newUrl = pathname + (cleaned ? `?${cleaned}` : '') + hash;
+      window.history.replaceState(null, '', newUrl);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- only on mount
+
+  return null;
+}
+
+/**
  * Scrolls to top on PUSH navigations (link clicks, programmatic navigate).
  * Skips POP navigations (back/forward) so the browser can restore scroll natively.
  */
@@ -169,6 +200,7 @@ function App() {
     <StartupGate>
       <ThemeParticles />
       <BrowserRouter>
+        <MagicLinkCleanup />
         <ScrollToTop />
         <Toaster
           position="top-right"
