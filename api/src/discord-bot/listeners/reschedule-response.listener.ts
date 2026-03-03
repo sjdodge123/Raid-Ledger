@@ -758,6 +758,9 @@ export class RescheduleResponseListener {
     const updateSet: Record<string, unknown> = {
       status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
       roachedOutAt: null,
+      // ROK-537: Reset confirmation status so user moves from Pending → Confirmed
+      // in the attendees panel after responding to the reschedule DM.
+      confirmationStatus: 'confirmed',
     };
 
     if (options?.preferredRoles) {

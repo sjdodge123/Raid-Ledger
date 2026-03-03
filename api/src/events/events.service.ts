@@ -1153,6 +1153,19 @@ export class EventsService {
       .delete(schema.eventRemindersSent)
       .where(eq(schema.eventRemindersSent.eventId, eventId));
 
+    // ROK-537: Reset all active signups to pending so users must re-confirm
+    // for the new time slot (via reschedule DM buttons)
+    await this.db
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'pending' })
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          ne(schema.eventSignups.status, 'declined'),
+          ne(schema.eventSignups.status, 'departed'),
+        ),
+      );
+
     this.logger.log(`Event rescheduled: ${eventId} by user ${userId}`);
 
     // Notify all signed-up RL users (except the rescheduler; skip anonymous Discord participants)
