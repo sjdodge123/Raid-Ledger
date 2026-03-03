@@ -1,0 +1,274 @@
+---
+title: Raid Ledger
+description: Drive community engagement, organize events, play games socially, and automate reminders — all in one self-hosted dashboard for gaming communities.
+template: splash
+hero:
+  tagline: Drive community engagement, organize events effortlessly, play games together, and automate the busywork — all in one self-hosted dashboard.
+  actions:
+    - text: Get Started
+      link: https://github.com/sjdodge123/Raid-Ledger#-quick-deploy
+      icon: right-arrow
+      variant: primary
+    - text: View on GitHub
+      link: https://github.com/sjdodge123/Raid-Ledger
+      variant: minimal
+      icon: github
+---
+
+import { Image } from 'astro:assets';
+import eventsDesktop from '../../assets/screenshots/events-list-desktop.png';
+import calendarDesktop from '../../assets/screenshots/calendar-desktop.png';
+import eventDetail from '../../assets/screenshots/event-detail.png';
+import adminPanel from '../../assets/screenshots/admin-panel.png';
+import setupWizard from '../../assets/screenshots/setup-wizard.png';
+import eventWithRoster from '../../assets/screenshots/event-with-roster.png';
+import gameLibrary from '../../assets/screenshots/game-library.png';
+
+<div class="section-heading">
+  <h2>Built to Bring Gamers Together</h2>
+  <p>Raid Ledger exists to solve one problem: getting your community to actually show up and play together. Less coordination overhead, more game time.</p>
+</div>
+
+<div class="features-grid">
+  <div class="feature-card">
+    <h3>Effortless Event Scheduling</h3>
+    <p>Create one-time or recurring events with natural language time parsing, a calendar view, and automatic Discord announcements. Scheduling should take seconds, not minutes.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Roster Management</h3>
+    <p>MMO-style role assignments (Tank/Healer/DPS), drag-and-drop slot management, bench tracking, and PUG invite system. Everyone knows their role before game time.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Discord Bot Integration</h3>
+    <p>Full-featured Discord bot with slash commands for event creation, roster viewing, channel bindings, and voice activity monitoring. Your community stays in Discord — Raid Ledger meets them there.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Automated Reminders</h3>
+    <p>Event reminders, no-show detection with automatic DMs, and configurable notifications per user. No more "I forgot" — everyone gets pinged at the right time.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Ad-Hoc Voice Events</h3>
+    <p>Auto-detect games in voice channels via Discord Rich Presence and create spontaneous events. Jump in when friends are already playing — no planning required.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Game Library (IGDB)</h3>
+    <p>Browse and filter from a catalog of 200,000+ games powered by IGDB. Genre filtering, cover art, and game-specific event grouping.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Admin Dashboard</h3>
+    <p>Full control panel for community admins — setup wizard, Discord integration management, user permissions, plugin configuration, and community settings all in one place.</p>
+  </div>
+
+  <div class="feature-card">
+    <h3>Analytics and Metrics</h3>
+    <p>Track attendance rates, no-show patterns, game popularity, and community engagement over time. See what's working and what's not.</p>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>See It in Action</h2>
+</div>
+
+<div class="carousel" id="screenshot-carousel">
+  <div class="carousel-track">
+    <div class="carousel-slide">
+      <Image src={eventsDesktop} alt="Events list" />
+      <div class="carousel-caption">
+        <strong>Events Dashboard</strong>
+        <span>Browse upcoming events with game cover art, signup counts, and quick filters. Create one-time or recurring events in seconds.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={calendarDesktop} alt="Calendar view" />
+      <div class="carousel-caption">
+        <strong>Calendar View</strong>
+        <span>See your community's schedule at a glance with color-coded events by game, week/month toggle, and quick-create actions.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={eventWithRoster} alt="Event with roster" />
+      <div class="carousel-caption">
+        <strong>Roster Management</strong>
+        <span>MMO-style role assignments with Tank, Healer, and DPS slots. Drag-and-drop players, auto-fill from bench, and track confirmations.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={eventDetail} alt="Event detail" />
+      <div class="carousel-caption">
+        <strong>Event Details</strong>
+        <span>Full event info at a glance — time, duration, creator, description, and signup roster with one-click RSVP.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={gameLibrary} alt="Game library" />
+      <div class="carousel-caption">
+        <strong>Game Library</strong>
+        <span>Browse and manage 200,000+ games powered by IGDB. Filter by genre, view cover art, and link games to events.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={adminPanel} alt="Admin panel" />
+      <div class="carousel-caption">
+        <strong>Admin Panel</strong>
+        <span>Manage community settings, Discord integrations, plugin configuration, and user permissions from one dashboard.</span>
+      </div>
+    </div>
+    <div class="carousel-slide">
+      <Image src={setupWizard} alt="Setup wizard" />
+      <div class="carousel-caption">
+        <strong>Setup Wizard</strong>
+        <span>Guided first-run experience walks new admins through account security, community setup, and plugin activation.</span>
+      </div>
+    </div>
+  </div>
+  <button class="carousel-btn carousel-prev" aria-label="Previous screenshot">&lsaquo;</button>
+  <button class="carousel-btn carousel-next" aria-label="Next screenshot">&rsaquo;</button>
+</div>
+<div class="carousel-dots" id="carousel-dots"></div>
+
+<script>
+{`
+  document.addEventListener('DOMContentLoaded', () => {
+    const carousel = document.querySelector('.carousel');
+    const track = document.querySelector('.carousel-track');
+    const slides = document.querySelectorAll('.carousel-slide');
+    const prevBtn = document.querySelector('.carousel-prev');
+    const nextBtn = document.querySelector('.carousel-next');
+    const dotsContainer = document.getElementById('carousel-dots');
+    let current = 0;
+
+    function sizeSlides() {
+      const w = carousel.offsetWidth;
+      slides.forEach(s => { s.style.width = w + 'px'; s.style.minWidth = w + 'px'; });
+      track.style.transform = 'translateX(-' + (current * w) + 'px)';
+    }
+
+    function positionButtons() {
+      const img = slides[current] && slides[current].querySelector('img');
+      if (img) {
+        const h = img.offsetHeight;
+        prevBtn.style.top = (h / 2) + 'px';
+        nextBtn.style.top = (h / 2) + 'px';
+      }
+    }
+
+    sizeSlides();
+    window.addEventListener('resize', () => { sizeSlides(); positionButtons(); });
+
+    slides.forEach((_, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'carousel-dot' + (i === 0 ? ' active' : '');
+      dot.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+      dot.addEventListener('click', () => goTo(i));
+      dotsContainer.appendChild(dot);
+    });
+
+    function goTo(index) {
+      current = (index + slides.length) % slides.length;
+      const w = carousel.offsetWidth;
+      track.style.transform = 'translateX(-' + (current * w) + 'px)';
+      document.querySelectorAll('.carousel-dot').forEach((d, i) =>
+        d.classList.toggle('active', i === current)
+      );
+      positionButtons();
+    }
+
+    prevBtn.addEventListener('click', () => goTo(current - 1));
+    nextBtn.addEventListener('click', () => goTo(current + 1));
+
+    const firstImg = slides[0] && slides[0].querySelector('img');
+    if (firstImg && firstImg.complete) { positionButtons(); }
+    else if (firstImg) { firstImg.addEventListener('load', positionButtons); }
+
+    let startX = 0;
+    track.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; });
+    track.addEventListener('touchend', (e) => {
+      const diff = startX - e.changedTouches[0].clientX;
+      if (Math.abs(diff) > 50) goTo(current + (diff > 0 ? 1 : -1));
+    });
+  });
+`}
+</script>
+
+<div class="section-heading">
+  <h2>Why Raid Ledger?</h2>
+</div>
+
+<div class="benefits">
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F3E0;</span>
+    <div>
+      <h4>Self-Hosted</h4>
+      <p>Your data stays on your hardware. No third-party dependencies, no subscriptions, no data harvesting.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F433;</span>
+    <div>
+      <h4>Single Docker Command</h4>
+      <p>One container bundles PostgreSQL, Redis, the API, and the web app. Up and running in under a minute.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F513;</span>
+    <div>
+      <h4>MIT Licensed</h4>
+      <p>Fully open source. Fork it, modify it, contribute back. No vendor lock-in.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F4E6;</span>
+    <div>
+      <h4>All-in-One Container</h4>
+      <p>PostgreSQL, Redis, NestJS API, and React frontend — everything included. No external services required.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F504;</span>
+    <div>
+      <h4>Automatic Backups</h4>
+      <p>Daily database backups and pre-migration snapshots. Your data is always safe.</p>
+    </div>
+  </div>
+
+  <div class="benefit">
+    <span class="benefit-icon">&#x1F527;</span>
+    <div>
+      <h4>Zero Configuration</h4>
+      <p>Works out of the box with sensible defaults. Optional Discord OAuth and game integrations when you are ready.</p>
+    </div>
+  </div>
+</div>
+
+<div class="section-heading">
+  <h2>Quick Start</h2>
+  <p>Get Raid Ledger running in under a minute.</p>
+</div>
+
+```bash
+docker run -d -p 80:80 ghcr.io/sjdodge123/raid-ledger:main
+```
+
+Then open [http://localhost](http://localhost) and check the container logs for your admin credentials.
+
+<div class="cta-group">
+  <a href="https://github.com/sjdodge123/Raid-Ledger#-quick-deploy" class="cta-primary">Deploy Now</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/wiki" class="cta-secondary">Read the Docs</a>
+</div>
+
+<div class="footer-links">
+  <a href="https://github.com/sjdodge123/Raid-Ledger">GitHub</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/wiki">Documentation</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/issues">Issues</a>
+  <a href="https://github.com/sjdodge123/Raid-Ledger/blob/main/LICENSE">MIT License</a>
+</div>

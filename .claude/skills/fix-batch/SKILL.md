@@ -154,7 +154,7 @@ Execute steps in order. Read each step's file when you reach it — do NOT read 
 | 1 | `steps/step-1-gather.md` | Cleanup, fetch stories by label, profile, present batch, init state |
 | 2 | `steps/step-2-implement.md` | Batch branch, worktrees, spawn devs, merge into batch branch |
 | 3 | `steps/step-3-validate.md` | Build + typecheck + lint + unit tests + integration tests + optional smoke |
-| 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary |
+| 4 | `steps/step-4-ship.md` | Single PR, auto-merge, Linear "Done", cleanup, summary, wiki sync (4f) |
 
 ---
 

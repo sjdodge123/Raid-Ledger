@@ -120,6 +120,18 @@ Present to the operator:
 - Dev agents: <count> (opus)
 ```
 
+---
+
+## 4f. Wiki Update (if applicable)
+
+**Best-effort, non-blocking.** If any story in the batch touches a domain with a wiki page, attempt to sync the wiki. See `../build/steps/step-5i-wiki-update.md` for the full procedure and domain-to-page mapping.
+
+**Note:** Fix-batch stories are typically `fix:`, `tech-debt:`, or `chore:` — wiki updates are rare but may be warranted when a fix changes user-facing behavior documented in the wiki. Use judgment: only update if the fix materially changes how a documented feature works.
+
+If the wiki push fails, log a warning and continue. Wiki sync failures must NEVER fail the pipeline.
+
+---
+
 Archive the state file:
 ```bash
 mv planning-artifacts/fix-batch-state.yaml planning-artifacts/fix-batch-state-YYYY-MM-DD.yaml

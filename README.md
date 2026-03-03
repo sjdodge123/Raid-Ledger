@@ -1,5 +1,9 @@
 # Raid Ledger
 
+[![Documentation](https://img.shields.io/badge/docs-wiki-blue)](https://github.com/sjdodge123/Raid-Ledger/wiki)
+[![Website](https://img.shields.io/badge/site-GitHub%20Pages-indigo)](https://sjdodge123.github.io/Raid-Ledger/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A unified dashboard for gaming communities—plan raids and events, track schedules and attendance, and boost engagement.
 
 ## 🚀 Quick Deploy
@@ -109,6 +113,13 @@ docker compose up -d          # Start db + redis
 npm install
 npm run dev                   # Run API + Web
 ```
+
+---
+
+## Documentation
+
+- **[Wiki](https://github.com/sjdodge123/Raid-Ledger/wiki)** — Setup guides, feature docs, operations, and API reference
+- **[Marketing Site](https://sjdodge123.github.io/Raid-Ledger/)** — Feature overview and quick start
 
 ---
 
