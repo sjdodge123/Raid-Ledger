@@ -432,6 +432,105 @@ describe('IgdbService', () => {
     });
   });
 
+  describe('syncAllGames — cover art backfill (Phase 3)', () => {
+    /**
+     * Helper to wire up the mock DB and fetch so that syncAllGames' Phase 1
+     * (refresh existing) and Phase 2 (discover popular) complete quickly,
+     * letting us focus on Phase 3 (backfill missing covers).
+     *
+     * @param missingCoverGames  Rows returned for the Phase-3 "coverUrl IS NULL" query
+     * @param igdbCoverResponse  IGDB API response for the cover-backfill query
+     */
+    function setupSyncMocks(
+      missingCoverGames: { igdbId: number }[],
+      igdbCoverResponse: { id: number; cover?: { image_id: string } }[],
+    ) {
+      let selectCallIndex = 0;
+      mockDb.select = jest.fn().mockImplementation(() => ({
+        from: jest.fn().mockImplementation(() => ({
+          where: jest.fn().mockImplementation(() => {
+            selectCallIndex++;
+            // Call 1: Phase 1 — existing games (return empty to skip refresh)
+            // Call 2: Phase 3 — games with missing covers
+            const data = selectCallIndex === 1 ? [] : missingCoverGames;
+            return thenableResult(data);
+          }),
+        })),
+      }));
+
+      mockDb.update = jest.fn().mockReturnValue({
+        set: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue(undefined),
+        }),
+      });
+
+      // Phase 2 (discover popular) + optional Phase 3 (cover backfill) IGDB calls
+      mockFetch
+        // Token
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () =>
+            Promise.resolve({ access_token: 'test-token', expires_in: 3600 }),
+        })
+        // Phase 2: popular games (empty to skip)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve([]),
+        });
+
+      // Only add Phase 3 mock if there are games to backfill (avoids
+      // unconsumed mockResolvedValueOnce bleeding into later tests)
+      if (missingCoverGames.length > 0) {
+        mockFetch.mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve(igdbCoverResponse),
+        });
+      }
+    }
+
+    it('should backfill covers for games where IGDB now has art', async () => {
+      const missingCoverGames = [
+        { igdbId: 111 },
+        { igdbId: 222 },
+      ];
+      const igdbCoverResponse = [
+        { id: 111, cover: { image_id: 'co_abc' } },
+        { id: 222, cover: { image_id: 'co_def' } },
+      ];
+
+      setupSyncMocks(missingCoverGames, igdbCoverResponse);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(2);
+      expect(mockDb.update).toHaveBeenCalledTimes(2);
+    });
+
+    it('should skip games where IGDB still has no cover', async () => {
+      const missingCoverGames = [{ igdbId: 333 }];
+      // IGDB returns the game but with no cover field
+      const igdbCoverResponse = [{ id: 333 }];
+
+      setupSyncMocks(missingCoverGames, igdbCoverResponse);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(0);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it('should not query IGDB when no games are missing covers', async () => {
+      // No games with missing covers
+      setupSyncMocks([], []);
+
+      const result = await service.syncAllGames();
+
+      expect(result.backfilled).toBe(0);
+      // Only token + Phase 2 (discover) — no Phase 3 IGDB call
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('error handling', () => {
     it('should throw when IGDB credentials not configured', async () => {
       mockConfigService.get = jest.fn().mockReturnValue(undefined);

@@ -261,7 +261,11 @@ export class IgdbService {
    * Full sync: refresh all existing games + pull popular multiplayer titles.
    * Called by scheduled cron and on initial IGDB config.
    */
-  async syncAllGames(): Promise<{ refreshed: number; discovered: number }> {
+  async syncAllGames(): Promise<{
+    refreshed: number;
+    discovered: number;
+    backfilled: number;
+  }> {
     this._syncInProgress = true;
     try {
       return await this._doSync();
@@ -270,9 +274,14 @@ export class IgdbService {
     }
   }
 
-  private async _doSync(): Promise<{ refreshed: number; discovered: number }> {
+  private async _doSync(): Promise<{
+    refreshed: number;
+    discovered: number;
+    backfilled: number;
+  }> {
     let refreshed = 0;
     let discovered = 0;
+    let backfilled = 0;
 
     // Check adult content filter setting
     const adultFilterEnabled = await this.isAdultFilterEnabled();
@@ -324,6 +333,51 @@ export class IgdbService {
       this.logger.warn(`Failed to discover popular games: ${err}`);
     }
 
+    // Phase 3: Backfill missing cover art
+    // Games with an IGDB ID but no coverUrl may have had their cover added
+    // to IGDB after the original sync. Re-query IGDB for just the cover field
+    // and update any games where IGDB now has art.
+    try {
+      const missingCovers = await this.db
+        .select({
+          igdbId: schema.games.igdbId,
+        })
+        .from(schema.games)
+        .where(
+          and(
+            isNull(schema.games.coverUrl),
+            not(isNull(schema.games.igdbId)),
+            eq(schema.games.banned, false),
+          ),
+        );
+
+      if (missingCovers.length > 0) {
+        const ids = missingCovers.map((g) => g.igdbId).join(',');
+        const coverResults = await this.queryIgdb(
+          `fields id, cover.image_id; where id = (${ids}); limit ${missingCovers.length};`,
+        );
+
+        for (const game of coverResults) {
+          if (game.cover?.image_id) {
+            const coverUrl = `${IGDB_CONFIG.COVER_URL_BASE}/${game.cover.image_id}.jpg`;
+            await this.db
+              .update(schema.games)
+              .set({ coverUrl })
+              .where(eq(schema.games.igdbId, game.id));
+            backfilled++;
+          }
+        }
+
+        if (backfilled > 0) {
+          this.logger.log(
+            `IGDB sync: backfilled cover art for ${backfilled} games`,
+          );
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to backfill missing covers: ${err}`);
+    }
+
     this.logger.log(
       `IGDB sync: refreshed ${refreshed} existing games, discovered ${discovered} popular titles`,
     );
@@ -338,7 +392,7 @@ export class IgdbService {
       // Non-fatal
     }
 
-    return { refreshed, discovered };
+    return { refreshed, discovered, backfilled };
   }
 
   /**
