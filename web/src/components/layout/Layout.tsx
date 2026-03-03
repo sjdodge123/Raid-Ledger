@@ -6,6 +6,7 @@ import { MoreDrawer } from './more-drawer';
 import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
+import { UnderwaterAmbience } from './UnderwaterAmbience';
 import { ImpersonationBanner } from '../auth';
 import { DiscordJoinBanner } from '../ui/DiscordJoinBanner';
 import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
@@ -49,6 +50,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="min-h-screen flex flex-col bg-backdrop" style={{ overflowX: 'clip' }}>
             <CurrentUserAvatarSync />
             {showSpaceEffects && <SpaceEffects />}
+            {showSpaceEffects && <UnderwaterAmbience />}
             <ImpersonationBanner />
             <DiscordJoinBanner />
             <Header onMenuClick={openMoreDrawer} />

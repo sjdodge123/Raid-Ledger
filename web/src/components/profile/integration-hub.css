@@ -114,10 +114,15 @@
    Light Theme Overrides
    ============================================ */
 
-/* Hide space background in light mode */
-[data-scheme="light"] .profile-page__nebula,
-[data-scheme="light"] .profile-page__stars {
+/* Profile CSS stars/nebula only visible on space theme */
+.profile-page__nebula,
+.profile-page__stars {
     display: none;
+}
+
+[data-scheme="space"] .profile-page__nebula,
+[data-scheme="space"] .profile-page__stars {
+    display: block;
 }
 
 [data-scheme="light"] .avatar-selector-option {

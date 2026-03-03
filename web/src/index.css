@@ -119,6 +119,37 @@ html {
     --gt-proximity-line: 152, 152, 200;
 }
 
+/* Underwater theme overrides (ROK-296) */
+[data-scheme="underwater"] {
+    --color-backdrop: #091424;
+    --color-surface: #0c1b2f;
+    --color-panel: #11233b;
+    --color-overlay: #172e48;
+    --color-faint: #2a4a60;
+    --color-dim: #3d6480;
+    --color-muted: #6b8fa8;
+    --color-secondary: #9ab8cc;
+    --color-foreground: #c8dce8;
+    --color-edge: #2a4535;
+    --color-edge-strong: #3a5a48;
+    --color-edge-subtle: #1e3328;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(20, 40, 64, 0.7);
+    --gt-widget-border: rgba(42, 69, 53, 0.6);
+    --gt-split-bg: rgba(20, 40, 64, 0.8);
+    --gt-past-highlight: rgba(20, 40, 64, 0.3);
+    --gt-hover-glow: rgba(107, 143, 168, 0.2);
+    --gt-proximity-line: 107, 143, 168;
+
+    /* Nautical accent tokens */
+    --uw-bioluminescent: #22d3a0;
+    --uw-bioluminescent-bright: #2eedb5;
+    --uw-coral-red: #e04848;
+    --uw-lantern-brass: #d4a843;
+    --uw-wood-highlight: rgba(139, 105, 60, 0.15);
+}
+
 /* ============================================
    UX Design System - Raid Ledger
    Based on ux-design-specification.md
@@ -291,6 +322,10 @@ html[data-scheme="light"] {
 }
 
 html[data-scheme="space"] {
+    color-scheme: dark;
+}
+
+html[data-scheme="underwater"] {
     color-scheme: dark;
 }
 
@@ -674,6 +709,182 @@ body {
 
 [data-scheme="space"] ::-webkit-scrollbar-thumb:hover {
     background: rgba(139, 92, 246, 0.5);
+}
+
+/* ============================================
+   Underwater Theme — Deep Sea Nautical (ROK-296)
+   Dark sub-theme with waterlogged wood borders,
+   bioluminescent accents, and a moody blue-green palette.
+   ============================================ */
+
+/* Nautical wood-grain borders — cards (bg-surface + border + rounded) */
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 1px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg:hover,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border:hover {
+    border-color: var(--color-edge-strong);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 4px rgba(34, 211, 160, 0.12);
+}
+
+/* Premium/integration cards (bg-panel + rounded-xl) */
+[data-scheme="underwater"] .bg-panel\/50.rounded-xl.border,
+[data-scheme="underwater"] .bg-panel.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 2px rgba(34, 211, 160, 0.1);
+}
+
+/* Modals — bg-surface + rounded-xl + border + shadow */
+[data-scheme="underwater"] .bg-surface.rounded-xl.border-edge,
+[data-scheme="underwater"] .bg-surface.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 6px rgba(34, 211, 160, 0.08),
+        0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Modal header/footer dividers — wood grain */
+[data-scheme="underwater"] .border-b.border-edge,
+[data-scheme="underwater"] .border-t.border-edge {
+    border-color: var(--color-edge);
+}
+
+/* Glass cards */
+[data-scheme="underwater"] .glass-card {
+    border: 2px solid var(--color-edge);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 1px rgba(34, 211, 160, 0.1);
+}
+
+/* Sidebar nav items — subtle wood border on active */
+[data-scheme="underwater"] .bg-emerald-500\/10.rounded-lg {
+    border: 1px solid var(--color-edge);
+    box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
+}
+
+/* General: any bordered surface/panel gets the wood highlight */
+[data-scheme="underwater"] .bg-surface.border,
+[data-scheme="underwater"] .bg-panel.border {
+    border-color: var(--color-edge);
+    box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
+}
+
+/* BottomSheet — wood border on top edge */
+[data-scheme="underwater"] .bg-surface.rounded-t-2xl {
+    border-top: 2px solid var(--color-edge);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 -4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* Rounded cards: subtle bioluminescent outer glow */
+[data-scheme="underwater"] .rounded-xl.border {
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 2px rgba(34, 211, 160, 0.1),
+        0 0 6px rgba(34, 211, 160, 0.04);
+}
+
+/* Primary buttons: bioluminescent teal glow */
+[data-scheme="underwater"] .bg-emerald-600 {
+    box-shadow:
+        0 0 12px rgba(34, 211, 160, 0.25),
+        0 0 20px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .bg-emerald-600:hover {
+    box-shadow:
+        0 0 16px rgba(34, 211, 160, 0.4),
+        0 0 30px rgba(34, 211, 160, 0.12);
+}
+
+/* Indigo buttons: deep sea purple accent */
+[data-scheme="underwater"] .bg-indigo-600 {
+    box-shadow:
+        0 0 12px rgba(99, 102, 241, 0.2),
+        0 0 20px rgba(34, 211, 160, 0.06);
+}
+
+[data-scheme="underwater"] .bg-indigo-600:hover {
+    box-shadow:
+        0 0 16px rgba(99, 102, 241, 0.35),
+        0 0 30px rgba(34, 211, 160, 0.1);
+}
+
+/* Header: waterlogged timber bottom border */
+[data-scheme="underwater"] header {
+    border-bottom-color: var(--color-edge);
+    box-shadow: 0 1px 6px rgba(34, 211, 160, 0.06);
+}
+
+/* Form inputs: bioluminescent focus glow */
+[data-scheme="underwater"] input:focus,
+[data-scheme="underwater"] select:focus,
+[data-scheme="underwater"] textarea:focus {
+    box-shadow:
+        0 0 0 2px rgba(34, 211, 160, 0.2),
+        0 0 8px rgba(34, 211, 160, 0.08);
+}
+
+/* Dividers */
+[data-scheme="underwater"] hr,
+[data-scheme="underwater"] .divide-edge> :not(:first-child) {
+    border-color: rgba(42, 69, 53, 0.4);
+}
+
+/* Links: subtle teal glow on hover */
+[data-scheme="underwater"] a:hover {
+    text-shadow: 0 0 6px rgba(34, 211, 160, 0.2);
+}
+
+/* Glow overrides — bioluminescent teal */
+[data-scheme="underwater"] .glow-emerald {
+    box-shadow: 0 0 20px rgba(34, 211, 160, 0.3), 0 0 40px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .glow-emerald:hover {
+    box-shadow: 0 0 30px rgba(34, 211, 160, 0.45), 0 0 50px rgba(34, 211, 160, 0.12);
+}
+
+[data-scheme="underwater"] .glow-indigo {
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.25), 0 0 40px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .glow-indigo:hover {
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.4), 0 0 50px rgba(34, 211, 160, 0.12);
+}
+
+/* Scrollbar — waterlogged wood track */
+[data-scheme="underwater"] ::-webkit-scrollbar {
+    width: 6px;
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-track {
+    background: rgba(12, 26, 46, 0.5);
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-thumb {
+    background: rgba(42, 69, 53, 0.5);
+    border-radius: 3px;
+}
+
+[data-scheme="underwater"] ::-webkit-scrollbar-thumb:hover {
+    background: rgba(34, 211, 160, 0.4);
 }
 
 /* ============================================

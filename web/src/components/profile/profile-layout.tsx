@@ -52,9 +52,6 @@ export function ProfileLayout() {
 
     return (
         <div className="profile-page relative md:min-h-screen px-4">
-            <div className="profile-page__nebula" />
-            <div className="profile-page__stars" />
-
             <div className="relative z-10 max-w-6xl mx-auto pt-6">
                 <h1 className="text-lg font-bold text-foreground mb-6 md:hidden">My Profile</h1>
 

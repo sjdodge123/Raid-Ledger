@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useThemeStore } from '../../stores/theme-store';
+import '../profile/integration-hub.css';
 
 interface Star {
     x: number;
@@ -50,6 +51,17 @@ export function SpaceEffects() {
     const nextShootingRef = useRef<number>(0);
 
     const isSpace = resolved.id === 'space';
+
+    // Immediately clear canvas when switching away from space
+    useEffect(() => {
+        if (!isSpace) {
+            const canvas = canvasRef.current;
+            if (canvas) {
+                canvas.width = 0;
+                canvas.height = 0;
+            }
+        }
+    }, [isSpace]);
 
     useEffect(() => {
         if (!isSpace) return;
@@ -164,16 +176,23 @@ export function SpaceEffects() {
         return () => {
             cancelAnimationFrame(animRef.current);
             window.removeEventListener('resize', resize);
+            // Clear the canvas so no stale frame persists during unmount
+            if (canvas) {
+                const c = canvas.getContext('2d');
+                if (c) c.clearRect(0, 0, canvas.width, canvas.height);
+            }
         };
     }, [isSpace]);
 
-    if (!isSpace) return null;
-
     return (
-        <canvas
-            ref={canvasRef}
-            className="fixed inset-0 w-full h-full pointer-events-none z-0 opacity-60"
-            aria-hidden="true"
-        />
+        <>
+            {isSpace && <div className="profile-page__nebula" aria-hidden="true" />}
+            {isSpace && <div className="profile-page__stars" aria-hidden="true" />}
+            <canvas
+                ref={canvasRef}
+                className={`fixed inset-0 w-full h-full pointer-events-none z-0 opacity-60${isSpace ? '' : ' hidden'}`}
+                aria-hidden="true"
+            />
+        </>
     );
 }
