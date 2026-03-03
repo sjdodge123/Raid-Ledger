@@ -43,7 +43,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   subscribed_game: { inApp: true, push: true, discord: true },
   achievement_unlocked: { inApp: true, push: false, discord: false },
   level_up: { inApp: true, push: false, discord: false },
-  missed_event_nudge: { inApp: true, push: false, discord: false },
+  missed_event_nudge: { inApp: true, push: true, discord: true },
   event_rescheduled: { inApp: true, push: true, discord: true },
   bench_promoted: { inApp: true, push: true, discord: true },
   event_cancelled: { inApp: true, push: true, discord: true },

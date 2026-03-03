@@ -78,6 +78,10 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
     description:
       'Auto-extends scheduled events when voice channel activity persists past the end time every 60 seconds',
   },
+  LiveNoShowService_checkNoShows: {
+    description:
+      'Detects no-show attendees during live events and sends reminder DMs (5 min) and creator escalation (15 min) every 60 seconds',
+  },
 };
 
 /**
