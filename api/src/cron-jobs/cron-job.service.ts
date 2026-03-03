@@ -39,9 +39,6 @@ const CORE_JOB_METADATA: Record<string, { description: string }> = {
     description:
       'Checks for events within reminder windows and sends DM reminders every 60 seconds',
   },
-  EventReminderService_handleDayOfReminders: {
-    description: 'Sends day-of event reminders every 15 minutes',
-  },
   RelayService_handleHeartbeat: {
     description: 'Sends heartbeat to the Raid Ledger relay hub every hour',
   },

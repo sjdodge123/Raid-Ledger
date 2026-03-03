@@ -2,6 +2,7 @@ import { useMemo, useCallback, useState, type ReactNode } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
+import { toast } from '../lib/toast';
 import { getAuthToken } from './use-auth';
 import {
     WantToPlayContext,
@@ -110,6 +111,7 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
             }
             // Also rollback the individual query cache
             queryClient.invalidateQueries({ queryKey: ['games', 'interest', vars.gameId] });
+            toast.error('Failed to update game interest');
         },
         onSettled: (_data, _err, vars) => {
             setTogglingIds((prev) => {

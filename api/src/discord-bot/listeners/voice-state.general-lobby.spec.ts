@@ -386,6 +386,135 @@ describe('VoiceStateListener — general lobby (ROK-515)', () => {
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
     });
 
+    // ─── ROK-651: Presence re-check tests ──────────────────────────────────
+
+    it('schedules a delayed re-check when no game detected, and joins event if game appears', async () => {
+      // First detection (voice join): no game
+      // Re-check (7s later): game detected
+      // Re-enter handleGeneralLobbyJoin: game detected again (3rd call)
+      mockPresenceDetector.detectGameForMember
+        .mockResolvedValueOnce({
+          gameId: null,
+          gameName: 'Untitled Gaming Session',
+        })
+        .mockResolvedValueOnce({
+          gameId: 42,
+          gameName: 'World of Warcraft Classic',
+        })
+        .mockResolvedValueOnce({
+          gameId: 42,
+          gameName: 'World of Warcraft Classic',
+        });
+
+      // Active event exists (so the re-check join path works)
+      mockAdHocEventService.getActiveState.mockReturnValue({
+        eventId: 100,
+        memberSet: new Set(['u-existing']),
+      });
+
+      voiceHandler!(
+        { channelId: null, id: 'u-recheck' },
+        {
+          channelId: 'gl-ch',
+          id: 'u-recheck',
+          member: {
+            id: 'u-recheck',
+            displayName: 'Rechecked',
+            user: { username: 'Rechecked', avatar: null },
+            presence: null,
+          },
+        },
+      );
+
+      // After debounce (2s) but before re-check (7s) — no join yet
+      await jest.advanceTimersByTimeAsync(2100);
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      // After re-check fires (7s from debounce completion)
+      await jest.advanceTimersByTimeAsync(7100);
+
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalledWith(
+        'bind-gl',
+        expect.objectContaining({ discordUserId: 'u-recheck' }),
+        expect.any(Object),
+        42,
+        'World of Warcraft Classic',
+      );
+    });
+
+    it('does NOT join event on re-check if game is still null', async () => {
+      // Both initial and re-check: no game
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+
+      voiceHandler!(
+        { channelId: null, id: 'u-still-null' },
+        {
+          channelId: 'gl-ch',
+          id: 'u-still-null',
+          member: {
+            id: 'u-still-null',
+            displayName: 'StillNull',
+            user: { username: 'StillNull', avatar: null },
+            presence: null,
+          },
+        },
+      );
+
+      // Advance past debounce + re-check
+      await jest.advanceTimersByTimeAsync(2100 + 7100);
+
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+
+    it('cancels pending re-check when user leaves the channel', async () => {
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+
+      // User joins
+      voiceHandler!(
+        { channelId: null, id: 'u-leaves' },
+        {
+          channelId: 'gl-ch',
+          id: 'u-leaves',
+          member: {
+            id: 'u-leaves',
+            displayName: 'Leaver',
+            user: { username: 'Leaver', avatar: null },
+            presence: null,
+          },
+        },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // User leaves before re-check fires
+      voiceHandler!(
+        {
+          channelId: 'gl-ch',
+          id: 'u-leaves',
+        },
+        { channelId: null, id: 'u-leaves', member: null },
+      );
+
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // Now advance past the re-check window
+      mockPresenceDetector.detectGameForMember.mockResolvedValueOnce({
+        gameId: 42,
+        gameName: 'WoW Classic',
+      });
+
+      await jest.advanceTimersByTimeAsync(7100);
+
+      // Re-check should have been cancelled — no join
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+
     it('creates "Just Chatting" event when allowJustChatting is enabled and no game detected', async () => {
       // Reconfigure bindings with allowJustChatting: true
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([

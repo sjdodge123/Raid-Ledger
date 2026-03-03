@@ -24,7 +24,7 @@ export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {
 
   async process(
     job: Job<IgdbSyncJobData>,
-  ): Promise<{ refreshed: number; discovered: number }> {
+  ): Promise<{ refreshed: number; discovered: number; backfilled: number }> {
     this.logger.log(`Starting IGDB sync (trigger: ${job.data.trigger})`);
     await job.updateProgress(0);
 
@@ -32,7 +32,7 @@ export class IgdbSyncProcessor extends WorkerHost implements OnModuleInit {
 
     await job.updateProgress(100);
     this.logger.log(
-      `IGDB sync complete: refreshed ${result.refreshed}, discovered ${result.discovered}`,
+      `IGDB sync complete: refreshed ${result.refreshed}, discovered ${result.discovered}, backfilled ${result.backfilled}`,
     );
 
     return result;

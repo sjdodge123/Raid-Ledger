@@ -6,7 +6,6 @@ import { useTimezoneStore } from '../../stores/timezone-store';
 /** Known display titles for core cron jobs */
 const JOB_TITLES: Record<string, string> = {
     IgdbService_handleScheduledSync: 'IGDB Game Sync',
-    EventReminderService_handleDayOfReminders: 'Day-of Event Reminders',
     EventReminderService_handleStartingSoonReminders: 'Starting Soon Reminders',
     RelayService_handleHeartbeat: 'Relay Heartbeat',
     VersionCheckService_handleCron: 'Version Check',
@@ -19,7 +18,6 @@ const JOB_THEMES: Record<string, string> = {
     GameActivityService_dailyRollup: 'Data Sync',
     // Notifications
     EventReminderService_handleReminders: 'Notifications',
-    EventReminderService_handleDayOfReminders: 'Notifications',
     EventReminderService_handleStartingSoonReminders: 'Notifications',
     EmbedSchedulerService_handleScheduledEmbeds: 'Notifications',
     PostEventReminderService_handlePostEventReminders: 'Notifications',

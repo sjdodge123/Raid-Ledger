@@ -260,6 +260,14 @@ export class PresenceGameDetectorService implements OnModuleInit {
     );
 
     if (!playingActivity) {
+      const activitySummary = member.presence?.activities?.length
+        ? member.presence.activities
+            .map((a) => `${a.type}:${a.name}`)
+            .join(', ')
+        : 'no-presence';
+      this.logger.debug(
+        `No Playing activity for member ${member.id} (activities: [${activitySummary}])`,
+      );
       return { gameId: null, gameName: 'Untitled Gaming Session' };
     }
 
@@ -347,6 +355,9 @@ export class PresenceGameDetectorService implements OnModuleInit {
     }
 
     // 5. No match — use activity name as-is with null gameId
+    this.logger.warn(
+      `Game detection fell through to null for activity "${activityName}" — no mapping, exact, ILIKE, or trigram match found`,
+    );
     this.cacheGame(activityName, null, activityName);
     return { gameId: null, gameName: activityName };
   }

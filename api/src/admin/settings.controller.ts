@@ -593,12 +593,13 @@ export class AdminSettingsController {
     message: string;
     refreshed: number;
     discovered: number;
+    backfilled: number;
   }> {
     try {
       const result = await this.igdbService.syncAllGames();
       return {
         success: true,
-        message: `Sync complete: ${result.refreshed} refreshed, ${result.discovered} discovered`,
+        message: `Sync complete: ${result.refreshed} refreshed, ${result.discovered} discovered, ${result.backfilled} backfilled`,
         ...result,
       };
     } catch (error) {
@@ -609,6 +610,7 @@ export class AdminSettingsController {
           error instanceof Error ? error.message : 'Sync failed unexpectedly',
         refreshed: 0,
         discovered: 0,
+        backfilled: 0,
       };
     }
   }
