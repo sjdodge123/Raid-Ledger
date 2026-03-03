@@ -7,6 +7,7 @@ import {
 } from 'discord.js';
 import {
   EMBED_COLORS,
+  RESCHEDULE_BUTTON_IDS,
   ROACH_OUT_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
@@ -197,20 +198,37 @@ export class DiscordNotificationEmbedService {
   private buildExtraRows(
     input: NotificationEmbedInput,
   ): ActionRowBuilder<ButtonBuilder>[] | undefined {
-    if (input.type !== 'event_reminder') return undefined;
-
     const eventId = input.payload?.eventId;
     if (eventId == null) return undefined;
 
-    const roachOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${toStr(eventId)}`)
-        .setLabel('Roach Out')
-        .setStyle(ButtonStyle.Danger)
-        .setEmoji('\uD83E\uDEB3'),
-    );
+    if (input.type === 'event_reminder') {
+      const roachOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${ROACH_OUT_BUTTON_IDS.ROACH_OUT}:${toStr(eventId)}`)
+          .setLabel('Roach Out')
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji('\uD83E\uDEB3'),
+      );
 
-    return [roachOutRow];
+      return [roachOutRow];
+    }
+
+    if (input.type === 'event_rescheduled') {
+      const rescheduleRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${RESCHEDULE_BUTTON_IDS.CONFIRM}:${toStr(eventId)}`)
+          .setLabel('Confirm')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`${RESCHEDULE_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
+          .setLabel("Can't Make It")
+          .setStyle(ButtonStyle.Danger),
+      );
+
+      return [rescheduleRow];
+    }
+
+    return undefined;
   }
 
   private getColorForType(type: NotificationType): number {

@@ -142,6 +142,17 @@ export const DEPARTURE_PROMOTE_BUTTON_IDS = {
   DISMISS: 'depart_dismiss',
 } as const;
 
+/**
+ * Custom IDs for reschedule DM confirm/decline interaction buttons (ROK-537).
+ * Format: `{action}:{eventId}` — e.g. `reschedule_confirm:42`
+ */
+export const RESCHEDULE_BUTTON_IDS = {
+  CONFIRM: 'reschedule_confirm',
+  DECLINE: 'reschedule_decline',
+  CHARACTER_SELECT: 'reschedule_char_select',
+  ROLE_SELECT: 'reschedule_role_select',
+} as const;
+
 export const SIGNUP_BUTTON_IDS = {
   SIGNUP: 'signup',
   TENTATIVE: 'tentative',

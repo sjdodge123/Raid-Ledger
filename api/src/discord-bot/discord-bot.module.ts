@@ -26,6 +26,7 @@ import { DiscordEventListener } from './listeners/event.listener';
 import { DiscordSyncListener } from './listeners/discord-sync.listener';
 import { InteractionListener } from './listeners/interaction.listener';
 import { SignupInteractionListener } from './listeners/signup-interaction.listener';
+import { RescheduleResponseListener } from './listeners/reschedule-response.listener';
 import { RoachOutInteractionListener } from './listeners/roach-out-interaction.listener';
 import { DeparturePromoteListener } from './listeners/departure-promote.listener';
 import { PugInviteListener } from './listeners/pug-invite.listener';
@@ -108,6 +109,7 @@ import { PlayingCommand } from './commands/playing.command';
     DepartureGraceService,
     InteractionListener,
     SignupInteractionListener,
+    RescheduleResponseListener,
     RoachOutInteractionListener,
     DeparturePromoteListener,
     PugInviteListener,
