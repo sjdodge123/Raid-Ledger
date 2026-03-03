@@ -50,7 +50,7 @@ describe('AdminSettingsController — ROK-231: game hide/ban and adult filter', 
       }),
       syncAllGames: jest
         .fn()
-        .mockResolvedValue({ refreshed: 0, discovered: 0 }),
+        .mockResolvedValue({ refreshed: 0, discovered: 0, backfilled: 0 }),
       database: {
         select: jest.fn().mockReturnValue({
           from: jest.fn().mockReturnValue({

@@ -17,7 +17,7 @@ describe('IgdbSyncProcessor', () => {
     mockIgdbService = {
       syncAllGames: jest
         .fn()
-        .mockResolvedValue({ refreshed: 10, discovered: 50 }),
+        .mockResolvedValue({ refreshed: 10, discovered: 50, backfilled: 0 }),
     };
 
     mockQueue = {
@@ -65,7 +65,7 @@ describe('IgdbSyncProcessor', () => {
     expect(mockUpdateProgress).toHaveBeenCalledWith(0);
     expect(mockIgdbService.syncAllGames).toHaveBeenCalled();
     expect(mockUpdateProgress).toHaveBeenCalledWith(100);
-    expect(result).toEqual({ refreshed: 10, discovered: 50 });
+    expect(result).toEqual({ refreshed: 10, discovered: 50, backfilled: 0 });
   });
 
   it('should propagate errors from syncAllGames', async () => {
