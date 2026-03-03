@@ -54,10 +54,41 @@ export interface ContentProvider {
   ): Promise<ExternalContentInstanceDetail | null>;
 }
 
-/** Enriches event data with game-specific information (no core consumer yet) */
+/**
+ * @deprecated Use {@link DataEnricher} instead (ROK-269).
+ * Enriches event data with game-specific information (no core consumer yet).
+ */
 export interface EventEnricher {
   readonly gameSlugs: string[];
   enrichEvent(event: Record<string, unknown>): Promise<Record<string, unknown>>;
+}
+
+/**
+ * Extension point for plugins that fetch supplementary character or event data
+ * from third-party APIs (Raider.IO M+ scores, WarcraftLogs parses, etc.).
+ * Unlike CharacterSyncAdapter (which owns the import/refresh lifecycle),
+ * enrichers layer additional data onto existing characters/events.
+ *
+ * Results are cached in the `enrichments` table — enrichers do NOT run on page load.
+ * They execute via BullMQ background jobs (scheduled or on manual refresh).
+ *
+ * Multiple enrichers can register for the same game slug (ROK-269).
+ */
+export interface DataEnricher {
+  /** Unique enricher identifier, e.g. 'raider-io', 'warcraftlogs' */
+  readonly key: string;
+  /** Which games this enricher applies to */
+  readonly gameSlugs: string[];
+  /** Optional refresh interval in milliseconds (defaults to 24h) */
+  readonly refreshIntervalMs?: number;
+  /** Enrich a character with supplementary data */
+  enrichCharacter?(
+    character: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
+  /** Enrich an event with supplementary data */
+  enrichEvent?(
+    event: Record<string, unknown>,
+  ): Promise<Record<string, unknown>>;
 }
 
 /** Formalizes plugin settings management */
@@ -94,6 +125,7 @@ export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
   CONTENT_PROVIDER: 'content-provider',
   EVENT_ENRICHER: 'event-enricher',
+  DATA_ENRICHER: 'data-enricher',
   SETTINGS_PROVIDER: 'settings-provider',
   CRON_REGISTRAR: 'cron-registrar',
   AUTH_PROVIDER: 'auth-provider',

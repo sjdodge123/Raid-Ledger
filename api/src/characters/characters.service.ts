@@ -32,6 +32,7 @@ import {
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
+import { EnrichmentsService } from '../enrichments/enrichments.service';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -45,6 +46,7 @@ export class CharactersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly pluginRegistry: PluginRegistryService,
+    private readonly enrichmentsService: EnrichmentsService,
   ) {}
 
   /**
@@ -720,12 +722,45 @@ export class CharactersService {
     this.logger.log(
       `User ${userId} refreshed character ${characterId} from external source`,
     );
+
+    // Trigger enrichment jobs for the refreshed character (ROK-269)
+    this.enqueueCharacterEnrichmentsBackground(characterId, character.gameId);
+
     return this.mapToDto(updated);
+  }
+
+  /**
+   * Fire-and-forget: look up the game slug and enqueue enrichment jobs.
+   * Errors are logged but never bubble to the caller.
+   */
+  private enqueueCharacterEnrichmentsBackground(
+    characterId: string,
+    gameId: number,
+  ): void {
+    this.db
+      .select({ slug: schema.games.slug })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .limit(1)
+      .then(([game]) => {
+        if (game) {
+          return this.enrichmentsService.enqueueCharacterEnrichments(
+            characterId,
+            game.slug,
+          );
+        }
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to enqueue enrichments for character ${characterId}: ${err}`,
+        );
+      });
   }
 
   /**
    * Get a single character by ID (public — no ownership check).
    * Used for the character detail page.
+   * Attaches enrichment data from the enrichments table (ROK-269).
    */
   async findOnePublic(characterId: string): Promise<CharacterDto> {
     const [character] = await this.db
@@ -738,7 +773,20 @@ export class CharactersService {
       throw new NotFoundException(`Character ${characterId} not found`);
     }
 
-    return this.mapToDto(character);
+    const dto = this.mapToDto(character);
+
+    // Attach enrichments (cached data from third-party APIs)
+    const enrichmentRows =
+      await this.enrichmentsService.getEnrichmentsForEntity(
+        'character',
+        characterId,
+      );
+
+    if (enrichmentRows.length > 0) {
+      return { ...dto, enrichments: enrichmentRows };
+    }
+
+    return dto;
   }
 
   /**

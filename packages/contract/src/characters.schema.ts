@@ -96,6 +96,12 @@ export const CharacterSchema = z.object({
     gameVariant: z.string().max(30).nullable(),
     equipment: CharacterEquipmentSchema.nullable(),
     talents: z.unknown().nullable(),
+    /** Cached enrichment data from third-party APIs (ROK-269) */
+    enrichments: z.array(z.object({
+        enricherKey: z.string(),
+        data: z.unknown(),
+        fetchedAt: z.string().datetime(),
+    })).optional(),
     displayOrder: z.number().int(),
     createdAt: z.string().datetime(),
     updatedAt: z.string().datetime(),

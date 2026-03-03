@@ -8,6 +8,7 @@ import {
 import { CharactersService } from './characters.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import { EnrichmentsService } from '../enrichments/enrichments.service';
 
 /**
  * Helper: build a mock tx.select chain that resolves to `rows`.
@@ -183,6 +184,13 @@ describe('CharactersService', () => {
         CharactersService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: PluginRegistryService, useValue: mockPluginRegistry },
+        {
+          provide: EnrichmentsService,
+          useValue: {
+            getEnrichmentsForEntity: jest.fn().mockResolvedValue([]),
+            enqueueCharacterEnrichments: jest.fn().mockResolvedValue(0),
+          },
+        },
       ],
     }).compile();
 
@@ -866,6 +874,143 @@ describe('CharactersService', () => {
 
       // Verify update was called (merge path), not just insert
       expect(mockDb.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('findOnePublic (ROK-269)', () => {
+    let mockEnrichmentsService: {
+      getEnrichmentsForEntity: jest.Mock;
+      enqueueCharacterEnrichments: jest.Mock;
+    };
+
+    beforeEach(async () => {
+      mockEnrichmentsService = {
+        getEnrichmentsForEntity: jest.fn().mockResolvedValue([]),
+        enqueueCharacterEnrichments: jest.fn().mockResolvedValue(0),
+      };
+
+      const module = await Test.createTestingModule({
+        providers: [
+          CharactersService,
+          { provide: DrizzleAsyncProvider, useValue: mockDb },
+          { provide: PluginRegistryService, useValue: mockPluginRegistry },
+          { provide: EnrichmentsService, useValue: mockEnrichmentsService },
+        ],
+      }).compile();
+
+      service = module.get(CharactersService);
+    });
+
+    it('should return character DTO without enrichments when no enrichments exist', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockCharacter]),
+          }),
+        }),
+      });
+      mockEnrichmentsService.getEnrichmentsForEntity.mockResolvedValueOnce([]);
+
+      const result = await service.findOnePublic('char-uuid-1');
+
+      expect(result).toMatchObject({
+        id: 'char-uuid-1',
+        name: 'Thrall',
+      });
+      // enrichments field should NOT be present when there are none
+      expect((result as Record<string, unknown>).enrichments).toBeUndefined();
+    });
+
+    it('should attach enrichments when they exist', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockCharacter]),
+          }),
+        }),
+      });
+
+      const enrichmentData = [
+        {
+          enricherKey: 'raider-io',
+          data: { mythicPlusScore: 2500 },
+          fetchedAt: '2026-03-01T12:00:00.000Z',
+        },
+      ];
+      mockEnrichmentsService.getEnrichmentsForEntity.mockResolvedValueOnce(
+        enrichmentData,
+      );
+
+      const result = await service.findOnePublic('char-uuid-1');
+
+      expect((result as Record<string, unknown>).enrichments).toEqual(
+        enrichmentData,
+      );
+    });
+
+    it('should call getEnrichmentsForEntity with correct entity type and id', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockCharacter]),
+          }),
+        }),
+      });
+
+      await service.findOnePublic('char-uuid-1');
+
+      expect(
+        mockEnrichmentsService.getEnrichmentsForEntity,
+      ).toHaveBeenCalledWith('character', 'char-uuid-1');
+    });
+
+    it('should throw NotFoundException when character is not found', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      await expect(service.findOnePublic('nonexistent-id')).rejects.toThrow(
+        NotFoundException,
+      );
+      // Should not attempt enrichment lookup when character doesn't exist
+      expect(
+        mockEnrichmentsService.getEnrichmentsForEntity,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('should attach multiple enrichments from different enrichers correctly', async () => {
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            limit: jest.fn().mockResolvedValue([mockCharacter]),
+          }),
+        }),
+      });
+
+      const enrichments = [
+        {
+          enricherKey: 'raider-io',
+          data: { score: 3000 },
+          fetchedAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          enricherKey: 'warcraftlogs',
+          data: { bestParse: 99 },
+          fetchedAt: '2026-02-01T00:00:00.000Z',
+        },
+      ];
+      mockEnrichmentsService.getEnrichmentsForEntity.mockResolvedValueOnce(
+        enrichments,
+      );
+
+      const result = await service.findOnePublic('char-uuid-1');
+
+      expect((result as Record<string, unknown>).enrichments).toHaveLength(2);
+      expect((result as Record<string, unknown>).enrichments).toEqual(enrichments);
     });
   });
 });

@@ -21,6 +21,8 @@ export class PluginRegistryService implements OnModuleInit {
   private manifests = new Map<string, PluginManifest>();
   private activeSlugs = new Set<string>();
   private adapters = new Map<string, Map<string, unknown>>();
+  /** Multi-adapter registry: extension point -> game slug -> adapter[] */
+  private multiAdapters = new Map<string, Map<string, unknown[]>>();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -265,8 +267,47 @@ export class PluginRegistryService implements OnModuleInit {
     return new Map(slugMap) as Map<string, T>;
   }
 
+  /**
+   * Register a multi-adapter: multiple adapters can register for the same
+   * extension point + game slug (e.g., multiple DataEnrichers for 'world-of-warcraft').
+   */
+  registerMultiAdapter<T>(
+    extensionPoint: string,
+    gameSlug: string,
+    adapter: T,
+  ): void {
+    let slugMap = this.multiAdapters.get(extensionPoint);
+    if (!slugMap) {
+      slugMap = new Map<string, unknown[]>();
+      this.multiAdapters.set(extensionPoint, slugMap);
+    }
+    let adapters = slugMap.get(gameSlug);
+    if (!adapters) {
+      adapters = [];
+      slugMap.set(gameSlug, adapters);
+    }
+    adapters.push(adapter);
+    this.logger.debug(
+      `Registered multi-adapter: ${extensionPoint} for game slug "${gameSlug}" (${adapters.length} total)`,
+    );
+  }
+
+  /**
+   * Get all multi-adapters for an extension point and game slug.
+   */
+  getMultiAdapters<T>(extensionPoint: string, gameSlug: string): T[] {
+    const slugMap = this.multiAdapters.get(extensionPoint);
+    if (!slugMap) return [];
+    return (slugMap.get(gameSlug) ?? []) as T[];
+  }
+
   removeAdaptersForPlugin(gameSlugs: string[] = []): void {
     for (const [, slugMap] of this.adapters) {
+      for (const slug of gameSlugs) {
+        slugMap.delete(slug);
+      }
+    }
+    for (const [, slugMap] of this.multiAdapters) {
       for (const slug of gameSlugs) {
         slugMap.delete(slug);
       }
