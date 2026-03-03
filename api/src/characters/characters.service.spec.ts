@@ -889,12 +889,6 @@ describe('CharactersService', () => {
         enqueueCharacterEnrichments: jest.fn().mockResolvedValue(0),
       };
 
-      const { Test } = await import('@nestjs/testing');
-      const { DrizzleAsyncProvider } = await import('../drizzle/drizzle.module');
-      const { PluginRegistryService } = await import('../plugins/plugin-host/plugin-registry.service');
-      const { EnrichmentsService } = await import('../enrichments/enrichments.service');
-      const { CharactersService } = await import('./characters.service');
-
       const module = await Test.createTestingModule({
         providers: [
           CharactersService,
