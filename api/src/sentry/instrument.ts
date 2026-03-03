@@ -18,9 +18,13 @@ if (!telemetryDisabled) {
     environment: isProduction ? 'production' : 'development',
     tracesSampleRate: isProduction ? 0.1 : 1.0,
     beforeSend(event) {
-      // Don't report rate-limit (ThrottlerException) events to Sentry
       const exceptionType = event.exception?.values?.[0]?.type;
+      // Don't report rate-limit (ThrottlerException) events to Sentry
       if (exceptionType === 'ThrottlerException') {
+        return null;
+      }
+      // Don't report transient Discord OAuth failures (ROK-668)
+      if (exceptionType === 'InternalOAuthError') {
         return null;
       }
       return event;

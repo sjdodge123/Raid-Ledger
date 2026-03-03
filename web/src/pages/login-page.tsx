@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { API_BASE_URL } from '../lib/config';
@@ -25,6 +25,19 @@ export function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [showLocalLogin, setShowLocalLogin] = useState(false);
+
+    const [searchParams, setSearchParams] = useSearchParams();
+
+    // Show toast for OAuth errors (ROK-668: redirect from failed Discord callback)
+    useEffect(() => {
+        const oauthError = searchParams.get('error');
+        if (oauthError === 'oauth_failed') {
+            toast.error('Login failed. Please try again.');
+            // Clean up the error param from the URL
+            searchParams.delete('error');
+            setSearchParams(searchParams, { replace: true });
+        }
+    }, [searchParams, setSearchParams]);
 
     const isFirstRun = systemStatus?.isFirstRun ?? false;
     const authProviders: LoginMethodDto[] = systemStatus?.authProviders ?? [];

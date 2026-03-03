@@ -9,6 +9,7 @@ import {
   Logger,
   Optional,
   Inject,
+  ExecutionContext,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from '../../auth/auth.service';
@@ -26,8 +27,44 @@ import type Redis from 'ioredis';
 import type { Response, Request } from 'express';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 
-// Uses the DiscordAuthStrategy's stored _callbackURL from database settings.
-class DiscordAuthGuard extends AuthGuard('discord') {}
+/**
+ * Custom DiscordAuthGuard that catches OAuth errors (e.g. InternalOAuthError
+ * from passport-oauth2) and redirects to the login page instead of returning
+ * a raw JSON 401 response. (ROK-668)
+ */
+class DiscordAuthGuard extends AuthGuard('discord') {
+  private readonly guardLogger = new Logger('DiscordAuthGuard');
+
+  handleRequest<TUser>(
+    err: Error | null,
+    user: TUser | false,
+    info: unknown,
+    context: ExecutionContext,
+  ): TUser {
+    if (err || !user) {
+      const errorMessage = err?.message || 'Unknown OAuth error';
+      const errorName = err?.constructor?.name || 'UnknownError';
+      this.guardLogger.warn(
+        `Discord OAuth callback failed: [${errorName}] ${errorMessage}`,
+      );
+
+      const httpCtx = context.switchToHttp();
+      const req = httpCtx.getRequest<Request>();
+      const res = httpCtx.getResponse<Response>();
+
+      const clientUrl =
+        process.env.CLIENT_URL ||
+        `${(req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || req.protocol || 'http'}://${req.headers.host || 'localhost'}`;
+
+      res.redirect(`${clientUrl}/login?error=oauth_failed`);
+
+      // Return a dummy value — the redirect has already been sent so the
+      // route handler won't execute, but TypeScript requires a return.
+      return undefined as unknown as TUser;
+    }
+    return user;
+  }
+}
 
 import type { UserRole } from '@raid-ledger/contract';
 
@@ -146,6 +183,9 @@ export class DiscordAuthController {
     @Req() req: RequestWithUser,
     @Res() res: Response,
   ) {
+    // Guard already redirected on OAuth failure (ROK-668)
+    if (res.headersSent) return;
+
     // User is validated and attached to req.user by DiscordStrategy
     const { access_token } = this.authService.login(req.user);
 
