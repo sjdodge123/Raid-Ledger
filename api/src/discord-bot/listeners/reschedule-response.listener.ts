@@ -279,6 +279,10 @@ export class RescheduleResponseListener {
 
   // ─── Tentative flow ────────────────────────────────────────────────
 
+  /**
+   * Handle Tentative button — mirrors Confirm flow (character/role select)
+   * but sets final status to 'tentative' instead of 'signed_up'.
+   */
   private async handleTentative(
     interaction: ButtonInteraction,
     eventId: number,
@@ -306,28 +310,127 @@ export class RescheduleResponseListener {
       return;
     }
 
-    // Set status to tentative
-    await this.signupsService.updateStatus(
-      eventId,
-      existingSignup.discordUserId
-        ? { discordUserId: existingSignup.discordUserId }
-        : { userId: existingSignup.user.id },
-      { status: 'tentative' },
-    );
+    // Check if user has a linked RL account
+    const [linkedUser] = await this.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.discordId, interaction.user.id))
+      .limit(1);
 
+    if (linkedUser) {
+      await this.handleLinkedTentative(interaction, event, linkedUser);
+    } else {
+      await this.handleUnlinkedTentative(interaction, event);
+    }
+  }
+
+  private async handleLinkedTentative(
+    interaction: ButtonInteraction,
+    event: EventRow,
+    linkedUser: { id: number },
+  ): Promise<void> {
+    if (event.gameId) {
+      const [game] = await this.db
+        .select()
+        .from(schema.games)
+        .where(eq(schema.games.id, event.gameId))
+        .limit(1);
+
+      if (game) {
+        const characterList = await this.charactersService.findAllForUser(
+          linkedUser.id,
+          event.gameId,
+        );
+        const characters = characterList.data;
+        const slotConfig = event.slotConfig as Record<string, unknown> | null;
+
+        if (slotConfig?.type === 'mmo' && characters.length >= 1) {
+          await showCharacterSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+            eventId: event.id,
+            eventTitle: event.title,
+            characters,
+            emojiService: this.emojiService,
+            customIdSuffix: 'tentative',
+          });
+          return;
+        }
+
+        if (characters.length > 1) {
+          await showCharacterSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+            eventId: event.id,
+            eventTitle: event.title,
+            characters,
+            emojiService: this.emojiService,
+            customIdSuffix: 'tentative',
+          });
+          return;
+        }
+
+        if (characters.length === 1) {
+          const char = characters[0];
+          await this.reconfirmSignup(interaction, event, linkedUser.id, {
+            characterId: char.id,
+            signupStatus: 'tentative',
+          });
+          await interaction.editReply({
+            content: `You're marked as **tentative** for **${event.title}** with **${char.name}**.`,
+          });
+          await this.editDmEmbed(interaction, 'tentative');
+          await this.embedSyncQueue.enqueue(event.id, 'reschedule-tentative');
+          return;
+        }
+
+        if (slotConfig?.type === 'mmo') {
+          await showRoleSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+            eventId: event.id,
+            emojiService: this.emojiService,
+            characterVerb: 'Tentative as',
+            customIdSuffix: 'tentative',
+          });
+          return;
+        }
+      }
+    }
+
+    // No game or no characters — set tentative immediately
+    await this.reconfirmSignup(interaction, event, linkedUser.id, {
+      signupStatus: 'tentative',
+    });
     await interaction.editReply({
       content: `You're marked as **tentative** for **${event.title}**.`,
     });
-
     await this.editDmEmbed(interaction, 'tentative');
-    await this.embedSyncQueue.enqueue(eventId, 'reschedule-tentative');
+    await this.embedSyncQueue.enqueue(event.id, 'reschedule-tentative');
+  }
 
-    this.logger.log(
-      'Discord user %s marked tentative for rescheduled event %d (%s)',
-      interaction.user.id,
-      eventId,
-      event.title,
-    );
+  private async handleUnlinkedTentative(
+    interaction: ButtonInteraction,
+    event: EventRow,
+  ): Promise<void> {
+    const slotConfig = event.slotConfig as Record<string, unknown> | null;
+    if (slotConfig?.type === 'mmo') {
+      await showRoleSelect(interaction, {
+        customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+        eventId: event.id,
+        emojiService: this.emojiService,
+        characterVerb: 'Tentative as',
+        customIdSuffix: 'tentative',
+      });
+      return;
+    }
+
+    // Non-MMO: set tentative immediately
+    await this.reconfirmSignup(interaction, event, undefined, {
+      signupStatus: 'tentative',
+    });
+    await interaction.editReply({
+      content: `You're marked as **tentative** for **${event.title}**.`,
+    });
+    await this.editDmEmbed(interaction, 'tentative');
+    await this.embedSyncQueue.enqueue(event.id, 'reschedule-tentative');
   }
 
   // ─── Decline flow ──────────────────────────────────────────────────
@@ -396,7 +499,7 @@ export class RescheduleResponseListener {
     interaction: StringSelectMenuInteraction,
   ): Promise<void> {
     const parts = interaction.customId.split(':');
-    if (parts.length < 2 || parts.length > 3) return;
+    if (parts.length < 2 || parts.length > 4) return;
 
     const [action, eventIdStr] = parts;
     const eventId = parseInt(eventIdStr, 10);
@@ -422,10 +525,35 @@ export class RescheduleResponseListener {
 
     try {
       if (action === RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT) {
-        await this.handleCharacterSelect(interaction, eventId);
+        // Format: reschedule_char_select:<eventId>[:<tentative>]
+        const signupStatus =
+          parts.length === 3 && parts[2] === 'tentative'
+            ? ('tentative' as const)
+            : undefined;
+        await this.handleCharacterSelect(interaction, eventId, signupStatus);
       } else {
-        const characterId = parts.length === 3 ? parts[2] : undefined;
-        await this.handleRoleSelect(interaction, eventId, characterId);
+        // Format: reschedule_role_select:<eventId>[:<charId>][:<tentative>]
+        // 'tentative' is a reserved keyword — any other segment is a characterId
+        let characterId: string | undefined;
+        let signupStatus: 'tentative' | undefined;
+
+        if (parts.length === 3) {
+          if (parts[2] === 'tentative') {
+            signupStatus = 'tentative';
+          } else {
+            characterId = parts[2];
+          }
+        } else if (parts.length === 4) {
+          characterId = parts[2];
+          signupStatus = parts[3] === 'tentative' ? 'tentative' : undefined;
+        }
+
+        await this.handleRoleSelect(
+          interaction,
+          eventId,
+          characterId,
+          signupStatus,
+        );
       }
     } catch (error) {
       this.logger.error(
@@ -441,11 +569,12 @@ export class RescheduleResponseListener {
   }
 
   /**
-   * Handle character selection from reschedule confirm flow.
+   * Handle character selection from reschedule confirm/tentative flow.
    */
   private async handleCharacterSelect(
     interaction: StringSelectMenuInteraction,
     eventId: number,
+    signupStatus?: 'tentative',
   ): Promise<void> {
     const characterId = interaction.values[0];
     const discordUserId = interaction.user.id;
@@ -481,6 +610,8 @@ export class RescheduleResponseListener {
       return;
     }
 
+    const isTentative = signupStatus === 'tentative';
+
     // Check if MMO — if so, show role select with character context
     const slotConfig = event.slotConfig as Record<string, unknown> | null;
     if (slotConfig?.type === 'mmo') {
@@ -497,7 +628,8 @@ export class RescheduleResponseListener {
           name: character.name,
           role: character.roleOverride ?? character.role ?? null,
         },
-        characterVerb: 'Confirming as',
+        characterVerb: isTentative ? 'Tentative as' : 'Confirming as',
+        customIdSuffix: signupStatus,
       });
       return;
     }
@@ -505,18 +637,24 @@ export class RescheduleResponseListener {
     // Non-MMO: re-confirm with character
     await this.reconfirmSignup(interaction, event, linkedUser.id, {
       characterId,
+      signupStatus,
     });
     const character = await this.charactersService.findOne(
       linkedUser.id,
       characterId,
     );
 
+    const state = isTentative ? 'tentative' : 'confirmed';
+    const label = isTentative ? 'tentative' : 'confirmed';
     await interaction.editReply({
-      content: `You're confirmed for **${event.title}** with **${character.name}**.`,
+      content: `You're ${label === 'tentative' ? 'marked as **tentative**' : 'confirmed'} for **${event.title}** with **${character.name}**.`,
       components: [],
     });
-    await this.editDmEmbedFromSelect(interaction, 'confirmed');
-    await this.embedSyncQueue.enqueue(eventId, 'reschedule-confirm');
+    await this.editDmEmbedFromSelect(interaction, state);
+    await this.embedSyncQueue.enqueue(
+      eventId,
+      isTentative ? 'reschedule-tentative' : 'reschedule-confirm',
+    );
   }
 
   /**
@@ -526,6 +664,7 @@ export class RescheduleResponseListener {
     interaction: StringSelectMenuInteraction,
     eventId: number,
     characterId?: string,
+    signupStatus?: 'tentative',
   ): Promise<void> {
     const selectedRoles = interaction.values as ('tank' | 'healer' | 'dps')[];
     const primaryRole = selectedRoles[0];
@@ -550,6 +689,7 @@ export class RescheduleResponseListener {
       return;
     }
 
+    const isTentative = signupStatus === 'tentative';
     const discordUserId = interaction.user.id;
     const [linkedUser] = await this.db
       .select()
@@ -562,6 +702,7 @@ export class RescheduleResponseListener {
         characterId,
         preferredRoles: selectedRoles,
         slotRole: selectedRoles.length === 1 ? primaryRole : undefined,
+        signupStatus,
       });
 
       const charName = characterId
@@ -569,10 +710,11 @@ export class RescheduleResponseListener {
             .name
         : null;
 
+      const statusLabel = isTentative ? 'marked as **tentative**' : 'confirmed';
       await interaction.editReply({
         content: charName
-          ? `You're confirmed for **${event.title}** with **${charName}** (${rolesLabel}).`
-          : `You're confirmed for **${event.title}** (${rolesLabel}).`,
+          ? `You're ${statusLabel} for **${event.title}** with **${charName}** (${rolesLabel}).`
+          : `You're ${statusLabel} for **${event.title}** (${rolesLabel}).`,
         components: [],
       });
     } else {
@@ -580,16 +722,22 @@ export class RescheduleResponseListener {
       await this.reconfirmSignup(interaction, event, undefined, {
         preferredRoles: selectedRoles,
         slotRole: selectedRoles.length === 1 ? primaryRole : undefined,
+        signupStatus,
       });
 
+      const statusLabel = isTentative ? 'marked as **tentative**' : 'confirmed';
       await interaction.editReply({
-        content: `You're confirmed for **${event.title}** (${rolesLabel}).`,
+        content: `You're ${statusLabel} for **${event.title}** (${rolesLabel}).`,
         components: [],
       });
     }
 
-    await this.editDmEmbedFromSelect(interaction, 'confirmed');
-    await this.embedSyncQueue.enqueue(eventId, 'reschedule-confirm');
+    const embedState = isTentative ? 'tentative' : 'confirmed';
+    await this.editDmEmbedFromSelect(interaction, embedState);
+    await this.embedSyncQueue.enqueue(
+      eventId,
+      isTentative ? 'reschedule-tentative' : 'reschedule-confirm',
+    );
   }
 
   /**
@@ -604,10 +752,11 @@ export class RescheduleResponseListener {
       characterId?: string;
       preferredRoles?: ('tank' | 'healer' | 'dps')[];
       slotRole?: string;
+      signupStatus?: 'tentative';
     },
   ): Promise<void> {
     const updateSet: Record<string, unknown> = {
-      status: 'signed_up',
+      status: options?.signupStatus === 'tentative' ? 'tentative' : 'signed_up',
       roachedOutAt: null,
     };
 
@@ -853,7 +1002,7 @@ export class RescheduleResponseListener {
    */
   private async editDmEmbedFromSelect(
     interaction: StringSelectMenuInteraction,
-    state: 'confirmed' | 'declined',
+    state: 'confirmed' | 'tentative' | 'declined',
   ): Promise<void> {
     try {
       // The select menu was shown via editReply on the deferred button interaction.
@@ -891,10 +1040,12 @@ export class RescheduleResponseListener {
       const { EmbedBuilder } = await import('discord.js');
       const updatedEmbed = EmbedBuilder.from(originalEmbed);
 
-      const stateText =
-        state === 'confirmed'
-          ? '\n\n**\u2705 Confirmed for new time**'
-          : '\n\n**\u274C Declined**';
+      const stateLabels: Record<string, string> = {
+        confirmed: '\n\n**\u2705 Confirmed for new time**',
+        tentative: '\n\n**\u2753 Tentative**',
+        declined: '\n\n**\u274C Declined**',
+      };
+      const stateText = stateLabels[state];
       const originalDescription = originalEmbed.description ?? '';
       updatedEmbed.setDescription(`${originalDescription}${stateText}`);
 

@@ -514,25 +514,37 @@ describe('RescheduleResponseListener', () => {
   // ─── Tentative flow ──────────────────────────────────────────────────
 
   describe('handleTentative', () => {
-    it('sets signup status to tentative via signupsService.updateStatus', async () => {
+    it('sets signup status to tentative via DB update for unlinked user', async () => {
+      // Event lookup
       mockDb.limit.mockResolvedValueOnce([mockEvent]);
       mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+      // Linked user lookup — unlinked
+      mockDb.limit.mockResolvedValueOnce([]);
+      // reconfirmSignup: find signup by discordUserId
+      mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeButtonInteraction(
         `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
       );
       await listener['handleButtonInteraction'](interaction);
 
-      expect(mockSignupsService.updateStatus).toHaveBeenCalledWith(
-        42,
-        { discordUserId: 'discord-user-1' },
-        { status: 'tentative' },
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'tentative', roachedOutAt: null }),
       );
     });
 
     it('replies with tentative confirmation message', async () => {
+      // Event lookup
       mockDb.limit.mockResolvedValueOnce([mockEvent]);
       mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+      // Linked user lookup — unlinked
+      mockDb.limit.mockResolvedValueOnce([]);
+      // reconfirmSignup: find signup by discordUserId
+      mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeButtonInteraction(
         `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
@@ -547,8 +559,15 @@ describe('RescheduleResponseListener', () => {
     });
 
     it('enqueues embed sync after marking tentative', async () => {
+      // Event lookup
       mockDb.limit.mockResolvedValueOnce([mockEvent]);
       mockSignupsService.findByDiscordUser.mockResolvedValue(mockSignup);
+      // Linked user lookup — unlinked
+      mockDb.limit.mockResolvedValueOnce([]);
+      // reconfirmSignup: find signup by discordUserId
+      mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeButtonInteraction(
         `${RESCHEDULE_BUTTON_IDS.TENTATIVE}:42`,
@@ -720,7 +739,7 @@ describe('RescheduleResponseListener', () => {
   describe('handleSelectMenuInteraction — routing', () => {
     it('ignores select menus with wrong custom ID format (too many parts)', async () => {
       const interaction = makeSelectMenuInteraction(
-        'reschedule_char_select:42:char-1:extra',
+        'reschedule_char_select:42:char-1:extra:more',
         ['char-1'],
       );
       await listener['handleSelectMenuInteraction'](interaction);
