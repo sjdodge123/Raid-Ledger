@@ -781,8 +781,9 @@ export class CharactersService {
         'character',
         characterId,
       );
+
     if (enrichmentRows.length > 0) {
-      (dto as Record<string, unknown>).enrichments = enrichmentRows;
+      return { ...dto, enrichments: enrichmentRows };
     }
 
     return dto;
