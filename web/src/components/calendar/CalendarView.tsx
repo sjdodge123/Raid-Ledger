@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useEffect } from 'react';
+import { useMemo, useState, useCallback } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
 import {
     format,
@@ -23,7 +23,6 @@ import { useEvents } from '../../hooks/use-events';
 import { getGameColors, getCalendarEventStyle } from '../../constants/game-colors';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { useCalendarViewStore, type CalendarViewPref } from '../../stores/calendar-view-store';
-import type { GameInfo } from '../../stores/game-filter-store';
 import { toZonedDate, getTimezoneAbbr } from '../../lib/timezone-utils';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { Z_INDEX } from '../../lib/z-index';
@@ -54,9 +53,6 @@ export interface CalendarEvent {
     resource: EventResponseDto;
 }
 
-/** Game info for filter sidebar — canonical definition lives in game-filter-store */
-export type { GameInfo } from '../../stores/game-filter-store';
-
 interface CalendarViewProps {
     className?: string;
     /** Controlled current date (optional - defaults to internal state) */
@@ -65,8 +61,6 @@ interface CalendarViewProps {
     onDateChange?: (date: Date) => void;
     /** Games to filter by (optional - shows all if undefined) */
     selectedGames?: Set<string>;
-    /** Callback when games list is available */
-    onGamesAvailable?: (games: GameInfo[]) => void;
     /** Game time template slots for overlap indicator (Set of "dayOfWeek:hour") */
     gameTimeSlots?: Set<string>;
     /** Mobile calendar view mode (schedule/month/day) — when 'schedule', renders ScheduleView */
@@ -80,7 +74,6 @@ export function CalendarView({
     currentDate: controlledDate,
     onDateChange,
     selectedGames,
-    onGamesAvailable,
     gameTimeSlots,
     calendarView,
     onCalendarViewChange,
@@ -192,29 +185,6 @@ export function CalendarView({
         includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
         limit: 100, // Override default page size (20) to fetch full date range
     });
-
-    // Extract unique games from events
-    const uniqueGames = useMemo((): GameInfo[] => {
-        if (!eventsData?.data) return [];
-        const gameMap = new Map<string, GameInfo>();
-        for (const event of eventsData.data) {
-            if (event.game?.slug && !gameMap.has(event.game.slug)) {
-                gameMap.set(event.game.slug, {
-                    slug: event.game.slug,
-                    name: event.game.name,
-                    coverUrl: event.game.coverUrl || null,
-                });
-            }
-        }
-        return Array.from(gameMap.values()).sort((a, b) => a.name.localeCompare(b.name));
-    }, [eventsData]);
-
-    // Notify parent when games change (including when empty)
-    useEffect(() => {
-        if (onGamesAvailable) {
-            onGamesAvailable(uniqueGames);
-        }
-    }, [uniqueGames, onGamesAvailable]);
 
     // Transform API events to calendar events (with optional filtering)
     const calendarEvents: CalendarEvent[] = useMemo(() => {

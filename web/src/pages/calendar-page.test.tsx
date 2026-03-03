@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { GameInfo } from '../stores/game-filter-store';
 
 // ---------------------------------------------------------------------------
 // Module mocks — must be declared before the component import
@@ -16,12 +15,15 @@ vi.mock('../hooks/use-game-time', () => ({
     useGameTime: () => ({ data: null }),
 }));
 
-// Stub out the heavy CalendarView; expose onGamesAvailable so tests can call it
-let capturedOnGamesAvailable: ((games: GameInfo[]) => void) | null = null;
+// Mock useGameRegistry — returns games that populate the filter store
+let mockRegistryGames: { id: number; slug: string; name: string; coverUrl: string | null; shortName: string | null; colorHex: string | null; hasRoles: boolean; hasSpecs: boolean; enabled: boolean; maxCharactersPerUser: number }[] = [];
+vi.mock('../hooks/use-game-registry', () => ({
+    useGameRegistry: () => ({ games: mockRegistryGames, isLoading: false, error: null }),
+}));
+
+// Stub out the heavy CalendarView
 vi.mock('../components/calendar', () => ({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    CalendarView: (props: any) => {
-        capturedOnGamesAvailable = props.onGamesAvailable ?? null;
+    CalendarView: () => {
         return <div data-testid="calendar-view" />;
     },
     MiniCalendar: () => <div data-testid="mini-calendar" />,
@@ -82,11 +84,26 @@ import { useGameFilterStore } from '../stores/game-filter-store';
 
 const makeGame = (slug: string, name: string) => ({ slug, name, coverUrl: null });
 
+/** Build a full registry game object from slug + name */
+function makeRegistryGame(slug: string, name: string, id = 1) {
+    return {
+        id,
+        slug,
+        name,
+        shortName: null,
+        coverUrl: null,
+        colorHex: null,
+        hasRoles: false,
+        hasSpecs: false,
+        enabled: true,
+        maxCharactersPerUser: 1,
+    };
+}
+
 let activeQueryClient: QueryClient;
 
 function renderPage() {
     activeQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    capturedOnGamesAvailable = null;
     return render(
         <QueryClientProvider client={activeQueryClient}>
             <MemoryRouter>
@@ -96,10 +113,10 @@ function renderPage() {
     );
 }
 
-// Deliver games to the calendar page via the CalendarView callback
+// Deliver games via the store directly (simulates what the useEffect does with registry data)
 function deliverGames(games: ReturnType<typeof makeGame>[]) {
     act(() => {
-        capturedOnGamesAvailable?.(games);
+        useGameFilterStore.getState().reportGames(games);
     });
 }
 
@@ -111,6 +128,7 @@ describe('CalendarPage — allKnownGames accumulator', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -129,8 +147,8 @@ describe('CalendarPage — allKnownGames accumulator', () => {
     });
 
     it('shows game filter section after games arrive', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         renderPage();
-        deliverGames([makeGame('wow', 'World of Warcraft')]);
         // "Filter by Game" header should appear in the sidebar section
         expect(screen.getAllByText('Filter by Game').length).toBeGreaterThan(0);
     });
@@ -185,6 +203,7 @@ describe('CalendarPage — auto-select behaviour', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -192,8 +211,11 @@ describe('CalendarPage — auto-select behaviour', () => {
     });
 
     it('auto-selects all games on first delivery', () => {
+        mockRegistryGames = [
+            makeRegistryGame('wow', 'World of Warcraft', 1),
+            makeRegistryGame('apex', 'Apex Legends', 2),
+        ];
         renderPage();
-        deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
         // Both checkboxes should be checked
         const checkboxes = screen.getAllByRole('checkbox');
@@ -225,6 +247,7 @@ describe('CalendarPage — inline list capping (maxVisible=5)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -299,6 +322,7 @@ describe('CalendarPage — filter modal (overflow)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -403,6 +427,7 @@ describe('CalendarPage — game toggle', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -483,6 +508,7 @@ describe('CalendarPage — All / None buttons', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -564,6 +590,7 @@ describe('CalendarPage — filter persistence when view changes', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -634,7 +661,7 @@ describe('CalendarPage — filter persistence when view changes', () => {
         // but Zustand store retains hasInitialized, seenSlugs, and selectedGames
         renderPage();
 
-        // Re-deliver the same games (as CalendarView would on mount)
+        // Re-deliver the same games (as the registry effect would on mount)
         deliverGames([makeGame('wow', 'World of Warcraft'), makeGame('apex', 'Apex Legends')]);
 
         // wow must STILL be deselected (store remembers the user's toggle)
@@ -695,6 +722,7 @@ describe('CalendarPage — FAB and BottomSheet', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
     });
 
     afterEach(() => {
@@ -707,14 +735,14 @@ describe('CalendarPage — FAB and BottomSheet', () => {
     });
 
     it('FAB appears after games arrive', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         renderPage();
-        deliverGames([makeGame('wow', 'World of Warcraft')]);
         expect(screen.getByTestId('fab')).toBeInTheDocument();
     });
 
     it('clicking FAB opens bottom sheet', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         renderPage();
-        deliverGames([makeGame('wow', 'World of Warcraft')]);
 
         const fab = screen.getByTestId('fab');
         fireEvent.click(fab);
@@ -724,8 +752,8 @@ describe('CalendarPage — FAB and BottomSheet', () => {
     });
 
     it('bottom sheet is initially closed', () => {
+        mockRegistryGames = [makeRegistryGame('wow', 'World of Warcraft')];
         renderPage();
-        deliverGames([makeGame('wow', 'World of Warcraft')]);
 
         const sheet = screen.getByTestId('bottom-sheet');
         expect(sheet).toHaveAttribute('data-open', 'false');
@@ -758,5 +786,51 @@ describe('CalendarPage — FAB and BottomSheet', () => {
         const sheet = screen.getByTestId('bottom-sheet');
         // "3 of 3 selected" pattern
         expect(sheet).toHaveTextContent(/3 of 3 selected/i);
+    });
+});
+
+describe('CalendarPage — useGameRegistry integration (ROK-650)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        useGameFilterStore.getState()._reset();
+        mockRegistryGames = [];
+    });
+
+    afterEach(() => {
+        activeQueryClient?.clear();
+    });
+
+    it('populates game filter from game registry on mount', () => {
+        mockRegistryGames = [
+            makeRegistryGame('wow', 'World of Warcraft', 1),
+            makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
+            makeRegistryGame('gw2', 'Guild Wars 2', 3),
+        ];
+        renderPage();
+
+        // All 3 games from registry should appear in the filter
+        const gameNames = screen.getAllByRole('checkbox').map(
+            (cb) => (cb.closest('label') as HTMLElement | null)?.querySelector('.game-filter-name')?.textContent ?? '',
+        );
+        expect(gameNames).toContain('World of Warcraft');
+        expect(gameNames).toContain('Final Fantasy XIV');
+        expect(gameNames).toContain('Guild Wars 2');
+        expect(gameNames.length).toBe(3);
+    });
+
+    it('shows all registry games even when no events exist for some games', () => {
+        // This is the core ROK-650 fix: games appear in filter regardless of
+        // whether they have events in the current date range
+        mockRegistryGames = [
+            makeRegistryGame('wow', 'World of Warcraft', 1),
+            makeRegistryGame('ff14', 'Final Fantasy XIV', 2),
+            makeRegistryGame('gw2', 'Guild Wars 2', 3),
+        ];
+        renderPage();
+
+        // All 3 should be visible and auto-selected
+        const checkboxes = screen.getAllByRole('checkbox');
+        expect(checkboxes).toHaveLength(3);
+        checkboxes.forEach((cb) => expect(cb).toBeChecked());
     });
 });
