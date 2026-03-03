@@ -278,6 +278,8 @@ jobs:
     if: github.event_name == 'pull_request'
     needs: lint
     runs-on: ubuntu-latest
+    # Require manual approval for non-owner PRs (controls API spend)
+    environment: ${{ github.event.pull_request.user.login != 'sjdodge123' && 'ai-review' || '' }}
     permissions:
       contents: read
       pull-requests: write
