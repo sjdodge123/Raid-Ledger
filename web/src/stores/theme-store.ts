@@ -58,7 +58,7 @@ const THEME_REGISTRY: ThemeDefinition[] = [
         name: 'Deep Sea',
         mode: 'dark',
         isDark: true,
-        preview: { surface: '#0f1f35', accent: '#22d3a0' },
+        preview: { surface: '#0c1b2f', accent: '#22d3a0' },
         tokens: {},
     },
 ];

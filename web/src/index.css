@@ -121,10 +121,10 @@ html {
 
 /* Underwater theme overrides (ROK-296) */
 [data-scheme="underwater"] {
-    --color-backdrop: #0c1a2e;
-    --color-surface: #0f1f35;
-    --color-panel: #142840;
-    --color-overlay: #1a3350;
+    --color-backdrop: #091424;
+    --color-surface: #0c1b2f;
+    --color-panel: #11233b;
+    --color-overlay: #172e48;
     --color-faint: #2a4a60;
     --color-dim: #3d6480;
     --color-muted: #6b8fa8;
@@ -717,10 +717,53 @@ body {
    bioluminescent accents, and a moody blue-green palette.
    ============================================ */
 
-/* Nautical wood-grain borders on panels and cards */
+/* Nautical wood-grain borders — cards (bg-surface + border + rounded) */
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 8px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 1px rgba(34, 211, 160, 0.08);
+}
+
+[data-scheme="underwater"] .bg-surface.border-edge.rounded-lg:hover,
+[data-scheme="underwater"] .bg-surface.rounded-lg.border:hover {
+    border-color: var(--color-edge-strong);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 4px rgba(34, 211, 160, 0.12);
+}
+
+/* Premium/integration cards (bg-panel + rounded-xl) */
+[data-scheme="underwater"] .bg-panel\/50.rounded-xl.border,
+[data-scheme="underwater"] .bg-panel.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 2px rgba(34, 211, 160, 0.1);
+}
+
+/* Modals — bg-surface + rounded-xl + border + shadow */
+[data-scheme="underwater"] .bg-surface.rounded-xl.border-edge,
+[data-scheme="underwater"] .bg-surface.rounded-xl.border {
+    border: 2px solid var(--color-edge);
+    border-radius: 10px;
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 0 6px rgba(34, 211, 160, 0.08),
+        0 4px 24px rgba(0, 0, 0, 0.5);
+}
+
+/* Modal header/footer dividers — wood grain */
+[data-scheme="underwater"] .border-b.border-edge,
+[data-scheme="underwater"] .border-t.border-edge {
+    border-color: var(--color-edge);
+}
+
+/* Glass cards */
 [data-scheme="underwater"] .glass-card {
-    background: color-mix(in srgb, var(--color-surface) 70%, transparent);
-    backdrop-filter: blur(12px);
     border: 2px solid var(--color-edge);
     border-radius: 8px;
     box-shadow:
@@ -728,32 +771,31 @@ body {
         0 0 1px rgba(34, 211, 160, 0.1);
 }
 
-[data-scheme="underwater"] .glass-card:hover {
-    border-color: var(--color-edge-strong);
-    background: color-mix(in srgb, var(--color-surface) 80%, transparent);
-    box-shadow:
-        inset 0 1px 0 var(--uw-wood-highlight),
-        0 0 4px rgba(34, 211, 160, 0.12);
-}
-
-/* Stronger nautical borders on surfaces and panels */
-[data-scheme="underwater"] .bg-surface,
-[data-scheme="underwater"] .bg-panel {
+/* Sidebar nav items — subtle wood border on active */
+[data-scheme="underwater"] .bg-emerald-500\/10.rounded-lg {
+    border: 1px solid var(--color-edge);
     box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
 }
 
-[data-scheme="underwater"] .border-edge,
-[data-scheme="underwater"] .border-edge-subtle {
+/* General: any bordered surface/panel gets the wood highlight */
+[data-scheme="underwater"] .bg-surface.border,
+[data-scheme="underwater"] .bg-panel.border {
     border-color: var(--color-edge);
+    box-shadow: inset 0 1px 0 var(--uw-wood-highlight);
 }
 
-[data-scheme="underwater"] .border-edge-strong {
-    border-color: var(--color-edge-strong);
+/* BottomSheet — wood border on top edge */
+[data-scheme="underwater"] .bg-surface.rounded-t-2xl {
+    border-top: 2px solid var(--color-edge);
+    box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
+        0 -4px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* Rounded cards: subtle bioluminescent outer glow */
-[data-scheme="underwater"] .rounded-xl {
+[data-scheme="underwater"] .rounded-xl.border {
     box-shadow:
+        inset 0 1px 0 var(--uw-wood-highlight),
         0 0 2px rgba(34, 211, 160, 0.1),
         0 0 6px rgba(34, 211, 160, 0.04);
 }
