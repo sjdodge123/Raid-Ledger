@@ -27,12 +27,14 @@ Discord OAuth provides:
 
 ### Magic Links
 
-Magic links provide passwordless authentication from Discord:
+Magic links provide passwordless navigation from Discord to the web app:
 
 - When a user interacts with the bot (e.g., `/events`), embeds include a **magic link button**
-- Clicking the button opens the web app with automatic authentication
-- Magic links are one-time-use and expire after a short period
-- No password entry required — seamless Discord-to-web transition
+- Clicking the button opens the web app directly to the relevant page
+- Magic links contain a short-lived token (15-minute expiry)
+- For users already logged in, the link navigates seamlessly to the target page
+
+> **Note:** Auto-authentication for users who are not already logged in is not yet implemented. Users who aren't logged in will be redirected to the login page. This is tracked as a planned improvement.
 
 ## User Roles
 

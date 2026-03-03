@@ -4,30 +4,23 @@
 
 These environment variables can be set when running the Docker container.
 
-### Core
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `80` | Port to expose the application |
-| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
-| `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
-| `DISABLE_TELEMETRY` | `false` | Set to `true` to disable anonymous error reporting via Sentry |
-
-### Discord
-
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DISCORD_BOT_TOKEN` | — | Discord bot token for slash commands and event announcements |
-| `CLIENT_URL` | — | Public URL of the web app (used for magic links in Discord embeds) |
-| `CORS_ORIGIN` | — | Allowed CORS origins (fallback for `CLIENT_URL`) |
+| `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
+| `CLIENT_URL` | — | Public URL of your web app (used for links in Discord embeds) |
+| `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
+| `DISABLE_TELEMETRY` | `false` | Set to `true` to disable anonymous error reporting via Sentry |
 
-### Database
+Most configuration — including Discord OAuth credentials, IGDB keys, community name, timezone, and theme — is managed through the **Admin Settings** panel in the web app. The environment variables above are the only ones you need to pass to `docker run`.
 
-The built-in PostgreSQL is configured automatically. These variables are only needed for external database connections:
+### External Database
+
+The built-in PostgreSQL and Redis are configured automatically. These variables are only needed if you want to use an external database:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | *(internal)* | PostgreSQL connection string |
+| `DATABASE_URL` | *(internal)* | PostgreSQL connection string (`postgresql://user:password@host:port/db`) |
 
 ## Admin Settings
 
@@ -40,7 +33,8 @@ These settings are configured through the web admin panel at **Admin Settings**.
 
 ### Integrations
 
-- **Discord OAuth** — Client ID and Client Secret for Discord login
+- **Discord OAuth** — Client ID and Client Secret for Discord login (configured here, not via env vars)
+- **IGDB** — Twitch/IGDB Client ID and Secret for game catalog search (configured here, not via env vars)
 - **Channel Bindings** — Manage Discord channel-to-game bindings
 - **Blizzard API** — Client ID and Secret for WoW character sync (requires the wow-common plugin)
 

@@ -1,97 +1,237 @@
-/* Dark gaming theme — deep slate background, indigo/purple accents */
+/*
+ * Raid Ledger Marketing Site
+ * Dark: Ember Forge  |  Light: Celestial
+ * Mapped from the app's own theme tokens.
+ */
 
+/* ── Dark mode (Ember Forge) ─────────────────────────────── */
 :root {
-  --sl-color-accent-low: #1e1b4b;
-  --sl-color-accent: #6366f1;
-  --sl-color-accent-high: #c7d2fe;
-  --sl-color-white: #f8fafc;
-  --sl-color-gray-1: #e2e8f0;
-  --sl-color-gray-2: #cbd5e1;
-  --sl-color-gray-3: #94a3b8;
-  --sl-color-gray-4: #475569;
-  --sl-color-gray-5: #1e293b;
-  --sl-color-gray-6: #0f172a;
-  --sl-color-black: #020617;
+  /* Starlight slots → Ember Forge palette */
+  --sl-color-accent-low: #2A211E;
+  --sl-color-accent: #E8600A;
+  --sl-color-accent-high: #F0E6DC;
+  --sl-color-white: #F0E6DC;
+  --sl-color-gray-1: #C8A898;
+  --sl-color-gray-2: #A8887A;
+  --sl-color-gray-3: #7A6058;
+  --sl-color-gray-4: #4A3830;
+  --sl-color-gray-5: #2A211E;
+  --sl-color-gray-6: #1E1917;
+  --sl-color-black: #121010;
+
+  /* Custom tokens */
+  --rl-hero-bg: linear-gradient(135deg, #121010 0%, #2A211E 50%, #1E1917 100%);
+  --rl-hero-border: #3D2E28;
+  --rl-card-bg: #2A211E;
+  --rl-card-border: #3D2E28;
+  --rl-card-heading: #F0E6DC;
+  --rl-card-text: #A8887A;
+  --rl-heading: #F0E6DC;
+  --rl-subtext: #A8887A;
+  --rl-cta-secondary-text: #C8A898;
+  --rl-screenshot-border: #3D2E28;
+  --rl-link: #E8600A;
+  --rl-btn-bg: rgba(42, 33, 30, 0.7);
+  --rl-btn-hover: rgba(232, 96, 10, 0.7);
+  --rl-dot-bg: #3D2E28;
 }
 
-/* Hero section */
+/* ── Light mode (Celestial) ──────────────────────────────── */
+:root[data-theme='light'] {
+  --sl-color-accent-low: #E4DDD0;
+  --sl-color-accent: #C9A84C;
+  --sl-color-accent-high: #1A1A2E;
+  --sl-color-white: #1A1A2E;
+  --sl-color-gray-1: #3D3560;
+  --sl-color-gray-2: #6A5840;
+  --sl-color-gray-3: #8A7860;
+  --sl-color-gray-4: #C0B098;
+  --sl-color-gray-5: #E4DDD0;
+  --sl-color-gray-6: #EDE8DC;
+  --sl-color-black: #F5F0E8;
+
+  --rl-hero-bg: linear-gradient(135deg, #F5F0E8 0%, #E4DDD0 50%, #EDE8DC 100%);
+  --rl-hero-border: #B8A88A;
+  --rl-card-bg: #EDE8DC;
+  --rl-card-border: #D0C8B8;
+  --rl-card-heading: #1A1A2E;
+  --rl-card-text: #6A5840;
+  --rl-heading: #1A1A2E;
+  --rl-subtext: #6A5840;
+  --rl-cta-secondary-text: #3D3560;
+  --rl-screenshot-border: #B8A88A;
+  --rl-link: #C9A84C;
+  --rl-btn-bg: rgba(228, 221, 208, 0.8);
+  --rl-btn-hover: rgba(201, 168, 76, 0.7);
+  --rl-dot-bg: #D0C8B8;
+}
+
+/* ── Hero section ────────────────────────────────────────── */
 .hero {
   padding: 4rem 1rem;
   text-align: center;
-  background: linear-gradient(135deg, #020617 0%, #1e1b4b 50%, #0f172a 100%);
-  border-bottom: 1px solid #334155;
+  background: var(--rl-hero-bg);
+  border-bottom: 1px solid var(--rl-hero-border);
 }
 
 .hero h1 {
   font-size: 3rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #818cf8, #a78bfa, #c084fc);
+  background: linear-gradient(135deg, #E8600A, #F59E0B, #E8600A);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
   margin-bottom: 1rem;
 }
 
+:root[data-theme='light'] .hero h1 {
+  background: linear-gradient(135deg, #C9A84C, #3D3560, #C9A84C);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
 .hero .tagline {
   font-size: 1.25rem;
-  color: #94a3b8;
+  color: var(--rl-subtext);
   max-width: 600px;
   margin: 0 auto 2rem;
 }
 
-/* Quick start code block styling */
-.quick-start code {
-  font-size: 1rem;
-}
-
-/* Feature cards */
+/* ── Feature cards ───────────────────────────────────────── */
 .features-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
   padding: 2rem 0;
+  align-items: start;
 }
 
 .feature-card {
-  background: #0f172a;
-  border: 1px solid #1e293b;
+  background: var(--rl-card-bg);
+  border: 1px solid var(--rl-card-border);
   border-radius: 12px;
   padding: 1.5rem;
+  margin: 0;
   transition: border-color 0.2s ease;
 }
 
 .feature-card:hover {
-  border-color: #6366f1;
+  border-color: var(--sl-color-accent);
 }
 
 .feature-card h3 {
-  color: #c7d2fe;
+  color: var(--rl-card-heading);
   margin-bottom: 0.5rem;
   font-size: 1.1rem;
 }
 
 .feature-card p {
-  color: #94a3b8;
+  color: var(--rl-card-text);
   font-size: 0.9rem;
   line-height: 1.6;
 }
 
-/* Screenshot gallery */
-.screenshots {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1rem;
-  padding: 1rem 0;
+/* ── Screenshot carousel ─────────────────────────────────── */
+.carousel {
+  position: relative;
+  margin: 1rem 0 2rem;
+  overflow: hidden;
+  border-radius: 12px;
 }
 
-.screenshots img {
-  border-radius: 8px;
-  border: 1px solid #1e293b;
+.carousel-track {
+  display: flex;
+  transition: transform 0.4s ease;
+  align-items: flex-start;
+}
+
+.carousel-slide {
+  flex: 0 0 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.carousel-slide img {
   width: 100%;
   height: auto;
+  max-height: 700px;
+  object-fit: contain;
+  display: block;
+  border: 1px solid var(--rl-screenshot-border);
+  border-radius: 8px;
 }
 
-/* Benefits list */
+.carousel-caption {
+  text-align: center;
+  padding: 1rem 1.5rem;
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.carousel-caption strong {
+  display: block;
+  color: var(--rl-heading);
+  font-size: 1.1rem;
+  margin-bottom: 0.25rem;
+}
+
+.carousel-caption span {
+  color: var(--rl-subtext);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.carousel-btn {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-100%);
+  background: var(--rl-btn-bg);
+  color: var(--rl-heading);
+  border: none;
+  font-size: 2rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+  z-index: 2;
+}
+
+.carousel-btn:hover {
+  background: var(--rl-btn-hover);
+}
+
+.carousel-prev { left: 0.75rem; }
+.carousel-next { right: 0.75rem; }
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0;
+}
+
+.carousel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: var(--rl-dot-bg);
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  outline: none;
+  transition: background 0.2s ease;
+}
+
+.carousel-dot.active {
+  background: var(--sl-color-accent);
+}
+
+/* ── Benefits list ───────────────────────────────────────── */
 .benefits {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -112,17 +252,17 @@
 }
 
 .benefit h4 {
-  color: #e2e8f0;
+  color: var(--rl-heading);
   margin: 0 0 0.25rem;
 }
 
 .benefit p {
-  color: #94a3b8;
+  color: var(--rl-subtext);
   margin: 0;
   font-size: 0.9rem;
 }
 
-/* CTA buttons */
+/* ── CTA buttons ─────────────────────────────────────────── */
 .cta-group {
   display: flex;
   gap: 1rem;
@@ -133,13 +273,17 @@
 
 .cta-primary {
   display: inline-block;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  background: linear-gradient(135deg, #E8600A, #F59E0B);
   color: #fff !important;
   padding: 0.75rem 2rem;
   border-radius: 8px;
   font-weight: 600;
   text-decoration: none !important;
   transition: opacity 0.2s ease;
+}
+
+:root[data-theme='light'] .cta-primary {
+  background: linear-gradient(135deg, #C9A84C, #3D3560);
 }
 
 .cta-primary:hover {
@@ -149,20 +293,24 @@
 .cta-secondary {
   display: inline-block;
   background: transparent;
-  color: #c7d2fe !important;
+  color: var(--rl-cta-secondary-text) !important;
   padding: 0.75rem 2rem;
   border-radius: 8px;
-  border: 1px solid #6366f1;
+  border: 1px solid var(--sl-color-accent);
   font-weight: 600;
   text-decoration: none !important;
   transition: background 0.2s ease;
 }
 
 .cta-secondary:hover {
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(232, 96, 10, 0.1);
 }
 
-/* Section headings */
+:root[data-theme='light'] .cta-secondary:hover {
+  background: rgba(201, 168, 76, 0.1);
+}
+
+/* ── Section headings ────────────────────────────────────── */
 .section-heading {
   text-align: center;
   margin: 3rem 0 1.5rem;
@@ -170,16 +318,16 @@
 
 .section-heading h2 {
   font-size: 2rem;
-  color: #e2e8f0;
+  color: var(--rl-heading);
 }
 
 .section-heading p {
-  color: #94a3b8;
+  color: var(--rl-subtext);
   max-width: 600px;
   margin: 0.5rem auto 0;
 }
 
-/* Footer links */
+/* ── Footer links ────────────────────────────────────────── */
 .footer-links {
   display: flex;
   gap: 2rem;
@@ -189,7 +337,7 @@
 }
 
 .footer-links a {
-  color: #818cf8;
+  color: var(--rl-link);
   text-decoration: none;
 }
 
@@ -197,7 +345,7 @@
   text-decoration: underline;
 }
 
-/* Responsive adjustments */
+/* ── Responsive ──────────────────────────────────────────── */
 @media (max-width: 768px) {
   .hero h1 {
     font-size: 2rem;
@@ -211,7 +359,8 @@
     grid-template-columns: 1fr;
   }
 
-  .screenshots {
-    grid-template-columns: 1fr;
+  .carousel-btn {
+    width: 2.5rem;
+    font-size: 1.5rem;
   }
 }

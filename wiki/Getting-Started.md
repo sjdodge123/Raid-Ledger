@@ -44,9 +44,12 @@ Look for the credentials block:
 
 On first login, you will be guided through the setup wizard:
 
-1. **Community Name** — Set your community's display name
-2. **Timezone** — Configure the default timezone for events
-3. **Discord Integration** (optional) — Connect the Discord bot for slash commands and channel bindings
+1. **Secure Account** — Change the default admin password and optionally link your Discord account for avatar sync
+2. **Community** — Set your community's display name and default timezone
+3. **Plugins** — Enable integrations (Discord bot, IGDB game catalog, Blizzard API, etc.)
+4. **Done** — Summary and next steps
+
+You can skip any step, but skipping the password change will show a security warning.
 
 ## Reset Admin Password
 

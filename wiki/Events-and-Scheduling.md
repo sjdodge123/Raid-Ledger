@@ -60,9 +60,10 @@ The event detail page shows:
 ## Recurring Events
 
 Events can be set up with recurrence rules:
-- Weekly, biweekly, or custom frequency
+- **Weekly**, **biweekly**, or **monthly** frequency
+- A recurrence end date (`until`) controls how far ahead instances are generated
 - Events in a recurrence group share the same recurrence group ID
-- Channel bindings can target an entire series
+- Channel bindings can target an entire series via `/bind series:"Series Name"`
 
 ## Event Planning (Polls)
 
@@ -73,9 +74,15 @@ Use `/event plan` in Discord or the web planning form to:
 
 ## Signups
 
-- **Sign up** — Confirm attendance
-- **Decline** — Mark yourself as not attending
-- **Bench** — Available as a backup if a slot opens
+Users can set one of three signup statuses:
+
+- **Signed Up** — Confirmed attendance
+- **Tentative** — Might attend (counted separately from confirmed)
+- **Declined** — Not attending (declining less than 23 hours before the event is tracked as a late cancel)
+
+### Bench Slots
+
+"Bench" is a **roster slot role**, not a signup status. When creating an event with an MMO roster, organizers can allocate bench slots alongside Tank, Healer, DPS, Flex, and Player slots. Benched players are reserves who get promoted automatically when a main slot opens (if the event has **auto-unbench** enabled).
 
 Admins can manage signups on behalf of other users.
 

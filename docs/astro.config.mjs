@@ -10,6 +10,7 @@ export default defineConfig({
       description:
         'A unified dashboard for gaming communities — plan raids and events, track schedules and attendance, and boost engagement.',
       customCss: ['./src/styles/custom.css'],
+      pagefind: false,
       social: [
         { icon: 'github', label: 'GitHub', href: 'https://github.com/sjdodge123/Raid-Ledger' },
       ],
