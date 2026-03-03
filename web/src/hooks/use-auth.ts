@@ -38,6 +38,14 @@ export function getAuthToken(): string | null {
 }
 
 /**
+ * Store an auth token (e.g., from a magic link).
+ * Does NOT trigger React Query invalidation — call login() for that.
+ */
+export function setAuthToken(token: string): void {
+    localStorage.setItem(TOKEN_KEY, token);
+}
+
+/**
  * Check if currently in impersonation mode
  */
 export function isImpersonating(): boolean {

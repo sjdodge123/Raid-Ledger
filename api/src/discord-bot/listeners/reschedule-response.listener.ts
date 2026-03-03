@@ -13,7 +13,6 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { SignupsService } from '../../events/signups.service';
-import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import {
   DISCORD_BOT_EVENTS,
@@ -47,7 +46,6 @@ export class RescheduleResponseListener {
     private db: PostgresJsDatabase<typeof schema>,
     private readonly clientService: DiscordBotClientService,
     private readonly signupsService: SignupsService,
-    private readonly eventsService: EventsService,
     private readonly charactersService: CharactersService,
     private readonly embedSyncQueue: EmbedSyncQueueService,
     private readonly emojiService: DiscordEmojiService,
@@ -645,9 +643,8 @@ export class RescheduleResponseListener {
     );
 
     const state = isTentative ? 'tentative' : 'confirmed';
-    const label = isTentative ? 'tentative' : 'confirmed';
     await interaction.editReply({
-      content: `You're ${label === 'tentative' ? 'marked as **tentative**' : 'confirmed'} for **${event.title}** with **${character.name}**.`,
+      content: `You're ${state === 'tentative' ? 'marked as **tentative**' : 'confirmed'} for **${event.title}** with **${character.name}**.`,
       components: [],
     });
     await this.editDmEmbedFromSelect(interaction, state);
