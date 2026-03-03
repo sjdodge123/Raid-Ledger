@@ -318,8 +318,8 @@ test.describe('Notifications', () => {
         // Dropdown should open with "Notifications" heading (h3 has implicit heading role)
         await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 5_000 });
 
-        // Demo data seeds "Event Rescheduled" notifications for admin
-        await expect(page.getByText('Event Rescheduled').first()).toBeVisible({ timeout: 5_000 });
+        // Demo data seeds notifications like "Roster Slot Available" for admin
+        await expect(page.getByText('Roster Slot Available').first()).toBeVisible({ timeout: 5_000 });
     });
 
     test('Mark All Read button works', async ({ page }) => {
