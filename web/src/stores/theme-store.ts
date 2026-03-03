@@ -61,6 +61,91 @@ const THEME_REGISTRY: ThemeDefinition[] = [
         preview: { surface: '#0c1b2f', accent: '#22d3a0' },
         tokens: {},
     },
+    // --- Batch 1: Sky + Obsidian (ROK-638, ROK-644) ---
+    {
+        id: 'sky',
+        name: 'Sky',
+        mode: 'light',
+        isDark: false,
+        preview: { surface: '#FFFFFF', accent: '#0284C7' },
+        tokens: {},
+    },
+    {
+        id: 'obsidian',
+        name: 'Obsidian',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#111111', accent: '#2DD4BF' },
+        tokens: {},
+    },
+    // --- Batch 2: Dawn + Ember (ROK-635, ROK-639) ---
+    {
+        id: 'dawn',
+        name: 'Dawn Raid',
+        mode: 'light',
+        isDark: false,
+        preview: { surface: '#FFF1E3', accent: '#E07B39' },
+        tokens: {},
+    },
+    {
+        id: 'ember',
+        name: 'Ember Forge',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#1E1917', accent: '#E8600A' },
+        tokens: {},
+    },
+    // --- Batch 3: Holy + Arctic (ROK-636, ROK-642) ---
+    {
+        id: 'holy',
+        name: 'Holy',
+        mode: 'light',
+        isDark: false,
+        preview: { surface: '#FFFFFF', accent: '#2563EB' },
+        tokens: {},
+    },
+    {
+        id: 'arctic',
+        name: 'Arctic Night',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#0E1520', accent: '#5BC8F5' },
+        tokens: {},
+    },
+    // --- Batch 4: Celestial + Blood Moon (ROK-637, ROK-641) ---
+    {
+        id: 'celestial',
+        name: 'Celestial',
+        mode: 'light',
+        isDark: false,
+        preview: { surface: '#EDE8DC', accent: '#C9A84C' },
+        tokens: {},
+    },
+    {
+        id: 'bloodmoon',
+        name: 'Blood Moon',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#1A0E0E', accent: '#CC2222' },
+        tokens: {},
+    },
+    // --- Batch 5: Forest + Fel (ROK-640, ROK-643) ---
+    {
+        id: 'forest',
+        name: 'Midnight Forest',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#111A14', accent: '#00E5A0' },
+        tokens: {},
+    },
+    {
+        id: 'fel',
+        name: 'Fel Green',
+        mode: 'dark',
+        isDark: true,
+        preview: { surface: '#131613', accent: '#7FFF00' },
+        tokens: {},
+    },
 ];
 
 export { THEME_REGISTRY };
@@ -126,6 +211,21 @@ const SUB_THEME_CONFIG: Record<
     space: { scheme: 'space', colorScheme: 'dark' },
     'quest-log': { scheme: 'light', colorScheme: 'light', variant: 'quest-log' },
     underwater: { scheme: 'underwater', colorScheme: 'dark' },
+    // Batch 1
+    sky: { scheme: 'sky', colorScheme: 'light' },
+    obsidian: { scheme: 'obsidian', colorScheme: 'dark' },
+    // Batch 2
+    dawn: { scheme: 'dawn', colorScheme: 'light' },
+    ember: { scheme: 'ember', colorScheme: 'dark' },
+    // Batch 3
+    holy: { scheme: 'holy', colorScheme: 'light' },
+    arctic: { scheme: 'arctic', colorScheme: 'dark' },
+    // Batch 4
+    celestial: { scheme: 'celestial', colorScheme: 'light' },
+    bloodmoon: { scheme: 'bloodmoon', colorScheme: 'dark' },
+    // Batch 5
+    forest: { scheme: 'forest', colorScheme: 'dark' },
+    fel: { scheme: 'fel', colorScheme: 'dark' },
 };
 
 function applyTheme(theme: ThemeDefinition, previousTokens: string[]) {

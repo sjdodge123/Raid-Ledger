@@ -151,6 +151,266 @@ html {
 }
 
 /* ============================================
+   Batch 1: Sky + Obsidian themes (ROK-638, ROK-644)
+   ============================================ */
+
+/* Sky light theme — soft sky blues, pure whites (ROK-638) */
+[data-scheme="sky"] {
+    --color-backdrop: #F0F4F8;
+    --color-surface: #FFFFFF;
+    --color-panel: #E8F0F7;
+    --color-overlay: #D8E8F4;
+    --color-faint: #C2D4E8;
+    --color-dim: #7B9AB5;
+    --color-muted: #4A6580;
+    --color-secondary: #2A4A64;
+    --color-foreground: #0D1F2D;
+    --color-edge: #C2D4E8;
+    --color-edge-strong: #A0BACE;
+    --color-edge-subtle: #D8E8F4;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(232, 240, 247, 0.9);
+    --gt-widget-border: rgba(194, 212, 232, 0.6);
+    --gt-split-bg: rgba(216, 232, 244, 0.4);
+    --gt-past-highlight: rgba(194, 212, 232, 0.3);
+    --gt-hover-glow: rgba(74, 101, 128, 0.15);
+    --gt-proximity-line: 74, 101, 128;
+}
+
+/* Obsidian dark theme — near-blacks, muted teal accent (ROK-644) */
+[data-scheme="obsidian"] {
+    --color-backdrop: #080808;
+    --color-surface: #111111;
+    --color-panel: #1C1C1E;
+    --color-overlay: #242426;
+    --color-faint: #3A3A3C;
+    --color-dim: #636366;
+    --color-muted: #8E8E93;
+    --color-secondary: #AEAEB2;
+    --color-foreground: #F2F2F7;
+    --color-edge: #2C2C2E;
+    --color-edge-strong: #3A3A3C;
+    --color-edge-subtle: #1C1C1E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(28, 28, 30, 0.7);
+    --gt-widget-border: rgba(44, 44, 46, 0.6);
+    --gt-split-bg: rgba(28, 28, 30, 0.8);
+    --gt-past-highlight: rgba(28, 28, 30, 0.3);
+    --gt-hover-glow: rgba(142, 142, 147, 0.2);
+    --gt-proximity-line: 142, 142, 147;
+}
+
+/* ============================================
+   Batch 2: Dawn Raid + Ember Forge themes (ROK-635, ROK-639)
+   ============================================ */
+
+/* Dawn Raid light theme — warm sunrise ambers and golds (ROK-635) */
+[data-scheme="dawn"] {
+    --color-backdrop: #FFF8F0;
+    --color-surface: #FFF1E3;
+    --color-panel: #FFE8D0;
+    --color-overlay: #FDDBB8;
+    --color-faint: #E8C99A;
+    --color-dim: #B08060;
+    --color-muted: #7A5535;
+    --color-secondary: #4A2E18;
+    --color-foreground: #2D1F0F;
+    --color-edge: #E8C99A;
+    --color-edge-strong: #CCA87A;
+    --color-edge-subtle: #FDDBB8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(255, 232, 208, 0.9);
+    --gt-widget-border: rgba(232, 201, 154, 0.6);
+    --gt-split-bg: rgba(253, 219, 184, 0.4);
+    --gt-past-highlight: rgba(232, 201, 154, 0.3);
+    --gt-hover-glow: rgba(122, 85, 53, 0.15);
+    --gt-proximity-line: 122, 85, 53;
+}
+
+/* Ember Forge dark theme — warm charcoals, molten orange accent (ROK-639) */
+[data-scheme="ember"] {
+    --color-backdrop: #121010;
+    --color-surface: #1E1917;
+    --color-panel: #2A211E;
+    --color-overlay: #382E28;
+    --color-faint: #4A3830;
+    --color-dim: #7A6058;
+    --color-muted: #A8887A;
+    --color-secondary: #C8A898;
+    --color-foreground: #F0E6DC;
+    --color-edge: #3D2E28;
+    --color-edge-strong: #5A4238;
+    --color-edge-subtle: #2A211E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(42, 33, 30, 0.7);
+    --gt-widget-border: rgba(61, 46, 40, 0.6);
+    --gt-split-bg: rgba(42, 33, 30, 0.8);
+    --gt-past-highlight: rgba(42, 33, 30, 0.3);
+    --gt-hover-glow: rgba(168, 136, 122, 0.2);
+    --gt-proximity-line: 168, 136, 122;
+}
+
+/* ============================================
+   Batch 3: Holy + Arctic Night themes (ROK-636, ROK-642)
+   ============================================ */
+
+/* Holy / Stained Glass light theme — crisp whites, deep navy + gold (ROK-636) */
+[data-scheme="holy"] {
+    --color-backdrop: #F8F9FC;
+    --color-surface: #FFFFFF;
+    --color-panel: #EEF2FB;
+    --color-overlay: #E0E6F5;
+    --color-faint: #C8D3E8;
+    --color-dim: #748AAD;
+    --color-muted: #4A5E82;
+    --color-secondary: #2A3A5A;
+    --color-foreground: #0F1A2E;
+    --color-edge: #C8D3E8;
+    --color-edge-strong: #A8BACC;
+    --color-edge-subtle: #E0E6F5;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(238, 242, 251, 0.9);
+    --gt-widget-border: rgba(200, 211, 232, 0.6);
+    --gt-split-bg: rgba(224, 230, 245, 0.4);
+    --gt-past-highlight: rgba(200, 211, 232, 0.3);
+    --gt-hover-glow: rgba(74, 94, 130, 0.15);
+    --gt-proximity-line: 74, 94, 130;
+}
+
+/* Arctic Night dark theme — deep blue-blacks, ice blue accent (ROK-642) */
+[data-scheme="arctic"] {
+    --color-backdrop: #080C12;
+    --color-surface: #0E1520;
+    --color-panel: #162030;
+    --color-overlay: #1E2E40;
+    --color-faint: #253A50;
+    --color-dim: #3A5A78;
+    --color-muted: #6A90B8;
+    --color-secondary: #98BAD8;
+    --color-foreground: #E0EEFF;
+    --color-edge: #1E3048;
+    --color-edge-strong: #2A4060;
+    --color-edge-subtle: #102035;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(22, 32, 48, 0.7);
+    --gt-widget-border: rgba(30, 48, 72, 0.6);
+    --gt-split-bg: rgba(22, 32, 48, 0.8);
+    --gt-past-highlight: rgba(22, 32, 48, 0.3);
+    --gt-hover-glow: rgba(106, 144, 184, 0.2);
+    --gt-proximity-line: 106, 144, 184;
+}
+
+/* ============================================
+   Batch 4: Celestial Chart + Blood Moon themes (ROK-637, ROK-641)
+   ============================================ */
+
+/* Celestial Chart light theme — warm ivory, deep navy + antique gold (ROK-637) */
+[data-scheme="celestial"] {
+    --color-backdrop: #F5F0E8;
+    --color-surface: #EDE8DC;
+    --color-panel: #E4DDD0;
+    --color-overlay: #D8D0C0;
+    --color-faint: #C0B098;
+    --color-dim: #8A7860;
+    --color-muted: #6A5840;
+    --color-secondary: #3D3560;
+    --color-foreground: #1A1A2E;
+    --color-edge: #B8A88A;
+    --color-edge-strong: #9A8870;
+    --color-edge-subtle: #D0C8B8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(228, 221, 208, 0.9);
+    --gt-widget-border: rgba(184, 168, 138, 0.6);
+    --gt-split-bg: rgba(216, 208, 192, 0.4);
+    --gt-past-highlight: rgba(184, 168, 138, 0.3);
+    --gt-hover-glow: rgba(106, 88, 64, 0.15);
+    --gt-proximity-line: 106, 88, 64;
+}
+
+/* Blood Moon dark theme — deep burgundy-blacks, blood crimson accent (ROK-641) */
+[data-scheme="bloodmoon"] {
+    --color-backdrop: #0E0808;
+    --color-surface: #1A0E0E;
+    --color-panel: #241414;
+    --color-overlay: #301A1A;
+    --color-faint: #4A2020;
+    --color-dim: #7A4040;
+    --color-muted: #9E6060;
+    --color-secondary: #C89090;
+    --color-foreground: #F5E0E0;
+    --color-edge: #3D1A1A;
+    --color-edge-strong: #5A2A2A;
+    --color-edge-subtle: #241414;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(36, 20, 20, 0.7);
+    --gt-widget-border: rgba(61, 26, 26, 0.6);
+    --gt-split-bg: rgba(36, 20, 20, 0.8);
+    --gt-past-highlight: rgba(36, 20, 20, 0.3);
+    --gt-hover-glow: rgba(158, 96, 96, 0.2);
+    --gt-proximity-line: 158, 96, 96;
+}
+
+/* ============================================
+   Batch 5: Midnight Forest + Fel Green themes (ROK-640, ROK-643)
+   ============================================ */
+
+/* Midnight Forest dark theme — deep forest greens, bioluminescent teal (ROK-640) */
+[data-scheme="forest"] {
+    --color-backdrop: #0A0F0C;
+    --color-surface: #111A14;
+    --color-panel: #182B1C;
+    --color-overlay: #1E3822;
+    --color-faint: #284A30;
+    --color-dim: #3D6A48;
+    --color-muted: #6A9E72;
+    --color-secondary: #96C49E;
+    --color-foreground: #D8F0DD;
+    --color-edge: #1F3D25;
+    --color-edge-strong: #2E5A36;
+    --color-edge-subtle: #122018;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(24, 43, 28, 0.7);
+    --gt-widget-border: rgba(31, 61, 37, 0.6);
+    --gt-split-bg: rgba(24, 43, 28, 0.8);
+    --gt-past-highlight: rgba(24, 43, 28, 0.3);
+    --gt-hover-glow: rgba(106, 158, 114, 0.2);
+    --gt-proximity-line: 106, 158, 114;
+}
+
+/* Fel Green dark theme — near-black, electric fel green + corrupted purple (ROK-643) */
+[data-scheme="fel"] {
+    --color-backdrop: #0A0C0A;
+    --color-surface: #131613;
+    --color-panel: #1A201A;
+    --color-overlay: #203028;
+    --color-faint: #284030;
+    --color-dim: #3D6040;
+    --color-muted: #6A9060;
+    --color-secondary: #96C090;
+    --color-foreground: #D8F0D0;
+    --color-edge: #1F3020;
+    --color-edge-strong: #2C4830;
+    --color-edge-subtle: #121814;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(26, 32, 26, 0.7);
+    --gt-widget-border: rgba(31, 48, 32, 0.6);
+    --gt-split-bg: rgba(26, 32, 26, 0.8);
+    --gt-past-highlight: rgba(26, 32, 26, 0.3);
+    --gt-hover-glow: rgba(106, 144, 96, 0.2);
+    --gt-proximity-line: 106, 144, 96;
+}
+
+/* ============================================
    UX Design System - Raid Ledger
    Based on ux-design-specification.md
    ============================================ */
