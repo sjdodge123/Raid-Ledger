@@ -5,7 +5,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RescheduleResponseListener } from './reschedule-response.listener';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SignupsService } from '../../events/signups.service';
-import { EventsService } from '../../events/events.service';
 import { CharactersService } from '../../characters/characters.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { RESCHEDULE_BUTTON_IDS } from '../discord-bot.constants';
@@ -86,6 +85,7 @@ function makeSelectMenuInteraction(
 
 describe('RescheduleResponseListener', () => {
   let module: TestingModule;
+
   let listener: any;
   let mockDb: MockDb;
   let mockClientService: { getClient: jest.Mock };
@@ -94,7 +94,6 @@ describe('RescheduleResponseListener', () => {
     confirmSignup: jest.Mock;
     updateStatus: jest.Mock;
   };
-  let mockEventsService: object;
   let mockCharactersService: {
     findAllForUser: jest.Mock;
     findOne: jest.Mock;
@@ -142,8 +141,6 @@ describe('RescheduleResponseListener', () => {
       updateStatus: jest.fn().mockResolvedValue(undefined),
     };
 
-    mockEventsService = {};
-
     mockCharactersService = {
       findAllForUser: jest
         .fn()
@@ -166,14 +163,15 @@ describe('RescheduleResponseListener', () => {
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: DiscordBotClientService, useValue: mockClientService },
         { provide: SignupsService, useValue: mockSignupsService },
-        { provide: EventsService, useValue: mockEventsService },
         { provide: CharactersService, useValue: mockCharactersService },
         { provide: EmbedSyncQueueService, useValue: mockEmbedSyncQueue },
         { provide: DiscordEmojiService, useValue: mockEmojiService },
       ],
     }).compile();
 
-    listener = module.get(RescheduleResponseListener);
+    listener = module.get<RescheduleResponseListener>(
+      RescheduleResponseListener,
+    );
   });
 
   afterEach(async () => {
