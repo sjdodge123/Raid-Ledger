@@ -181,7 +181,7 @@ export function CalendarView({
     const { data: eventsData, isLoading, isFetching } = useEvents({
         startAfter,
         endBefore,
-        upcoming: false, // Get all events in range, not just upcoming
+        // ROK-655: upcoming intentionally omitted — date range handles filtering
         includeSignups: isScheduleView || view === Views.WEEK || view === Views.DAY,
         limit: 100, // Override default page size (20) to fetch full date range
     });
