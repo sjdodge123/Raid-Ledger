@@ -50,7 +50,9 @@ jobs:
 
   unit-tests:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, claude-review]
+    # Run after review on PRs; skip review gate on push (review is PR-only)
+    if: ${{ !cancelled() && needs.lint.result == 'success' && (needs.claude-review.result == 'success' || needs.claude-review.result == 'skipped') }}
 
     steps:
       - name: Checkout code
@@ -84,7 +86,9 @@ jobs:
 
   integration-tests:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, claude-review]
+    # Run after review on PRs; skip review gate on push (review is PR-only)
+    if: ${{ !cancelled() && needs.lint.result == 'success' && (needs.claude-review.result == 'success' || needs.claude-review.result == 'skipped') }}
 
     services:
       postgres:
@@ -146,7 +150,7 @@ jobs:
 
   smoke-tests:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [unit-tests, integration-tests]
 
     services:
       postgres:
@@ -242,12 +246,13 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  # Claude Code automated review — runs on every PR
+  # Claude Code automated review — runs on every PR, after lint passes
   # NOTE: Add ANTHROPIC_API_KEY to repo secrets (Settings > Secrets > Actions)
   # NOTE: Add "claude-review" as a required status check in branch protection rules
   #       (Settings > Branches > main > Require status checks)
   claude-review:
     if: github.event_name == 'pull_request'
+    needs: lint
     runs-on: ubuntu-latest
     permissions:
       contents: read
