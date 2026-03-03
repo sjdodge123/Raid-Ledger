@@ -259,12 +259,18 @@ jobs:
       pull-requests: write
       issues: write
     steps:
+      - name: Skip for repo owner
+        if: github.event.pull_request.user.login == 'sjdodge123'
+        run: echo "Skipping AI review for repo owner — no API cost incurred"
+
       - name: Checkout code
+        if: github.event.pull_request.user.login != 'sjdodge123'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
       - name: Run Claude Code review
+        if: github.event.pull_request.user.login != 'sjdodge123'
         uses: anthropics/claude-code-action@beta
         with:
           model: claude-sonnet-4-6
