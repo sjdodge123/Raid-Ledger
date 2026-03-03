@@ -2,6 +2,7 @@ import { useContext } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
+import { toast } from '../lib/toast';
 import { getAuthToken } from './use-auth';
 import { WantToPlayContext, NO_PROVIDER } from './want-to-play-context';
 
@@ -91,6 +92,7 @@ function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
                     (context as { previous: GameInterestResponseDto }).previous,
                 );
             }
+            toast.error('Failed to update game interest');
         },
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey });
