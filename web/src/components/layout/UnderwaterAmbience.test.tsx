@@ -34,6 +34,10 @@ const mockMoveTo = vi.fn();
 const mockLineTo = vi.fn();
 const mockClosePath = vi.fn();
 
+const mockGradient = {
+    addColorStop: vi.fn(),
+};
+
 const mockCtx = {
     clearRect: mockClearRect,
     beginPath: mockBeginPath,
@@ -47,6 +51,13 @@ const mockCtx = {
     moveTo: mockMoveTo,
     lineTo: mockLineTo,
     closePath: mockClosePath,
+    createLinearGradient: vi.fn(() => mockGradient),
+    createRadialGradient: vi.fn(() => mockGradient),
+    stroke: vi.fn(),
+    strokeStyle: '',
+    lineWidth: 1,
+    shadowColor: '',
+    shadowBlur: 0,
     fillStyle: '',
     globalAlpha: 1,
 };
@@ -112,22 +123,28 @@ afterEach(() => {
 // ============================================================
 
 describe('UnderwaterAmbience — rendering (ROK-296)', () => {
-    it('returns null when theme is not underwater', () => {
+    it('renders a hidden canvas when theme is not underwater', () => {
         mockResolvedTheme.mockReturnValue('default-dark');
         const { container } = render(<UnderwaterAmbience />);
-        expect(container.firstChild).toBeNull();
+        const canvas = container.firstChild as HTMLElement | null;
+        expect(canvas).not.toBeNull();
+        expect(canvas).toHaveClass('hidden');
     });
 
-    it('returns null when theme is space', () => {
+    it('renders a hidden canvas when theme is space', () => {
         mockResolvedTheme.mockReturnValue('space');
         const { container } = render(<UnderwaterAmbience />);
-        expect(container.firstChild).toBeNull();
+        const canvas = container.firstChild as HTMLElement | null;
+        expect(canvas).not.toBeNull();
+        expect(canvas).toHaveClass('hidden');
     });
 
-    it('returns null when theme is default-light', () => {
+    it('renders a hidden canvas when theme is default-light', () => {
         mockResolvedTheme.mockReturnValue('default-light');
         const { container } = render(<UnderwaterAmbience />);
-        expect(container.firstChild).toBeNull();
+        const canvas = container.firstChild as HTMLElement | null;
+        expect(canvas).not.toBeNull();
+        expect(canvas).toHaveClass('hidden');
     });
 
     it('renders a canvas element when theme is underwater', () => {
@@ -286,26 +303,31 @@ describe('UnderwaterAmbience — canvas sizing (ROK-296)', () => {
 });
 
 describe('UnderwaterAmbience — theme switch (ROK-296)', () => {
-    it('removes canvas when theme switches away from underwater', () => {
+    it('hides canvas when theme switches away from underwater', () => {
         mockResolvedTheme.mockReturnValue('underwater');
         const { rerender } = render(<UnderwaterAmbience />);
-        expect(document.querySelector('canvas')).toBeInTheDocument();
+        const canvas = document.querySelector('canvas');
+        expect(canvas).toBeInTheDocument();
+        expect(canvas).not.toHaveClass('hidden');
 
         mockResolvedTheme.mockReturnValue('default-dark');
         rerender(<UnderwaterAmbience />);
 
-        expect(document.querySelector('canvas')).not.toBeInTheDocument();
+        expect(document.querySelector('canvas')).toBeInTheDocument();
+        expect(document.querySelector('canvas')).toHaveClass('hidden');
     });
 
-    it('renders canvas when theme switches to underwater', () => {
+    it('shows canvas when theme switches to underwater', () => {
         mockResolvedTheme.mockReturnValue('default-dark');
         const { rerender } = render(<UnderwaterAmbience />);
-        expect(document.querySelector('canvas')).not.toBeInTheDocument();
+        expect(document.querySelector('canvas')).toHaveClass('hidden');
 
         mockResolvedTheme.mockReturnValue('underwater');
         rerender(<UnderwaterAmbience />);
 
-        expect(document.querySelector('canvas')).toBeInTheDocument();
+        const canvas = document.querySelector('canvas');
+        expect(canvas).toBeInTheDocument();
+        expect(canvas).not.toHaveClass('hidden');
     });
 });
 

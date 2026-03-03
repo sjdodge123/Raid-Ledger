@@ -43,9 +43,9 @@ describe('THEME_REGISTRY — underwater theme registration (ROK-296)', () => {
         expect(underwater!.isDark).toBe(true);
     });
 
-    it('has preview surface color #0f1f35', () => {
+    it('has preview surface color #0c1b2f', () => {
         const underwater = THEME_REGISTRY.find((t) => t.id === 'underwater');
-        expect(underwater!.preview.surface).toBe('#0f1f35');
+        expect(underwater!.preview.surface).toBe('#0c1b2f');
     });
 
     it('has preview accent color #22d3a0', () => {
