@@ -59,7 +59,7 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
-[data-scheme="light"] .user-link__avatar--initials {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .user-link__avatar--initials {
     color: #64748b;
     background: rgba(0, 0, 0, 0.06);
     border-color: rgba(203, 213, 225, 0.3);

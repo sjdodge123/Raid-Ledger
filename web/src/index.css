@@ -72,7 +72,7 @@ html {
 }
 
 /* Light theme overrides (ROK-124, contrast fixes ROK-464) */
-[data-scheme="light"] {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
     --color-backdrop: #f8fafc;
     --color-surface: #ffffff;
     --color-panel: #f1f5f9;
@@ -148,6 +148,266 @@ html {
     --uw-coral-red: #e04848;
     --uw-lantern-brass: #d4a843;
     --uw-wood-highlight: rgba(139, 105, 60, 0.15);
+}
+
+/* ============================================
+   Batch 1: Sky + Obsidian themes (ROK-638, ROK-644)
+   ============================================ */
+
+/* Sky light theme — soft sky blues, pure whites (ROK-638) */
+[data-scheme="sky"] {
+    --color-backdrop: #F0F4F8;
+    --color-surface: #FFFFFF;
+    --color-panel: #E8F0F7;
+    --color-overlay: #D8E8F4;
+    --color-faint: #C2D4E8;
+    --color-dim: #7B9AB5;
+    --color-muted: #4A6580;
+    --color-secondary: #2A4A64;
+    --color-foreground: #0D1F2D;
+    --color-edge: #C2D4E8;
+    --color-edge-strong: #A0BACE;
+    --color-edge-subtle: #D8E8F4;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(232, 240, 247, 0.9);
+    --gt-widget-border: rgba(194, 212, 232, 0.6);
+    --gt-split-bg: rgba(216, 232, 244, 0.4);
+    --gt-past-highlight: rgba(194, 212, 232, 0.3);
+    --gt-hover-glow: rgba(74, 101, 128, 0.15);
+    --gt-proximity-line: 74, 101, 128;
+}
+
+/* Obsidian dark theme — near-blacks, muted teal accent (ROK-644) */
+[data-scheme="obsidian"] {
+    --color-backdrop: #080808;
+    --color-surface: #111111;
+    --color-panel: #1C1C1E;
+    --color-overlay: #242426;
+    --color-faint: #3A3A3C;
+    --color-dim: #636366;
+    --color-muted: #8E8E93;
+    --color-secondary: #AEAEB2;
+    --color-foreground: #F2F2F7;
+    --color-edge: #2C2C2E;
+    --color-edge-strong: #3A3A3C;
+    --color-edge-subtle: #1C1C1E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(28, 28, 30, 0.7);
+    --gt-widget-border: rgba(44, 44, 46, 0.6);
+    --gt-split-bg: rgba(28, 28, 30, 0.8);
+    --gt-past-highlight: rgba(28, 28, 30, 0.3);
+    --gt-hover-glow: rgba(142, 142, 147, 0.2);
+    --gt-proximity-line: 142, 142, 147;
+}
+
+/* ============================================
+   Batch 2: Dawn Raid + Ember Forge themes (ROK-635, ROK-639)
+   ============================================ */
+
+/* Dawn Raid light theme — warm sunrise ambers and golds (ROK-635) */
+[data-scheme="dawn"] {
+    --color-backdrop: #FFF8F0;
+    --color-surface: #FFF1E3;
+    --color-panel: #FFE8D0;
+    --color-overlay: #FDDBB8;
+    --color-faint: #E8C99A;
+    --color-dim: #B08060;
+    --color-muted: #7A5535;
+    --color-secondary: #4A2E18;
+    --color-foreground: #2D1F0F;
+    --color-edge: #E8C99A;
+    --color-edge-strong: #CCA87A;
+    --color-edge-subtle: #FDDBB8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(255, 232, 208, 0.9);
+    --gt-widget-border: rgba(232, 201, 154, 0.6);
+    --gt-split-bg: rgba(253, 219, 184, 0.4);
+    --gt-past-highlight: rgba(232, 201, 154, 0.3);
+    --gt-hover-glow: rgba(122, 85, 53, 0.15);
+    --gt-proximity-line: 122, 85, 53;
+}
+
+/* Ember Forge dark theme — warm charcoals, molten orange accent (ROK-639) */
+[data-scheme="ember"] {
+    --color-backdrop: #121010;
+    --color-surface: #1E1917;
+    --color-panel: #2A211E;
+    --color-overlay: #382E28;
+    --color-faint: #4A3830;
+    --color-dim: #7A6058;
+    --color-muted: #A8887A;
+    --color-secondary: #C8A898;
+    --color-foreground: #F0E6DC;
+    --color-edge: #3D2E28;
+    --color-edge-strong: #5A4238;
+    --color-edge-subtle: #2A211E;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(42, 33, 30, 0.7);
+    --gt-widget-border: rgba(61, 46, 40, 0.6);
+    --gt-split-bg: rgba(42, 33, 30, 0.8);
+    --gt-past-highlight: rgba(42, 33, 30, 0.3);
+    --gt-hover-glow: rgba(168, 136, 122, 0.2);
+    --gt-proximity-line: 168, 136, 122;
+}
+
+/* ============================================
+   Batch 3: Holy + Arctic Night themes (ROK-636, ROK-642)
+   ============================================ */
+
+/* Holy / Stained Glass light theme — crisp whites, deep navy + gold (ROK-636) */
+[data-scheme="holy"] {
+    --color-backdrop: #F8F9FC;
+    --color-surface: #FFFFFF;
+    --color-panel: #EEF2FB;
+    --color-overlay: #E0E6F5;
+    --color-faint: #C8D3E8;
+    --color-dim: #748AAD;
+    --color-muted: #4A5E82;
+    --color-secondary: #2A3A5A;
+    --color-foreground: #0F1A2E;
+    --color-edge: #C8D3E8;
+    --color-edge-strong: #A8BACC;
+    --color-edge-subtle: #E0E6F5;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(238, 242, 251, 0.9);
+    --gt-widget-border: rgba(200, 211, 232, 0.6);
+    --gt-split-bg: rgba(224, 230, 245, 0.4);
+    --gt-past-highlight: rgba(200, 211, 232, 0.3);
+    --gt-hover-glow: rgba(74, 94, 130, 0.15);
+    --gt-proximity-line: 74, 94, 130;
+}
+
+/* Arctic Night dark theme — deep blue-blacks, ice blue accent (ROK-642) */
+[data-scheme="arctic"] {
+    --color-backdrop: #080C12;
+    --color-surface: #0E1520;
+    --color-panel: #162030;
+    --color-overlay: #1E2E40;
+    --color-faint: #253A50;
+    --color-dim: #3A5A78;
+    --color-muted: #6A90B8;
+    --color-secondary: #98BAD8;
+    --color-foreground: #E0EEFF;
+    --color-edge: #1E3048;
+    --color-edge-strong: #2A4060;
+    --color-edge-subtle: #102035;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(22, 32, 48, 0.7);
+    --gt-widget-border: rgba(30, 48, 72, 0.6);
+    --gt-split-bg: rgba(22, 32, 48, 0.8);
+    --gt-past-highlight: rgba(22, 32, 48, 0.3);
+    --gt-hover-glow: rgba(106, 144, 184, 0.2);
+    --gt-proximity-line: 106, 144, 184;
+}
+
+/* ============================================
+   Batch 4: Celestial Chart + Blood Moon themes (ROK-637, ROK-641)
+   ============================================ */
+
+/* Celestial Chart light theme — warm ivory, deep navy + antique gold (ROK-637) */
+[data-scheme="celestial"] {
+    --color-backdrop: #F5F0E8;
+    --color-surface: #EDE8DC;
+    --color-panel: #E4DDD0;
+    --color-overlay: #D8D0C0;
+    --color-faint: #C0B098;
+    --color-dim: #8A7860;
+    --color-muted: #6A5840;
+    --color-secondary: #3D3560;
+    --color-foreground: #1A1A2E;
+    --color-edge: #B8A88A;
+    --color-edge-strong: #9A8870;
+    --color-edge-subtle: #D0C8B8;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(228, 221, 208, 0.9);
+    --gt-widget-border: rgba(184, 168, 138, 0.6);
+    --gt-split-bg: rgba(216, 208, 192, 0.4);
+    --gt-past-highlight: rgba(184, 168, 138, 0.3);
+    --gt-hover-glow: rgba(106, 88, 64, 0.15);
+    --gt-proximity-line: 106, 88, 64;
+}
+
+/* Blood Moon dark theme — deep burgundy-blacks, blood crimson accent (ROK-641) */
+[data-scheme="bloodmoon"] {
+    --color-backdrop: #0E0808;
+    --color-surface: #1A0E0E;
+    --color-panel: #241414;
+    --color-overlay: #301A1A;
+    --color-faint: #4A2020;
+    --color-dim: #7A4040;
+    --color-muted: #9E6060;
+    --color-secondary: #C89090;
+    --color-foreground: #F5E0E0;
+    --color-edge: #3D1A1A;
+    --color-edge-strong: #5A2A2A;
+    --color-edge-subtle: #241414;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(36, 20, 20, 0.7);
+    --gt-widget-border: rgba(61, 26, 26, 0.6);
+    --gt-split-bg: rgba(36, 20, 20, 0.8);
+    --gt-past-highlight: rgba(36, 20, 20, 0.3);
+    --gt-hover-glow: rgba(158, 96, 96, 0.2);
+    --gt-proximity-line: 158, 96, 96;
+}
+
+/* ============================================
+   Batch 5: Midnight Forest + Fel Green themes (ROK-640, ROK-643)
+   ============================================ */
+
+/* Midnight Forest dark theme — deep forest greens, bioluminescent teal (ROK-640) */
+[data-scheme="forest"] {
+    --color-backdrop: #0A0F0C;
+    --color-surface: #111A14;
+    --color-panel: #182B1C;
+    --color-overlay: #1E3822;
+    --color-faint: #284A30;
+    --color-dim: #3D6A48;
+    --color-muted: #6A9E72;
+    --color-secondary: #96C49E;
+    --color-foreground: #D8F0DD;
+    --color-edge: #1F3D25;
+    --color-edge-strong: #2E5A36;
+    --color-edge-subtle: #122018;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(24, 43, 28, 0.7);
+    --gt-widget-border: rgba(31, 61, 37, 0.6);
+    --gt-split-bg: rgba(24, 43, 28, 0.8);
+    --gt-past-highlight: rgba(24, 43, 28, 0.3);
+    --gt-hover-glow: rgba(106, 158, 114, 0.2);
+    --gt-proximity-line: 106, 158, 114;
+}
+
+/* Fel Green dark theme — near-black, electric fel green + corrupted purple (ROK-643) */
+[data-scheme="fel"] {
+    --color-backdrop: #0A0C0A;
+    --color-surface: #131613;
+    --color-panel: #1A201A;
+    --color-overlay: #203028;
+    --color-faint: #284030;
+    --color-dim: #3D6040;
+    --color-muted: #6A9060;
+    --color-secondary: #96C090;
+    --color-foreground: #D8F0D0;
+    --color-edge: #1F3020;
+    --color-edge-strong: #2C4830;
+    --color-edge-subtle: #121814;
+
+    /* Game Time Grid inline-style tokens */
+    --gt-widget-bg: rgba(26, 32, 26, 0.7);
+    --gt-widget-border: rgba(31, 48, 32, 0.6);
+    --gt-split-bg: rgba(26, 32, 26, 0.8);
+    --gt-past-highlight: rgba(26, 32, 26, 0.3);
+    --gt-hover-glow: rgba(106, 144, 96, 0.2);
+    --gt-proximity-line: 106, 144, 96;
 }
 
 /* ============================================
@@ -317,7 +577,7 @@ html {
     color-scheme: dark;
 }
 
-html[data-scheme="light"] {
+html:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) {
     color-scheme: light;
 }
 
@@ -359,12 +619,12 @@ body {
 }
 
 /* Light mode glass-card: opaque with subtle shadow */
-[data-scheme="light"] .glass-card {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card {
     background: color-mix(in srgb, var(--color-surface) 90%, transparent);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
-[data-scheme="light"] .glass-card:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glass-card:hover {
     background: color-mix(in srgb, var(--color-surface) 95%, transparent);
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
@@ -373,91 +633,91 @@ body {
    Light Mode — Status Color Contrast Fixes (ROK-464)
    Tailwind -400 shades (~3:1 on white) bumped to
    -600/-700 shades (>4.5:1) for WCAG AA compliance.
-   Only active under [data-scheme="light"].
+   Only active under :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]).
    ============================================ */
 
 /* --- Text colors: bump from -400 to -600/-700 for AA on white --- */
-[data-scheme="light"] .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
-[data-scheme="light"] .text-amber-400 { color: #d97706; }       /* amber-600: 4.3:1 */
-[data-scheme="light"] .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
-[data-scheme="light"] .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
-[data-scheme="light"] .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
-[data-scheme="light"] .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
-[data-scheme="light"] .text-emerald-400 { color: #059669; }     /* emerald-600: 4.5:1 */
-[data-scheme="light"] .text-emerald-300 { color: #059669; }     /* emerald-600 */
-[data-scheme="light"] .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
-[data-scheme="light"] .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
-[data-scheme="light"] .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
-[data-scheme="light"] .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
-[data-scheme="light"] .text-cyan-400 { color: #0891b2; }        /* cyan-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400 { color: #dc2626; }         /* red-600: 4.6:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400 { color: #d97706; }       /* amber-600: 4.3:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-400 { color: #ca8a04; }      /* yellow-600: 4.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-yellow-500 { color: #a16207; }      /* yellow-700: 5.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-400 { color: #16a34a; }       /* green-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-green-500 { color: #15803d; }       /* green-700: 5.9:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-400 { color: #059669; }     /* emerald-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-300 { color: #059669; }     /* emerald-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-emerald-500 { color: #047857; }     /* emerald-700: 6.0:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-purple-400 { color: #7c3aed; }      /* violet-600: 5.2:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-indigo-400 { color: #4f46e5; }      /* indigo-600: 5.9:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-300 { color: #0891b2; }        /* cyan-600: 4.5:1 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-cyan-400 { color: #0891b2; }        /* cyan-600: 4.5:1 */
 
 /* Opacity variants of status text colors */
-[data-scheme="light"] .text-red-400\/80 { color: rgba(220, 38, 38, 0.85); }   /* red-600 */
-[data-scheme="light"] .text-red-400\/70 { color: rgba(220, 38, 38, 0.75); }
-[data-scheme="light"] .text-red-400\/60 { color: rgba(220, 38, 38, 0.65); }
-[data-scheme="light"] .text-amber-400\/80 { color: rgba(217, 119, 6, 0.85); } /* amber-600 */
-[data-scheme="light"] .text-amber-400\/70 { color: rgba(217, 119, 6, 0.75); }
-[data-scheme="light"] .text-amber-400\/60 { color: rgba(217, 119, 6, 0.65); }
-[data-scheme="light"] .text-amber-500\/80 { color: rgba(180, 83, 9, 0.85); }  /* amber-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/80 { color: rgba(220, 38, 38, 0.85); }   /* red-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/70 { color: rgba(220, 38, 38, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-red-400\/60 { color: rgba(220, 38, 38, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/80 { color: rgba(217, 119, 6, 0.85); } /* amber-600 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/70 { color: rgba(217, 119, 6, 0.75); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-400\/60 { color: rgba(217, 119, 6, 0.65); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .text-amber-500\/80 { color: rgba(180, 83, 9, 0.85); }  /* amber-700 */
 
 /* Hover state colors: in light mode, hover should darken (not lighten) */
-[data-scheme="light"] .hover\:text-red-300:hover { color: #b91c1c; }            /* red-700 */
-[data-scheme="light"] .hover\:text-amber-300:hover { color: #b45309; }          /* amber-700 */
-[data-scheme="light"] .hover\:text-yellow-300:hover { color: #a16207; }         /* yellow-700 */
-[data-scheme="light"] .hover\:text-green-300:hover { color: #15803d; }          /* green-700 */
-[data-scheme="light"] .hover\:text-emerald-300:hover { color: #047857; }        /* emerald-700 */
-[data-scheme="light"] .hover\:text-cyan-300:hover { color: #0e7490; }           /* cyan-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-red-300:hover { color: #b91c1c; }            /* red-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-amber-300:hover { color: #b45309; }          /* amber-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-yellow-300:hover { color: #a16207; }         /* yellow-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-green-300:hover { color: #15803d; }          /* green-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-emerald-300:hover { color: #047857; }        /* emerald-700 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:text-cyan-300:hover { color: #0e7490; }           /* cyan-700 */
 
 /* --- Background tints: dark-mode-specific opacity tints need light-mode equivalents --- */
-[data-scheme="light"] .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
-[data-scheme="light"] .bg-red-500\/10 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
-[data-scheme="light"] .bg-red-500\/20 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
-[data-scheme="light"] .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
-[data-scheme="light"] .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
-[data-scheme="light"] .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
-[data-scheme="light"] .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
-[data-scheme="light"] .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-500\/20 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/30 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
-[data-scheme="light"] .bg-emerald-600\/50 { background-color: rgba(167, 243, 208, 0.6); }   /* emerald-200 */
-[data-scheme="light"] .bg-green-500\/10 { background-color: rgba(220, 252, 231, 0.5); }     /* green-100 */
-[data-scheme="light"] .bg-green-500\/20 { background-color: rgba(220, 252, 231, 0.7); }     /* green-100 */
-[data-scheme="light"] .bg-yellow-500\/20 { background-color: rgba(254, 249, 195, 0.6); }    /* yellow-100 */
-[data-scheme="light"] .bg-yellow-900\/30 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
-[data-scheme="light"] .bg-red-600\/15 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
-[data-scheme="light"] .bg-red-600\/25 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
-[data-scheme="light"] .bg-indigo-500\/10 { background-color: rgba(224, 231, 255, 0.5); }    /* indigo-100 */
-[data-scheme="light"] .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
-[data-scheme="light"] .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
-[data-scheme="light"] .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-950\/50 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/10 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-500\/20 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/20 { background-color: rgba(254, 226, 226, 0.6); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-900\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/10 { background-color: rgba(254, 243, 199, 0.5); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-amber-500\/15 { background-color: rgba(254, 243, 199, 0.6); }     /* amber-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-900\/20 { background-color: rgba(209, 250, 229, 0.5); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/10 { background-color: rgba(209, 250, 229, 0.4); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-500\/20 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/30 { background-color: rgba(209, 250, 229, 0.6); }   /* emerald-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-emerald-600\/50 { background-color: rgba(167, 243, 208, 0.6); }   /* emerald-200 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/10 { background-color: rgba(220, 252, 231, 0.5); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-green-500\/20 { background-color: rgba(220, 252, 231, 0.7); }     /* green-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/20 { background-color: rgba(254, 249, 195, 0.6); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-900\/30 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/15 { background-color: rgba(254, 226, 226, 0.5); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-red-600\/25 { background-color: rgba(254, 226, 226, 0.7); }       /* red-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-indigo-500\/10 { background-color: rgba(224, 231, 255, 0.5); }    /* indigo-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-yellow-500\/10 { background-color: rgba(254, 249, 195, 0.5); }    /* yellow-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/15 { background-color: rgba(207, 250, 254, 0.5); }      /* cyan-100 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-cyan-500\/20 { background-color: rgba(207, 250, 254, 0.6); }      /* cyan-100 */
 
 /* Hover backgrounds */
-[data-scheme="light"] .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
-[data-scheme="light"] .hover\:bg-red-500\/20:hover { background-color: rgba(254, 202, 202, 0.5); }
-[data-scheme="light"] .hover\:bg-red-500\/30:hover { background-color: rgba(254, 202, 202, 0.6); }
-[data-scheme="light"] .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
-[data-scheme="light"] .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
-[data-scheme="light"] .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
-[data-scheme="light"] .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
-[data-scheme="light"] .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
-[data-scheme="light"] .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-950\/50:hover { background-color: rgba(254, 226, 226, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/20:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-500\/30:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/30:hover { background-color: rgba(254, 202, 202, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-red-600\/40:hover { background-color: rgba(254, 202, 202, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-amber-500\/20:hover { background-color: rgba(254, 243, 199, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-emerald-500\/10:hover { background-color: rgba(209, 250, 229, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-green-500\/20:hover { background-color: rgba(220, 252, 231, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .hover\:bg-yellow-500\/20:hover { background-color: rgba(254, 249, 195, 0.7); }
 
 /* --- Border colors: dark-mode tinted borders need visible light equivalents --- */
-[data-scheme="light"] .border-red-900 { border-color: #fca5a5; }             /* red-300 */
-[data-scheme="light"] .border-red-500\/20 { border-color: rgba(252, 165, 165, 0.6); }
-[data-scheme="light"] .border-red-500\/30 { border-color: rgba(252, 165, 165, 0.7); }
-[data-scheme="light"] .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.5); }
-[data-scheme="light"] .border-red-600\/50 { border-color: rgba(248, 113, 113, 0.5); }
-[data-scheme="light"] .border-amber-500\/30 { border-color: rgba(252, 211, 77, 0.5); }
-[data-scheme="light"] .border-amber-500\/40 { border-color: rgba(252, 211, 77, 0.6); }
-[data-scheme="light"] .border-yellow-500\/30 { border-color: rgba(253, 224, 71, 0.5); }
-[data-scheme="light"] .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
-[data-scheme="light"] .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
-[data-scheme="light"] .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
-[data-scheme="light"] .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
-[data-scheme="light"] .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-900 { border-color: #fca5a5; }             /* red-300 */
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/20 { border-color: rgba(252, 165, 165, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/30 { border-color: rgba(252, 165, 165, 0.7); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-500\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-red-600\/50 { border-color: rgba(248, 113, 113, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/30 { border-color: rgba(252, 211, 77, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-amber-500\/40 { border-color: rgba(252, 211, 77, 0.6); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-500\/30 { border-color: rgba(253, 224, 71, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-yellow-700\/40 { border-color: rgba(202, 138, 4, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-emerald-500\/30 { border-color: rgba(110, 231, 183, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-green-500\/30 { border-color: rgba(134, 239, 172, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/30 { border-color: rgba(103, 232, 249, 0.5); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .border-cyan-500\/40 { border-color: rgba(103, 232, 249, 0.6); }
 
 /* --- Badge overlay: preserve dark-theme colors for badges on cover images (ROK-493) ---
    Badges overlaid on dark game-cover images must keep light text/bg regardless
@@ -466,22 +726,22 @@ body {
    cards). The :is(.badge-overlay, .badge-overlay *) pattern matches both
    cases with enough specificity to beat the light-mode overrides above,
    so no !important is needed. */
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
-[data-scheme="light"] :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-emerald-400 { color: #34d399; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-yellow-400 { color: #facc15; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-red-400 { color: #f87171; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-300 { color: #67e8f9; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).text-cyan-400 { color: #22d3ee; }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-emerald-500\/20 { background-color: rgba(16, 185, 129, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-yellow-500\/20 { background-color: rgba(234, 179, 8, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-red-500\/20 { background-color: rgba(239, 68, 68, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).bg-cyan-500\/20 { background-color: rgba(6, 182, 212, 0.2); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-emerald-500\/30 { border-color: rgba(16, 185, 129, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-yellow-500\/30 { border-color: rgba(234, 179, 8, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-red-500\/30 { border-color: rgba(239, 68, 68, 0.3); }
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(.badge-overlay, .badge-overlay *).border-cyan-500\/30 { border-color: rgba(6, 182, 212, 0.3); }
 
 /* --- Solid-color button text: force white on colored backgrounds --- */
-[data-scheme="light"] :is(
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) :is(
     .bg-blue-600, .bg-indigo-600, .bg-emerald-600, .bg-purple-600,
     .bg-red-600, .bg-red-500, .bg-amber-600, .bg-violet-600,
     .bg-\[\#5865F2\]
@@ -490,9 +750,9 @@ body {
 }
 
 /* --- Panel/card shadow for light mode panel-on-surface distinction --- */
-[data-scheme="light"] .bg-panel,
-[data-scheme="light"] .bg-panel\/50,
-[data-scheme="light"] .bg-panel\/80 {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/50,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .bg-panel\/80 {
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 }
 
@@ -532,19 +792,19 @@ body {
 }
 
 /* Light mode: reduced glows */
-[data-scheme="light"] .glow-emerald {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald {
     box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
 }
 
-[data-scheme="light"] .glow-emerald:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-emerald:hover {
     box-shadow: 0 0 15px rgba(16, 185, 129, 0.3);
 }
 
-[data-scheme="light"] .glow-indigo {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo {
     box-shadow: 0 0 10px rgba(99, 102, 241, 0.2);
 }
 
-[data-scheme="light"] .glow-indigo:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .glow-indigo:hover {
     box-shadow: 0 0 15px rgba(99, 102, 241, 0.3);
 }
 
@@ -891,7 +1151,7 @@ body {
    Quest Log Theme — Parchment & Scroll (ROK-291)
    Light sub-theme using data-variant="quest-log"
    on top of data-scheme="light". Inherits all
-   existing [data-scheme="light"] rules.
+   existing :is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) rules.
    ============================================ */
 
 [data-variant="quest-log"] {

@@ -1240,242 +1240,242 @@
    Light Theme Overrides (ROK-124)
    ============================================ */
 
-[data-scheme="light"] .calendar-container {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-container {
     background: rgba(241, 245, 249, 0.8);
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .toolbar-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-btn {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.5);
     color: #334155;
 }
 
-[data-scheme="light"] .toolbar-btn:hover:not(:disabled) {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-btn:hover:not(:disabled) {
     background: rgba(203, 213, 225, 0.7);
     border-color: rgba(148, 163, 184, 0.5);
 }
 
-[data-scheme="light"] .toolbar-title {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .toolbar-title {
     color: #0f172a;
 }
 
-[data-scheme="light"] .calendar-loading {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-loading {
     color: #64748b;
 }
 
-[data-scheme="light"] .calendar-empty {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-empty {
     color: #64748b;
 }
 
-[data-scheme="light"] .rbc-header {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-header {
     color: #64748b;
     border-bottom-color: rgba(203, 213, 225, 0.4);
     background: rgba(241, 245, 249, 0.5);
 }
 
-[data-scheme="light"] .rbc-month-view {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-view {
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-month-row {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-row {
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-day-bg {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-bg {
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-day-bg:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-bg:hover {
     background: rgba(241, 245, 249, 0.5);
 }
 
-[data-scheme="light"] .rbc-off-range-bg {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range-bg {
     background: rgba(248, 250, 252, 0.7);
 }
 
-[data-scheme="light"] .rbc-month-view .rbc-day-bg.rbc-today {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-month-view .rbc-day-bg.rbc-today {
     background: rgba(16, 185, 129, 0.1) !important;
 }
 
-[data-scheme="light"] .rbc-date-cell>a {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-date-cell>a {
     color: #334155;
 }
 
-[data-scheme="light"] .rbc-off-range .rbc-date-cell>a,
-[data-scheme="light"] .rbc-off-range a {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range .rbc-date-cell>a,
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-off-range a {
     color: #cbd5e1;
 }
 
-[data-scheme="light"] .rbc-overlay {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-overlay {
     background: rgba(255, 255, 255, 0.97);
     border-color: rgba(203, 213, 225, 0.5);
     box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
 }
 
-[data-scheme="light"] .rbc-overlay-header {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-overlay-header {
     color: #0f172a;
     border-bottom-color: rgba(203, 213, 225, 0.5);
 }
 
 /* Mini calendar light overrides */
-[data-scheme="light"] .mini-calendar {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-calendar {
     background: rgba(255, 255, 255, 0.8);
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .mini-nav-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-nav-btn {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.5);
     color: #64748b;
 }
 
-[data-scheme="light"] .mini-nav-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-nav-btn:hover {
     background: rgba(203, 213, 225, 0.7);
     color: #334155;
 }
 
-[data-scheme="light"] .mini-calendar-title {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-calendar-title {
     color: #0f172a;
 }
 
-[data-scheme="light"] .mini-weekday {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-weekday {
     color: #94a3b8;
 }
 
-[data-scheme="light"] .mini-day {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day {
     color: #334155;
 }
 
-[data-scheme="light"] .mini-day:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day:hover {
     background: rgba(226, 232, 240, 0.6);
 }
 
-[data-scheme="light"] .mini-day.other-month {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .mini-day.other-month {
     color: #cbd5e1;
 }
 
 /* Sidebar light overrides */
-[data-scheme="light"] .sidebar-section {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-section {
     background: rgba(255, 255, 255, 0.8);
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .sidebar-section-title {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-section-title {
     color: #64748b;
 }
 
-[data-scheme="light"] .sidebar-action-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-action-btn {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.5);
     color: #334155;
 }
 
-[data-scheme="light"] .sidebar-action-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .sidebar-action-btn:hover {
     background: rgba(203, 213, 225, 0.7);
 }
 
-[data-scheme="light"] .filter-action-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .filter-action-btn {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.4);
     color: #64748b;
 }
 
-[data-scheme="light"] .filter-action-btn:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .filter-action-btn:hover {
     background: rgba(203, 213, 225, 0.7);
     color: #334155;
 }
 
-[data-scheme="light"] .game-filter-item {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-item {
     background: rgba(241, 245, 249, 0.5);
     border-color: rgba(203, 213, 225, 0.3);
 }
 
-[data-scheme="light"] .game-filter-item:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-item:hover {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.5);
 }
 
-[data-scheme="light"] .game-filter-icon {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-icon {
     background: rgba(241, 245, 249, 0.7);
 }
 
-[data-scheme="light"] .game-filter-name {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-name {
     color: #334155;
 }
 
-[data-scheme="light"] .game-filter-item.selected .game-filter-name {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-item.selected .game-filter-name {
     color: #1e293b;
 }
 
-[data-scheme="light"] .game-filter-show-all {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-show-all {
     color: #64748b;
 }
 
-[data-scheme="light"] .game-filter-show-all:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .game-filter-show-all:hover {
     color: #334155;
 }
 
 /* Week view light overrides */
-[data-scheme="light"] .rbc-time-view {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-view {
     border-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-header {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header {
     background: rgba(241, 245, 249, 0.5);
     border-bottom-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-header-content {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header-content {
     border-left-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-header-gutter {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-header-gutter {
     background: rgba(241, 245, 249, 0.5);
     border-right-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-allday-cell {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-allday-cell {
     border-bottom-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-content {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-content {
     border-top-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-content>*+*>* {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-content>*+*>* {
     border-left-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-gutter {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-gutter {
     background: rgba(248, 250, 252, 0.5);
 }
 
-[data-scheme="light"] .rbc-timeslot-group {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-timeslot-group {
     border-bottom-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-time-slot {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-time-slot {
     border-top-color: rgba(203, 213, 225, 0.15);
 }
 
-[data-scheme="light"] .rbc-label {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-label {
     color: #94a3b8;
 }
 
-[data-scheme="light"] .rbc-day-slot {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot {
     border-left-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .rbc-day-slot .rbc-time-slot {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot .rbc-time-slot {
     border-top-color: rgba(203, 213, 225, 0.15);
 }
 
-[data-scheme="light"] .rbc-day-slot .rbc-event {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .rbc-day-slot .rbc-event {
     border-top-color: rgba(255, 255, 255, 0.95) !important;
 }
 
-[data-scheme="light"] .week-event-signup-badge {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .week-event-signup-badge {
     background: rgba(0, 0, 0, 0.15);
     color: rgba(255, 255, 255, 0.95);
 }
@@ -1646,71 +1646,71 @@
    Quick-Join Light Theme Overrides (ROK-191)
    ============================================ */
 
-[data-scheme="light"] .day-event-actions-shimmer {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-actions-shimmer {
     background: linear-gradient(90deg, rgba(0, 0, 0, 0.03) 0%, rgba(0, 0, 0, 0.08) 50%, rgba(0, 0, 0, 0.03) 100%);
     background-size: 200% 100%;
 }
 
-[data-scheme="light"] .day-event-role-btn--tank {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--tank {
     color: #2563eb;
 }
 
-[data-scheme="light"] .day-event-role-btn--healer {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--healer {
     color: #16a34a;
 }
 
-[data-scheme="light"] .day-event-role-btn--dps {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--dps {
     color: #dc2626;
 }
 
-[data-scheme="light"] .day-event-role-btn--flex {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-role-btn--flex {
     color: #9333ea;
 }
 
-[data-scheme="light"] .day-event-join-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-join-btn {
     color: #059669;
 }
 
-[data-scheme="light"] .day-event-leave-btn {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-leave-btn {
     color: #dc2626;
 }
 
-[data-scheme="light"] .day-event-login-link {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-login-link {
     color: rgba(0, 0, 0, 0.5);
 }
 
-[data-scheme="light"] .day-event-login-link:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .day-event-login-link:hover {
     color: rgba(0, 0, 0, 0.8);
 }
 
 /* Mobile nav bar light overrides (ROK-368) */
-[data-scheme="light"] .calendar-mobile-nav {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav {
     background: rgba(241, 245, 249, 0.95);
     border-bottom-color: rgba(203, 213, 225, 0.4);
 }
 
-[data-scheme="light"] .calendar-mobile-nav-arrow {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-arrow {
     background: rgba(226, 232, 240, 0.6);
     border-color: rgba(203, 213, 225, 0.5);
     color: #334155;
 }
 
-[data-scheme="light"] .calendar-mobile-nav-arrow:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-arrow:hover {
     background: rgba(203, 213, 225, 0.7);
     border-color: rgba(148, 163, 184, 0.5);
 }
 
-[data-scheme="light"] .calendar-mobile-nav-label {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-label {
     color: #0f172a;
 }
 
-[data-scheme="light"] .calendar-mobile-nav-today {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-today {
     background: #059669;
     border-color: #059669;
     color: #fff;
 }
 
-[data-scheme="light"] .calendar-mobile-nav-today:hover {
+:is([data-scheme="light"],[data-scheme="quest-log"],[data-scheme="sky"],[data-scheme="dawn"],[data-scheme="holy"],[data-scheme="celestial"]) .calendar-mobile-nav-today:hover {
     background: #10b981;
     border-color: #10b981;
 }

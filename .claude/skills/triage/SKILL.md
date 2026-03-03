@@ -14,6 +14,70 @@ Scans Sentry-created GitHub issues, deduplicates by root cause, traces errors to
 
 ---
 
+## Step 0: Clean Up Resolved GitHub Issues
+
+Before triaging new issues, check if any previously-triaged open Sentry issues can be closed because their linked Linear stories are Done.
+
+### 0a. Fetch open triaged issues
+
+```bash
+gh issue list --state open --label triaged --label sentry --json number,title,comments --limit 100
+```
+
+If none found, skip to Step 1.
+
+### 0b. Extract linked Linear story IDs
+
+Parse each issue's comments for the `ROK-NNN` pattern from the triage comment (e.g., "Triaged → Linear ROK-631").
+
+### 0c. Query Linear for story status
+
+**Load `LINEAR_API_KEY` from `.env`:**
+```bash
+export $(grep '^LINEAR_API_KEY=' .env | xargs)
+```
+
+Query by exact issue numbers using the GraphQL API:
+```bash
+curl -s -X POST https://api.linear.app/graphql \
+  -H "Content-Type: application/json" \
+  -H "Authorization: $LINEAR_API_KEY" \
+  -d '{"query":"{ issues(filter: { number: { in: [NNN, MMM] }, team: { key: { eq: \"ROK\" } } }) { nodes { identifier title state { name } } } }"}'
+```
+
+### 0d. Classify each issue
+
+| Linear Status | Action |
+|---|---|
+| **Done** | Close GitHub issue with resolution comment |
+| **Not found** in Linear | Check `git log` for fix evidence in referenced source files; if fix shipped, close; otherwise flag for manual review |
+| **In Progress / Backlog / other** | Leave open — still being worked |
+
+### 0e. Present cleanup summary and get confirmation
+
+```
+## Resolved Issues — Ready to Close
+
+| GitHub | Linear | Status | Action |
+|---|---|---|---|
+| #331 — Calendar highlight | ROK-631 | Done | Close |
+| #278 — Discord interaction | ROK-540 | Fix shipped (commit abc123) | Close |
+| #400 — Some bug | ROK-650 | In Progress | Skip |
+```
+
+Use `AskUserQuestion` to confirm before closing. Then for each approved issue:
+```bash
+gh issue close <num> --comment "## Resolved
+
+This fix has been shipped.
+
+**Linear:** [ROK-XXX](https://linear.app/roknua-projects/issue/ROK-XXX) — Done"
+```
+
+If no issues are ready to close, report that and continue to Step 1.
+
+---
+
 ## Step 1: Fetch Untriaged Sentry Issues
 
 Fetch all open issues and filter for Sentry-created ones that haven't been triaged:
@@ -25,7 +89,7 @@ gh issue list --state open --json number,title,body,author,labels,createdAt --li
 Filter client-side:
 - `author.login == "app/sentry"` AND no `triaged` label
 - If `$ARGUMENTS` contains `--issue <N>`: process only that single issue
-- If no untriaged issues found, report "No untriaged Sentry issues" and stop
+- If no untriaged issues found, report "No untriaged Sentry issues" and stop (Step 0 cleanup still runs first)
 
 **First run — create labels if missing:**
 ```bash
