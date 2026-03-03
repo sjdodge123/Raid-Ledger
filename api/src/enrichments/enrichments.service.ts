@@ -14,6 +14,20 @@ import {
   EnrichEventJobData,
 } from './enrichments.constants';
 
+/** Drizzle row inferred types for enricher input */
+type CharacterRow = typeof schema.characters.$inferSelect;
+type EventRow = typeof schema.events.$inferSelect;
+
+/**
+ * Convert a typed Drizzle row to a Record for enricher plugin consumption.
+ * Uses a single generic cast instead of double-casting through `unknown`.
+ */
+function toEnricherInput(
+  row: CharacterRow | EventRow,
+): Record<string, unknown> {
+  return row as Record<string, unknown>;
+}
+
 @Injectable()
 export class EnrichmentsService {
   private readonly logger = new Logger(EnrichmentsService.name);
@@ -204,9 +218,7 @@ export class EnrichmentsService {
       return;
     }
 
-    const data = await enricher.enrichCharacter(
-      character as unknown as Record<string, unknown>,
-    );
+    const data = await enricher.enrichCharacter(toEnricherInput(character));
     await this.upsertEnrichment('character', characterId, enricherKey, data);
 
     this.logger.debug(
@@ -246,9 +258,7 @@ export class EnrichmentsService {
       return;
     }
 
-    const data = await enricher.enrichEvent(
-      event as unknown as Record<string, unknown>,
-    );
+    const data = await enricher.enrichEvent(toEnricherInput(event));
     await this.upsertEnrichment('event', eventId, enricherKey, data);
 
     this.logger.debug(

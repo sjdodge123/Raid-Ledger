@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useThemeStore } from '../../stores/theme-store';
+import { useMediaQuery } from '../../hooks/use-media-query';
 
 // ============================================================
 // Types
@@ -330,6 +331,7 @@ function drawLeviathan(ctx: CanvasRenderingContext2D, lev: Leviathan) {
  */
 export function UnderwaterAmbience() {
     const resolved = useThemeStore((s) => s.resolved);
+    const prefersMotion = useMediaQuery('(prefers-reduced-motion: no-preference)');
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const animRef = useRef<number>(0);
     const schoolsRef = useRef<FishSchool[]>([]);
@@ -342,20 +344,21 @@ export function UnderwaterAmbience() {
     const hiddenRef = useRef(false);
 
     const isUnderwater = resolved.id === 'underwater';
+    const isActive = isUnderwater && prefersMotion;
 
-    // Immediately clear canvas when switching away from underwater
+    // Immediately clear canvas when switching away from underwater or when reduced motion kicks in
     useEffect(() => {
-        if (!isUnderwater) {
+        if (!isActive) {
             const canvas = canvasRef.current;
             if (canvas) {
                 canvas.width = 0;
                 canvas.height = 0;
             }
         }
-    }, [isUnderwater]);
+    }, [isActive]);
 
     useEffect(() => {
-        if (!isUnderwater) return;
+        if (!isActive) return;
         const canvas = canvasRef.current;
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
@@ -544,12 +547,12 @@ export function UnderwaterAmbience() {
                 if (c) c.clearRect(0, 0, canvas.width, canvas.height);
             }
         };
-    }, [isUnderwater]);
+    }, [isActive]);
 
     return (
         <canvas
             ref={canvasRef}
-            className={`fixed inset-0 w-full h-full pointer-events-none z-0${isUnderwater ? '' : ' hidden'}`}
+            className={`fixed inset-0 w-full h-full pointer-events-none z-0${isActive ? '' : ' hidden'}`}
             aria-hidden="true"
         />
     );

@@ -11,10 +11,18 @@ import { UnderwaterAmbience } from './UnderwaterAmbience';
 // ============================================================
 
 const mockResolvedTheme = vi.fn();
+const mockPrefersMotion = vi.fn(() => true);
 
 vi.mock('../../stores/theme-store', () => ({
     useThemeStore: (selector: (s: { resolved: { id: string } }) => unknown) =>
         selector({ resolved: { id: mockResolvedTheme() } }),
+}));
+
+vi.mock('../../hooks/use-media-query', () => ({
+    useMediaQuery: (query: string) => {
+        if (query === '(prefers-reduced-motion: no-preference)') return mockPrefersMotion();
+        return false;
+    },
 }));
 
 // ============================================================
@@ -111,6 +119,7 @@ beforeEach(() => {
 
     vi.clearAllMocks();
     mockResolvedTheme.mockReturnValue('default-dark');
+    mockPrefersMotion.mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -331,20 +340,30 @@ describe('UnderwaterAmbience — theme switch (ROK-296)', () => {
     });
 });
 
-describe('UnderwaterAmbience — reduced motion (ROK-296)', () => {
-    // The component itself does not check prefers-reduced-motion internally;
-    // Layout.tsx only renders UnderwaterAmbience when prefersMotion is true.
-    // This suite tests the component's own behavior when rendered — it should
-    // always draw, which is safe because the parent gates it behind prefersMotion.
-    // We verify the canvas is present and animation loop starts (so parent can gate it).
-
-    it('starts animation loop regardless of own render context (parent gates via prefersMotion)', () => {
+describe('UnderwaterAmbience — reduced motion (ROK-296, ROK-645)', () => {
+    it('starts animation loop when motion is preferred', () => {
         mockResolvedTheme.mockReturnValue('underwater');
+        mockPrefersMotion.mockReturnValue(true);
         render(<UnderwaterAmbience />);
-        // The canvas and animation loop should start — the Layout parent is
-        // responsible for not rendering this when prefers-reduced-motion is set.
         expect(document.querySelector('canvas')).toBeInTheDocument();
         expect(rafCallbacks.size).toBeGreaterThan(0);
+    });
+
+    it('does not start animation loop when prefers-reduced-motion is set', () => {
+        mockResolvedTheme.mockReturnValue('underwater');
+        mockPrefersMotion.mockReturnValue(false);
+        render(<UnderwaterAmbience />);
+        expect(document.querySelector('canvas')).toBeInTheDocument();
+        expect(document.querySelector('canvas')).toHaveClass('hidden');
+        expect(rafCallbacks.size).toBe(0);
+    });
+
+    it('hides canvas when prefers-reduced-motion is set even with underwater theme', () => {
+        mockResolvedTheme.mockReturnValue('underwater');
+        mockPrefersMotion.mockReturnValue(false);
+        const { container } = render(<UnderwaterAmbience />);
+        const canvas = container.firstChild as HTMLElement | null;
+        expect(canvas).toHaveClass('hidden');
     });
 });
 
