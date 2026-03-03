@@ -16,9 +16,14 @@ export const RECENT_MEMBER_DAYS = 30;
 /** Maximum number of recent members to return. */
 export const RECENT_MEMBER_LIMIT = 10;
 
+/** How long the user count cache is considered fresh (ms). */
+export const USER_COUNT_CACHE_TTL_MS = 5 * 60_000; // 5 minutes
+
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
+  private cachedUserCount: number | null = null;
+  private userCountCachedAt = 0;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -61,6 +66,7 @@ export class UsersService {
       })
       .returning();
 
+    this.invalidateCountCache();
     return created;
   }
 
@@ -229,14 +235,29 @@ export class UsersService {
   }
 
   /**
-   * Count total users in the database.
-   * Used for first-run detection (ROK-175 AC-4).
+   * Count total users in the database with 5-minute in-memory cache.
+   * Used for first-run detection (ROK-175 AC-4, ROK-662).
    */
   async count(): Promise<number> {
+    if (
+      this.cachedUserCount !== null &&
+      Date.now() - this.userCountCachedAt < USER_COUNT_CACHE_TTL_MS
+    ) {
+      return this.cachedUserCount;
+    }
+
     const result = await this.db
       .select({ count: sql<number>`count(*)` })
       .from(schema.users);
-    return Number(result[0].count);
+    this.cachedUserCount = Number(result[0].count);
+    this.userCountCachedAt = Date.now();
+    return this.cachedUserCount;
+  }
+
+  /** Invalidate cached user count so the next call re-queries the DB. */
+  invalidateCountCache(): void {
+    this.cachedUserCount = null;
+    this.userCountCachedAt = 0;
   }
 
   /**
@@ -628,6 +649,7 @@ export class UsersService {
       await tx.delete(schema.users).where(eq(schema.users.id, userId));
     });
 
+    this.invalidateCountCache();
     this.logger.log(
       `User ${userId} deleted. Events reassigned to user ${reassignToUserId}.`,
     );

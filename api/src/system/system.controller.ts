@@ -29,29 +29,37 @@ export class SystemController {
    */
   @Get('status')
   async getStatus(): Promise<SystemStatusDto> {
+    // Collect auth adapters synchronously (the map itself is not async)
+    const authAdapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<AuthProvider>(
+        EXTENSION_POINTS.AUTH_PROVIDER,
+      );
+    const adapterEntries = [...authAdapters.entries()];
+
+    // Run all independent async checks in parallel (ROK-662)
     const [
       userCount,
       discordConfigured,
       blizzardConfigured,
       branding,
       onboardingCompletedRaw,
+      demoMode,
+      ...adapterConfigured
     ] = await Promise.all([
       this.usersService.count(),
       this.settingsService.isDiscordConfigured(),
       this.settingsService.isBlizzardConfigured(),
       this.settingsService.getBranding(),
       this.settingsService.get(SETTING_KEYS.ONBOARDING_COMPLETED),
+      this.settingsService.getDemoMode(),
+      ...adapterEntries.map(([, provider]) => provider.isConfigured()),
     ]);
 
-    // Query all registered auth providers for configured login methods (ROK-267)
-    const authAdapters =
-      this.pluginRegistry.getAdaptersForExtensionPoint<AuthProvider>(
-        EXTENSION_POINTS.AUTH_PROVIDER,
-      );
+    // Build authProviders from parallel results
     const authProviders: LoginMethodDto[] = [];
-    for (const [, provider] of authAdapters) {
-      if (await provider.isConfigured()) {
-        authProviders.push(provider.getLoginMethod());
+    for (let i = 0; i < adapterEntries.length; i++) {
+      if (adapterConfigured[i]) {
+        authProviders.push(adapterEntries[i][1].getLoginMethod());
       }
     }
 
@@ -59,7 +67,7 @@ export class SystemController {
       isFirstRun: userCount === 0,
       discordConfigured,
       blizzardConfigured,
-      demoMode: await this.settingsService.getDemoMode(),
+      demoMode,
       activePlugins: [...this.pluginRegistry.getActiveSlugsSync()],
       communityName: branding.communityName ?? undefined,
       communityLogoUrl: branding.communityLogoPath
