@@ -88,6 +88,7 @@ export class LiveNoShowService {
       creatorId: number;
       startTime: Date;
       endTime: Date;
+      gameId: number | null;
     }>
   > {
     // Events where: not ad-hoc, not cancelled, started at least 5 min ago,
@@ -99,6 +100,7 @@ export class LiveNoShowService {
         id: schema.events.id,
         title: schema.events.title,
         creatorId: schema.events.creatorId,
+        gameId: schema.events.gameId,
         duration: schema.events.duration,
       })
       .from(schema.events)
@@ -117,6 +119,7 @@ export class LiveNoShowService {
       id: r.id,
       title: r.title,
       creatorId: r.creatorId,
+      gameId: r.gameId,
       startTime: r.duration[0],
       endTime: r.duration[1],
     }));
@@ -132,8 +135,13 @@ export class LiveNoShowService {
     creatorId: number;
     startTime: Date;
     endTime: Date;
+    gameId: number | null;
   }): Promise<void> {
     const absentPlayers = await this.getAbsentSignedUpPlayers(event.id);
+    if (absentPlayers.length === 0) return;
+
+    // Resolve voice channel for the event's game
+    const voiceChannelId = await this.resolveVoiceChannelId(event.gameId);
 
     for (const player of absentPlayers) {
       if (!player.userId) continue; // Skip anonymous signups for Phase 1 DMs
@@ -150,10 +158,11 @@ export class LiveNoShowService {
         userId: player.userId,
         type: 'event_reminder',
         title: 'Are you joining?',
-        message: `Your event **${event.title}** started 5 minutes ago \u2014 hop in the voice channel!`,
+        message: `Your event **${event.title}** started 5 minutes ago — hop in the voice channel!`,
         payload: {
           eventId: event.id,
           startTime: event.startTime.toISOString(),
+          voiceChannelId,
           noshowReminder: true,
         },
       });
@@ -175,6 +184,7 @@ export class LiveNoShowService {
     creatorId: number;
     startTime: Date;
     endTime: Date;
+    gameId: number | null;
   }): Promise<void> {
     // Check if we already sent the creator escalation for this event
     const alreadyEscalated = await this.hasReminderBeenSent(
@@ -414,6 +424,28 @@ export class LiveNoShowService {
       );
 
     return rows.map((r) => r.userId);
+  }
+
+  /**
+   * Resolve the voice channel ID for a game via channel_bindings.
+   */
+  private async resolveVoiceChannelId(
+    gameId: number | null,
+  ): Promise<string | null> {
+    if (!gameId) return null;
+
+    const [binding] = await this.db
+      .select({ channelId: schema.channelBindings.channelId })
+      .from(schema.channelBindings)
+      .where(
+        and(
+          eq(schema.channelBindings.gameId, gameId),
+          eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
+        ),
+      )
+      .limit(1);
+
+    return binding?.channelId ?? null;
   }
 
   /**
