@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
@@ -6,10 +5,21 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { PluginRegistryService } from './plugin-registry.service';
 import { PluginManifest, PLUGIN_EVENTS } from './plugin-manifest.interface';
 
-function thenableResult(data: unknown[]) {
-  const obj: any = {
-    then: (resolve: any, reject?: any) =>
-      Promise.resolve(data).then(resolve, reject),
+interface ThenableQueryResult {
+  then: (
+    resolve: (value: unknown) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => Promise<unknown>;
+  limit: jest.Mock;
+  where?: jest.Mock;
+}
+
+function thenableResult(data: unknown[]): ThenableQueryResult {
+  const obj: ThenableQueryResult = {
+    then: (
+      resolve: (value: unknown) => unknown,
+      reject?: (reason: unknown) => unknown,
+    ) => Promise.resolve(data).then(resolve, reject),
     limit: jest.fn().mockImplementation(() => thenableResult(data)),
   };
   return obj;
