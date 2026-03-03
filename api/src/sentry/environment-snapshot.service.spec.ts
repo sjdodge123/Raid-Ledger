@@ -165,6 +165,8 @@ describe('EnvironmentSnapshotService', () => {
       expect(typeof snapshot.runtime.memoryUsageMB.rss).toBe('number');
       expect(typeof snapshot.runtime.memoryUsageMB.heapUsed).toBe('number');
       expect(typeof snapshot.runtime.memoryUsageMB.heapTotal).toBe('number');
+      expect(typeof snapshot.runtime.memoryUsageMB.external).toBe('number');
+      expect(typeof snapshot.runtime.memoryUsageMB.arrayBuffers).toBe('number');
       expect(typeof snapshot.runtime.isContainer).toBe('boolean');
     });
 
