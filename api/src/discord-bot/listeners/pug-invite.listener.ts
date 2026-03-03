@@ -776,6 +776,19 @@ export class PugInviteListener {
       .limit(1);
 
     if (linkedUser) {
+      // ROK-652: Delete orphaned anonymous signup for this PUG before creating
+      // the real user signup. The anonymous entry was created when the PUG first
+      // accepted the invite; now that we know the linked account, it's redundant.
+      // Roster assignments cascade-delete via FK.
+      await this.db
+        .delete(schema.eventSignups)
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, slot.eventId),
+            eq(schema.eventSignups.discordUserId, discordUserId),
+          ),
+        );
+
       // Linked user — use SignupsService for full signup + roster assignment
       try {
         const result = await this.signupsService.signup(
