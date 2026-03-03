@@ -62,17 +62,17 @@ describe('EnrichmentsProcessor', () => {
 
       await processor.process(job);
 
-      expect(mockEnrichmentsService.runCharacterEnrichment).toHaveBeenCalledWith(
-        'char-1',
-        'raider-io',
-        'world-of-warcraft',
-      );
+      expect(
+        mockEnrichmentsService.runCharacterEnrichment,
+      ).toHaveBeenCalledWith('char-1', 'raider-io', 'world-of-warcraft');
       expect(mockEnrichmentsService.runEventEnrichment).not.toHaveBeenCalled();
     });
 
     it('should propagate errors thrown by runCharacterEnrichment', async () => {
       const error = new Error('Raider.IO API timed out');
-      mockEnrichmentsService.runCharacterEnrichment.mockRejectedValueOnce(error);
+      mockEnrichmentsService.runCharacterEnrichment.mockRejectedValueOnce(
+        error,
+      );
 
       const job = buildJob({
         characterId: 'char-1',

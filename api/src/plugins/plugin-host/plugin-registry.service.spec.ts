@@ -911,10 +911,21 @@ describe('PluginRegistryService', () => {
       // The implementation doesn't deduplicate — this is intentional: callers own dedup
       const enricher = { key: 'raider-io', enrichCharacter: jest.fn() };
 
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher);
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher);
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
 
-      const result = service.getMultiAdapters('data-enricher', 'world-of-warcraft');
+      const result = service.getMultiAdapters(
+        'data-enricher',
+        'world-of-warcraft',
+      );
       // Both registrations should be stored (no implicit dedup)
       expect(result).toHaveLength(2);
       expect(result[0]).toBe(enricher);
@@ -925,8 +936,16 @@ describe('PluginRegistryService', () => {
       const singleAdapter = { fetchProfile: jest.fn() };
       const multiAdapter = { key: 'raider-io', enrichCharacter: jest.fn() };
 
-      service.registerAdapter('data-enricher', 'world-of-warcraft', singleAdapter);
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', multiAdapter);
+      service.registerAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        singleAdapter,
+      );
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        multiAdapter,
+      );
 
       // Regular adapter should not appear in multi-adapter results
       const multiResult = service.getMultiAdapters<typeof multiAdapter>(
@@ -944,10 +963,17 @@ describe('PluginRegistryService', () => {
 
     it('should return empty array for registered extension point but unknown game slug', () => {
       const enricher = { key: 'raider-io' };
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher);
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
 
       // Known extension point, unknown slug
-      const result = service.getMultiAdapters('data-enricher', 'final-fantasy-xiv');
+      const result = service.getMultiAdapters(
+        'data-enricher',
+        'final-fantasy-xiv',
+      );
       expect(result).toEqual([]);
     });
   });
@@ -956,7 +982,11 @@ describe('PluginRegistryService', () => {
     it('should not throw when removing adapters for slug with no registered multi-adapters', () => {
       // Register a multi-adapter for game A, then remove for game B (never registered)
       const enricher = { key: 'raider-io' };
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher);
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
 
       // Should not throw even though 'final-fantasy-xiv' was never registered
       expect(() =>
@@ -973,8 +1003,16 @@ describe('PluginRegistryService', () => {
       const enricher1 = { key: 'enricher-a' };
       const enricher2 = { key: 'enricher-b' };
 
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher1);
-      service.registerMultiAdapter('event-enricher', 'world-of-warcraft', enricher2);
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher1,
+      );
+      service.registerMultiAdapter(
+        'event-enricher',
+        'world-of-warcraft',
+        enricher2,
+      );
 
       service.removeAdaptersForPlugin(['world-of-warcraft']);
 
@@ -988,7 +1026,11 @@ describe('PluginRegistryService', () => {
 
     it('should not affect multi-adapters after removing with empty slug list', () => {
       const enricher = { key: 'raider-io' };
-      service.registerMultiAdapter('data-enricher', 'world-of-warcraft', enricher);
+      service.registerMultiAdapter(
+        'data-enricher',
+        'world-of-warcraft',
+        enricher,
+      );
 
       // Passing empty array should not remove anything
       service.removeAdaptersForPlugin([]);

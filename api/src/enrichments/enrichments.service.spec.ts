@@ -180,9 +180,7 @@ describe('EnrichmentsService', () => {
       const enricher = {
         key: 'raider-io',
         gameSlugs: ['world-of-warcraft'],
-        enrichCharacter: jest
-          .fn()
-          .mockResolvedValue({ mythicPlusScore: 2500 }),
+        enrichCharacter: jest.fn().mockResolvedValue({ mythicPlusScore: 2500 }),
       };
       mockPluginRegistry.getMultiAdapters.mockReturnValue([enricher]);
 
@@ -244,16 +242,12 @@ describe('EnrichmentsService', () => {
       const enricher = {
         key: 'event-stats',
         gameSlugs: ['world-of-warcraft'],
-        enrichEvent: jest
-          .fn()
-          .mockResolvedValue({ averageItemLevel: 625 }),
+        enrichEvent: jest.fn().mockResolvedValue({ averageItemLevel: 625 }),
       };
       mockPluginRegistry.getMultiAdapters.mockReturnValue([enricher]);
 
       // Mock event lookup (events.id is serial/number)
-      mockDb.limit.mockResolvedValueOnce([
-        { id: 42, title: 'Raid Night' },
-      ]);
+      mockDb.limit.mockResolvedValueOnce([{ id: 42, title: 'Raid Night' }]);
 
       mockDb.onConflictDoUpdate.mockResolvedValueOnce(undefined);
 
@@ -297,11 +291,7 @@ describe('EnrichmentsService', () => {
       };
       mockPluginRegistry.getMultiAdapters.mockReturnValue([charOnlyEnricher]);
 
-      await service.runEventEnrichment(
-        '42',
-        'char-only',
-        'world-of-warcraft',
-      );
+      await service.runEventEnrichment('42', 'char-only', 'world-of-warcraft');
 
       // Should not attempt DB lookup for the event
       expect(mockDb.select).not.toHaveBeenCalled();
@@ -318,7 +308,11 @@ describe('EnrichmentsService', () => {
       mockDb.limit.mockResolvedValueOnce([{ id: 42, title: 'Raid Night' }]);
 
       await expect(
-        service.runEventEnrichment('42', 'failing-enricher', 'world-of-warcraft'),
+        service.runEventEnrichment(
+          '42',
+          'failing-enricher',
+          'world-of-warcraft',
+        ),
       ).rejects.toThrow('API down');
     });
   });
@@ -337,7 +331,11 @@ describe('EnrichmentsService', () => {
       ]);
 
       await expect(
-        service.runCharacterEnrichment('char-1', 'raider-io', 'world-of-warcraft'),
+        service.runCharacterEnrichment(
+          'char-1',
+          'raider-io',
+          'world-of-warcraft',
+        ),
       ).rejects.toThrow('Rate limited');
     });
 
@@ -478,7 +476,10 @@ describe('EnrichmentsService', () => {
         },
       ]);
 
-      const result = await service.getEnrichmentsForEntity('character', 'char-1');
+      const result = await service.getEnrichmentsForEntity(
+        'character',
+        'char-1',
+      );
 
       expect(result).toHaveLength(2);
       expect(result[0]).toMatchObject({
@@ -515,7 +516,11 @@ describe('EnrichmentsService', () => {
       expect(result[0]).not.toHaveProperty('updatedAt');
       expect(result[0]).not.toHaveProperty('entityType');
       expect(result[0]).not.toHaveProperty('entityId');
-      expect(Object.keys(result[0])).toEqual(['enricherKey', 'data', 'fetchedAt']);
+      expect(Object.keys(result[0])).toEqual([
+        'enricherKey',
+        'data',
+        'fetchedAt',
+      ]);
     });
   });
 
@@ -528,7 +533,10 @@ describe('EnrichmentsService', () => {
       const afterCall = Date.now();
 
       expect(mockDb.insert).toHaveBeenCalled();
-      const valuesCall = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      const valuesCall = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
 
       expect(valuesCall.entityType).toBe('event');
       expect(valuesCall.entityId).toBe('event-42');
@@ -587,7 +595,10 @@ describe('EnrichmentsService', () => {
 
       await service.enqueueCharacterEnrichments('char-1', 'world-of-warcraft');
 
-      const jobOptions = mockQueue.add.mock.calls[0][2] as Record<string, unknown>;
+      const jobOptions = mockQueue.add.mock.calls[0][2] as Record<
+        string,
+        unknown
+      >;
       expect(jobOptions.attempts).toBe(3);
       expect(jobOptions.backoff).toMatchObject({
         type: 'exponential',
