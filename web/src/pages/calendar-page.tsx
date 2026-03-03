@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
 import { FunnelIcon } from '@heroicons/react/24/outline';
@@ -11,6 +11,7 @@ import { Modal } from '../components/ui/modal';
 import { getGameColors } from '../constants/game-colors';
 import { useGameTime } from '../hooks/use-game-time';
 import { useAuth } from '../hooks/use-auth';
+import { useGameRegistry } from '../hooks/use-game-registry';
 import { useGameFilterStore } from '../stores/game-filter-store';
 import '../components/calendar/calendar-styles.css';
 
@@ -39,10 +40,25 @@ export function CalendarPage() {
     // (React StrictMode, HMR, Suspense boundaries, etc.)
     const allKnownGames = useGameFilterStore((s) => s.allKnownGames);
     const selectedGames = useGameFilterStore((s) => s.selectedGames);
-    const reportGames = useGameFilterStore((s) => s.reportGames);
     const toggleGame = useGameFilterStore((s) => s.toggleGame);
     const selectAllGames = useGameFilterStore((s) => s.selectAll);
     const deselectAllGames = useGameFilterStore((s) => s.deselectAll);
+
+    // ROK-650: Populate game filter from game registry (all games system-wide)
+    // instead of extracting from the current API response, which misses games
+    // that don't have events in the visible date range.
+    const { games: registryGames } = useGameRegistry();
+    useEffect(() => {
+        if (registryGames.length > 0) {
+            useGameFilterStore.getState().reportGames(
+                registryGames.map((g) => ({
+                    slug: g.slug,
+                    name: g.name,
+                    coverUrl: g.coverUrl,
+                })),
+            );
+        }
+    }, [registryGames]);
 
     // Hard cap — show at most 5 games inline, overflow to modal
     const maxVisible = 5;
@@ -219,7 +235,6 @@ export function CalendarPage() {
                             currentDate={currentDate}
                             onDateChange={setCurrentDate}
                             selectedGames={selectedGames}
-                            onGamesAvailable={reportGames}
                             gameTimeSlots={gameTimeSlots}
                             calendarView={calendarView}
                             onCalendarViewChange={setCalendarView}
