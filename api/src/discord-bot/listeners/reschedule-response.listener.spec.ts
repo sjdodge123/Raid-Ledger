@@ -324,6 +324,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([]);
       // reconfirmSignup — unlinked: find signup by discordUserId
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeButtonInteraction(
         `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
@@ -378,6 +380,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([linkedUser]);
       // reconfirmSignup: find signup by userId
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeButtonInteraction(
         `${RESCHEDULE_BUTTON_IDS.CONFIRM}:42`,
@@ -406,6 +410,8 @@ describe('RescheduleResponseListener', () => {
       });
       // reconfirmSignup: find signup
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
       mockCharactersService.findOne.mockResolvedValue(character);
 
       const interaction = makeButtonInteraction(
@@ -763,6 +769,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
       mockDb.limit.mockResolvedValueOnce([mockEvent]); // event (no slotConfig)
       mockDb.limit.mockResolvedValueOnce([mockSignup]); // reconfirmSignup signup
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       mockCharactersService.findOne.mockResolvedValue({
         id: 'char-1',
@@ -873,6 +881,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([mockEvent]); // event
       mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
       mockDb.limit.mockResolvedValueOnce([mockSignup]); // reconfirmSignup signup
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeSelectMenuInteraction(
         `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
@@ -896,6 +906,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([mockEvent]);
       mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeSelectMenuInteraction(
         `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
@@ -916,6 +928,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([]); // no linked user
       // unlinked signup lookup
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
 
       const interaction = makeSelectMenuInteraction(
         `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
@@ -965,6 +979,8 @@ describe('RescheduleResponseListener', () => {
       mockDb.limit.mockResolvedValueOnce([mockEvent]);
       mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
       mockDb.limit.mockResolvedValueOnce([mockSignup]);
+      // ensureRosterAssignment — no existing assignment (slotConfig null → early return)
+      mockDb.limit.mockResolvedValueOnce([]);
       mockCharactersService.findOne.mockResolvedValue({
         id: 'char-1',
         name: 'Arthas',
@@ -980,6 +996,94 @@ describe('RescheduleResponseListener', () => {
         expect.objectContaining({
           content: expect.stringContaining('Arthas'),
           components: [],
+        }),
+      );
+    });
+  });
+
+  // ─── Auto-slotting on reconfirm ─────────────────────────────────────
+
+  describe('ensureRosterAssignment (auto-slotting)', () => {
+    const mmoEvent = {
+      id: 42,
+      title: 'Mythic Raid Night',
+      cancelledAt: null,
+      gameId: 10,
+      slotConfig: { type: 'mmo', tank: 2, healer: 4, dps: 14 },
+    };
+
+    it('creates roster assignment for MMO event when none exists', async () => {
+      mockDb.limit.mockResolvedValueOnce([mmoEvent]); // event
+      mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
+      mockDb.limit.mockResolvedValueOnce([mockSignup]); // reconfirmSignup signup
+      // ensureRosterAssignment: no existing roster assignment
+      mockDb.limit.mockResolvedValueOnce([]);
+      // ensureRosterAssignment: current assignments (empty — no one slotted)
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const interaction = makeSelectMenuInteraction(
+        `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
+        ['tank'],
+      );
+      await listener['handleRoleSelect'](interaction, 42);
+
+      // Should have called insert for roster assignment
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          eventId: 42,
+          signupId: mockSignup.id,
+          role: 'tank',
+          position: 1,
+          isOverride: 0,
+        }),
+      );
+    });
+
+    it('skips roster creation when assignment already exists', async () => {
+      mockDb.limit.mockResolvedValueOnce([mmoEvent]); // event
+      mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
+      mockDb.limit.mockResolvedValueOnce([mockSignup]); // reconfirmSignup signup
+      // ensureRosterAssignment: existing roster assignment found
+      mockDb.limit.mockResolvedValueOnce([
+        { signupId: mockSignup.id, eventId: 42, role: 'tank', position: 1 },
+      ]);
+
+      const insertSpy = jest.spyOn(mockDb, 'insert');
+      const callCountBefore = insertSpy.mock.calls.length;
+
+      const interaction = makeSelectMenuInteraction(
+        `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
+        ['tank'],
+      );
+      await listener['handleRoleSelect'](interaction, 42);
+
+      // insert should not have been called again (only existing calls from update chain)
+      expect(insertSpy.mock.calls.length).toBe(callCountBefore);
+    });
+
+    it('assigns to second preferred role when first is full', async () => {
+      mockDb.limit.mockResolvedValueOnce([mmoEvent]); // event
+      mockDb.limit.mockResolvedValueOnce([{ id: 5 }]); // linked user
+      mockDb.limit.mockResolvedValueOnce([mockSignup]); // reconfirmSignup signup
+      // ensureRosterAssignment: no existing roster assignment
+      mockDb.limit.mockResolvedValueOnce([]);
+      // ensureRosterAssignment: current assignments — both tank slots taken
+      mockDb.limit.mockResolvedValueOnce([
+        { role: 'tank', position: 1 },
+        { role: 'tank', position: 2 },
+      ]);
+
+      const interaction = makeSelectMenuInteraction(
+        `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:42`,
+        ['tank', 'healer'],
+      );
+      await listener['handleRoleSelect'](interaction, 42);
+
+      // Should fall back to healer since tank is full
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          role: 'healer',
+          position: 1,
         }),
       );
     });

@@ -3,7 +3,6 @@ import { OnEvent } from '@nestjs/event-emitter';
 import {
   ActionRowBuilder,
   ButtonBuilder,
-  StringSelectMenuBuilder,
   ComponentType,
   type ButtonInteraction,
   type StringSelectMenuInteraction,
@@ -23,6 +22,11 @@ import {
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { DiscordEmojiService } from '../services/discord-emoji.service';
+import {
+  showCharacterSelect,
+  showRoleSelect,
+} from '../utils/signup-dropdown-builders';
+import { findFirstAvailableSlot } from '../../events/roster-slot.utils';
 
 /**
  * Handles Confirm / Decline button interactions on reschedule DMs (ROK-537).
@@ -189,22 +193,24 @@ export class RescheduleResponseListener {
 
         // MMO events: always show character select when characters exist
         if (slotConfig?.type === 'mmo' && characters.length >= 1) {
-          await this.showCharacterSelect(
-            interaction,
-            event.id,
-            event.title,
+          await showCharacterSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+            eventId: event.id,
+            eventTitle: event.title,
             characters,
-          );
+            emojiService: this.emojiService,
+          });
           return;
         }
 
         if (characters.length > 1) {
-          await this.showCharacterSelect(
-            interaction,
-            event.id,
-            event.title,
+          await showCharacterSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT,
+            eventId: event.id,
+            eventTitle: event.title,
             characters,
-          );
+            emojiService: this.emojiService,
+          });
           return;
         }
 
@@ -224,7 +230,12 @@ export class RescheduleResponseListener {
 
         // No characters — for MMO events, show role select
         if (slotConfig?.type === 'mmo') {
-          await this.showRoleSelect(interaction, event.id);
+          await showRoleSelect(interaction, {
+            customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+            eventId: event.id,
+            emojiService: this.emojiService,
+            characterVerb: 'Confirming as',
+          });
           return;
         }
       }
@@ -248,7 +259,12 @@ export class RescheduleResponseListener {
   ): Promise<void> {
     const slotConfig = event.slotConfig as Record<string, unknown> | null;
     if (slotConfig?.type === 'mmo') {
-      await this.showRoleSelect(interaction, event.id);
+      await showRoleSelect(interaction, {
+        customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+        eventId: event.id,
+        emojiService: this.emojiService,
+        characterVerb: 'Confirming as',
+      });
       return;
     }
 
@@ -472,9 +488,16 @@ export class RescheduleResponseListener {
         linkedUser.id,
         characterId,
       );
-      await this.showRoleSelect(interaction, eventId, characterId, {
-        name: character.name,
-        role: character.roleOverride ?? character.role ?? null,
+      await showRoleSelect(interaction, {
+        customIdPrefix: RESCHEDULE_BUTTON_IDS.ROLE_SELECT,
+        eventId,
+        emojiService: this.emojiService,
+        characterId,
+        characterInfo: {
+          name: character.name,
+          role: character.roleOverride ?? character.role ?? null,
+        },
+        characterVerb: 'Confirming as',
       });
       return;
     }
@@ -569,115 +592,9 @@ export class RescheduleResponseListener {
     await this.embedSyncQueue.enqueue(eventId, 'reschedule-confirm');
   }
 
-  // ─── Shared helpers ────────────────────────────────────────────────
-
-  private async showCharacterSelect(
-    interaction: ButtonInteraction,
-    eventId: number,
-    eventTitle: string,
-    characters: import('@raid-ledger/contract').CharacterDto[],
-  ): Promise<void> {
-    const mainChar = characters.find((c) => c.isMain);
-
-    const options = characters.slice(0, 25).map((char) => {
-      const parts: string[] = [];
-      if (char.class) {
-        parts.push(char.spec ? `${char.class} (${char.spec})` : char.class);
-      }
-      if (char.level) {
-        parts.push(`Level ${char.level}`);
-      }
-      if (char.isMain) {
-        parts.push('\u2B50');
-      }
-
-      const classEmoji = char.class
-        ? this.emojiService.getClassEmojiComponent(char.class)
-        : undefined;
-
-      return {
-        label: char.name,
-        value: char.id,
-        description: parts.join(' \u2014 ') || undefined,
-        emoji: classEmoji,
-        default: characters.length > 1 && mainChar?.id === char.id,
-      };
-    });
-
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(`${RESCHEDULE_BUTTON_IDS.CHARACTER_SELECT}:${eventId}`)
-      .setPlaceholder('Select a character')
-      .addOptions(options);
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      selectMenu,
-    );
-
-    await interaction.editReply({
-      content: `Pick a character for **${eventTitle}**`,
-      components: [row],
-    });
-  }
-
-  private async showRoleSelect(
-    interaction: ButtonInteraction | StringSelectMenuInteraction,
-    eventId: number,
-    characterId?: string,
-    characterInfo?: { name: string; role: string | null },
-  ): Promise<void> {
-    const customId = characterId
-      ? `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:${eventId}:${characterId}`
-      : `${RESCHEDULE_BUTTON_IDS.ROLE_SELECT}:${eventId}`;
-
-    const roleOptions: Array<{
-      label: string;
-      value: string;
-      emoji?: import('discord.js').ComponentEmojiResolvable;
-    }> = [
-      {
-        label: 'Tank',
-        value: 'tank',
-        emoji: this.emojiService.getRoleEmojiComponent('tank'),
-      },
-      {
-        label: 'Healer',
-        value: 'healer',
-        emoji: this.emojiService.getRoleEmojiComponent('healer'),
-      },
-      {
-        label: 'DPS',
-        value: 'dps',
-        emoji: this.emojiService.getRoleEmojiComponent('dps'),
-      },
-    ];
-
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId(customId)
-      .setPlaceholder('Select your preferred role(s)')
-      .setMinValues(1)
-      .setMaxValues(3)
-      .addOptions(roleOptions);
-
-    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
-      selectMenu,
-    );
-
-    const roleHint = characterInfo?.role
-      ? ` (current: ${characterInfo.role})`
-      : '';
-    const content = characterInfo
-      ? `Confirming as **${characterInfo.name}**${roleHint} — select your preferred role(s):`
-      : 'Select your preferred role(s):';
-
-    await interaction.editReply({
-      content,
-      components: [row],
-    });
-  }
-
   /**
-   * Re-confirm an existing signup: set status to `signed_up` and optionally
-   * update character/role.
+   * Re-confirm an existing signup: set status to `signed_up`, optionally
+   * update character/role, and ensure a roster assignment exists.
    */
   private async reconfirmSignup(
     _interaction: ButtonInteraction | StringSelectMenuInteraction,
@@ -701,6 +618,8 @@ export class RescheduleResponseListener {
       updateSet.preferredRoles = [options.slotRole];
     }
 
+    let signupId: number | undefined;
+
     if (userId) {
       // Linked user
       const [signup] = await this.db
@@ -715,6 +634,7 @@ export class RescheduleResponseListener {
         .limit(1);
 
       if (!signup) return;
+      signupId = signup.id;
 
       await this.db
         .update(schema.eventSignups)
@@ -741,11 +661,113 @@ export class RescheduleResponseListener {
         .limit(1);
 
       if (!signup) return;
+      signupId = signup.id;
 
       await this.db
         .update(schema.eventSignups)
         .set(updateSet)
         .where(eq(schema.eventSignups.id, signup.id));
+    }
+
+    // Ensure a roster assignment exists (may have been removed during
+    // a previous decline or never created for this signup).
+    if (signupId) {
+      await this.ensureRosterAssignment(event, signupId, options);
+    }
+  }
+
+  /**
+   * Check if a roster assignment exists for this signup; if not, create one
+   * using the event's slot configuration and the user's preferred roles.
+   */
+  private async ensureRosterAssignment(
+    event: EventRow,
+    signupId: number,
+    options?: {
+      preferredRoles?: ('tank' | 'healer' | 'dps')[];
+      slotRole?: string;
+    },
+  ): Promise<void> {
+    const [existingAssignment] = await this.db
+      .select()
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, signupId))
+      .limit(1);
+
+    if (existingAssignment) return;
+
+    const slotConfig = event.slotConfig as Record<string, unknown> | null;
+    if (!slotConfig) return;
+
+    // Get current roster assignments to find occupied slots (cap at 200)
+    const currentAssignments = await this.db
+      .select({
+        role: schema.rosterAssignments.role,
+        position: schema.rosterAssignments.position,
+      })
+      .from(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.eventId, event.id))
+      .limit(200);
+
+    const occupiedSlots = new Set(
+      currentAssignments.map((a) => `${a.role}:${a.position}`),
+    );
+
+    if (slotConfig.type === 'mmo') {
+      // MMO: try preferred roles in order
+      const preferredRoles =
+        options?.preferredRoles ??
+        (options?.slotRole ? [options.slotRole] : []);
+
+      if (preferredRoles.length === 0) return;
+
+      const roleCapacity: Record<string, number> = {
+        tank: (slotConfig.tank as number) ?? 0,
+        healer: (slotConfig.healer as number) ?? 0,
+        dps: (slotConfig.dps as number) ?? 0,
+      };
+
+      for (const role of preferredRoles) {
+        if (!(role in roleCapacity)) continue;
+        for (let pos = 1; pos <= roleCapacity[role]; pos++) {
+          if (!occupiedSlots.has(`${role}:${pos}`)) {
+            await this.db.insert(schema.rosterAssignments).values({
+              eventId: event.id,
+              signupId,
+              role,
+              position: pos,
+              isOverride: 0,
+            });
+            this.logger.log(
+              'Auto-slotted signup %d into %s:%d for event %d (reschedule confirm)',
+              signupId,
+              role,
+              pos,
+              event.id,
+            );
+            return;
+          }
+        }
+      }
+    } else {
+      // Generic event: find first available player slot
+      const slot = findFirstAvailableSlot(slotConfig, occupiedSlots);
+      if (slot) {
+        await this.db.insert(schema.rosterAssignments).values({
+          eventId: event.id,
+          signupId,
+          role: slot.role,
+          position: slot.position,
+          isOverride: 0,
+        });
+        this.logger.log(
+          'Auto-slotted signup %d into %s:%d for event %d (reschedule confirm)',
+          signupId,
+          slot.role,
+          slot.position,
+          event.id,
+        );
+      }
     }
   }
 
