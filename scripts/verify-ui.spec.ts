@@ -182,7 +182,7 @@ test.describe('Event detail', () => {
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
-    test('event detail shows roster section', async ({ page }) => {
+    test('event detail page renders without crashing', async ({ page }) => {
         await page.goto('/events');
         await page.waitForTimeout(2000);
 
@@ -194,10 +194,8 @@ test.describe('Event detail', () => {
         // Wait for event detail to load
         await page.waitForTimeout(2000);
 
-        // The event detail page should have a roster/signup section
-        // Look for signup-related content (user avatars, signup entries, or the roster builder)
-        const rosterArea = page.getByText(/signed up|roster|attendees/i).first();
-        // Roster may or may not have entries, but the page should render without crashing
+        // The event detail page should render without crashing
+        // (roster content depends on seed data; detailed assertions are in API integration tests)
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
@@ -216,7 +214,7 @@ test.describe('Event detail', () => {
         await expect(page.getByRole('button', { name: 'Cancel Event' })).toBeVisible();
     });
 
-    test('signup count matches roster entries', async ({ page }) => {
+    test('event detail loads without error boundary', async ({ page }) => {
         await page.goto('/events');
         await page.waitForTimeout(2000);
 
@@ -373,10 +371,9 @@ test.describe('Navigation', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Games page', () => {
-    test('renders page heading', async ({ page }) => {
+    test('page loads without crashing', async ({ page }) => {
         await page.goto('/games');
-        // Games page may show "Discover" tab or game cards
-        // Wait for the page to load without errors
+        // Games page may show "Discover" tab or game cards depending on IGDB data
         await page.waitForTimeout(3000);
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
