@@ -303,9 +303,9 @@ export async function getMyDashboard(): Promise<DashboardResponseDto> {
 /**
  * Search for games via IGDB
  */
-export async function searchGames(query: string): Promise<GameSearchResponseDto> {
+export async function searchGames(query: string, signal?: AbortSignal): Promise<GameSearchResponseDto> {
     const params = new URLSearchParams({ q: query });
-    return fetchApi(`/games/search?${params}`, {}, GameSearchResponseSchema);
+    return fetchApi(`/games/search?${params}`, { signal }, GameSearchResponseSchema);
 }
 
 /**
