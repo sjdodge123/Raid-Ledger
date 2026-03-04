@@ -643,6 +643,73 @@ describe('RecruitmentReminderService', () => {
       expect(signUpBtn?.url).toContain('http://localhost:5173/events/55');
     });
 
+    it('should skip channel bump when event is full (signupCount >= maxAttendees)', async () => {
+      const event = makeEventRow({
+        max_attendees: 10,
+        signup_count: '10',
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+    });
+
+    it('should skip channel bump when event is over-full (signupCount > maxAttendees)', async () => {
+      const event = makeEventRow({
+        max_attendees: 10,
+        signup_count: '12',
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockDiscordBotClient.sendEmbed).not.toHaveBeenCalled();
+    });
+
+    it('should post channel bump when max_attendees is null (no cap)', async () => {
+      const event = makeEventRow({
+        max_attendees: null,
+        signup_count: '50',
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      expect(mockDiscordBotClient.sendEmbed).toHaveBeenCalledTimes(1);
+    });
+
+    it('should use "tomorrow" in embed title when event is <= 24h away', async () => {
+      const event = makeEventRow({
+        start_time: new Date(Date.now() + 20 * 60 * 60 * 1000).toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+        string,
+        { toJSON: () => { title: string } },
+      ];
+      expect(embed.toJSON().title).toContain('tomorrow');
+    });
+
+    it('should use "in Xh" in embed title when event is > 24h away', async () => {
+      const event = makeEventRow({
+        start_time: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
+      });
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
+
+      await service.checkAndSendReminders();
+
+      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+        string,
+        { toJSON: () => { title: string } },
+      ];
+      expect(embed.toJSON().title).toMatch(/in \d+h/);
+      expect(embed.toJSON().title).not.toContain('tomorrow');
+    });
+
     it('should embed description contain event title, gameName, and signupSummary', async () => {
       const event = makeEventRow({
         id: 42,
