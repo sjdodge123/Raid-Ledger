@@ -179,9 +179,9 @@ export function CreateEventForm({ event: editEvent }: EventFormProps = {}) {
     // Registry game ID for submission
     const registryGameId = useRegistryGameId(form.game);
 
-    // Interest stats
-    const igdbId = form.game?.igdbId ?? undefined;
-    const { count: interestCount, isLoading: interestLoading } = useWantToPlay(igdbId);
+    // Interest stats (use local DB id, not igdbId — API endpoints expect local id)
+    const gameIdForInterest = form.game?.id ?? undefined;
+    const { count: interestCount, isLoading: interestLoading } = useWantToPlay(gameIdForInterest);
 
     // Load template into form
     function loadTemplate(config: TemplateConfigDto) {

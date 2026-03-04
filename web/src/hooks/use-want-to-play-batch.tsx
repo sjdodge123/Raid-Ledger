@@ -121,7 +121,6 @@ export function WantToPlayProvider({ gameIds, children }: WantToPlayProviderProp
             });
             queryClient.invalidateQueries({ queryKey });
             queryClient.invalidateQueries({ queryKey: ['games', 'interest', vars.gameId] });
-            queryClient.invalidateQueries({ queryKey: ['games', 'discover'] });
             queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
         },
     });
