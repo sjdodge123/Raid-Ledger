@@ -17,6 +17,8 @@ export const cronJobs = pgTable('cron_jobs', {
   cronExpression: text('cron_expression').notNull(),
   /** Human-readable description */
   description: text('description'),
+  /** Job classification for admin UI filtering */
+  category: text('category').default('Other').notNull(),
   /** When true, the job's handler is skipped and a "skipped" execution is logged */
   paused: boolean('paused').default(false).notNull(),
   lastRunAt: timestamp('last_run_at'),

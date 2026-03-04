@@ -43,6 +43,7 @@ export const CronJobSchema = z.object({
   pluginSlug: z.string().nullable(),
   cronExpression: z.string(),
   description: z.string().nullable(),
+  category: z.string(),
   paused: z.boolean(),
   lastRunAt: z.string().nullable(),
   nextRunAt: z.string().nullable(),

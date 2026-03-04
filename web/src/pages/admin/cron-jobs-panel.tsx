@@ -11,40 +11,7 @@ const JOB_TITLES: Record<string, string> = {
     VersionCheckService_handleCron: 'Version Check',
 };
 
-/** Theme categorization for cron jobs */
-const JOB_THEMES: Record<string, string> = {
-    // Data Sync
-    IgdbService_handleScheduledSync: 'Data Sync',
-    GameActivityService_dailyRollup: 'Data Sync',
-    // Notifications
-    EventReminderService_handleReminders: 'Notifications',
-    EventReminderService_handleStartingSoonReminders: 'Notifications',
-    EmbedSchedulerService_handleScheduledEmbeds: 'Notifications',
-    PostEventReminderService_handlePostEventReminders: 'Notifications',
-    // Monitoring
-    RelayService_handleHeartbeat: 'Monitoring',
-    VersionCheckService_handleCron: 'Monitoring',
-    // Maintenance
-    SessionCleanupService_cleanupExpiredSessions: 'Maintenance',
-    NotificationService_cleanupExpiredNotifications: 'Maintenance',
-    GameActivityService_sweepStaleSessions: 'Maintenance',
-    BackupService_dailyBackup: 'Maintenance',
-    // Events
-    ScheduledEventService_startScheduledEvents: 'Events',
-    VoiceAttendanceService_classifyCompletedEvents: 'Events',
-};
-
-/** Derive theme from job name */
-function getJobTheme(name: string): string {
-    if (JOB_THEMES[name]) return JOB_THEMES[name];
-    // Plugin jobs containing 'sync' are Data Sync, others default to 'Plugin'
-    if (name.includes(':')) {
-        return name.toLowerCase().includes('sync') ? 'Data Sync' : 'Plugin';
-    }
-    return 'Other';
-}
-
-/** Theme colors */
+/** Category colors for cron job badges */
 const THEME_COLORS: Record<string, string> = {
     'Notifications': 'bg-amber-500/15 text-amber-400 border-amber-500/30',
     'Data Sync': 'bg-cyan-500/15 text-cyan-400 border-cyan-500/30',
@@ -341,14 +308,9 @@ function JobCard({
                     )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
-                    {(() => {
-                        const theme = getJobTheme(job.name);
-                        return (
-                            <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${THEME_COLORS[theme] || THEME_COLORS['Other']}`}>
-                                {theme}
-                            </span>
-                        );
-                    })()}
+                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full border ${THEME_COLORS[job.category] || THEME_COLORS['Other']}`}>
+                        {job.category}
+                    </span>
                     <SourceBadge source={job.source} pluginSlug={job.pluginSlug} />
                     {job.paused ? (
                         <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
@@ -618,15 +580,15 @@ export function CronJobsPanel() {
 
     // Derive available themes from data
     const allThemes = cronJobs.data
-        ? [...new Set(cronJobs.data.map((j: CronJobDto) => getJobTheme(j.name)))].sort()
+        ? [...new Set(cronJobs.data.map((j: CronJobDto) => j.category))].sort()
         : [];
 
     // Filter + sort
     const filteredJobs = cronJobs.data
         ? cronJobs.data
-            .filter((job: CronJobDto) => !activeTheme || getJobTheme(job.name) === activeTheme)
+            .filter((job: CronJobDto) => !activeTheme || job.category === activeTheme)
             .sort((a: CronJobDto, b: CronJobDto) => {
-                if (sortBy === 'theme') return getJobTheme(a.name).localeCompare(getJobTheme(b.name));
+                if (sortBy === 'theme') return a.category.localeCompare(b.category);
                 if (sortBy === 'status') return (a.paused ? 1 : 0) - (b.paused ? 1 : 0);
                 return formatJobName(a.name).localeCompare(formatJobName(b.name));
             })
@@ -657,7 +619,7 @@ export function CronJobsPanel() {
                             All ({cronJobs.data.length})
                         </button>
                         {allThemes.map((theme) => {
-                            const count = cronJobs.data!.filter((j: CronJobDto) => getJobTheme(j.name) === theme).length;
+                            const count = cronJobs.data!.filter((j: CronJobDto) => j.category === theme).length;
                             return (
                                 <button
                                     key={theme}
