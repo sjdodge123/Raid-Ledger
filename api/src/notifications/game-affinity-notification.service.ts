@@ -192,7 +192,7 @@ export class GameAffinityNotificationService {
     const rows = await this.db.execute<{ user_id: number }>(sql`
       SELECT DISTINCT a.user_id
       FROM game_time_absences a
-      WHERE a.user_id = ANY(${userIds})
+      WHERE a.user_id IN (${sql.join(userIds, sql`, `)})
         AND ${eventDate} >= a.start_date
         AND ${eventDate} <= a.end_date
     `);
