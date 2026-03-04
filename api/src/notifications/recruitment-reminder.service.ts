@@ -192,6 +192,26 @@ export class RecruitmentReminderService {
         AND lower(e.duration) <= ${in48h.toISOString()}::timestamptz
         AND dem.embed_state != 'full'
         AND e.game_id IS NOT NULL
+        -- ROK-682: Safety net — exclude events where signups >= slot capacity
+        AND (
+          SELECT count(*)
+          FROM event_signups es2
+          WHERE es2.event_id = e.id
+            AND es2.status NOT IN ('roached_out', 'departed', 'declined')
+        ) < COALESCE(
+          CASE
+            WHEN e.slot_config->>'type' = 'mmo' THEN
+              COALESCE((e.slot_config->>'tank')::int, 0) +
+              COALESCE((e.slot_config->>'healer')::int, 0) +
+              COALESCE((e.slot_config->>'dps')::int, 0) +
+              COALESCE((e.slot_config->>'flex')::int, 0)
+            WHEN e.slot_config->>'player' IS NOT NULL THEN
+              (e.slot_config->>'player')::int
+            ELSE NULL
+          END,
+          e.max_attendees,
+          2147483647  -- no cap → always eligible
+        )
     `);
 
     return rows.map((r) => ({
