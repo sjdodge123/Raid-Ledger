@@ -359,6 +359,22 @@ export class EventsService {
    * @returns Event with full details
    * @throws NotFoundException if event not found
    */
+  /**
+   * Lightweight existence check — SELECT 1 instead of full JOINs.
+   * Use when you only need to verify an event exists (not its data).
+   */
+  async exists(id: number): Promise<void> {
+    const [row] = await this.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(eq(schema.events.id, id))
+      .limit(1);
+
+    if (!row) {
+      throw new NotFoundException(`Event with ID ${id} not found`);
+    }
+  }
+
   async findOne(id: number): Promise<EventResponseDto> {
     const results = await this.db
       .select({
@@ -972,8 +988,18 @@ export class EventsService {
     from?: string,
     to?: string,
   ): Promise<RosterAvailabilityResponse> {
-    // Get event details
-    const event = await this.findOne(eventId);
+    // Fetch event details and signups in parallel
+    const [event, signups] = await Promise.all([
+      this.findOne(eventId),
+      this.db
+        .select({
+          signup: schema.eventSignups,
+          user: schema.users,
+        })
+        .from(schema.eventSignups)
+        .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
+        .where(eq(schema.eventSignups.eventId, eventId)),
+    ]);
 
     // Calculate time window (event duration ± 2 hours buffer)
     const eventStart = new Date(event.startTime);
@@ -982,16 +1008,6 @@ export class EventsService {
     const startTime =
       from || new Date(eventStart.getTime() - bufferMs).toISOString();
     const endTime = to || new Date(eventEnd.getTime() + bufferMs).toISOString();
-
-    // Get all signups for this event
-    const signups = await this.db
-      .select({
-        signup: schema.eventSignups,
-        user: schema.users,
-      })
-      .from(schema.eventSignups)
-      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-      .where(eq(schema.eventSignups.eventId, eventId));
 
     if (signups.length === 0) {
       return {
@@ -1050,22 +1066,21 @@ export class EventsService {
   async getAggregateGameTime(
     eventId: number,
   ): Promise<AggregateGameTimeResponse> {
-    // Verify event exists
-    await this.findOne(eventId);
-
-    // Get all signed-up user IDs (filter out anonymous Discord participants)
-    // ROK-652: Exclude declined/roached_out/departed signups from aggregate game time
-    const signups = await this.db
-      .select({ userId: schema.eventSignups.userId })
-      .from(schema.eventSignups)
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          ne(schema.eventSignups.status, 'roached_out'),
-          ne(schema.eventSignups.status, 'departed'),
-          ne(schema.eventSignups.status, 'declined'),
+    // Run existence check and signups query in parallel
+    const [, signups] = await Promise.all([
+      this.exists(eventId),
+      this.db
+        .select({ userId: schema.eventSignups.userId })
+        .from(schema.eventSignups)
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            ne(schema.eventSignups.status, 'roached_out'),
+            ne(schema.eventSignups.status, 'departed'),
+            ne(schema.eventSignups.status, 'declined'),
+          ),
         ),
-      );
+    ]);
 
     const userIds = signups
       .map((s) => s.userId)
