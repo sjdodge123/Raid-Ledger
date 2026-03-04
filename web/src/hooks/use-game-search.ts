@@ -6,6 +6,7 @@ import { useDebouncedValue } from './use-debounced-value';
  * Hook for searching games via IGDB API.
  * Includes built-in debouncing (300ms) to prevent rate limit issues.
  * Requires minimum 2 characters to search.
+ * Cancels in-flight requests when a new query arrives (ROK-660).
  *
  * @param query - Raw search query (will be debounced)
  * @param enabled - Whether the query is enabled
@@ -16,7 +17,7 @@ export function useGameSearch(query: string, enabled = true) {
 
     return useQuery({
         queryKey: ['games', 'search', debouncedQuery],
-        queryFn: () => searchGames(debouncedQuery),
+        queryFn: ({ signal }) => searchGames(debouncedQuery, signal),
         enabled: enabled && debouncedQuery.length >= 2,
         staleTime: 1000 * 60 * 5, // Cache for 5 minutes
         gcTime: 1000 * 60 * 10, // Keep in cache for 10 minutes

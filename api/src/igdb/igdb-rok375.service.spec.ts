@@ -180,9 +180,29 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(game.summary).toBe('Master Chief returns.');
     });
 
-    it('Redis layer returns full GameDetailDto via mapDbRowToDetail re-query', async () => {
-      // Redis cache hit — contains cached game IDs
-      mockRedis.get.mockResolvedValue(JSON.stringify([{ id: 1 }]));
+    it('Redis layer returns full GameDetailDto directly from cache (ROK-660)', async () => {
+      // ROK-660: Redis now stores full GameDetailDto objects (cached by cacheToRedis)
+      // and returns them directly without a DB re-query
+      const cachedDetail = {
+        id: 1,
+        igdbId: 100,
+        name: 'Halo',
+        slug: 'halo',
+        coverUrl: 'https://example.com/halo.jpg',
+        genres: [5, 31],
+        platforms: [6, 169],
+        rating: 82.5,
+        summary: 'Master Chief returns.',
+        themes: [],
+        screenshots: [],
+        videos: [],
+        gameModes: [],
+        firstReleaseDate: null,
+        playerCount: undefined,
+        twitchGameId: undefined,
+        crossplay: null,
+      };
+      mockRedis.get.mockResolvedValue(JSON.stringify([cachedDetail]));
 
       const result = await service.searchGames('halo');
 
@@ -190,7 +210,6 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
       expect(result.games.length).toBe(1);
 
       const game = result.games[0];
-      // Should have full detail fields from DB re-query, not just cached basic fields
       expect(game).toHaveProperty('genres');
       expect(game).toHaveProperty('platforms');
       expect(game).toHaveProperty('rating');
@@ -357,39 +376,30 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
   });
 
   // ============================================================
-  // Redis cache hits re-query DB with ban/hide/adult filters
+  // ROK-660: Redis cache hits return cached data directly (no DB re-query)
+  // Ban/hide re-validation is deferred to SWR background refresh.
   // ============================================================
-  describe('Redis cache hits re-query DB with filters', () => {
-    it('re-queries database on Redis hit to enforce current ban/hide state', async () => {
-      // Redis returns cached game IDs
-      mockRedis.get.mockResolvedValue(
-        JSON.stringify([{ id: 1 }, { id: 2 }, { id: 3 }]),
-      );
+  describe('Redis cache hits return cached data directly', () => {
+    it('returns cached games without querying DB', async () => {
+      // Redis returns full cached GameDetailDto objects
+      const cachedGames = [
+        {
+          id: 1,
+          igdbId: 100,
+          name: 'Halo',
+          slug: 'halo',
+          coverUrl: 'https://example.com/halo.jpg',
+          genres: [],
+          themes: [],
+          platforms: [],
+          screenshots: [],
+          videos: [],
+          gameModes: [],
+        },
+      ];
+      mockRedis.get.mockResolvedValue(JSON.stringify(cachedGames));
 
-      // DB re-query returns only non-hidden/non-banned games
-      const whereCall = jest
-        .fn()
-        .mockImplementation(() => thenableResult([fullGameRow]));
-      mockDb.select = jest.fn().mockImplementation(() => ({
-        from: jest.fn().mockImplementation(() => ({
-          where: whereCall,
-        })),
-      }));
-
-      const result = await service.searchGames('halo');
-
-      expect(result.source).toBe('redis');
-      // DB was queried even though Redis had a hit (re-query with filters)
-      expect(mockDb.select).toHaveBeenCalled();
-      // Only the non-hidden/non-banned game came back
-      expect(result.games.length).toBe(1);
-    });
-
-    it('returns empty results from Redis if all cached games are now banned/hidden', async () => {
-      // Redis returns cached game IDs
-      mockRedis.get.mockResolvedValue(JSON.stringify([{ id: 1 }]));
-
-      // DB re-query returns empty (game was banned since caching)
+      // Reset DB mock to track calls
       mockDb.select = jest.fn().mockImplementation(() => ({
         from: jest.fn().mockImplementation(() => ({
           where: jest.fn().mockImplementation(() => thenableResult([])),
@@ -398,12 +408,20 @@ describe('IgdbService — ROK-375: enriched search, cache guard, Redis re-query'
 
       const result = await service.searchGames('halo');
 
-      // Should fall through when cached IDs are empty after re-query
-      // (the code checks cachedIds.length > 0 before the DB query, not after)
-      // With [{ id: 1 }] the cachedIds array has length 1, so it does query DB
-      // When DB returns empty, the redis layer still returns that empty result
       expect(result.source).toBe('redis');
-      expect(result.games).toEqual([]);
+      // DB should NOT be queried on Redis cache hit (ROK-660)
+      expect(mockDb.select).not.toHaveBeenCalled();
+      expect(result.games).toEqual(cachedGames);
+    });
+
+    it('falls through to DB layer when Redis cached games array is empty', async () => {
+      // Redis returns an empty games array
+      mockRedis.get.mockResolvedValue(JSON.stringify([]));
+
+      const result = await service.searchGames('halo');
+
+      // Should fall through to DB/IGDB layers when cached games are empty
+      expect(result.source).not.toBe('redis');
     });
   });
 

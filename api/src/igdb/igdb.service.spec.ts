@@ -164,8 +164,9 @@ describe('IgdbService', () => {
 
   describe('searchGames', () => {
     it('should return Redis-cached games when available', async () => {
-      // Mock Redis cache hit
-      mockRedis.get.mockResolvedValueOnce(JSON.stringify(mockGames));
+      // ROK-660: Redis now stores full GameDetailDto objects and returns them
+      // directly without a DB re-query
+      mockRedis.get.mockResolvedValueOnce(JSON.stringify(mockGameDetails));
 
       const result = await service.searchGames('valheim');
 
