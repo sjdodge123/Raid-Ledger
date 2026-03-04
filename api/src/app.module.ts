@@ -35,6 +35,7 @@ import { CronJobModule } from './cron-jobs/cron-job.module';
 import { BackupModule } from './backup/backup.module';
 import { EnrichmentsModule } from './enrichments/enrichments.module';
 import { SteamModule } from './steam/steam.module';
+import { LogsModule } from './logs/logs.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { SteamModule } from './steam/steam.module';
     CronJobModule,
     BackupModule,
     SteamModule,
+    LogsModule,
   ],
   controllers: [AppController],
   providers: [

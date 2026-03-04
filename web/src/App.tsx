@@ -117,6 +117,7 @@ const PluginsPanel = lazyWithRetry(() => import('./pages/admin/plugins-panel').t
 const PluginIntegrationPanel = lazyWithRetry(() => import('./pages/admin/plugin-integration-panel').then(m => ({ default: m.PluginIntegrationPanel })));
 const CronJobsPanel = lazyWithRetry(() => import('./pages/admin/cron-jobs-panel').then(m => ({ default: m.CronJobsPanel })));
 const BackupsPanel = lazyWithRetry(() => import('./pages/admin/backups-panel').then(m => ({ default: m.BackupsPanel })));
+const LogsPanel = lazyWithRetry(() => import('./pages/admin/logs-panel').then(m => ({ default: m.LogsPanel })));
 
 // -- Lazy loaded Discord admin pages (ROK-430) --
 const DiscordOverviewPage = lazyWithRetry(() => import('./pages/admin/discord-overview-page').then(m => ({ default: m.DiscordOverviewPage })));
@@ -275,6 +276,7 @@ function App() {
                   <Route path="general/data" element={<DemoDataPanel />} />
                   <Route path="general/cron-jobs" element={<CronJobsPanel />} />
                   <Route path="general/backups" element={<BackupsPanel />} />
+                  <Route path="general/logs" element={<LogsPanel />} />
                   <Route path="integrations/igdb" element={<IgdbPanel />} />
 
                   {/* ROK-430: Discord admin pages */}
