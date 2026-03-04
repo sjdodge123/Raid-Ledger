@@ -257,6 +257,8 @@ export class DiscordNotificationEmbedService {
         return EMBED_COLORS.SIGNUP_CONFIRMATION;
       case 'missed_event_nudge':
         return EMBED_COLORS.REMINDER;
+      case 'recruitment_reminder':
+        return EMBED_COLORS.ANNOUNCEMENT;
       default:
         return EMBED_COLORS.SYSTEM;
     }
@@ -290,6 +292,8 @@ export class DiscordNotificationEmbedService {
         return '⬆️';
       case 'missed_event_nudge':
         return '👋';
+      case 'recruitment_reminder':
+        return '📢';
       default:
         return '🔔';
     }
@@ -323,6 +327,8 @@ export class DiscordNotificationEmbedService {
         return 'Level Up';
       case 'missed_event_nudge':
         return 'Missed Event';
+      case 'recruitment_reminder':
+        return 'Recruitment Reminder';
       default:
         return 'Notification';
     }
@@ -454,6 +460,36 @@ export class DiscordNotificationEmbedService {
           });
         }
         break;
+      case 'recruitment_reminder':
+        if (payload.eventTitle) {
+          embed.addFields({
+            name: 'Event',
+            value: toStr(payload.eventTitle),
+            inline: true,
+          });
+        }
+        if (payload.signupSummary) {
+          embed.addFields({
+            name: 'Signups',
+            value: toStr(payload.signupSummary),
+            inline: true,
+          });
+        }
+        if (payload.gameName) {
+          embed.addFields({
+            name: 'Game',
+            value: toStr(payload.gameName),
+            inline: true,
+          });
+        }
+        if (payload.voiceChannelId) {
+          embed.addFields({
+            name: 'Voice Channel',
+            value: `<#${toStr(payload.voiceChannelId)}>`,
+            inline: true,
+          });
+        }
+        break;
     }
   }
 
@@ -478,6 +514,7 @@ export class DiscordNotificationEmbedService {
       'event_rescheduled',
       'event_cancelled',
       'subscribed_game',
+      'recruitment_reminder',
     ];
 
     if (eventTypes.includes(input.type) && input.payload?.startTime) {
@@ -534,9 +571,15 @@ export class DiscordNotificationEmbedService {
       case 'subscribed_game':
       case 'event_rescheduled':
       case 'event_cancelled':
+      case 'recruitment_reminder':
         if (eventId) {
           return new ButtonBuilder()
-            .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')
+            .setLabel(
+              input.type === 'new_event' ||
+                input.type === 'recruitment_reminder'
+                ? 'Sign Up'
+                : 'View Event',
+            )
             .setStyle(ButtonStyle.Link)
             .setURL(
               `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,
