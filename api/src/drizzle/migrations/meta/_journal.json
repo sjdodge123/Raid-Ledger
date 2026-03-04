@@ -568,6 +568,13 @@
       "when": 1772766000000,
       "tag": "0080_hide_mindustry_classic",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1772766100000,
+      "tag": "0081_steam_account_linking",
+      "breakpoints": true
     }
   ]
 }
