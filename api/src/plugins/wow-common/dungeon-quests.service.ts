@@ -4,6 +4,7 @@ import { eq, inArray, and } from 'drizzle-orm';
 import { join } from 'path';
 import { readFile } from 'fs/promises';
 import type { EnrichedQuestReward } from '@raid-ledger/contract';
+import type Redis from 'ioredis';
 
 import * as schema from '../../drizzle/schema';
 import {
@@ -11,7 +12,14 @@ import {
   wowClassicBossLoot,
 } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../../redis/redis.module';
+import { redisSwr } from '../../common/swr-cache';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
+
+/** Cache key prefix for WoW Classic quest data */
+const CACHE_PREFIX = 'wow:quests';
+/** 24 hours in seconds */
+const CACHE_TTL_SEC = 86400;
 
 /**
  * Variant-to-expansion-set mapping.
@@ -67,6 +75,8 @@ export class DungeonQuestsService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: DungeonQuestSeeder,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
   ) {}
 
   /**
@@ -304,25 +314,58 @@ export class DungeonQuestsService {
    * Seed quest data (delegates to seeder).
    */
   async seedQuests(): Promise<{ inserted: number; total: number }> {
-    return this.seeder.seed();
+    const result = await this.seeder.seed();
+    await this.clearCache();
+    return result;
   }
 
   /**
    * Drop all quest data (delegates to seeder).
    */
   async dropQuests(): Promise<void> {
-    return this.seeder.drop();
+    await this.seeder.drop();
+    await this.clearCache();
+  }
+
+  /**
+   * Clear all cached quest data from Redis.
+   * Called after seed refresh, data drop, or admin refresh actions.
+   */
+  async clearCache(): Promise<void> {
+    try {
+      const keys = await this.redis.keys(`${CACHE_PREFIX}:*`);
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        this.logger.log(`Cleared ${keys.length} quest cache entries`);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to clear quest cache: ${err}`);
+    }
   }
 
   /**
    * Get enriched quests for an instance — includes resolved reward item details
-   * and prerequisite chains.
+   * and prerequisite chains. Results are cached in Redis for 24h (ROK-665).
    *
    * ROK-246: Dungeon Companion — Quest Suggestions UI
    */
   async getEnrichedQuestsForInstance(
     instanceId: number,
     variant: string = 'classic_era',
+  ): Promise<EnrichedDungeonQuestDto[]> {
+    const cacheKey = `${CACHE_PREFIX}:enriched:${instanceId}:${variant}`;
+    const result = await redisSwr<EnrichedDungeonQuestDto[]>({
+      redis: this.redis,
+      key: cacheKey,
+      ttlSec: CACHE_TTL_SEC,
+      fetcher: () => this.fetchEnrichedQuestsForInstance(instanceId, variant),
+    });
+    return result ?? [];
+  }
+
+  private async fetchEnrichedQuestsForInstance(
+    instanceId: number,
+    variant: string,
   ): Promise<EnrichedDungeonQuestDto[]> {
     const quests = await this.getQuestsForInstance(instanceId, variant);
 
