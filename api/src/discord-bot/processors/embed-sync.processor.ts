@@ -328,8 +328,14 @@ export class EmbedSyncProcessor extends WorkerHost {
       return EMBED_STATES.IMMINENT;
     }
 
-    // Capacity-based states
+    // Capacity-based states — check both maxAttendees and slot config capacity
     if (event.maxAttendees && eventData.signupCount >= event.maxAttendees) {
+      return EMBED_STATES.FULL;
+    }
+
+    // ROK-682: Also check slot config capacity (roster slots define true capacity)
+    const totalSlots = this.getTotalSlotsFromConfig(eventData.slotConfig);
+    if (totalSlots > 0 && eventData.signupCount >= totalSlots) {
       return EMBED_STATES.FULL;
     }
 
@@ -339,6 +345,28 @@ export class EmbedSyncProcessor extends WorkerHost {
     }
 
     return EMBED_STATES.POSTED;
+  }
+
+  /**
+   * ROK-682: Compute total player slots from slotConfig.
+   * Returns 0 if no slot config is present.
+   */
+  private getTotalSlotsFromConfig(
+    slotConfig: EmbedEventData['slotConfig'],
+  ): number {
+    if (!slotConfig) return 0;
+
+    if (slotConfig.type === 'mmo') {
+      return (
+        (slotConfig.tank ?? 0) +
+        (slotConfig.healer ?? 0) +
+        (slotConfig.dps ?? 0) +
+        (slotConfig.flex ?? 0)
+      );
+    }
+
+    // Generic slot config: player count
+    return slotConfig.player ?? 0;
   }
 
   /**

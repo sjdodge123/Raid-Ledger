@@ -237,3 +237,253 @@ describe('EmbedSyncProcessor — ROK-471 scheduled event description update', ()
     expect(clientService.editEmbed).toHaveBeenCalled();
   });
 });
+
+describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
+  let processor: EmbedSyncProcessor;
+  let embedFactory: jest.Mocked<DiscordEmbedFactory>;
+  let mockDb: Record<string, jest.Mock>;
+
+  const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
+
+  const mockRecord = {
+    id: 'record-uuid',
+    eventId: 42,
+    guildId: 'guild-123',
+    channelId: 'channel-789',
+    messageId: 'msg-456',
+    embedState: EMBED_STATES.POSTED,
+  };
+
+  const mockEmbed = new EmbedBuilder().setTitle('Test');
+  const mockRow = new ActionRowBuilder<ButtonBuilder>();
+
+  const makeSelectChain = (rows: unknown[] = []) => {
+    const chain: Record<string, jest.Mock> & { then?: unknown } = {};
+    chain.from = jest.fn().mockReturnValue(chain);
+    chain.where = jest.fn().mockReturnValue(chain);
+    chain.limit = jest.fn().mockResolvedValue(rows);
+    chain.leftJoin = jest.fn().mockReturnValue(chain);
+    chain.innerJoin = jest.fn().mockReturnValue(chain);
+    chain.groupBy = jest.fn().mockResolvedValue([]);
+    chain.select = jest.fn().mockReturnValue(chain);
+    chain.then = (
+      resolve: (v: unknown) => void,
+      reject: (e: unknown) => void,
+    ) => Promise.resolve(rows).then(resolve, reject);
+    return chain;
+  };
+
+  const makeUpdateChain = () => {
+    const chain: Record<string, jest.Mock> = {};
+    chain.set = jest.fn().mockReturnValue(chain);
+    chain.where = jest.fn().mockResolvedValue(undefined);
+    return chain;
+  };
+
+  /** Build signup rows that simulate N active signups. */
+  const makeSignupRows = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      discordId: `user-${i}`,
+      username: `User ${i}`,
+      role: 'player',
+      status: 'signed_up',
+      preferredRoles: null,
+      className: null,
+    }));
+
+  beforeEach(async () => {
+    const selectChain = makeSelectChain();
+    const updateChain = makeUpdateChain();
+
+    mockDb = {
+      select: jest.fn().mockReturnValue(selectChain),
+      update: jest.fn().mockReturnValue(updateChain),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        EmbedSyncProcessor,
+        { provide: DrizzleAsyncProvider, useValue: mockDb },
+        {
+          provide: DiscordBotClientService,
+          useValue: {
+            isConnected: jest.fn().mockReturnValue(true),
+            getGuildId: jest.fn().mockReturnValue('guild-123'),
+            editEmbed: jest.fn().mockResolvedValue({ id: 'msg-456' }),
+          },
+        },
+        {
+          provide: DiscordEmbedFactory,
+          useValue: {
+            buildEventUpdate: jest
+              .fn()
+              .mockReturnValue({ embed: mockEmbed, row: mockRow }),
+          },
+        },
+        {
+          provide: SettingsService,
+          useValue: {
+            getBranding: jest.fn().mockResolvedValue({
+              communityName: 'Test Guild',
+              communityLogoPath: null,
+              communityAccentColor: null,
+            }),
+            getClientUrl: jest.fn().mockResolvedValue(null),
+            getDefaultTimezone: jest.fn().mockResolvedValue(null),
+          },
+        },
+        {
+          provide: ScheduledEventService,
+          useValue: {
+            updateDescription: jest.fn().mockResolvedValue(undefined),
+            completeScheduledEvent: jest.fn().mockResolvedValue(undefined),
+          },
+        },
+        {
+          provide: ChannelResolverService,
+          useValue: {
+            resolveVoiceChannelForScheduledEvent: jest
+              .fn()
+              .mockResolvedValue(null),
+          },
+        },
+      ],
+    }).compile();
+
+    processor = module.get(EmbedSyncProcessor);
+    embedFactory = module.get(DiscordEmbedFactory);
+  });
+
+  afterEach(() => jest.clearAllMocks());
+
+  /**
+   * Set up DB mocks for a sync run with a given event and signup count.
+   */
+  const setupDbForEvent = (
+    event: Record<string, unknown>,
+    signupCount: number,
+  ) => {
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([mockRecord])) // discordEventMessages
+      .mockReturnValueOnce(makeSelectChain([event])) // events
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(signupCount))) // eventSignups
+      .mockReturnValueOnce(makeSelectChain([])) // rosterAssignments
+      .mockReturnValueOnce(
+        makeSelectChain([{ name: 'Phasmophobia', coverUrl: null }]),
+      ); // games
+    mockDb.update.mockReturnValue(makeUpdateChain());
+  };
+
+  it('marks event as FULL when generic slotConfig player count is reached (maxAttendees null)', async () => {
+    const event = {
+      id: 42,
+      title: 'Ghost Raid',
+      description: null,
+      duration: [FUTURE, FUTURE_END],
+      maxAttendees: null,
+      cancelledAt: null,
+      gameId: 1,
+      slotConfig: { type: 'generic', player: 4, bench: 2 },
+      isAdHoc: false,
+      extendedUntil: null,
+      notificationChannelOverride: null,
+      recurrenceGroupId: null,
+    };
+
+    setupDbForEvent(event, 4); // 4 signups == 4 player slots → FULL
+
+    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+
+  it('marks event as FULL when MMO slotConfig total is reached (maxAttendees null)', async () => {
+    const event = {
+      id: 42,
+      title: 'Mythic Raid',
+      description: null,
+      duration: [FUTURE, FUTURE_END],
+      maxAttendees: null,
+      cancelledAt: null,
+      gameId: 1,
+      slotConfig: { type: 'mmo', tank: 2, healer: 3, dps: 5, flex: 0 },
+      isAdHoc: false,
+      extendedUntil: null,
+      notificationChannelOverride: null,
+      recurrenceGroupId: null,
+    };
+
+    setupDbForEvent(event, 10); // 10 signups == 2+3+5 = 10 slots → FULL
+
+    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+
+  it('marks event as FILLING when signups are below slot capacity', async () => {
+    const event = {
+      id: 42,
+      title: 'Ghost Raid',
+      description: null,
+      duration: [FUTURE, FUTURE_END],
+      maxAttendees: null,
+      cancelledAt: null,
+      gameId: 1,
+      slotConfig: { type: 'generic', player: 4, bench: 2 },
+      isAdHoc: false,
+      extendedUntil: null,
+      notificationChannelOverride: null,
+      recurrenceGroupId: null,
+    };
+
+    setupDbForEvent(event, 3); // 3 signups < 4 player slots → FILLING
+
+    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FILLING,
+    );
+  });
+
+  it('marks event as FULL when signups exceed slot capacity (benched players)', async () => {
+    const event = {
+      id: 42,
+      title: 'Ghost Raid',
+      description: null,
+      duration: [FUTURE, FUTURE_END],
+      maxAttendees: null,
+      cancelledAt: null,
+      gameId: 1,
+      slotConfig: { type: 'generic', player: 4, bench: 2 },
+      isAdHoc: false,
+      extendedUntil: null,
+      notificationChannelOverride: null,
+      recurrenceGroupId: null,
+    };
+
+    setupDbForEvent(event, 5); // 5 signups > 4 player slots (1 benched) → FULL
+
+    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      EMBED_STATES.FULL,
+    );
+  });
+});
