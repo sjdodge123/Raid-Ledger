@@ -28,6 +28,7 @@ import {
   AdminGameListResponseDto,
   DemoDataStatusDto,
   DemoDataResultDto,
+  SteamConfigStatusDto,
 } from '@raid-ledger/contract';
 import { and, eq, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
@@ -82,6 +83,12 @@ export class IgdbConfigDto {
   @IsString()
   @IsNotEmpty({ message: 'Client Secret is required' })
   clientSecret!: string;
+}
+
+export class SteamConfigDto {
+  @IsString()
+  @IsNotEmpty({ message: 'API key is required' })
+  apiKey!: string;
 }
 
 export interface OAuthTestResponse {
@@ -832,6 +839,103 @@ export class AdminSettingsController {
   @HttpCode(HttpStatus.OK)
   async clearDemoData(): Promise<DemoDataResultDto> {
     return this.demoDataService.clearDemoData();
+  }
+
+  // ============================================================
+  // Steam API Key (ROK-417)
+  // ============================================================
+
+  /**
+   * GET /admin/settings/steam
+   * Returns current Steam API key configuration status.
+   */
+  @Get('steam')
+  async getSteamStatus(): Promise<SteamConfigStatusDto> {
+    const configured = await this.settingsService.isSteamConfigured();
+    return { configured };
+  }
+
+  /**
+   * PUT /admin/settings/steam
+   * Update Steam API key.
+   */
+  @Put('steam')
+  @HttpCode(HttpStatus.OK)
+  async updateSteamConfig(
+    @Body() body: SteamConfigDto,
+  ): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.setSteamApiKey(body.apiKey.trim());
+
+    this.logger.log('Steam API key updated via admin UI');
+
+    return {
+      success: true,
+      message: 'Steam API key saved. Steam library sync is now enabled.',
+    };
+  }
+
+  /**
+   * POST /admin/settings/steam/test
+   * Test Steam API key by calling GetSupportedAPIList.
+   */
+  @Post('steam/test')
+  @HttpCode(HttpStatus.OK)
+  async testSteamConfig(): Promise<OAuthTestResponse> {
+    const apiKey = await this.settingsService.getSteamApiKey();
+
+    if (!apiKey) {
+      return {
+        success: false,
+        message: 'Steam API key is not configured',
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `https://api.steampowered.com/ISteamWebAPIUtil/GetSupportedAPIList/v1/?key=${encodeURIComponent(apiKey)}`,
+      );
+
+      if (!response.ok) {
+        if (response.status === 403) {
+          return {
+            success: false,
+            message: 'Invalid Steam API key',
+          };
+        }
+        return {
+          success: false,
+          message: `Steam API returned HTTP ${response.status}`,
+        };
+      }
+
+      return {
+        success: true,
+        message: 'Steam API key is valid!',
+      };
+    } catch (error) {
+      this.logger.error('Failed to test Steam API key:', error);
+      return {
+        success: false,
+        message: 'Failed to connect to Steam API. Please check your network.',
+      };
+    }
+  }
+
+  /**
+   * POST /admin/settings/steam/clear
+   * Remove Steam API key.
+   */
+  @Post('steam/clear')
+  @HttpCode(HttpStatus.OK)
+  async clearSteamConfig(): Promise<{ success: boolean; message: string }> {
+    await this.settingsService.clearSteamConfig();
+
+    this.logger.log('Steam API key cleared via admin UI');
+
+    return {
+      success: true,
+      message: 'Steam API key cleared.',
+    };
   }
 
   // ============================================================

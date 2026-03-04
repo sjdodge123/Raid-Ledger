@@ -40,6 +40,7 @@ export const SETTINGS_EVENTS = {
   BLIZZARD_UPDATED: 'settings.blizzard.updated',
   DEMO_MODE_UPDATED: 'settings.demo_mode.updated',
   DISCORD_BOT_UPDATED: 'settings.discord-bot.updated',
+  STEAM_UPDATED: 'settings.steam.updated',
 } as const;
 
 /** How long the in-memory cache is considered fresh (ms). */
@@ -170,6 +171,7 @@ export class SettingsService implements OnModuleInit {
     this.eventEmitter.emit(SETTINGS_EVENTS.OAUTH_DISCORD_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.IGDB_UPDATED, null);
     this.eventEmitter.emit(SETTINGS_EVENTS.BLIZZARD_UPDATED, null);
+    this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, null);
     this.logger.debug('All integration events emitted as cleared');
   }
 
@@ -698,5 +700,37 @@ export class SettingsService implements OnModuleInit {
     );
     const parsed = value ? parseInt(value, 10) : NaN;
     return isNaN(parsed) ? 2 : parsed;
+  }
+
+  /**
+   * Get Steam API key (ROK-417).
+   */
+  async getSteamApiKey(): Promise<string | null> {
+    return this.get(SETTING_KEYS.STEAM_API_KEY);
+  }
+
+  /**
+   * Set Steam API key (ROK-417).
+   */
+  async setSteamApiKey(apiKey: string): Promise<void> {
+    await this.set(SETTING_KEYS.STEAM_API_KEY, apiKey);
+    this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, { configured: true });
+    this.logger.log('Steam API key updated');
+  }
+
+  /**
+   * Check if Steam API is configured (ROK-417).
+   */
+  async isSteamConfigured(): Promise<boolean> {
+    return this.exists(SETTING_KEYS.STEAM_API_KEY);
+  }
+
+  /**
+   * Clear Steam API key (ROK-417).
+   */
+  async clearSteamConfig(): Promise<void> {
+    await this.delete(SETTING_KEYS.STEAM_API_KEY);
+    this.eventEmitter.emit(SETTINGS_EVENTS.STEAM_UPDATED, null);
+    this.logger.log('Steam API key cleared');
   }
 }

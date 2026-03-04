@@ -127,6 +127,8 @@ const IGDB_CONFIG = {
   MAX_RETRIES: 3,
   /** Base delay for exponential backoff (ms) */
   BASE_RETRY_DELAY: 1000,
+  /** Steam external game category ID in IGDB */
+  STEAM_CATEGORY_ID: 1,
   /** Twitch external game category ID in IGDB */
   TWITCH_CATEGORY_ID: 14,
   /** Expanded APICALYPSE fields for discovery */
@@ -428,6 +430,14 @@ export class IgdbService {
       (eg) => eg.category === IGDB_CONFIG.TWITCH_CATEGORY_ID,
     );
 
+    // ROK-417: Extract Steam AppID from external_games
+    const steamExternal = game.external_games?.find(
+      (eg) => eg.category === IGDB_CONFIG.STEAM_CATEGORY_ID,
+    );
+    const steamAppId = steamExternal?.uid
+      ? parseInt(steamExternal.uid, 10)
+      : null;
+
     // Extract player count from multiplayer_modes
     let playerCount: { min: number; max: number } | null = null;
     let crossplay: boolean | null = null;
@@ -482,6 +492,7 @@ export class IgdbService {
       playerCount,
       twitchGameId: twitchExternal?.uid ?? null,
       crossplay,
+      steamAppId: steamAppId && !isNaN(steamAppId) ? steamAppId : null,
     };
   }
 

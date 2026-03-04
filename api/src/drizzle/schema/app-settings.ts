@@ -78,6 +78,8 @@ export const SETTING_KEYS = {
     'event_auto_extend_max_overage_minutes',
   /** ROK-576: Minimum voice members required to trigger extension */
   EVENT_AUTO_EXTEND_MIN_VOICE_MEMBERS: 'event_auto_extend_min_voice_members',
+  /** ROK-417: Steam Web API key for library/playtime sync */
+  STEAM_API_KEY: 'steam_api_key',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
