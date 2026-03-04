@@ -36,6 +36,7 @@ export const notifications = pgTable(
         'roster_reassigned',
         'tentative_displaced',
         'member_returned',
+        'recruitment_reminder',
         'system',
       ],
     }).notNull(),

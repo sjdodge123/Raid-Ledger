@@ -18,6 +18,7 @@ export const NOTIFICATION_TYPES = [
   'roster_reassigned',
   'tentative_displaced',
   'member_returned',
+  'recruitment_reminder',
   'system',
 ] as const;
 
@@ -50,6 +51,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   roster_reassigned: { inApp: true, push: true, discord: true },
   tentative_displaced: { inApp: true, push: true, discord: true },
   member_returned: { inApp: true, push: true, discord: true },
+  recruitment_reminder: { inApp: true, push: true, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 
