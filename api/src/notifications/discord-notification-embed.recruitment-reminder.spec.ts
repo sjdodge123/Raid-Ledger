@@ -80,7 +80,9 @@ jest.mock('discord.js', () => {
     private components: Array<{ toJSON: () => unknown }> = [];
 
     addComponents(
-      ...args: Array<{ toJSON: () => unknown } | Array<{ toJSON: () => unknown }>>
+      ...args: Array<
+        { toJSON: () => unknown } | Array<{ toJSON: () => unknown }>
+      >
     ) {
       for (const arg of args) {
         if (Array.isArray(arg)) {
@@ -180,7 +182,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const json = embed.toJSON() as { fields: Array<{ name: string; value: string }> };
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
       const eventField = json.fields?.find((f) => f.name === 'Event');
       expect(eventField).toBeDefined();
       expect(eventField?.value).toBe('Mythic Raid Night');
@@ -198,7 +202,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const json = embed.toJSON() as { fields: Array<{ name: string; value: string }> };
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
       const signupsField = json.fields?.find((f) => f.name === 'Signups');
       expect(signupsField).toBeDefined();
       expect(signupsField?.value).toBe('10/20 spots filled');
@@ -216,7 +222,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const json = embed.toJSON() as { fields: Array<{ name: string; value: string }> };
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
       const gameField = json.fields?.find((f) => f.name === 'Game');
       expect(gameField).toBeDefined();
       expect(gameField?.value).toBe('World of Warcraft');
@@ -234,7 +242,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const json = embed.toJSON() as { fields: Array<{ name: string; value: string }> };
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
       const vcField = json.fields?.find((f) => f.name === 'Voice Channel');
       expect(vcField).toBeDefined();
       expect(vcField?.value).toBe('<#vc-123>');
@@ -300,7 +310,7 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
   });
 
   describe('primary action button', () => {
-    it('should use "Sign Up" label for recruitment_reminder (not "View Event")', async () => {
+    it('should use "View Event" label for recruitment_reminder', async () => {
       const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-rr-11',
@@ -312,12 +322,14 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string; url: string }> };
-      const signUpBtn = rowJson.components.find((c) => c.label === 'Sign Up');
-      expect(signUpBtn).toBeDefined();
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const viewEventBtn = rowJson.components.find((c) => c.label === 'View Event');
+      expect(viewEventBtn).toBeDefined();
     });
 
-    it('should URL-encode the eventId and notif in the Sign Up button URL', async () => {
+    it('should URL-encode the eventId and notif in the View Event button URL', async () => {
       const { row } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-rr-12',
@@ -329,10 +341,12 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string; url: string }> };
-      const signUpBtn = rowJson.components.find((c) => c.label === 'Sign Up');
-      expect(signUpBtn?.url).toContain('/events/99');
-      expect(signUpBtn?.url).toContain('notif=notif-rr-12');
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const viewEventBtn = rowJson.components.find((c) => c.label === 'View Event');
+      expect(viewEventBtn?.url).toContain('/events/99');
+      expect(viewEventBtn?.url).toContain('notif=notif-rr-12');
     });
 
     it('should not include Sign Up button when eventId is absent from payload', async () => {
@@ -365,8 +379,12 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string; url: string }> };
-      const discordBtn = rowJson.components.find((c) => c.label === 'View in Discord');
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const discordBtn = rowJson.components.find(
+        (c) => c.label === 'View in Discord',
+      );
       expect(discordBtn).toBeDefined();
       expect(discordBtn?.url).toBe(discordUrl);
     });
@@ -383,13 +401,15 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
       );
 
       const rowJson = row.toJSON() as { components: Array<{ label: string }> };
-      const adjustBtn = rowJson.components.find((c) => c.label === 'Adjust Notifications');
+      const adjustBtn = rowJson.components.find(
+        (c) => c.label === 'Adjust Notifications',
+      );
       expect(adjustBtn).toBeDefined();
     });
   });
 
   describe('extra rows', () => {
-    it('should NOT return extra rows for recruitment_reminder (no roach-out or reschedule buttons)', async () => {
+    it('should return Sign Up / Tentative / Decline interactive buttons for recruitment_reminder', async () => {
       const { rows } = await service.buildNotificationEmbed(
         {
           notificationId: 'notif-rr-16',
@@ -401,7 +421,13 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      expect(rows).toBeUndefined();
+      expect(rows).toBeDefined();
+      expect(rows).toHaveLength(1);
+      const rowJson = rows![0].toJSON() as {
+        components: Array<{ label: string; customId?: string }>;
+      };
+      const labels = rowJson.components.map((c) => c.label);
+      expect(labels).toEqual(['Sign Up', 'Tentative', 'Decline']);
     });
   });
 

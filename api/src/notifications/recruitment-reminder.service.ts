@@ -79,12 +79,33 @@ export class RecruitmentReminderService {
       `Found ${events.length} eligible events for recruitment reminders`,
     );
 
+    const now = Date.now();
+
     for (const event of events) {
-      const dedupKey = `recruitment-reminder:event:${event.id}`;
-      const alreadySent = await this.redis.get(dedupKey);
-      if (alreadySent) {
+      const eventStart = new Date(event.startTime).getTime();
+      const hoursUntilStart = (eventStart - now) / (1000 * 60 * 60);
+
+      // Channel bump: fires at 48h mark
+      const bumpKey = `recruitment-bump:event:${event.id}`;
+      const alreadyBumped = await this.redis.get(bumpKey);
+      if (!alreadyBumped) {
+        await this.redis.set(bumpKey, '1', 'EX', DEDUP_TTL_SECONDS);
+        await this.postChannelBump(event);
+      }
+
+      // DMs: only fire at the 24h mark
+      if (hoursUntilStart > 24) {
         this.logger.debug(
-          `Recruitment reminder already sent for event ${event.id}, skipping`,
+          `Event ${event.id} starts in ${hoursUntilStart.toFixed(1)}h — bump sent, DMs deferred until 24h mark`,
+        );
+        continue;
+      }
+
+      const dmKey = `recruitment-dm:event:${event.id}`;
+      const alreadyDMd = await this.redis.get(dmKey);
+      if (alreadyDMd) {
+        this.logger.debug(
+          `Recruitment DMs already sent for event ${event.id}, skipping`,
         );
         continue;
       }
@@ -111,7 +132,7 @@ export class RecruitmentReminderService {
       }
 
       // Set dedup key before dispatching to prevent duplicates on retries
-      await this.redis.set(dedupKey, '1', 'EX', DEDUP_TTL_SECONDS);
+      await this.redis.set(dmKey, '1', 'EX', DEDUP_TTL_SECONDS);
 
       // Send DMs to recipients
       if (recipientIds.length > 0) {
@@ -121,19 +142,17 @@ export class RecruitmentReminderService {
           `No recruitment reminder recipients for event ${event.id}`,
         );
       }
-
-      // Post channel bump
-      await this.postChannelBump(event);
     }
   }
 
   /**
-   * Find future, non-cancelled events starting within [now, now + 24h]
+   * Find future, non-cancelled events starting within [now, now + 48h]
    * that have a Discord embed, are NOT full, and have a game.
+   * Channel bumps fire at 48h; DMs fire at 24h (filtered in caller).
    */
   private async findEligibleEvents(): Promise<EligibleEvent[]> {
     const now = new Date();
-    const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
     const rows = await this.db.execute<{
       id: number;
@@ -170,7 +189,7 @@ export class RecruitmentReminderService {
       INNER JOIN discord_event_messages dem ON dem.event_id = e.id
       WHERE e.cancelled_at IS NULL
         AND lower(e.duration) >= ${now.toISOString()}::timestamptz
-        AND lower(e.duration) <= ${in24h.toISOString()}::timestamptz
+        AND lower(e.duration) <= ${in48h.toISOString()}::timestamptz
         AND dem.embed_state != 'full'
         AND e.game_id IS NOT NULL
     `);
@@ -334,16 +353,20 @@ export class RecruitmentReminderService {
       const embed = new EmbedBuilder()
         .setTitle(`📢 Spots still available for tomorrow's event!`)
         .setDescription(
-          `**${event.title}** — ${event.gameName}\n${signupSummary}\n\n[View original embed](${embedUrl})`,
+          `**${event.title}** — ${event.gameName}\n${signupSummary}`,
         )
         .setColor(EMBED_COLORS.ANNOUNCEMENT)
         .setTimestamp(new Date(event.startTime));
 
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setLabel('Sign Up')
+          .setLabel('View Event')
           .setStyle(ButtonStyle.Link)
           .setURL(`${clientUrl}/events/${event.id}`),
+        new ButtonBuilder()
+          .setLabel('View in Discord')
+          .setStyle(ButtonStyle.Link)
+          .setURL(embedUrl),
       );
 
       await this.discordBotClient.sendEmbed(event.channelId, embed, row);

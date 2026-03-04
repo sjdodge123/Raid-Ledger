@@ -235,21 +235,23 @@ describe('RecruitmentReminderService', () => {
   });
 
   describe('checkAndSendReminders — deduplication', () => {
-    it('should skip event when Redis dedup key already exists', async () => {
+    it('should skip event when both Redis dedup keys already exist', async () => {
       const event = makeEventRow();
-      // First call: eligible events query; second would be recipients — but it should not get there
       mockDb.execute.mockResolvedValueOnce([event]);
-      mockRedis.get.mockResolvedValue('1'); // already sent
+      mockRedis.get.mockResolvedValue('1'); // both bump and dm keys exist
 
       await service.checkAndSendReminders();
 
       expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-reminder:event:42',
+        'recruitment-bump:event:42',
+      );
+      expect(mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-dm:event:42',
       );
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
-    it('should set Redis dedup key with 48h TTL before dispatching DMs', async () => {
+    it('should set Redis DM dedup key with 48h TTL before dispatching DMs', async () => {
       const event = makeEventRow();
       mockDb.execute
         .mockResolvedValueOnce([event]) // findEligibleEvents
@@ -259,7 +261,7 @@ describe('RecruitmentReminderService', () => {
       await service.checkAndSendReminders();
 
       expect(mockRedis.set).toHaveBeenCalledWith(
-        'recruitment-reminder:event:42',
+        'recruitment-dm:event:42',
         '1',
         'EX',
         48 * 60 * 60,
@@ -280,10 +282,10 @@ describe('RecruitmentReminderService', () => {
       await service.checkAndSendReminders();
 
       expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-reminder:event:10',
+        'recruitment-bump:event:10',
       );
       expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-reminder:event:20',
+        'recruitment-bump:event:20',
       );
     });
   });
@@ -621,7 +623,7 @@ describe('RecruitmentReminderService', () => {
       ];
       const rowJson = row.toJSON();
       const signUpBtn = rowJson.components.find(
-        (c: { label: string }) => c.label === 'Sign Up',
+        (c: { label: string }) => c.label === 'View Event',
       );
       expect(signUpBtn).toBeDefined();
       expect(signUpBtn?.url).toContain(
@@ -644,7 +646,7 @@ describe('RecruitmentReminderService', () => {
       ];
       const rowJson = row.toJSON();
       const signUpBtn = rowJson.components.find(
-        (c: { label: string }) => c.label === 'Sign Up',
+        (c: { label: string }) => c.label === 'View Event',
       );
       expect(signUpBtn?.url).toContain('http://localhost:5173/events/55');
     });

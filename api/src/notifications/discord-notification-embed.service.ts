@@ -9,6 +9,7 @@ import {
   EMBED_COLORS,
   RESCHEDULE_BUTTON_IDS,
   ROACH_OUT_BUTTON_IDS,
+  SIGNUP_BUTTON_IDS,
 } from '../discord-bot/discord-bot.constants';
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { SettingsService } from '../settings/settings.service';
@@ -230,6 +231,25 @@ export class DiscordNotificationEmbedService {
       );
 
       return [rescheduleRow];
+    }
+
+    if (input.type === 'recruitment_reminder') {
+      const signupRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`${SIGNUP_BUTTON_IDS.SIGNUP}:${toStr(eventId)}`)
+          .setLabel('Sign Up')
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`${SIGNUP_BUTTON_IDS.TENTATIVE}:${toStr(eventId)}`)
+          .setLabel('Tentative')
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`${SIGNUP_BUTTON_IDS.DECLINE}:${toStr(eventId)}`)
+          .setLabel('Decline')
+          .setStyle(ButtonStyle.Danger),
+      );
+
+      return [signupRow];
     }
 
     return undefined;
@@ -575,8 +595,7 @@ export class DiscordNotificationEmbedService {
         if (eventId) {
           return new ButtonBuilder()
             .setLabel(
-              input.type === 'new_event' ||
-                input.type === 'recruitment_reminder'
+              input.type === 'new_event'
                 ? 'Sign Up'
                 : 'View Event',
             )
