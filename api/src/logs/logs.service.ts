@@ -90,6 +90,11 @@ export class LogsService {
     }
 
     const filepath = path.join(this.logDir, filename);
+
+    if (!fs.existsSync(filepath) || !fs.statSync(filepath).isFile()) {
+      throw new NotFoundException(`Log file not found: ${filename}`);
+    }
+
     const resolvedPath = fs.realpathSync(filepath);
     const resolvedDir = fs.realpathSync(this.logDir);
 
@@ -99,10 +104,6 @@ export class LogsService {
       resolvedPath !== resolvedDir
     ) {
       throw new BadRequestException('Invalid file path');
-    }
-
-    if (!fs.existsSync(filepath) || !fs.statSync(filepath).isFile()) {
-      throw new NotFoundException(`Log file not found: ${filename}`);
     }
 
     return filepath;

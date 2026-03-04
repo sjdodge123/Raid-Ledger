@@ -89,9 +89,10 @@ export class LogsController {
     const filepath = this.logsService.getValidatedPath(filename);
     const stream = this.logsService.createScrubbedStream(filepath);
 
+    const safeFilename = filename.replace(/["\r\n]/g, '_');
     res.set({
       'Content-Type': 'text/plain; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': `attachment; filename="${safeFilename}"`,
     });
 
     stream.pipe(res);
