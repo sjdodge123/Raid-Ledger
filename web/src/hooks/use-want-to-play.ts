@@ -97,9 +97,6 @@ function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey });
             queryClient.invalidateQueries({
-                queryKey: ['games', 'discover'],
-            });
-            queryClient.invalidateQueries({
                 queryKey: ['userHeartedGames'],
             });
         },
