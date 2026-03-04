@@ -7,6 +7,7 @@ import { NotificationService } from './notification.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { CronJobService } from '../cron-jobs/cron-job.service';
 import { SettingsService } from '../settings/settings.service';
+import { RoleGapAlertService } from './role-gap-alert.service';
 
 describe('EventReminderService — voice channel in reminder payloads (ROK-507)', () => {
   let service: EventReminderService;
@@ -64,6 +65,10 @@ describe('EventReminderService — voice channel in reminder payloads (ROK-507)'
             getClientUrl: jest.fn().mockResolvedValue('http://localhost:5173'),
             getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
           },
+        },
+        {
+          provide: RoleGapAlertService,
+          useValue: { checkRoleGaps: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();
