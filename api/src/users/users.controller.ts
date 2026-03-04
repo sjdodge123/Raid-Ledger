@@ -17,6 +17,7 @@ import {
   UploadedFile,
   Request,
   HttpCode,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -527,6 +528,7 @@ export class UsersController {
    */
   @Get('me/game-time')
   @UseGuards(AuthGuard('jwt'))
+  @Header('Cache-Control', 'private, max-age=120')
   async getMyGameTime(
     @Request() req: AuthenticatedRequest,
     @Query('week') week?: string,

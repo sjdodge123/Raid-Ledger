@@ -1,8 +1,16 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { eq, and, sql, gte, lte, inArray } from 'drizzle-orm';
+
+/** TTL for in-memory game-time cache (ms). */
+const CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
+interface CacheEntry<T> {
+  data: T;
+  expiresAt: number;
+}
 
 export interface TemplateSlot {
   dayOfWeek: number;
@@ -57,10 +65,37 @@ export interface AbsenceRecord {
  */
 @Injectable()
 export class GameTimeService {
+  private readonly logger = new Logger(GameTimeService.name);
+  private readonly cache = new Map<string, CacheEntry<unknown>>();
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
+
+  private getCached<T>(key: string): T | undefined {
+    const entry = this.cache.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.cache.delete(key);
+      return undefined;
+    }
+    return entry.data as T;
+  }
+
+  private setCache<T>(key: string, data: T): void {
+    this.cache.set(key, { data, expiresAt: Date.now() + CACHE_TTL_MS });
+  }
+
+  /** Invalidate all cache entries for a user. */
+  invalidateUserCache(userId: number): void {
+    for (const key of this.cache.keys()) {
+      if (key.startsWith(`game-time:${userId}:`)) {
+        this.cache.delete(key);
+      }
+    }
+    this.logger.debug(`Invalidated game-time cache for user ${userId}`);
+  }
 
   /**
    * Get a user's game time template (raw slots, no status).
@@ -131,6 +166,8 @@ export class GameTimeService {
         );
       }
     });
+
+    this.invalidateUserCache(userId);
 
     // Return all slots in display convention (convert preserved slots back)
     const preservedDisplay = preservedSlots.map((s) => ({
@@ -214,6 +251,8 @@ export class GameTimeService {
   ): Promise<void> {
     if (overrides.length === 0) return;
 
+    this.invalidateUserCache(userId);
+
     const now = new Date();
     await this.db.transaction(async (tx) => {
       for (const override of overrides) {
@@ -249,6 +288,7 @@ export class GameTimeService {
     userId: number,
     input: { startDate: string; endDate: string; reason?: string },
   ): Promise<AbsenceRecord> {
+    this.invalidateUserCache(userId);
     const now = new Date();
     const [row] = await this.db
       .insert(schema.gameTimeAbsences)
@@ -274,6 +314,7 @@ export class GameTimeService {
    * Delete an absence.
    */
   async deleteAbsence(userId: number, absenceId: number): Promise<void> {
+    this.invalidateUserCache(userId);
     await this.db
       .delete(schema.gameTimeAbsences)
       .where(
@@ -318,6 +359,14 @@ export class GameTimeService {
     overrides: OverrideRecord[];
     absences: AbsenceRecord[];
   }> {
+    // Check in-memory cache
+    const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}`;
+    type CompositeResult = Awaited<
+      ReturnType<GameTimeService['getCompositeView']>
+    >;
+    const cached = this.getCached<CompositeResult>(cacheKey);
+    if (cached) return cached;
+
     // 1. Fetch template slots (DB stores 0=Mon, convert to 0=Sun for display)
     const template = await this.getTemplate(userId);
     const remappedTemplateSlots = template.slots.map((s) => ({
@@ -698,12 +747,15 @@ export class GameTimeService {
       }
     }
 
-    return {
+    const result = {
       slots,
       events: eventBlocks,
       weekStart: weekStart.toISOString(),
       overrides: overrideRows,
       absences: absenceRows,
     };
+
+    this.setCache(cacheKey, result);
+    return result;
   }
 }
