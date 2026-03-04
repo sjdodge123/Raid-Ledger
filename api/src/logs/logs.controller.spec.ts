@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-call */
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForbiddenException } from '@nestjs/common';
 import { LogsController } from './logs.controller';
@@ -213,12 +214,7 @@ describe('LogsController', () => {
       mockLogsService.createExportStream.mockReturnValue(createMockStream());
 
       const res = createMockResponse();
-      controller.exportLogs(
-        res,
-        undefined,
-        ' api.log , nginx.log ',
-        undefined,
-      );
+      controller.exportLogs(res, undefined, ' api.log , nginx.log ', undefined);
 
       expect(mockLogsService.createExportStream).toHaveBeenCalledWith([
         'api.log',
@@ -365,7 +361,9 @@ describe('LogsController', () => {
       const guard = new AdminGuard();
       const mockContext = {
         switchToHttp: () => ({
-          getRequest: () => ({ user: { id: 2, username: 'member', role: 'member' } }),
+          getRequest: () => ({
+            user: { id: 2, username: 'member', role: 'member' },
+          }),
         }),
       } as any;
 
@@ -376,7 +374,9 @@ describe('LogsController', () => {
       const guard = new AdminGuard();
       const mockContext = {
         switchToHttp: () => ({
-          getRequest: () => ({ user: { id: 1, username: 'admin', role: 'admin' } }),
+          getRequest: () => ({
+            user: { id: 1, username: 'admin', role: 'admin' },
+          }),
         }),
       } as any;
 
