@@ -50,7 +50,7 @@ export class AdHocParticipantService {
         ],
         set: {
           leftAt: null,
-          joinedAt: now, // Reset for accurate session duration on next leave
+          // joinedAt intentionally omitted — preserve original first-join time
           discordUsername: member.discordUsername,
           discordAvatarHash: member.discordAvatarHash,
           userId: member.userId,
