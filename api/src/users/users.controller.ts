@@ -17,6 +17,7 @@ import {
   UploadedFile,
   Request,
   HttpCode,
+  Header,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -33,6 +34,7 @@ import {
   RecentPlayersResponseDto,
   UserManagementListResponseDto,
   UpdatePreferenceSchema,
+  UpdatePreferenceBatchSchema,
   UpdateUserRoleSchema,
   GameTimeTemplateInputSchema,
   GameTimeOverrideInputSchema,
@@ -527,6 +529,7 @@ export class UsersController {
    */
   @Get('me/game-time')
   @UseGuards(AuthGuard('jwt'))
+  @Header('Cache-Control', 'private, max-age=120')
   async getMyGameTime(
     @Request() req: AuthenticatedRequest,
     @Query('week') week?: string,
@@ -842,6 +845,20 @@ export class UsersController {
     @Body() body: unknown,
   ) {
     try {
+      // Try batch format first (ROK-666), fall back to single-key format
+      const batchResult = UpdatePreferenceBatchSchema.safeParse(body);
+      if (batchResult.success) {
+        await this.preferencesService.setUserPreferences(
+          req.user.id,
+          batchResult.data.preferences,
+        );
+        return {
+          data: {
+            updated: Object.keys(batchResult.data.preferences).length,
+          },
+        };
+      }
+
       const dto = UpdatePreferenceSchema.parse(body);
       const updated = await this.preferencesService.setUserPreference(
         req.user.id,

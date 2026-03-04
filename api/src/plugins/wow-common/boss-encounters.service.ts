@@ -2,11 +2,19 @@ import { Injectable, Inject, Logger } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, inArray, and } from 'drizzle-orm';
 import type { BossEncounterDto, BossLootDto } from '@raid-ledger/contract';
+import type Redis from 'ioredis';
 
 import * as schema from '../../drizzle/schema';
 import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../../redis/redis.module';
+import { redisSwr } from '../../common/swr-cache';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
+
+/** Cache key prefix for WoW Classic boss data */
+const CACHE_PREFIX = 'wow:bosses';
+/** 24 hours in seconds */
+const CACHE_TTL_SEC = 86400;
 
 /**
  * Variant-to-expansion-set mapping for boss encounters.
@@ -48,6 +56,7 @@ const SUB_INSTANCE_BOSSES: Record<string, Set<string>> = {
 
 /**
  * Service for querying boss encounter and loot data with variant-aware filtering.
+ * Static data is cached in Redis with 24h TTL (ROK-665).
  *
  * ROK-244: Variant-Aware Boss & Loot Table Seed Data
  */
@@ -59,6 +68,8 @@ export class BossEncountersService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly seeder: BossEncounterSeeder,
+    @Inject(REDIS_CLIENT)
+    private readonly redis: Redis,
   ) {}
 
   /**
@@ -70,14 +81,25 @@ export class BossEncountersService {
 
   /**
    * Get all boss encounters for an instance, filtered by variant.
-   * SoD-modified bosses are only included for SoD-enabled variants.
-   *
-   * For sub-instances (synthetic IDs > 10000, e.g. 31603 = SM:Armory),
-   * resolves to the parent instance and filters to only the wing's bosses.
+   * Results are cached in Redis for 24h.
    */
   async getBossesForInstance(
     instanceId: number,
     variant: string = 'classic_era',
+  ): Promise<BossEncounterDto[]> {
+    const cacheKey = `${CACHE_PREFIX}:instance:${instanceId}:${variant}`;
+    const result = await redisSwr<BossEncounterDto[]>({
+      redis: this.redis,
+      key: cacheKey,
+      ttlSec: CACHE_TTL_SEC,
+      fetcher: () => this.fetchBossesForInstance(instanceId, variant),
+    });
+    return result ?? [];
+  }
+
+  private async fetchBossesForInstance(
+    instanceId: number,
+    variant: string,
   ): Promise<BossEncounterDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
 
@@ -121,10 +143,25 @@ export class BossEncountersService {
 
   /**
    * Get loot items for a boss, filtered by variant's expansion set.
+   * Results are cached in Redis for 24h.
    */
   async getLootForBoss(
     bossId: number,
     variant: string = 'classic_era',
+  ): Promise<BossLootDto[]> {
+    const cacheKey = `${CACHE_PREFIX}:loot:${bossId}:${variant}`;
+    const result = await redisSwr<BossLootDto[]>({
+      redis: this.redis,
+      key: cacheKey,
+      ttlSec: CACHE_TTL_SEC,
+      fetcher: () => this.fetchLootForBoss(bossId, variant),
+    });
+    return result ?? [];
+  }
+
+  private async fetchLootForBoss(
+    bossId: number,
+    variant: string,
   ): Promise<BossLootDto[]> {
     const expansions = this.getExpansionsForVariant(variant);
 
@@ -149,14 +186,33 @@ export class BossEncountersService {
     bossesInserted: number;
     lootInserted: number;
   }> {
-    return this.seeder.seed();
+    const result = await this.seeder.seed();
+    await this.clearCache();
+    return result;
   }
 
   /**
    * Drop all boss encounter data (delegates to seeder).
    */
   async dropBosses(): Promise<void> {
-    return this.seeder.drop();
+    await this.seeder.drop();
+    await this.clearCache();
+  }
+
+  /**
+   * Clear all cached boss/loot data from Redis.
+   * Called after seed refresh, data drop, or admin refresh actions.
+   */
+  async clearCache(): Promise<void> {
+    try {
+      const keys = await this.redis.keys(`${CACHE_PREFIX}:*`);
+      if (keys.length > 0) {
+        await this.redis.del(...keys);
+        this.logger.log(`Cleared ${keys.length} boss cache entries`);
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to clear boss cache: ${err}`);
+    }
   }
 
   private toBossDto(

@@ -1,12 +1,12 @@
 ---
 name: fix-batch
-description: "Fast pipeline: batch small fixes (bugs, tech debt, chores), parallel dev agents, validate, ship as single PR"
+description: "Fast pipeline: batch small fixes (bugs, tech debt, chores, perf), parallel dev agents, validate, ship as single PR"
 argument-hint: "[ROK-XXX ROK-YYY | all]"
 ---
 
 # Fix-Batch — Fast Fix Pipeline
 
-Pulls small-scope stories (Bug, Tech Debt, Chore) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no reviewer agents, no architect checks.** The quality gate is: integration tests + full CI pass on the merged batch branch.
+Pulls small-scope stories (Bug, Tech Debt, Chore, Performance, Spike) from Linear, batches them, spawns parallel dev agents in worktrees, merges all into a single batch branch, validates, and ships one PR. **No operator review gate, no test agents, no reviewer agents, no architect checks.** The quality gate is: integration tests + full CI pass on the merged batch branch.
 
 **Linear Project:** Raid Ledger (ID: `1bc39f98-abaa-4d85-912f-ba62c8da1532`)
 **Team:** Roknua's projects (ID: `0728c19f-5268-4e16-aa45-c944349ce386`)
@@ -15,7 +15,7 @@ Pulls small-scope stories (Bug, Tech Debt, Chore) from Linear, batches them, spa
 
 ## When to Use
 
-- Bug fixes, tech debt, chores, small improvements
+- Bug fixes, tech debt, chores, performance improvements, spikes, small improvements
 - Stories that are light or standard scope ONLY
 - If a story looks full-scope (contract changes, migrations, cross-module), flag it and recommend `/build` instead
 

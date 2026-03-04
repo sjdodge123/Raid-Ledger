@@ -56,7 +56,7 @@ mcp__linear__list_issues({
 })
 ```
 
-Filter results to stories with labels: **Bug**, **Tech Debt**, or **Chore**.
+Filter results to stories with labels: **Bug**, **Tech Debt**, **Chore**, **Performance**, or **Spike**.
 
 ### Secondary pool — "Backlog" status (opt-in):
 
@@ -68,7 +68,7 @@ mcp__linear__list_issues({
 })
 ```
 
-Filter results to stories with labels: **Bug**, **Tech Debt**, or **Chore**.
+Filter results to stories with labels: **Bug**, **Tech Debt**, **Chore**, **Performance**, or **Spike**.
 
 ### If operator specified specific stories (e.g. `ROK-XXX ROK-YYY`):
 

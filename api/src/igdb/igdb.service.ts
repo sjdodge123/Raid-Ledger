@@ -674,7 +674,9 @@ export class IgdbService {
       dbFilters.push(...this.buildAdultFilters());
     }
 
-    // Layer 1: Check Redis cache — re-query DB with filters to enforce ban/hide/adult
+    // Layer 1: Check Redis cache — return cached payload directly (ROK-660).
+    // Ban/hide re-validation is deferred to the SWR background refresh,
+    // so cached results are at most 24h stale on ban status (acceptable).
     // ROK-605: SWR — if the entry is in the stale window (last 20% of TTL),
     // return cached data immediately and trigger a background refresh.
     try {
@@ -682,9 +684,9 @@ export class IgdbService {
       if (raw) {
         // Parse envelope (new format has { storedAt, games }, old format is a plain array)
         const parsed = JSON.parse(raw) as
-          | { id: number }[]
-          | { storedAt: number; games: { id: number }[] };
-        const cachedGamesArr: { id: number }[] = Array.isArray(parsed)
+          | GameDetailDto[]
+          | { storedAt: number; games: GameDetailDto[] };
+        const cachedGames: GameDetailDto[] = Array.isArray(parsed)
           ? parsed
           : (parsed.games ?? []);
         const storedAt: number | null = Array.isArray(parsed)
@@ -692,22 +694,9 @@ export class IgdbService {
           : (parsed.storedAt ?? null);
 
         this.logger.debug(`Redis cache hit for query: ${query}`);
-        const cachedIds = cachedGamesArr.map((g) => g.id);
-        if (cachedIds.length > 0) {
-          const freshRows = await this.db
-            .select()
-            .from(schema.games)
-            .where(
-              and(
-                inArray(schema.games.id, cachedIds),
-                eq(schema.games.hidden, false),
-                eq(schema.games.banned, false),
-                ...(adultFilterEnabled ? this.buildAdultFilters() : []),
-              ),
-            )
-            .limit(IGDB_CONFIG.SEARCH_LIMIT);
-
+        if (cachedGames.length > 0) {
           // ROK-605: Check stale window and trigger background refresh
+          // The background refresh re-validates ban/hide/adult status
           if (storedAt) {
             const ageMs = Date.now() - storedAt;
             const ttlMs = IGDB_CONFIG.SEARCH_CACHE_TTL * 1000;
@@ -718,12 +707,12 @@ export class IgdbService {
           }
 
           return {
-            games: freshRows.map((g) => this.mapDbRowToDetail(g)),
+            games: cachedGames,
             cached: true,
             source: 'redis',
           };
         }
-        // Cached IDs empty — fall through to DB/IGDB layers
+        // Cached games empty — fall through to DB/IGDB layers
       }
       this.logger.debug(`Redis cache miss for query: ${query}`);
     } catch (redisError) {
@@ -754,7 +743,10 @@ export class IgdbService {
 
     // Layer 3: Fetch from IGDB (DB had < SEARCH_LIMIT results, try to find more)
     try {
-      const igdbGames = await this.fetchWithRetry(normalizedQuery);
+      const igdbGames = await this.fetchWithRetry(
+        normalizedQuery,
+        adultFilterEnabled,
+      );
 
       // Upsert games with full expanded data from IGDB
       if (igdbGames.length > 0) {
@@ -829,12 +821,16 @@ export class IgdbService {
 
     const promise = (async () => {
       try {
-        const igdbGames = await this.fetchWithRetry(normalizedQuery);
+        // ROK-660: Resolve adultFilterEnabled once for both IGDB fetch and DB re-read
+        const adultFilterEnabled = await this.isAdultFilterEnabled();
+        const igdbGames = await this.fetchWithRetry(
+          normalizedQuery,
+          adultFilterEnabled,
+        );
         if (igdbGames.length > 0) {
           await this.upsertGamesFromApi(igdbGames);
         }
-        // Re-read from DB and update Redis cache
-        const adultFilterEnabled = await this.isAdultFilterEnabled();
+        // Re-read from DB and update Redis cache (re-validates ban/hide/adult status)
         const dbFilters = [
           ...buildWordMatchFilters(schema.games.name, normalizedQuery),
           eq(schema.games.hidden, false),
@@ -906,11 +902,12 @@ export class IgdbService {
    */
   private async fetchWithRetry(
     query: string,
+    adultFilterEnabled: boolean,
     attempt = 1,
     retriedAuth = false,
   ): Promise<IgdbApiGame[]> {
     try {
-      return await this.fetchFromIgdb(query);
+      return await this.fetchFromIgdb(query, adultFilterEnabled);
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : String(error);
       const is429 = errorMsg.includes('429');
@@ -923,7 +920,7 @@ export class IgdbService {
         );
         this.accessToken = null;
         this.tokenExpiry = null;
-        return this.fetchWithRetry(query, attempt, true);
+        return this.fetchWithRetry(query, adultFilterEnabled, attempt, true);
       }
 
       if (is429 && attempt < IGDB_CONFIG.MAX_RETRIES) {
@@ -932,7 +929,12 @@ export class IgdbService {
           `IGDB 429 rate limit, retrying in ${delay}ms (attempt ${attempt}/${IGDB_CONFIG.MAX_RETRIES})`,
         );
         await this.delay(delay);
-        return this.fetchWithRetry(query, attempt + 1, retriedAuth);
+        return this.fetchWithRetry(
+          query,
+          adultFilterEnabled,
+          attempt + 1,
+          retriedAuth,
+        );
       }
 
       // Log final failure
@@ -952,15 +954,17 @@ export class IgdbService {
    * @returns Array of games from IGDB
    * @throws Error if API call fails (including 429)
    */
-  private async fetchFromIgdb(query: string): Promise<IgdbApiGame[]> {
+  private async fetchFromIgdb(
+    query: string,
+    adultFilterEnabled: boolean,
+  ): Promise<IgdbApiGame[]> {
     const token = await this.getAccessToken();
     const { clientId } = await this.resolveCredentials();
 
     // Escape quotes in query to prevent APICALYPSE injection
     const sanitizedQuery = query.replace(/"/g, '\\"');
 
-    // Apply adult content filter if enabled
-    const adultFilterEnabled = await this.isAdultFilterEnabled();
+    // Apply adult content filter if enabled (ROK-660: passed from caller to avoid duplicate call)
     const adultWhereClause = adultFilterEnabled
       ? ` where themes != (${ADULT_THEME_IDS.join(',')});`
       : '';

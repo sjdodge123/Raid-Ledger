@@ -4,8 +4,8 @@ import { Queue } from 'bullmq';
 
 export const EMBED_SYNC_QUEUE = 'discord-embed-sync';
 
-/** Debounce window in milliseconds — max 1 embed edit per event per window. */
-const DEBOUNCE_DELAY_MS = 10_000;
+/** Coalescing window in milliseconds — max 1 embed edit per event per window. */
+const COALESCE_DELAY_MS = 2_000;
 
 export interface EmbedSyncJobData {
   eventId: number;
@@ -13,11 +13,11 @@ export interface EmbedSyncJobData {
 }
 
 /**
- * Producer service for the discord-embed-sync BullMQ queue (ROK-119).
+ * Producer service for the discord-embed-sync BullMQ queue (ROK-119, ROK-664).
  *
- * Enqueues debounced embed sync jobs. If a job for the same eventId is
- * already waiting in the queue, the old job is removed and replaced with
- * a fresh one (effectively resetting the debounce timer).
+ * Coalesces rapid-fire embed sync requests per event. When multiple triggers
+ * arrive for the same eventId within the coalescing window, the delay is
+ * reset so only the final state gets synced to Discord.
  */
 @Injectable()
 export class EmbedSyncQueueService {
@@ -26,21 +26,39 @@ export class EmbedSyncQueueService {
   constructor(@InjectQueue(EMBED_SYNC_QUEUE) private readonly queue: Queue) {}
 
   /**
-   * Enqueue a debounced embed sync job for the given event.
-   * Uses a deterministic job ID so duplicate jobs for the same event
-   * are deduplicated. Removes any existing pending job before adding
-   * a new one with a fresh delay.
+   * Enqueue a coalesced embed sync job for the given event.
+   *
+   * If a delayed job already exists for the same eventId, resets its timer
+   * and updates the reason (avoiding the remove+re-add race condition).
+   * If the existing job is already active/waiting, skips — the running
+   * job will pick up the latest state from the DB anyway.
    */
   async enqueue(eventId: number, reason: string): Promise<void> {
     const jobId = `embed-sync-${eventId}`;
 
     try {
-      // Remove any existing delayed/waiting job for this event
       const existingJob = await this.queue.getJob(jobId);
+
       if (existingJob) {
         const state = await existingJob.getState();
-        if (state === 'delayed' || state === 'waiting') {
-          await existingJob.remove();
+
+        if (state === 'delayed') {
+          // Reset the coalescing window — only the final state matters
+          await existingJob.updateData({ eventId, reason });
+          await existingJob.changeDelay(COALESCE_DELAY_MS);
+          this.logger.debug(
+            `Coalesced embed sync for event ${eventId} (reason: ${reason})`,
+          );
+          return;
+        }
+
+        if (state === 'active' || state === 'waiting') {
+          // Job is already processing or about to — processor reads
+          // latest state from DB, so this trigger is a no-op.
+          this.logger.debug(
+            `Embed sync already ${state} for event ${eventId}, skipping (reason: ${reason})`,
+          );
+          return;
         }
       }
 
@@ -49,7 +67,7 @@ export class EmbedSyncQueueService {
         { eventId, reason } satisfies EmbedSyncJobData,
         {
           jobId,
-          delay: DEBOUNCE_DELAY_MS,
+          delay: COALESCE_DELAY_MS,
           attempts: 3,
           backoff: { type: 'exponential', delay: 5_000 },
           removeOnComplete: true,

@@ -5,6 +5,10 @@ import { eq, and } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
 import { wowClassicQuestProgress } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { memorySwr, type MemoryCacheEntry } from '../../common/swr-cache';
+
+/** 5 minutes in milliseconds */
+const COVERAGE_CACHE_TTL_MS = 5 * 60 * 1000;
 
 export interface QuestProgressDto {
   id: number;
@@ -23,12 +27,17 @@ export interface QuestCoverageEntry {
 
 /**
  * Service for managing per-event quest progress tracking.
+ * Quest coverage is cached in-memory with invalidation on updates (ROK-665).
  *
  * ROK-246: Dungeon Companion — Quest Suggestions UI
  */
 @Injectable()
 export class QuestProgressService {
   private readonly logger = new Logger(QuestProgressService.name);
+  private readonly coverageCache = new Map<
+    string,
+    MemoryCacheEntry<QuestCoverageEntry[]>
+  >();
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -62,6 +71,7 @@ export class QuestProgressService {
 
   /**
    * Update (upsert) a user's progress on a quest for an event.
+   * Invalidates the coverage cache for the event on mutation.
    */
   async updateProgress(
     eventId: number,
@@ -101,6 +111,9 @@ export class QuestProgressService {
         .where(eq(schema.users.id, userId))
         .limit(1);
 
+      // Invalidate coverage cache for this event
+      this.coverageCache.delete(`coverage:${eventId}`);
+
       return {
         id: updated.id,
         eventId: updated.eventId,
@@ -130,6 +143,9 @@ export class QuestProgressService {
       .where(eq(schema.users.id, userId))
       .limit(1);
 
+    // Invalidate coverage cache for this event
+    this.coverageCache.delete(`coverage:${eventId}`);
+
     return {
       id: inserted.id,
       eventId: inserted.eventId,
@@ -144,8 +160,20 @@ export class QuestProgressService {
   /**
    * Get sharable quest coverage for an event.
    * Returns which sharable quests have been picked up and by whom.
+   * Results are cached in-memory for 5 minutes, invalidated on progress updates.
    */
   async getCoverageForEvent(eventId: number): Promise<QuestCoverageEntry[]> {
+    return memorySwr({
+      cache: this.coverageCache,
+      key: `coverage:${eventId}`,
+      ttlMs: COVERAGE_CACHE_TTL_MS,
+      fetcher: () => this.fetchCoverageForEvent(eventId),
+    });
+  }
+
+  private async fetchCoverageForEvent(
+    eventId: number,
+  ): Promise<QuestCoverageEntry[]> {
     const rows = await this.db
       .select({
         questId: wowClassicQuestProgress.questId,
