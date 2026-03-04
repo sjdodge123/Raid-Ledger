@@ -184,9 +184,10 @@ test.describe('Events list', () => {
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
         // Search for a nonsense term — should show empty state
-        await searchInput.fill('xyznonexistent');
-        // Wait for the event cards to disappear (filtered out)
-        await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 5_000 });
+        // Use pressSequentially to trigger input/change events that drive the search filter
+        await searchInput.pressSequentially('xyznonexistent', { delay: 50 });
+        // Wait for the event cards to disappear (filtered out) — allow extra time for CI debounce
+        await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
         // Should show zero event cards
         const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
