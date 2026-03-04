@@ -594,11 +594,7 @@ export class DiscordNotificationEmbedService {
       case 'recruitment_reminder':
         if (eventId) {
           return new ButtonBuilder()
-            .setLabel(
-              input.type === 'new_event'
-                ? 'Sign Up'
-                : 'View Event',
-            )
+            .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')
             .setStyle(ButtonStyle.Link)
             .setURL(
               `${clientUrl}/events/${eventId}?notif=${input.notificationId}`,

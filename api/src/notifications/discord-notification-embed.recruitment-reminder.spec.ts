@@ -325,7 +325,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
       const rowJson = row.toJSON() as {
         components: Array<{ label: string; url: string }>;
       };
-      const viewEventBtn = rowJson.components.find((c) => c.label === 'View Event');
+      const viewEventBtn = rowJson.components.find(
+        (c) => c.label === 'View Event',
+      );
       expect(viewEventBtn).toBeDefined();
     });
 
@@ -344,7 +346,9 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
       const rowJson = row.toJSON() as {
         components: Array<{ label: string; url: string }>;
       };
-      const viewEventBtn = rowJson.components.find((c) => c.label === 'View Event');
+      const viewEventBtn = rowJson.components.find(
+        (c) => c.label === 'View Event',
+      );
       expect(viewEventBtn?.url).toContain('/events/99');
       expect(viewEventBtn?.url).toContain('notif=notif-rr-12');
     });

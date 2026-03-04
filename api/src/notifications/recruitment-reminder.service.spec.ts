@@ -242,12 +242,8 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-bump:event:42',
-      );
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-dm:event:42',
-      );
+      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:42');
+      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-dm:event:42');
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -281,12 +277,8 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-bump:event:10',
-      );
-      expect(mockRedis.get).toHaveBeenCalledWith(
-        'recruitment-bump:event:20',
-      );
+      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:10');
+      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-bump:event:20');
     });
   });
 
