@@ -35,10 +35,8 @@ export function buildSteamOpenIdUrl(returnUrl: string): string {
     'openid.mode': 'checkid_setup',
     'openid.return_to': returnUrl,
     'openid.realm': new URL(returnUrl).origin,
-    'openid.identity':
-      'http://specs.openid.net/auth/2.0/identifier_select',
-    'openid.claimed_id':
-      'http://specs.openid.net/auth/2.0/identifier_select',
+    'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
+    'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
   });
 
   return `${STEAM_OPENID_URL}?${params.toString()}`;

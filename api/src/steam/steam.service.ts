@@ -74,9 +74,7 @@ export class SteamService {
     }
 
     // Build lookup: steamAppId -> game row
-    const gameByAppId = new Map(
-      matchedGames.map((g) => [g.steamAppId!, g]),
-    );
+    const gameByAppId = new Map(matchedGames.map((g) => [g.steamAppId!, g]));
 
     // Get existing steam_library interests for this user
     const existingInterests = await this.db
@@ -147,16 +145,10 @@ export class SteamService {
     let updatedPlaytime = 0;
     if (toUpdate.length > 0) {
       const updateGameIds = toUpdate.map((u) => u.gameId);
-      const playtimeMap = new Map(
-        toUpdate.map((u) => [u.gameId, u]),
-      );
 
       // Build CASE expressions for batch update
       const foreverCases = toUpdate
-        .map(
-          (u) =>
-            `WHEN game_id = ${u.gameId} THEN ${u.playtimeForever}`,
-        )
+        .map((u) => `WHEN game_id = ${u.gameId} THEN ${u.playtimeForever}`)
         .join(' ');
       const weeksCases = toUpdate
         .map(

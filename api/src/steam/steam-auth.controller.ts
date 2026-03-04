@@ -9,7 +9,6 @@ import {
   UseGuards,
   HttpCode,
   Logger,
-  Inject,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
@@ -204,9 +203,7 @@ export class SteamAuthController {
       // Link Steam account
       await this.usersService.linkSteam(userId, steamId);
 
-      this.logger.log(
-        `Steam account ${steamId} linked to user ${userId}`,
-      );
+      this.logger.log(`Steam account ${steamId} linked to user ${userId}`);
 
       // Check privacy status
       const apiKey = await this.settingsService.getSteamApiKey();
@@ -241,7 +238,9 @@ export class SteamAuthController {
    */
   @Get('status')
   @UseGuards(AuthGuard('jwt'))
-  async steamStatus(@Req() req: AuthenticatedRequest): Promise<SteamLinkStatusDto> {
+  async steamStatus(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<SteamLinkStatusDto> {
     const user = await this.usersService.findById(req.user.id);
     if (!user?.steamId) {
       return { linked: false, steamId: null };
