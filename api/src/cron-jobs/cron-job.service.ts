@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   OnApplicationBootstrap,
+  OnModuleDestroy,
   Optional,
 } from '@nestjs/common';
 import { perfLog } from '../common/perf-logger';
@@ -26,6 +27,9 @@ const MAX_EXECUTIONS_PER_JOB = 50;
 
 /** Run retention cleanup every N executions per job (reduces DB overhead) */
 const PRUNE_EVERY_N_EXECUTIONS = 50;
+
+/** How often (ms) to flush cached last_run_at updates to the DB */
+const FLUSH_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Human-readable descriptions for the core @Cron jobs.
@@ -144,11 +148,26 @@ const CORE_JOB_METADATA: Record<
  * - Provides read APIs for admin UI
  */
 @Injectable()
-export class CronJobService implements OnApplicationBootstrap {
+export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(CronJobService.name);
 
   /** In-memory counter per cronJobId to decide when to run retention cleanup */
   private readonly executionCounts = new Map<number, number>();
+
+  /** In-memory cache of job rows keyed by name (avoids SELECT per tick) */
+  private readonly jobCache = new Map<
+    string,
+    typeof schema.cronJobs.$inferSelect
+  >();
+
+  /** Pending last_run_at updates keyed by job ID → { lastRunAt, cronExpression } */
+  private readonly pendingLastRunUpdates = new Map<
+    number,
+    { lastRunAt: Date; cronExpression: string }
+  >();
+
+  /** Interval handle for periodic flush of last_run_at */
+  private flushInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -168,6 +187,25 @@ export class CronJobService implements OnApplicationBootstrap {
         this.logger.error(`Failed to sync cron jobs: ${err}`),
       );
     }, 2_000);
+
+    // Start periodic flush of cached last_run_at updates
+    this.flushInterval = setInterval(() => {
+      this.flushLastRunUpdates().catch((err) =>
+        this.logger.error(`Failed to flush last_run_at updates: ${err}`),
+      );
+    }, FLUSH_INTERVAL_MS);
+  }
+
+  /**
+   * Clean up on module destroy — flush pending updates and clear interval.
+   */
+  async onModuleDestroy() {
+    if (this.flushInterval) {
+      clearInterval(this.flushInterval);
+      this.flushInterval = null;
+    }
+    // Flush any pending updates before shutdown
+    await this.flushLastRunUpdates();
   }
 
   /**
@@ -278,6 +316,13 @@ export class CronJobService implements OnApplicationBootstrap {
     }
 
     this.logger.log(`Cron job sync complete (${syncedNames.size} total)`);
+
+    // Populate the in-memory job cache from DB
+    const allJobs = await this.db.select().from(schema.cronJobs);
+    this.jobCache.clear();
+    for (const j of allJobs) {
+      this.jobCache.set(j.name, j);
+    }
   }
 
   /** Upsert a single cron job into the DB */
@@ -325,19 +370,33 @@ export class CronJobService implements OnApplicationBootstrap {
    * - Times execution and records "completed" or "failed"
    * - Periodically prunes old execution history (every Nth execution)
    *
+   * Performance optimizations (ROK-663):
+   * - Job rows are cached in memory (no SELECT per tick)
+   * - Handler can return `false` to signal a no-op run, which skips the
+   *   INSERT into execution history and defers the last_run_at UPDATE
+   * - last_run_at updates for no-op runs are batched and flushed every 5 min
+   *
    * @param jobName - The unique job name (must match cron_jobs.name)
-   * @param fn - The async handler function to execute
+   * @param fn - The async handler. Return `false` to signal no work was done
+   *             (skips execution record). Return void/true for normal tracking.
    */
   async executeWithTracking(
     jobName: string,
-    fn: () => Promise<void>,
+    fn: () => Promise<void | boolean>,
   ): Promise<void> {
-    // Find the job row
-    const [job] = await this.db
-      .select()
-      .from(schema.cronJobs)
-      .where(eq(schema.cronJobs.name, jobName))
-      .limit(1);
+    // Look up job from in-memory cache first, fall back to DB
+    let job = this.jobCache.get(jobName) ?? null;
+    if (!job) {
+      const [row] = await this.db
+        .select()
+        .from(schema.cronJobs)
+        .where(eq(schema.cronJobs.name, jobName))
+        .limit(1);
+      if (row) {
+        this.jobCache.set(jobName, row);
+        job = row;
+      }
+    }
 
     if (!job) {
       // Job not yet synced — just run it directly
@@ -361,31 +420,49 @@ export class CronJobService implements OnApplicationBootstrap {
     // Execute and track
     const startedAt = new Date();
     try {
-      await fn();
+      const result = await fn();
       const finishedAt = new Date();
       const durationMs = finishedAt.getTime() - startedAt.getTime();
 
-      await this.db.insert(schema.cronJobExecutions).values({
-        cronJobId: job.id,
-        status: 'completed',
-        startedAt,
-        finishedAt,
-        durationMs,
-      });
-      perfLog('CRON', jobName, durationMs, { status: 'completed' });
+      // If the handler explicitly returned false, this was a no-op run.
+      // Skip the execution INSERT and defer the last_run_at UPDATE.
+      const isNoOp = result === false;
 
-      // Update last_run_at + next_run_at
-      const nextRunAt = this.computeNextRun(job.cronExpression);
-      await this.db
-        .update(schema.cronJobs)
-        .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
-        .where(eq(schema.cronJobs.id, job.id));
+      if (isNoOp) {
+        // Defer last_run_at update to the periodic flush
+        this.pendingLastRunUpdates.set(job.id, {
+          lastRunAt: finishedAt,
+          cronExpression: job.cronExpression,
+        });
+        perfLog('CRON', jobName, durationMs, { status: 'no-op' });
+      } else {
+        await this.db.insert(schema.cronJobExecutions).values({
+          cronJobId: job.id,
+          status: 'completed',
+          startedAt,
+          finishedAt,
+          durationMs,
+        });
+        perfLog('CRON', jobName, durationMs, { status: 'completed' });
+
+        // Update last_run_at + next_run_at immediately for meaningful runs
+        const nextRunAt = this.computeNextRun(job.cronExpression);
+        await this.db
+          .update(schema.cronJobs)
+          .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
+          .where(eq(schema.cronJobs.id, job.id));
+
+        // Update cache
+        job.lastRunAt = finishedAt;
+        if (nextRunAt) job.nextRunAt = nextRunAt;
+      }
     } catch (error) {
       const finishedAt = new Date();
       const durationMs = finishedAt.getTime() - startedAt.getTime();
       const errorMessage =
         error instanceof Error ? error.message : String(error);
 
+      // Always record failed executions (important for debugging)
       await this.db.insert(schema.cronJobExecutions).values({
         cronJobId: job.id,
         status: 'failed',
@@ -402,6 +479,10 @@ export class CronJobService implements OnApplicationBootstrap {
         .update(schema.cronJobs)
         .set({ lastRunAt: finishedAt, nextRunAt, updatedAt: new Date() })
         .where(eq(schema.cronJobs.id, job.id));
+
+      // Update cache
+      job.lastRunAt = finishedAt;
+      if (nextRunAt) job.nextRunAt = nextRunAt;
 
       // Log the error but do NOT re-throw — executeWithTracking is a
       // fire-and-forget wrapper; the calling @Cron handler already had
@@ -529,6 +610,7 @@ export class CronJobService implements OnApplicationBootstrap {
       .set({ paused: true, updatedAt: new Date() })
       .where(eq(schema.cronJobs.id, id))
       .returning();
+    if (updated) this.jobCache.set(updated.name, updated);
     return updated;
   }
 
@@ -541,6 +623,7 @@ export class CronJobService implements OnApplicationBootstrap {
       .set({ paused: false, updatedAt: new Date() })
       .where(eq(schema.cronJobs.id, id))
       .returning();
+    if (updated) this.jobCache.set(updated.name, updated);
     return updated;
   }
 
@@ -568,6 +651,7 @@ export class CronJobService implements OnApplicationBootstrap {
       .returning();
 
     if (!updated) return updated;
+    this.jobCache.set(updated.name, updated);
 
     // Apply at runtime if the job exists in the SchedulerRegistry
     try {
@@ -589,6 +673,35 @@ export class CronJobService implements OnApplicationBootstrap {
   }
 
   // ─── Private helpers ────────────────────────────────────────────
+
+  /**
+   * Flush all pending last_run_at updates to the DB in a single batch.
+   * Called periodically (every 5 min) and on shutdown.
+   */
+  async flushLastRunUpdates(): Promise<void> {
+    if (this.pendingLastRunUpdates.size === 0) return;
+
+    // Snapshot and clear to avoid concurrent modification
+    const updates = new Map(this.pendingLastRunUpdates);
+    this.pendingLastRunUpdates.clear();
+
+    const now = new Date();
+    for (const [jobId, { lastRunAt, cronExpression }] of updates) {
+      try {
+        const nextRunAt = this.computeNextRun(cronExpression);
+        await this.db
+          .update(schema.cronJobs)
+          .set({ lastRunAt, nextRunAt, updatedAt: now })
+          .where(eq(schema.cronJobs.id, jobId));
+      } catch (err) {
+        this.logger.warn(
+          `Failed to flush last_run_at for job ${jobId}: ${err}`,
+        );
+      }
+    }
+
+    this.logger.debug(`Flushed last_run_at for ${updates.size} cron job(s)`);
+  }
 
   /**
    * Compute the next fire time from a cron expression. Returns null if

@@ -361,6 +361,17 @@ export class RecruitmentReminderService {
       return;
     }
 
+    // Re-check capacity: the event may have filled between query and bump
+    if (
+      event.maxAttendees !== null &&
+      event.signupCount >= event.maxAttendees
+    ) {
+      this.logger.debug(
+        `Event ${event.id} is now full (${event.signupCount}/${event.maxAttendees}) — skipping channel bump`,
+      );
+      return;
+    }
+
     try {
       const signupSummary = event.maxAttendees
         ? `${event.signupCount}/${event.maxAttendees} spots filled`
@@ -370,8 +381,13 @@ export class RecruitmentReminderService {
       const clientUrl =
         (await this.settingsService.getClientUrl()) ?? 'http://localhost:5173';
 
+      const hoursUntil = Math.round(
+        (new Date(event.startTime).getTime() - Date.now()) / (1000 * 60 * 60),
+      );
+      const timeLabel = hoursUntil <= 24 ? 'tomorrow' : `in ${hoursUntil}h`;
+
       const embed = new EmbedBuilder()
-        .setTitle(`📢 Spots still available for tomorrow's event!`)
+        .setTitle(`📢 Spots still available — event ${timeLabel}!`)
         .setDescription(
           `**${event.title}** — ${event.gameName}\n${signupSummary}`,
         )

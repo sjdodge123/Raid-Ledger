@@ -4,6 +4,7 @@ import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
 import { RosterNotificationBufferService } from './roster-notification-buffer.service';
 import { EventReminderService } from './event-reminder.service';
+import { RoleGapAlertService } from './role-gap-alert.service';
 import { PostEventReminderService } from './post-event-reminder.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { DiscordNotificationProcessor } from './discord-notification.processor';
@@ -30,6 +31,7 @@ import { SettingsModule } from '../settings/settings.module';
     NotificationService,
     RosterNotificationBufferService,
     EventReminderService,
+    RoleGapAlertService,
     PostEventReminderService,
     DiscordNotificationService,
     DiscordNotificationProcessor,
