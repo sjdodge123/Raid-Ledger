@@ -99,3 +99,6 @@ export * from './voice-attendance.schema.js';
 
 // Event Analytics (ROK-491)
 export * from './event-analytics.schema.js';
+
+// Steam Integration (ROK-417)
+export * from './steam.schema.js';

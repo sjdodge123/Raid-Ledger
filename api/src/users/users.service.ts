@@ -235,6 +235,56 @@ export class UsersService {
   }
 
   /**
+   * Find a user by Steam ID (ROK-417).
+   */
+  async findBySteamId(steamId: string) {
+    const result = await this.db.query.users.findFirst({
+      where: eq(schema.users.steamId, steamId),
+    });
+    return result ?? null;
+  }
+
+  /**
+   * Link a Steam account to an existing user (ROK-417).
+   * Throws ConflictException if Steam account is already linked to another user.
+   */
+  async linkSteam(userId: number, steamId: string) {
+    const existing = await this.findBySteamId(steamId);
+    if (existing && existing.id !== userId) {
+      throw new ConflictException(
+        'This Steam account is already linked to another user',
+      );
+    }
+
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        steamId,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
+
+    return updated;
+  }
+
+  /**
+   * Unlink Steam from a user account (ROK-417).
+   */
+  async unlinkSteam(userId: number) {
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        steamId: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
+
+    return updated;
+  }
+
+  /**
    * Count total users in the database with 5-minute in-memory cache.
    * Used for first-run detection (ROK-175 AC-4, ROK-662).
    */

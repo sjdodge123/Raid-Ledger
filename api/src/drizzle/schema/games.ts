@@ -46,6 +46,8 @@ export const games = pgTable('games', {
   } | null>(),
   /** Twitch category ID for streams lookup (may differ from IGDB ID) */
   twitchGameId: text('twitch_game_id'),
+  /** ROK-417: Steam AppID for library matching (from IGDB external_games category=1) */
+  steamAppId: integer('steam_app_id'),
   /** Whether the game supports cross-platform play (inferred from IGDB or manual) */
   crossplay: boolean('crossplay'),
   /** ROK-231: Hidden games are excluded from user-facing search/discovery */

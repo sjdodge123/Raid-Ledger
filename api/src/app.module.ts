@@ -34,6 +34,7 @@ import { SentryEnvModule } from './sentry/sentry-env.module';
 import { CronJobModule } from './cron-jobs/cron-job.module';
 import { BackupModule } from './backup/backup.module';
 import { EnrichmentsModule } from './enrichments/enrichments.module';
+import { SteamModule } from './steam/steam.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { EnrichmentsModule } from './enrichments/enrichments.module';
     SentryEnvModule,
     CronJobModule,
     BackupModule,
+    SteamModule,
   ],
   controllers: [AppController],
   providers: [

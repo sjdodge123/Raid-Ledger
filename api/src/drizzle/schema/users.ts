@@ -13,6 +13,7 @@ export const users = pgTable(
   {
     id: serial('id').primaryKey(),
     discordId: text('discord_id').unique(), // Nullable for local-only users who link Discord later
+    steamId: text('steam_id').unique(), // Nullable — linked via Steam OpenID 2.0 (ROK-417)
     username: text('username').notNull(),
     displayName: varchar('display_name', { length: 30 }),
     avatar: text('avatar'),

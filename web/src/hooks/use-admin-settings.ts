@@ -696,6 +696,66 @@ export function useAdminSettings() {
         },
     });
 
+    // ============================================================
+    // Steam API Key (ROK-417)
+    // ============================================================
+
+    const steamStatus = useQuery<{ configured: boolean }>({
+        queryKey: ['admin', 'settings', 'steam'],
+        queryFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/steam`, {
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to fetch Steam status');
+            return response.json();
+        },
+        enabled: !!getAuthToken(),
+        staleTime: 30_000,
+    });
+
+    const updateSteam = useMutation<ApiResponse, Error, { apiKey: string }>({
+        mutationFn: async (config) => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/steam`, {
+                method: 'PUT',
+                headers: getHeaders(),
+                body: JSON.stringify(config),
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Failed to update Steam configuration' }));
+                throw new Error(error.message || 'Failed to update Steam configuration');
+            }
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'steam'] });
+        },
+    });
+
+    const testSteam = useMutation<OAuthTestResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/steam/test`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to test Steam configuration');
+            return response.json();
+        },
+    });
+
+    const clearSteam = useMutation<ApiResponse, Error>({
+        mutationFn: async () => {
+            const response = await fetch(`${API_BASE_URL}/admin/settings/steam/clear`, {
+                method: 'POST',
+                headers: getHeaders(),
+            });
+            if (!response.ok) throw new Error('Failed to clear Steam configuration');
+            return response.json();
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['admin', 'settings', 'steam'] });
+        },
+    });
+
     // ROK-293: Ad-hoc events toggle
     const adHocEventsStatus = useQuery<{ enabled: boolean }>({
         queryKey: ['admin', 'settings', 'discord-bot', 'ad-hoc'],
@@ -762,5 +822,9 @@ export function useAdminSettings() {
         setDiscordVoiceChannel,
         adHocEventsStatus,
         updateAdHocEvents,
+        steamStatus,
+        updateSteam,
+        testSteam,
+        clearSteam,
     };
 }
