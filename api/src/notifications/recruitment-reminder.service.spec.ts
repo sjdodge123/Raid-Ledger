@@ -61,7 +61,11 @@ jest.mock('discord.js', () => {
 
   class MockActionRowBuilder {
     private components: Array<{ toJSON: () => unknown }> = [];
-    addComponents(...args: Array<{ toJSON: () => unknown } | Array<{ toJSON: () => unknown }>>) {
+    addComponents(
+      ...args: Array<
+        { toJSON: () => unknown } | Array<{ toJSON: () => unknown }>
+      >
+    ) {
       for (const arg of args) {
         if (Array.isArray(arg)) {
           this.components.push(...arg);
@@ -78,7 +82,12 @@ jest.mock('discord.js', () => {
 
   return {
     Client: MockClient,
-    GatewayIntentBits: { Guilds: 1, GuildMessages: 2, GuildMembers: 4, DirectMessages: 64 },
+    GatewayIntentBits: {
+      Guilds: 1,
+      GuildMessages: 2,
+      GuildMembers: 4,
+      DirectMessages: 64,
+    },
     Events: { ClientReady: 'ready', Error: 'error' },
     PermissionsBitField: {
       Flags: {
@@ -108,19 +117,21 @@ jest.mock('discord.js', () => {
  * Helper to build a minimal EligibleEvent-shaped row returned from db.execute
  * for the findEligibleEvents query.
  */
-function makeEventRow(overrides: Partial<{
-  id: number;
-  title: string;
-  game_id: number;
-  game_name: string;
-  creator_id: number;
-  start_time: string;
-  max_attendees: number | null;
-  signup_count: string;
-  channel_id: string;
-  guild_id: string;
-  message_id: string;
-}> = {}) {
+function makeEventRow(
+  overrides: Partial<{
+    id: number;
+    title: string;
+    game_id: number;
+    game_name: string;
+    creator_id: number;
+    start_time: string;
+    max_attendees: number | null;
+    signup_count: string;
+    channel_id: string;
+    guild_id: string;
+    message_id: string;
+  }> = {},
+) {
   return {
     id: 42,
     title: 'Mythic Raid Night',
@@ -145,7 +156,10 @@ describe('RecruitmentReminderService', () => {
     create: jest.Mock;
     resolveVoiceChannelId: jest.Mock;
   };
-  let mockSettingsService: { getDefaultTimezone: jest.Mock; getClientUrl: jest.Mock };
+  let mockSettingsService: {
+    getDefaultTimezone: jest.Mock;
+    getClientUrl: jest.Mock;
+  };
   let mockDiscordBotClient: { isConnected: jest.Mock; sendEmbed: jest.Mock };
   let mockCronJobService: { executeWithTracking: jest.Mock };
 
@@ -173,7 +187,9 @@ describe('RecruitmentReminderService', () => {
     };
 
     mockCronJobService = {
-      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) => fn()),
+      executeWithTracking: jest.fn((_name: string, fn: () => Promise<void>) =>
+        fn(),
+      ),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -188,7 +204,9 @@ describe('RecruitmentReminderService', () => {
       ],
     }).compile();
 
-    service = module.get<RecruitmentReminderService>(RecruitmentReminderService);
+    service = module.get<RecruitmentReminderService>(
+      RecruitmentReminderService,
+    );
   });
 
   describe('handleCron', () => {
@@ -225,7 +243,9 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-reminder:event:42');
+      expect(mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-reminder:event:42',
+      );
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -259,8 +279,12 @@ describe('RecruitmentReminderService', () => {
 
       await service.checkAndSendReminders();
 
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-reminder:event:10');
-      expect(mockRedis.get).toHaveBeenCalledWith('recruitment-reminder:event:20');
+      expect(mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-reminder:event:10',
+      );
+      expect(mockRedis.get).toHaveBeenCalledWith(
+        'recruitment-reminder:event:20',
+      );
     });
   });
 
@@ -288,7 +312,9 @@ describe('RecruitmentReminderService', () => {
 
       // Only 2 DMs: users 5 and 7 (not 6)
       expect(mockNotificationService.create).toHaveBeenCalledTimes(2);
-      const calls = mockNotificationService.create.mock.calls.map((c) => c[0].userId);
+      const calls = mockNotificationService.create.mock.calls.map(
+        (c: Array<{ userId: number }>) => c[0].userId,
+      );
       expect(calls).toContain(5);
       expect(calls).toContain(7);
       expect(calls).not.toContain(6);
@@ -388,7 +414,9 @@ describe('RecruitmentReminderService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ signupSummary: '10/20 spots filled' }),
+          payload: expect.objectContaining({
+            signupSummary: '10/20 spots filled',
+          }),
         }),
       );
     });
@@ -398,7 +426,9 @@ describe('RecruitmentReminderService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ url: 'http://localhost:5173/events/42' }),
+          payload: expect.objectContaining({
+            url: 'http://localhost:5173/events/42',
+          }),
         }),
       );
     });
@@ -409,7 +439,8 @@ describe('RecruitmentReminderService', () => {
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
           payload: expect.objectContaining({
-            discordUrl: 'https://discord.com/channels/guild-xyz/channel-abc/msg-123',
+            discordUrl:
+              'https://discord.com/channels/guild-xyz/channel-abc/msg-123',
           }),
         }),
       );
@@ -420,7 +451,9 @@ describe('RecruitmentReminderService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ startTime: '2026-03-04T20:00:00.000Z' }),
+          payload: expect.objectContaining({
+            startTime: '2026-03-04T20:00:00.000Z',
+          }),
         }),
       );
     });
@@ -450,7 +483,9 @@ describe('RecruitmentReminderService', () => {
       await service.checkAndSendReminders();
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
-        expect.objectContaining({ title: 'Spots Available — Mythic Raid Night' }),
+        expect.objectContaining({
+          title: 'Spots Available — Mythic Raid Night',
+        }),
       );
     });
   });
@@ -483,7 +518,9 @@ describe('RecruitmentReminderService', () => {
 
       expect(mockNotificationService.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ signupSummary: '15/30 spots filled' }),
+          payload: expect.objectContaining({
+            signupSummary: '15/30 spots filled',
+          }),
         }),
       );
     });
@@ -546,9 +583,7 @@ describe('RecruitmentReminderService', () => {
 
     it('should skip channel bump when bot is not connected', async () => {
       const event = makeEventRow();
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
 
       mockDiscordBotClient.isConnected.mockReturnValue(false);
 
@@ -559,46 +594,58 @@ describe('RecruitmentReminderService', () => {
 
     it('should not throw when channel bump sendEmbed fails', async () => {
       const event = makeEventRow();
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
 
-      mockDiscordBotClient.sendEmbed.mockRejectedValue(new Error('Channel not found'));
+      mockDiscordBotClient.sendEmbed.mockRejectedValue(
+        new Error('Channel not found'),
+      );
 
       await expect(service.checkAndSendReminders()).resolves.not.toThrow();
     });
 
     it('should use clientUrl from settings in the bump Sign Up button URL', async () => {
       const event = makeEventRow({ id: 99 });
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
 
-      mockSettingsService.getClientUrl.mockResolvedValue('https://raidledger.example.com');
+      mockSettingsService.getClientUrl.mockResolvedValue(
+        'https://raidledger.example.com',
+      );
 
       await service.checkAndSendReminders();
 
       // sendEmbed is called with (channelId, embed, row)
-      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0];
-      const rowJson = row.toJSON() as { components: Array<{ url: string; label: string }> };
-      const signUpBtn = rowJson.components.find((c: { label: string }) => c.label === 'Sign Up');
+      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+        string,
+        unknown,
+        { toJSON: () => { components: Array<{ url: string; label: string }> } },
+      ];
+      const rowJson = row.toJSON();
+      const signUpBtn = rowJson.components.find(
+        (c: { label: string }) => c.label === 'Sign Up',
+      );
       expect(signUpBtn).toBeDefined();
-      expect(signUpBtn?.url).toContain('https://raidledger.example.com/events/99');
+      expect(signUpBtn?.url).toContain(
+        'https://raidledger.example.com/events/99',
+      );
     });
 
     it('should fall back to http://localhost:5173 for clientUrl when settings returns null', async () => {
       const event = makeEventRow({ id: 55 });
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
 
       mockSettingsService.getClientUrl.mockResolvedValue(null);
 
       await service.checkAndSendReminders();
 
-      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0];
-      const rowJson = row.toJSON() as { components: Array<{ url: string; label: string }> };
-      const signUpBtn = rowJson.components.find((c: { label: string }) => c.label === 'Sign Up');
+      const [, , row] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+        string,
+        unknown,
+        { toJSON: () => { components: Array<{ url: string; label: string }> } },
+      ];
+      const rowJson = row.toJSON();
+      const signUpBtn = rowJson.components.find(
+        (c: { label: string }) => c.label === 'Sign Up',
+      );
       expect(signUpBtn?.url).toContain('http://localhost:5173/events/55');
     });
 
@@ -610,14 +657,15 @@ describe('RecruitmentReminderService', () => {
         max_attendees: 20,
         signup_count: '10',
       });
-      mockDb.execute
-        .mockResolvedValueOnce([event])
-        .mockResolvedValueOnce([]);
+      mockDb.execute.mockResolvedValueOnce([event]).mockResolvedValueOnce([]);
 
       await service.checkAndSendReminders();
 
-      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0];
-      const embedJson = embed.toJSON() as { description: string; title: string };
+      const [, embed] = mockDiscordBotClient.sendEmbed.mock.calls[0] as [
+        string,
+        { toJSON: () => { description: string; title: string } },
+      ];
+      const embedJson = embed.toJSON();
       expect(embedJson.description).toContain('Mythic Raid Night');
       expect(embedJson.description).toContain('World of Warcraft');
       expect(embedJson.description).toContain('10/20 spots filled');
