@@ -1,9 +1,12 @@
 name: Build and Push Docker Images
 
 on:
+  # Only build Docker images after CI passes (lint + tests + smoke)
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main]
   push:
-    branches:
-      - main
     tags:
       - 'v*'
 
@@ -13,6 +16,8 @@ env:
 jobs:
   # Build each platform natively in parallel (no QEMU emulation)
   build:
+    # Skip if triggered by workflow_run and CI failed
+    if: ${{ github.event_name == 'push' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       fail-fast: false
       matrix:
