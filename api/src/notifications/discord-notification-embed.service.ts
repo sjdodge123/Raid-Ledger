@@ -73,8 +73,8 @@ export class DiscordNotificationEmbedService {
     const clientUrl = await this.resolveClientUrl();
     const row = this.buildActionRow(input, clientUrl);
 
-    // ROK-378: Add Roach Out button row for event reminders
-    const rows = this.buildExtraRows(input);
+    // ROK-378: Add extra button rows for specific notification types
+    const rows = this.buildExtraRows(input, clientUrl);
 
     return { embed, row, rows };
   }
@@ -193,14 +193,20 @@ export class DiscordNotificationEmbedService {
   }
 
   /**
-   * Build extra action rows for specific notification types (ROK-378).
+   * Build extra action rows for specific notification types (ROK-378, ROK-536).
    * Event reminders get a "Roach Out" interactive button.
+   * Role gap alerts get Cancel Event and Reschedule deep-link buttons.
    */
   private buildExtraRows(
     input: NotificationEmbedInput,
+    clientUrl: string,
   ): ActionRowBuilder<ButtonBuilder>[] | undefined {
     const eventId = input.payload?.eventId;
     if (eventId == null) return undefined;
+
+    if (input.type === 'role_gap_alert') {
+      return this.buildRoleGapExtraRows(input, clientUrl, toStr(eventId));
+    }
 
     if (input.type === 'event_reminder') {
       const roachOutRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -255,6 +261,35 @@ export class DiscordNotificationEmbedService {
     return undefined;
   }
 
+  /**
+   * ROK-536: Build Cancel Event and Reschedule deep-link buttons for role gap alerts.
+   */
+  private buildRoleGapExtraRows(
+    input: NotificationEmbedInput,
+    clientUrl: string,
+    eventId: string,
+  ): ActionRowBuilder<ButtonBuilder>[] {
+    const reason = input.payload?.suggestedReason
+      ? encodeURIComponent(toStr(input.payload.suggestedReason).slice(0, 200))
+      : '';
+    const reasonParam = reason ? `&reason=${reason}` : '';
+
+    return [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setLabel('Cancel Event')
+          .setStyle(ButtonStyle.Link)
+          .setURL(`${clientUrl}/events/${eventId}?action=cancel${reasonParam}`),
+        new ButtonBuilder()
+          .setLabel('Reschedule')
+          .setStyle(ButtonStyle.Link)
+          .setURL(
+            `${clientUrl}/events/${eventId}?action=reschedule${reasonParam}`,
+          ),
+      ),
+    ];
+  }
+
   private getColorForType(type: NotificationType): number {
     switch (type) {
       case 'event_reminder':
@@ -276,6 +311,7 @@ export class DiscordNotificationEmbedService {
       case 'level_up':
         return EMBED_COLORS.SIGNUP_CONFIRMATION;
       case 'missed_event_nudge':
+      case 'role_gap_alert':
         return EMBED_COLORS.REMINDER;
       case 'recruitment_reminder':
         return EMBED_COLORS.ANNOUNCEMENT;
@@ -314,6 +350,8 @@ export class DiscordNotificationEmbedService {
         return '👋';
       case 'recruitment_reminder':
         return '📢';
+      case 'role_gap_alert':
+        return '\u26A0\uFE0F';
       default:
         return '🔔';
     }
@@ -349,6 +387,8 @@ export class DiscordNotificationEmbedService {
         return 'Missed Event';
       case 'recruitment_reminder':
         return 'Recruitment Reminder';
+      case 'role_gap_alert':
+        return 'Role Gap Alert';
       default:
         return 'Notification';
     }
@@ -480,6 +520,29 @@ export class DiscordNotificationEmbedService {
           });
         }
         break;
+      case 'role_gap_alert':
+        if (payload.eventTitle) {
+          embed.addFields({
+            name: 'Event',
+            value: toStr(payload.eventTitle),
+            inline: true,
+          });
+        }
+        if (payload.gapSummary) {
+          embed.addFields({
+            name: 'Missing Roles',
+            value: toStr(payload.gapSummary),
+            inline: true,
+          });
+        }
+        if (payload.rosterSummary) {
+          embed.addFields({
+            name: 'Roster',
+            value: toStr(payload.rosterSummary),
+            inline: true,
+          });
+        }
+        break;
       case 'recruitment_reminder':
         if (payload.eventTitle) {
           embed.addFields({
@@ -535,6 +598,7 @@ export class DiscordNotificationEmbedService {
       'event_cancelled',
       'subscribed_game',
       'recruitment_reminder',
+      'role_gap_alert',
     ];
 
     if (eventTypes.includes(input.type) && input.payload?.startTime) {
@@ -592,6 +656,7 @@ export class DiscordNotificationEmbedService {
       case 'event_rescheduled':
       case 'event_cancelled':
       case 'recruitment_reminder':
+      case 'role_gap_alert':
         if (eventId) {
           return new ButtonBuilder()
             .setLabel(input.type === 'new_event' ? 'Sign Up' : 'View Event')

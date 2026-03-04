@@ -19,6 +19,7 @@ export const NOTIFICATION_TYPES = [
   'tentative_displaced',
   'member_returned',
   'recruitment_reminder',
+  'role_gap_alert',
   'system',
 ] as const;
 
@@ -52,6 +53,7 @@ export const DEFAULT_CHANNEL_PREFS: ChannelPrefs = {
   tentative_displaced: { inApp: true, push: true, discord: true },
   member_returned: { inApp: true, push: true, discord: true },
   recruitment_reminder: { inApp: true, push: true, discord: true },
+  role_gap_alert: { inApp: true, push: true, discord: true },
   system: { inApp: true, push: false, discord: false },
 };
 

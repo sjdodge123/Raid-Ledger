@@ -238,12 +238,21 @@ describe('EventReminderService', () => {
           ]),
         }),
       };
-      mockDb.select.mockReturnValue(selectChain);
+      // Role gap check: no MMO events in 4h window
+      const roleGapChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockDb.select
+        .mockReturnValueOnce(selectChain)
+        .mockReturnValueOnce(roleGapChain);
 
       await service.handleReminders();
 
-      // Only the candidate events query, no signups/users queries
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
+      // candidate events + role gap check queries only
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
       expect(mockNotificationService.create).not.toHaveBeenCalled();
     });
 
@@ -307,12 +316,20 @@ describe('EventReminderService', () => {
         }),
       };
 
+      // Sixth call: checkRoleGaps — no MMO events
+      const roleGapSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
       mockDb.select
         .mockReturnValueOnce(eventsSelectChain)
         .mockReturnValueOnce(signupsSelectChain)
         .mockReturnValueOnce(usersSelectChain)
         .mockReturnValueOnce(charsSelectChain)
-        .mockReturnValueOnce(tzSelectChain);
+        .mockReturnValueOnce(tzSelectChain)
+        .mockReturnValueOnce(roleGapSelectChain);
 
       // Mock sendReminder tracking insert
       const trackingRow = {
@@ -410,12 +427,20 @@ describe('EventReminderService', () => {
         }),
       };
 
+      // Sixth call: checkRoleGaps — no MMO events
+      const roleGapSelectChain2 = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
       mockDb.select
         .mockReturnValueOnce(eventsSelectChain)
         .mockReturnValueOnce(signupsSelectChain)
         .mockReturnValueOnce(usersSelectChain)
         .mockReturnValueOnce(charsSelectChain)
-        .mockReturnValueOnce(tzSelectChain);
+        .mockReturnValueOnce(tzSelectChain)
+        .mockReturnValueOnce(roleGapSelectChain2);
 
       const trackingRow = {
         id: 1,
@@ -444,6 +469,30 @@ describe('EventReminderService', () => {
       );
     });
 
+    it('should call checkRoleGaps after reminder windows', async () => {
+      // Return no events in any reminder window
+      const eventsSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+      // Role gap query: no MMO events
+      const roleGapSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockDb.select
+        .mockReturnValueOnce(eventsSelectChain) // candidateEvents
+        .mockReturnValueOnce(roleGapSelectChain); // checkRoleGaps query
+
+      await service.handleReminders();
+
+      // 2 select calls: candidate events + role gap check
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
+    });
+
     it('should not send reminders when window is disabled for event', async () => {
       const now = new Date();
       const soonStart = new Date(now.getTime() + 10 * 60 * 1000);
@@ -468,13 +517,422 @@ describe('EventReminderService', () => {
         }),
       };
 
-      mockDb.select.mockReturnValueOnce(eventsSelectChain);
+      // Also need to mock the role gap query (called after reminder windows)
+      const roleGapSelectChain = {
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      };
+
+      mockDb.select
+        .mockReturnValueOnce(eventsSelectChain)
+        .mockReturnValueOnce(roleGapSelectChain);
 
       await service.handleReminders();
 
-      // No signups query should have been made
-      expect(mockDb.select).toHaveBeenCalledTimes(1);
       expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('checkRoleGaps (ROK-536)', () => {
+    const now = new Date();
+
+    /** Helper: mock select chain returning the given value. */
+    function mockSelectChain(value: unknown[]) {
+      return {
+        from: jest.fn().mockReturnValue({
+          innerJoin: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              groupBy: jest.fn().mockResolvedValue(value),
+            }),
+          }),
+          where: jest.fn().mockResolvedValue(value),
+        }),
+      };
+    }
+
+    /** Helper: mock the insert→values→onConflict→returning dedup chain. */
+    function mockDedupInsert(isNew: boolean) {
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue(
+              isNew
+                ? [
+                    {
+                      id: 1,
+                      eventId: 10,
+                      userId: 100,
+                      reminderType: 'role_gap_4h',
+                      sentAt: now,
+                    },
+                  ]
+                : [],
+            ),
+          }),
+        }),
+      });
+    }
+
+    it('should send alert when MMO event is missing tanks', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      // Events query
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Mythic Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+            },
+          ]),
+        )
+        // Roster assignment counts (1 tank, 4 healers)
+        .mockReturnValueOnce(
+          mockSelectChain([
+            { eventId: 10, role: 'tank', count: 1 },
+            { eventId: 10, role: 'healer', count: 4 },
+          ]),
+        )
+        // getUserTimezones for creator
+        .mockReturnValueOnce(mockSelectChain([]));
+
+      mockDedupInsert(true);
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 100,
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: expect.stringContaining('Missing 1 tank') as string,
+          payload: expect.objectContaining({
+            eventId: 10,
+            eventTitle: 'Mythic Raid',
+            gapSummary: 'Missing 1 tank',
+            rosterSummary: 'Tanks: 1/2',
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+
+    it('should send alert when missing healers', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          mockSelectChain([
+            { eventId: 10, role: 'tank', count: 2 },
+            { eventId: 10, role: 'healer', count: 2 },
+          ]),
+        )
+        .mockReturnValueOnce(mockSelectChain([]));
+
+      mockDedupInsert(true);
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            gapSummary: 'Missing 2 healers',
+            rosterSummary: 'Healers: 2/4',
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+
+    it('should send alert when both tanks and healers are missing', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          mockSelectChain([
+            { eventId: 10, role: 'healer', count: 3 },
+            // No tank entries — 0 filled
+          ]),
+        )
+        .mockReturnValueOnce(mockSelectChain([]));
+
+      mockDedupInsert(true);
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            gapSummary: 'Missing 2 tanks, 1 healer',
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+
+    it('should NOT alert when roster is fully staffed', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          mockSelectChain([
+            { eventId: 10, role: 'tank', count: 2 },
+            { eventId: 10, role: 'healer', count: 4 },
+          ]),
+        );
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should NOT alert when no MMO events are in the 4h window', async () => {
+      mockDb.select.mockReturnValueOnce(mockSelectChain([]));
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should skip duplicate alerts (dedup returns empty)', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              slotConfig: { type: 'mmo', tank: 2, healer: 4 },
+            },
+          ]),
+        )
+        .mockReturnValueOnce(
+          mockSelectChain([
+            { eventId: 10, role: 'tank', count: 1 },
+            { eventId: 10, role: 'healer', count: 4 },
+          ]),
+        );
+
+      // Dedup returns empty — already sent
+      mockDedupInsert(false);
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should use default slot counts when slotConfig omits them', async () => {
+      const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+      mockDb.select
+        .mockReturnValueOnce(
+          mockSelectChain([
+            {
+              id: 10,
+              title: 'Raid',
+              duration: [
+                fourHoursOut,
+                new Date(fourHoursOut.getTime() + 7200000),
+              ] as [Date, Date],
+              creatorId: 100,
+              gameId: 1,
+              // slotConfig only has type, no tank/healer counts → defaults to 2/4
+              slotConfig: { type: 'mmo' },
+            },
+          ]),
+        )
+        .mockReturnValueOnce(mockSelectChain([])) // No roster assignments at all
+        .mockReturnValueOnce(mockSelectChain([])); // getUserTimezones
+
+      mockDedupInsert(true);
+
+      await service.checkRoleGaps(now, 'UTC');
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            gapSummary: 'Missing 2 tanks, 4 healers',
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+  });
+
+  describe('sendRoleGapAlert (ROK-536)', () => {
+    const now = new Date();
+    const fourHoursOut = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+
+    it('should return true on first send and false on duplicate', async () => {
+      // First call — new insert
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([
+              {
+                id: 1,
+                eventId: 10,
+                userId: 100,
+                reminderType: 'role_gap_4h',
+                sentAt: now,
+              },
+            ]),
+          }),
+        }),
+      });
+
+      // getUserTimezones
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      });
+
+      const result1 = await service.sendRoleGapAlert(
+        {
+          eventId: 10,
+          creatorId: 100,
+          title: 'Raid',
+          startTime: fourHoursOut,
+          gameId: 1,
+          gaps: [{ role: 'tank', required: 2, filled: 1, missing: 1 }],
+        },
+        'UTC',
+      );
+
+      expect(result1).toBe(true);
+      expect(mockNotificationService.create).toHaveBeenCalledTimes(1);
+
+      // Second call — duplicate
+      mockNotificationService.create.mockClear();
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      });
+
+      const result2 = await service.sendRoleGapAlert(
+        {
+          eventId: 10,
+          creatorId: 100,
+          title: 'Raid',
+          startTime: fourHoursOut,
+          gameId: 1,
+          gaps: [{ role: 'tank', required: 2, filled: 1, missing: 1 }],
+        },
+        'UTC',
+      );
+
+      expect(result2).toBe(false);
+      expect(mockNotificationService.create).not.toHaveBeenCalled();
+    });
+
+    it('should include suggested reason in payload', async () => {
+      mockDb.insert.mockReturnValue({
+        values: jest.fn().mockReturnValue({
+          onConflictDoNothing: jest.fn().mockReturnValue({
+            returning: jest.fn().mockResolvedValue([
+              {
+                id: 1,
+                eventId: 10,
+                userId: 100,
+                reminderType: 'role_gap_4h',
+                sentAt: now,
+              },
+            ]),
+          }),
+        }),
+      });
+
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          where: jest.fn().mockResolvedValue([]),
+        }),
+      });
+
+      await service.sendRoleGapAlert(
+        {
+          eventId: 10,
+          creatorId: 100,
+          title: 'Raid',
+          startTime: fourHoursOut,
+          gameId: 1,
+          gaps: [
+            { role: 'tank', required: 2, filled: 0, missing: 2 },
+            { role: 'healer', required: 4, filled: 3, missing: 1 },
+          ],
+        },
+        'UTC',
+      );
+
+      expect(mockNotificationService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            suggestedReason:
+              'Not enough tank/healer — missing 2 tanks, 1 healer',
+          }) as Record<string, unknown>,
+        }),
+      );
     });
   });
 });

@@ -1002,4 +1002,173 @@ describe('DiscordNotificationEmbedService', () => {
       expect(rowJson.components[0].customId).toBe('event_roachout:77');
     });
   });
+
+  describe('role_gap_alert embed (ROK-536)', () => {
+    it('should use REMINDER color for role_gap_alert type', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-1',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing 1 tank',
+        },
+        'Community',
+      );
+
+      expect(embed.toJSON().color).toBe(EMBED_COLORS.REMINDER);
+    });
+
+    it('should use warning emoji for role_gap_alert', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-2',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as { title: string };
+      expect(json.title).toContain('\u26A0\uFE0F');
+    });
+
+    it('should include "Role Gap Alert" in footer category', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-3',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+        },
+        'My Guild',
+      );
+
+      const json = embed.toJSON() as { footer: { text: string } };
+      expect(json.footer.text).toBe('My Guild \u00B7 Role Gap Alert');
+    });
+
+    it('should add Event, Missing Roles, and Roster fields from payload', async () => {
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-4',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing 1 tank',
+          payload: {
+            eventId: 42,
+            eventTitle: 'Mythic Raid',
+            gapSummary: 'Missing 1 tank',
+            rosterSummary: 'Tanks: 1/2 | Healers: 4/4',
+          },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as {
+        fields: Array<{ name: string; value: string }>;
+      };
+      const eventField = json.fields?.find((f) => f.name === 'Event');
+      expect(eventField?.value).toBe('Mythic Raid');
+
+      const gapField = json.fields?.find((f) => f.name === 'Missing Roles');
+      expect(gapField?.value).toBe('Missing 1 tank');
+
+      const rosterField = json.fields?.find((f) => f.name === 'Roster');
+      expect(rosterField?.value).toBe('Tanks: 1/2 | Healers: 4/4');
+    });
+
+    it('should include "View Event" primary button for role_gap_alert', async () => {
+      const { row } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-5',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+          payload: { eventId: 42 },
+        },
+        'Community',
+      );
+
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const viewButton = rowJson.components.find(
+        (c) => c.label === 'View Event',
+      );
+      expect(viewButton).toBeDefined();
+      expect(viewButton?.url).toContain('/events/42');
+    });
+
+    it('should return extra rows with Cancel Event and Reschedule link buttons', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-6',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+          payload: {
+            eventId: 42,
+            suggestedReason: 'Not enough tank — missing 1 tank',
+          },
+        },
+        'Community',
+      );
+
+      expect(rows).toBeDefined();
+      expect(rows).toHaveLength(1);
+
+      const rowJson = rows![0].toJSON() as unknown as {
+        components: Array<{ label: string; url: string; style: number }>;
+      };
+      expect(rowJson.components).toHaveLength(2);
+
+      const cancelBtn = rowJson.components.find(
+        (c) => c.label === 'Cancel Event',
+      );
+      expect(cancelBtn).toBeDefined();
+      expect(cancelBtn?.url).toContain('/events/42?action=cancel');
+      expect(cancelBtn?.url).toContain('reason=');
+      // ButtonStyle.Link = 5
+      expect(cancelBtn?.style).toBe(5);
+
+      const rescheduleBtn = rowJson.components.find(
+        (c) => c.label === 'Reschedule',
+      );
+      expect(rescheduleBtn).toBeDefined();
+      expect(rescheduleBtn?.url).toContain('/events/42?action=reschedule');
+      expect(rescheduleBtn?.style).toBe(5);
+    });
+
+    it('should use event start time as timestamp for role_gap_alert (ROK-545)', async () => {
+      const eventStart = new Date('2026-03-04T21:00:00Z');
+      const { embed } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-7',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+          payload: { eventId: 42, startTime: eventStart.toISOString() },
+        },
+        'Community',
+      );
+
+      const json = embed.toJSON() as unknown as { timestamp: Date };
+      expect(json.timestamp.getTime()).toBe(eventStart.getTime());
+    });
+
+    it('should omit extra rows when eventId is missing for role_gap_alert', async () => {
+      const { rows } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-gap-8',
+          type: 'role_gap_alert',
+          title: 'Role Gap Alert',
+          message: 'Missing roles',
+        },
+        'Community',
+      );
+
+      expect(rows).toBeUndefined();
+    });
+  });
 });

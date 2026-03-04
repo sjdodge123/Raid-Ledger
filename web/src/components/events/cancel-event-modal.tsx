@@ -11,6 +11,8 @@ interface CancelEventModalProps {
     eventId: number;
     eventTitle: string;
     signupCount: number;
+    /** ROK-536: Pre-populate reason from deep-link query param. */
+    initialReason?: string;
 }
 
 /**
@@ -23,8 +25,9 @@ export function CancelEventModal({
     eventId,
     eventTitle,
     signupCount,
+    initialReason,
 }: CancelEventModalProps) {
-    const [reason, setReason] = useState('');
+    const [reason, setReason] = useState(initialReason ?? '');
     const cancelEvent = useCancelEvent(eventId);
     const convertToPlan = useConvertEventToPlan();
     const navigate = useNavigate();
