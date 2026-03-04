@@ -57,7 +57,8 @@ RUN apk add --no-cache \
   supervisor \
   bash \
   su-exec \
-  gettext
+  gettext \
+  logrotate
 
 # Create app user and directories
 RUN addgroup -g 1001 -S app && \
@@ -68,7 +69,7 @@ WORKDIR /app
 # ==================
 # Persistent data volume — mount as -v raid-ledger-data:/data
 # ==================
-RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /run/postgresql /run/redis && \
+RUN mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs /run/postgresql /run/redis && \
   chown -R postgres:postgres /data/postgresql /run/postgresql && \
   chown -R redis:redis /data/redis /run/redis
 VOLUME /data
@@ -86,6 +87,21 @@ COPY --from=builder /app/web/dist /usr/share/nginx/html
 
 # Nginx config template (port resolved at runtime via envsubst)
 COPY nginx/monolith.conf.template /etc/nginx/http.d/default.conf.template
+
+# ==================
+# Log Rotation Setup
+# ==================
+COPY <<'EOF' /etc/logrotate.d/raid-ledger
+/data/logs/*.log {
+    daily
+    rotate 60
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+EOF
 
 # ==================
 # API Setup
@@ -133,7 +149,7 @@ loglevel=warn
 pidfile=/run/supervisord.pid
 
 [program:postgres]
-command=/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL
+command=/bin/bash -c '/sbin/su-exec postgres /usr/libexec/postgresql16/postgres -D /data/postgresql -c log_min_messages=FATAL 2>&1 | tee -a /data/logs/postgresql.log'
 autostart=true
 autorestart=true
 priority=10
@@ -146,7 +162,7 @@ killasgroup=true
 stopasgroup=true
 
 [program:redis]
-command=/usr/bin/redis-server --dir /data/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700
+command=/bin/bash -c '/usr/bin/redis-server --dir /data/redis --daemonize no --port 0 --unixsocket /tmp/redis.sock --unixsocketperm 700 2>&1 | tee -a /data/logs/redis.log'
 user=redis
 autostart=true
 autorestart=true
@@ -158,7 +174,7 @@ stopwaitsecs=5
 stopsignal=TERM
 
 [program:nginx]
-command=/usr/sbin/nginx -g "daemon off;"
+command=/bin/bash -c '/usr/sbin/nginx -g "daemon off;" 2>&1 | tee -a /data/logs/nginx.log'
 autostart=true
 autorestart=true
 priority=30
@@ -167,7 +183,7 @@ stdout_logfile_maxbytes=0
 redirect_stderr=true
 
 [program:api]
-command=/app/start-api.sh
+command=/bin/bash -c '/app/start-api.sh 2>&1 | tee -a /data/logs/api.log'
 directory=/app
 environment=PORT=3000
 autostart=true
@@ -175,6 +191,15 @@ autorestart=true
 priority=40
 startsecs=15
 startretries=5
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+redirect_stderr=true
+
+[program:logrotate]
+command=/bin/bash -c 'while true; do /usr/sbin/logrotate /etc/logrotate.d/raid-ledger --state /data/logs/.logrotate.state; sleep 86400; done'
+autostart=true
+autorestart=true
+priority=50
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 redirect_stderr=true
@@ -258,7 +283,7 @@ set -e
 
 # Ensure /data subdirectories exist and have correct ownership
 # (volume mounts may arrive as root-owned empty dirs)
-mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations
+mkdir -p /data/postgresql /data/redis /data/backups/daily /data/backups/migrations /data/logs
 chown -R postgres:postgres /data/postgresql
 chown -R redis:redis /data/redis
 
@@ -287,6 +312,7 @@ ENV DOTENV_CONFIG_QUIET=true
 ENV CORS_ORIGIN=auto
 ENV CLIENT_URL=
 ENV BACKUP_DIR=/data/backups
+ENV LOG_DIR=/data/logs
 ENV ADMIN_PASSWORD=
 
 # Expose port (nginx)
