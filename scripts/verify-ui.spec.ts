@@ -105,29 +105,34 @@ test.describe('Calendar', () => {
         await page.goto('/calendar');
         // Demo data creates events like "Heroic Amirdrassil Clear", "Mythic+ Push Night"
         // They should appear as event chips/cards on the calendar
-        // Wait for events to load, then check for any event link
-        await page.waitForTimeout(2000);
+        // Wait for event links to render instead of using a fixed timeout
         const eventLinks = page.locator('a[href*="/events/"]');
+        await expect(eventLinks.first()).toBeVisible({ timeout: 10_000 });
         const count = await eventLinks.count();
         expect(count).toBeGreaterThan(0);
     });
 
     test('game filter checkboxes are visible when games exist', async ({ page }) => {
         await page.goto('/calendar');
-        await page.waitForTimeout(2000);
-        // The filter section appears with game checkboxes when games are in the registry
-        // This may not be visible if no IGDB games exist in CI, so we check conditionally
+        // Wait for calendar to finish loading before checking filter UI
+        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+
+        // The filter toggle may not exist if no IGDB games are seeded (e.g. CI).
+        // This is a soft check: we verify the filter works IF present, but skip gracefully otherwise.
         const filterToggle = page.locator('button').filter({ hasText: /filter/i }).first();
         if (await filterToggle.isVisible({ timeout: 3000 }).catch(() => false)) {
             await filterToggle.click();
             // Should see game checkboxes in the filter panel
             const checkboxes = page.getByRole('checkbox');
             const checkboxCount = await checkboxes.count();
-            // If games exist, there should be filter checkboxes
+            // Soft check: if games exist, there should be filter checkboxes
             if (checkboxCount > 0) {
                 await expect(checkboxes.first()).toBeVisible();
             }
         }
+        // NOTE: In CI without IGDB data, no filter toggle is rendered and this test
+        // passes trivially. This is acceptable — game filter coverage requires IGDB
+        // seed data which is not available in the CI environment.
     });
 });
 
@@ -148,7 +153,6 @@ test.describe('Events list', () => {
 
     test('tab navigation works (Upcoming/Past/My Events/Plans)', async ({ page }) => {
         await page.goto('/events');
-        await page.waitForTimeout(2000);
 
         // Desktop tabs live inside a "hidden md:flex" container.
         // Scope to that container to avoid matching mobile toolbar buttons.
@@ -172,7 +176,6 @@ test.describe('Events list', () => {
 
     test('search input accepts text and filters results', async ({ page }) => {
         await page.goto('/events');
-        await page.waitForTimeout(2000);
 
         // Desktop search input — scope to the visible desktop filter bar.
         // Both desktop and mobile have aria-label="Search events".
@@ -182,16 +185,16 @@ test.describe('Events list', () => {
 
         // Search for a nonsense term — should show empty state
         await searchInput.fill('xyznonexistent');
-        await page.waitForTimeout(500);
+        // Wait for the event cards to disappear (filtered out)
+        await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 5_000 });
 
-        // Should show "No events yet" empty state or zero event cards
+        // Should show zero event cards
         const eventCards = page.locator('.hidden.md\\:grid [role="button"]');
         const count = await eventCards.count();
         expect(count).toBe(0);
 
         // Clear search — events should reappear
         await searchInput.clear();
-        await page.waitForTimeout(1000);
         await expect(
             page.locator('.hidden.md\\:grid [role="button"]').first()
         ).toBeVisible({ timeout: 5_000 });
@@ -205,13 +208,12 @@ test.describe('Events list', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Event Detail
+// Event Detail (TD-2: shared navigation in beforeEach)
 // ---------------------------------------------------------------------------
 
 test.describe('Event detail', () => {
-    test('navigate to seeded event and verify content', async ({ page }) => {
+    test.beforeEach(async ({ page }) => {
         await page.goto('/events');
-        await page.waitForTimeout(2000);
 
         // Event cards are div[role="button"], NOT <a> tags.
         // Click the first event card in the desktop grid.
@@ -221,21 +223,16 @@ test.describe('Event detail', () => {
 
         // Should land on event detail page (numeric ID)
         await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
+    });
+
+    test('navigate to seeded event and verify content', async ({ page }) => {
         // Event should not show error boundary
         await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
     });
 
     test('event detail page renders without crashing', async ({ page }) => {
-        await page.goto('/events');
-        await page.waitForTimeout(2000);
-
-        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
-        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
-        await firstEventCard.click();
-        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
-
-        // Wait for event detail to load
-        await page.waitForTimeout(2000);
+        // Wait for event detail content to appear (e.g. the Reschedule button)
+        await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
 
         // The event detail page should render without crashing
         // (roster content depends on seed data; detailed assertions are in API integration tests)
@@ -243,14 +240,6 @@ test.describe('Event detail', () => {
     });
 
     test('admin action buttons are visible on event detail', async ({ page }) => {
-        await page.goto('/events');
-        await page.waitForTimeout(2000);
-
-        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
-        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
-        await firstEventCard.click();
-        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
-
         // Admin should see management buttons
         await expect(page.getByRole('button', { name: 'Reschedule' })).toBeVisible({ timeout: 10_000 });
         await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible();
@@ -258,14 +247,8 @@ test.describe('Event detail', () => {
     });
 
     test('event detail loads without error boundary', async ({ page }) => {
-        await page.goto('/events');
-        await page.waitForTimeout(2000);
-
-        const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
-        await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
-        await firstEventCard.click();
-        await page.waitForURL(/\/events\/\d+/, { timeout: 10_000 });
-        await page.waitForTimeout(3000);
+        // Wait for page to fully load by checking for admin buttons
+        await expect(page.getByRole('button', { name: 'Edit Event' })).toBeVisible({ timeout: 10_000 });
 
         // Page should load without errors — detailed count matching
         // is covered by the API integration tests. Here we just verify
@@ -281,7 +264,6 @@ test.describe('Event detail', () => {
 test.describe('Reschedule modal', () => {
     test('opens on seeded event and shows signup count', async ({ page }) => {
         await page.goto('/events');
-        await page.waitForTimeout(2000);
 
         const firstEventCard = page.locator('.hidden.md\\:grid [role="button"]').first();
         await expect(firstEventCard).toBeVisible({ timeout: 10_000 });
@@ -336,9 +318,7 @@ test.describe('Notifications', () => {
         const markAllReadBtn = page.getByRole('button', { name: 'Mark All Read' });
         if (await markAllReadBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
             await markAllReadBtn.click();
-            // After marking all as read, the button should disappear or notifications update
-            await page.waitForTimeout(1000);
-            // Verify no errors
+            // After marking all as read, verify no errors
             await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
         }
     });
@@ -393,14 +373,18 @@ test.describe('Navigation', () => {
             if (msg.type() === 'error') errors.push(msg.text());
         });
 
+        // Navigate through each page, waiting for content to load instead of fixed timeouts
         await page.goto('/calendar');
-        await page.waitForTimeout(2000);
+        await expect(page.getByRole('heading', { name: 'Calendar' })).toBeVisible({ timeout: 15_000 });
+
         await page.goto('/events');
-        await page.waitForTimeout(2000);
+        await expect(page.getByRole('heading', { name: /Events/i }).first()).toBeVisible({ timeout: 15_000 });
+
         await page.goto('/games');
-        await page.waitForTimeout(2000);
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
+
         await page.goto('/players');
-        await page.waitForTimeout(2000);
+        await expect(page.getByRole('heading', { name: 'Players' })).toBeVisible({ timeout: 15_000 });
 
         // Filter out known benign errors (network, favicon, CORS in dev, rate limiting)
         const criticalErrors = errors.filter(
@@ -425,8 +409,8 @@ test.describe('Games page', () => {
     test('page loads without crashing', async ({ page }) => {
         await page.goto('/games');
         // Games page may show "Discover" tab or game cards depending on IGDB data
-        await page.waitForTimeout(3000);
-        await expect(page.locator('body')).not.toHaveText(/something went wrong/i);
+        // Wait for page to settle by checking for absence of error boundary
+        await expect(page.locator('body')).not.toHaveText(/something went wrong/i, { timeout: 10_000 });
     });
 });
 
@@ -446,7 +430,6 @@ test.describe('Players page', () => {
 
     test('shows total player count', async ({ page }) => {
         await page.goto('/players');
-        await page.waitForTimeout(2000);
         // The players page shows "N registered" — demo data has ~101 users
         await expect(page.getByText(/registered/i)).toBeVisible({ timeout: 10_000 });
     });
