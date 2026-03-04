@@ -33,6 +33,7 @@ import {
   RecentPlayersResponseDto,
   UserManagementListResponseDto,
   UpdatePreferenceSchema,
+  UpdatePreferenceBatchSchema,
   UpdateUserRoleSchema,
   GameTimeTemplateInputSchema,
   GameTimeOverrideInputSchema,
@@ -842,6 +843,20 @@ export class UsersController {
     @Body() body: unknown,
   ) {
     try {
+      // Try batch format first (ROK-666), fall back to single-key format
+      const batchResult = UpdatePreferenceBatchSchema.safeParse(body);
+      if (batchResult.success) {
+        await this.preferencesService.setUserPreferences(
+          req.user.id,
+          batchResult.data.preferences,
+        );
+        return {
+          data: {
+            updated: Object.keys(batchResult.data.preferences).length,
+          },
+        };
+      }
+
       const dto = UpdatePreferenceSchema.parse(body);
       const updated = await this.preferencesService.setUserPreference(
         req.user.id,

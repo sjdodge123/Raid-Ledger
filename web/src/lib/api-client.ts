@@ -829,13 +829,61 @@ export async function getMyPreferences(): Promise<Record<string, unknown>> {
 }
 
 /**
+ * Debounced preference batcher (ROK-666).
+ * Coalesces rapid preference changes into a single PATCH request
+ * after 800ms of inactivity.
+ */
+const preferenceBatcher = (() => {
+    let pending: Record<string, unknown> = {};
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let flushPromise: Promise<void> | null = null;
+    let resolveFlush: (() => void) | null = null;
+    let rejectFlush: ((err: unknown) => void) | null = null;
+
+    function flush() {
+        timer = null;
+        const batch = pending;
+        const resolve = resolveFlush;
+        const reject = rejectFlush;
+        pending = {};
+        flushPromise = null;
+        resolveFlush = null;
+        rejectFlush = null;
+
+        fetchApi('/users/me/preferences', {
+            method: 'PATCH',
+            body: JSON.stringify({ preferences: batch }),
+        }).then(
+            () => resolve?.(),
+            (err) => reject?.(err),
+        );
+    }
+
+    return {
+        queue(key: string, value: unknown): Promise<void> {
+            pending[key] = value;
+            if (timer) clearTimeout(timer);
+
+            if (!flushPromise) {
+                flushPromise = new Promise<void>((resolve, reject) => {
+                    resolveFlush = resolve;
+                    rejectFlush = reject;
+                });
+            }
+
+            timer = setTimeout(flush, 800);
+            return flushPromise;
+        },
+    };
+})();
+
+/**
  * Update a single user preference (upsert).
+ * Calls are debounced and batched — rapid changes within 800ms
+ * are coalesced into a single API request (ROK-666).
  */
 export async function updatePreference(key: string, value: unknown): Promise<void> {
-    await fetchApi('/users/me/preferences', {
-        method: 'PATCH',
-        body: JSON.stringify({ key, value }),
-    });
+    return preferenceBatcher.queue(key, value);
 }
 
 // ============================================================

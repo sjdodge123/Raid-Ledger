@@ -60,4 +60,27 @@ export class PreferencesService {
 
     return result;
   }
+
+  /**
+   * Batch upsert multiple preferences for a user in a single transaction (ROK-666).
+   */
+  async setUserPreferences(
+    userId: number,
+    preferences: Record<string, unknown>,
+  ) {
+    const now = new Date();
+    const entries = Object.entries(preferences);
+
+    await this.db.transaction(async (tx) => {
+      for (const [key, value] of entries) {
+        await tx
+          .insert(schema.userPreferences)
+          .values({ userId, key, value })
+          .onConflictDoUpdate({
+            target: [schema.userPreferences.userId, schema.userPreferences.key],
+            set: { value, updatedAt: now },
+          });
+      }
+    });
+  }
 }
