@@ -393,7 +393,9 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
 
     setupDbForEvent(event, 4); // 4 signups == 4 player slots → FULL
 
-    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
@@ -421,7 +423,9 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
 
     setupDbForEvent(event, 10); // 10 signups == 2+3+5 = 10 slots → FULL
 
-    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
@@ -449,7 +453,9 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
 
     setupDbForEvent(event, 3); // 3 signups < 4 player slots → FILLING
 
-    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(
@@ -477,7 +483,9 @@ describe('EmbedSyncProcessor — ROK-682 slot-config-based fullness', () => {
 
     setupDbForEvent(event, 5); // 5 signups > 4 player slots (1 benched) → FULL
 
-    const job = { data: { eventId: 42, reason: 'signup' } } as Job<EmbedSyncJobData>;
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
     expect(embedFactory.buildEventUpdate).toHaveBeenCalledWith(

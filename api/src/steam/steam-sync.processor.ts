@@ -49,7 +49,9 @@ export class SteamSyncProcessor extends WorkerHost implements OnModuleInit {
    * Daily cron: sync all linked Steam users at 4:00 AM.
    * Only runs if Steam API key is configured.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @Cron(CronExpression.EVERY_DAY_AT_4AM, {
+    name: 'SteamSyncProcessor_scheduledSync',
+  })
   async scheduledSync() {
     const configured = await this.settingsService.isSteamConfigured();
     if (!configured) return;

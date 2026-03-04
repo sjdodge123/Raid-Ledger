@@ -31,53 +31,104 @@ const PRUNE_EVERY_N_EXECUTIONS = 50;
  * Human-readable descriptions for the core @Cron jobs.
  * Keys match the NestJS SchedulerRegistry names (class.method format).
  */
-const CORE_JOB_METADATA: Record<string, { description: string }> = {
+/**
+ * Valid categories for cron jobs. Must match the `category` column values.
+ */
+type CronCategory =
+  | 'Data Sync'
+  | 'Notifications'
+  | 'Events'
+  | 'Maintenance'
+  | 'Monitoring'
+  | 'Other';
+
+const CORE_JOB_METADATA: Record<
+  string,
+  { description: string; category: CronCategory }
+> = {
   IgdbService_handleScheduledSync: {
     description: 'Syncs game data from IGDB every 6 hours',
+    category: 'Data Sync',
   },
   EventReminderService_handleReminders: {
     description:
       'Checks for events within reminder windows and sends DM reminders every 60 seconds',
+    category: 'Notifications',
+  },
+  EventReminderService_handleDayOfReminders: {
+    description:
+      'Sends day-of reminder DMs for events starting today every 60 seconds',
+    category: 'Notifications',
   },
   RelayService_handleHeartbeat: {
     description: 'Sends heartbeat to the Raid Ledger relay hub every hour',
+    category: 'Monitoring',
   },
   VersionCheckService_handleCron: {
     description: 'Checks GitHub for new Raid Ledger releases daily',
+    category: 'Monitoring',
   },
   EmbedSchedulerService_handleScheduledEmbeds: {
     description:
       'Posts deferred Discord embeds for future series events approaching their lead-time window every 15 minutes',
+    category: 'Notifications',
   },
   SessionCleanupService_cleanupExpiredSessions: {
     description: 'Deletes expired sessions daily at 3 AM',
+    category: 'Maintenance',
   },
   NotificationService_cleanupExpiredNotifications: {
     description: 'Deletes expired notifications daily at 4 AM',
+    category: 'Maintenance',
   },
   GameActivityService_sweepStaleSessions: {
     description:
       'Closes game activity sessions older than 24h every 15 minutes',
+    category: 'Maintenance',
   },
   GameActivityService_dailyRollup: {
     description:
       'Aggregates closed game sessions into daily/weekly/monthly rollups at 5 AM',
+    category: 'Data Sync',
   },
   BackupService_dailyBackup: {
     description:
       'Creates a pg_dump backup and rotates backups older than 30 days',
+    category: 'Maintenance',
   },
   ScheduledEventService_startScheduledEvents: {
     description:
       'Auto-starts Discord scheduled events when their start time arrives every 30 seconds',
+    category: 'Events',
   },
   EventAutoExtendService_checkExtensions: {
     description:
       'Auto-extends scheduled events when voice channel activity persists past the end time every 60 seconds',
+    category: 'Events',
+  },
+  VoiceAttendanceService_classifyCompletedEvents: {
+    description:
+      'Classifies attendance for completed voice events every 60 seconds',
+    category: 'Events',
   },
   LiveNoShowService_checkNoShows: {
     description:
       'Detects no-show attendees during live events and sends reminder DMs (5 min) and creator escalation (15 min) every 60 seconds',
+    category: 'Notifications',
+  },
+  PostEventReminderService_handlePostEventReminders: {
+    description:
+      'Sends post-event feedback reminders after events end every 60 seconds',
+    category: 'Notifications',
+  },
+  RecruitmentReminderService_checkAndSendReminders: {
+    description:
+      'DMs unsigned game followers about upcoming events every 15 minutes',
+    category: 'Notifications',
+  },
+  SteamSyncProcessor_scheduledSync: {
+    description: 'Syncs Steam library data for all linked users daily at 4 AM',
+    category: 'Data Sync',
   },
 };
 
@@ -155,12 +206,29 @@ export class CronJobService implements OnApplicationBootstrap {
       const source = isPlugin ? 'plugin' : 'core';
       const pluginSlug = isPlugin ? name.split(':')[0] : null;
 
+      // Reject jobs with auto-generated UUID names — every @Cron must have an explicit name
+      if (/^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(name)) {
+        this.logger.error(
+          `Skipping cron job with auto-generated name "${name}". ` +
+            'Add { name: "ClassName_methodName" } to the @Cron decorator.',
+        );
+        continue;
+      }
+
+      // Warn if a core job is missing metadata (description + category)
+      const meta = CORE_JOB_METADATA[name];
+      if (!isPlugin && !meta) {
+        this.logger.warn(
+          `Core cron job "${name}" is missing CORE_JOB_METADATA entry. ` +
+            'Add a description and category to cron-job.service.ts.',
+        );
+      }
+
       const cronExpression =
         typeof job.cronTime === 'object' && 'source' in job.cronTime
           ? String(job.cronTime.source)
           : String(job.cronTime);
 
-      const meta = CORE_JOB_METADATA[name];
       const nextRunAt = this.computeNextRun(cronExpression);
 
       await this.upsertJob(
@@ -169,6 +237,7 @@ export class CronJobService implements OnApplicationBootstrap {
         pluginSlug,
         cronExpression,
         meta?.description ?? null,
+        meta?.category ?? (isPlugin ? 'Plugin' : 'Other'),
         nextRunAt,
       );
       syncedNames.add(name);
@@ -193,6 +262,7 @@ export class CronJobService implements OnApplicationBootstrap {
                 gameSlug,
                 pJob.cronExpression,
                 null,
+                'Plugin',
                 nextRunAt,
               );
               syncedNames.add(jobName);
@@ -217,6 +287,7 @@ export class CronJobService implements OnApplicationBootstrap {
     pluginSlug: string | null,
     cronExpression: string,
     description: string | null,
+    category: string,
     nextRunAt: Date | null = null,
   ): Promise<void> {
     await this.db
@@ -227,6 +298,7 @@ export class CronJobService implements OnApplicationBootstrap {
         pluginSlug,
         cronExpression,
         description,
+        category,
         paused: false,
         nextRunAt,
       })
@@ -237,6 +309,7 @@ export class CronJobService implements OnApplicationBootstrap {
           source,
           pluginSlug,
           description: description ?? sql`${schema.cronJobs.description}`,
+          category,
           nextRunAt,
           updatedAt: new Date(),
         },

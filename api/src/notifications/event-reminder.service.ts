@@ -37,6 +37,39 @@ const REMINDER_WINDOWS = [
 type ReminderWindowType = (typeof REMINDER_WINDOWS)[number]['type'];
 
 /**
+ * ROK-536: 4-hour role gap alert window.
+ * Fires when MMO events are ~4h out and missing critical roles.
+ */
+const ROLE_GAP_WINDOW = {
+  type: 'role_gap_4h' as const,
+  /** Center of the window: 4 hours in ms */
+  centerMs: 4 * 60 * 60 * 1000,
+  /** Half-width: 15 minutes in ms (total window: 3h45m to 4h15m) */
+  halfWidthMs: 15 * 60 * 1000,
+};
+
+/** MMO roles that trigger a gap alert when understaffed. */
+const MMO_CRITICAL_ROLES = ['tank', 'healer'] as const;
+
+/** Shape of a single role gap for the alert payload. */
+interface RoleGap {
+  role: string;
+  required: number;
+  filled: number;
+  missing: number;
+}
+
+/** Aggregated gap result for one event. */
+interface RoleGapResult {
+  eventId: number;
+  creatorId: number;
+  title: string;
+  startTime: Date;
+  gameId: number | null;
+  gaps: RoleGap[];
+}
+
+/**
  * Scheduled service that sends event reminders via Discord DM (ROK-126).
  *
  * Runs every 60 seconds, checking for events that fall within each
@@ -129,8 +162,191 @@ export class EventReminderService {
             defaultTimezone,
           );
         }
+
+        // ROK-536: Check for role gaps on MMO events ~4h out
+        await this.checkRoleGaps(now, defaultTimezone);
       },
     );
+  }
+
+  /**
+   * ROK-536: Check for MMO events ~4h out with unfilled tank/healer slots.
+   * Sends a one-time alert to the event creator.
+   */
+  async checkRoleGaps(now: Date, defaultTimezone: string): Promise<void> {
+    const lowerBound = new Date(
+      now.getTime() + ROLE_GAP_WINDOW.centerMs - ROLE_GAP_WINDOW.halfWidthMs,
+    );
+    const upperBound = new Date(
+      now.getTime() + ROLE_GAP_WINDOW.centerMs + ROLE_GAP_WINDOW.halfWidthMs,
+    );
+
+    // Query MMO events in the 4h window
+    const candidates = await this.db
+      .select({
+        id: schema.events.id,
+        title: schema.events.title,
+        duration: schema.events.duration,
+        creatorId: schema.events.creatorId,
+        gameId: schema.events.gameId,
+        slotConfig: schema.events.slotConfig,
+      })
+      .from(schema.events)
+      .where(
+        and(
+          isNull(schema.events.cancelledAt),
+          sql`${schema.events.slotConfig}->>'type' = 'mmo'`,
+          sql`lower(${schema.events.duration}) >= ${lowerBound.toISOString()}::timestamptz`,
+          sql`lower(${schema.events.duration}) <= ${upperBound.toISOString()}::timestamptz`,
+        ),
+      );
+
+    if (candidates.length === 0) return;
+
+    const eventIds = candidates.map((e) => e.id);
+
+    // Batch query roster assignments for critical roles, joined with signed_up signups
+    const roleCounts = await this.db
+      .select({
+        eventId: schema.rosterAssignments.eventId,
+        role: schema.rosterAssignments.role,
+        count: sql<number>`count(*)`,
+      })
+      .from(schema.rosterAssignments)
+      .innerJoin(
+        schema.eventSignups,
+        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
+      )
+      .where(
+        and(
+          inArray(schema.rosterAssignments.eventId, eventIds),
+          eq(schema.eventSignups.status, 'signed_up'),
+          inArray(
+            schema.rosterAssignments.role,
+            MMO_CRITICAL_ROLES as unknown as string[],
+          ),
+        ),
+      )
+      .groupBy(schema.rosterAssignments.eventId, schema.rosterAssignments.role);
+
+    // Build a lookup: eventId -> role -> count
+    const countMap = new Map<number, Map<string, number>>();
+    for (const row of roleCounts) {
+      if (!countMap.has(row.eventId)) countMap.set(row.eventId, new Map());
+      countMap.get(row.eventId)!.set(row.role!, Number(row.count));
+    }
+
+    // Check each event for gaps and send alerts
+    for (const event of candidates) {
+      const gaps = this.detectRoleGaps(event, countMap.get(event.id));
+      if (gaps.length === 0) continue;
+
+      await this.sendRoleGapAlert(
+        {
+          eventId: event.id,
+          creatorId: event.creatorId,
+          title: event.title,
+          startTime: event.duration[0],
+          gameId: event.gameId,
+          gaps,
+        },
+        defaultTimezone,
+      );
+    }
+  }
+
+  /**
+   * ROK-536: Compare filled roles against slot config requirements.
+   * Returns gaps only for roles below the required count.
+   */
+  private detectRoleGaps(
+    event: { slotConfig: unknown },
+    filledByRole: Map<string, number> | undefined,
+  ): RoleGap[] {
+    const config = (event.slotConfig ?? {}) as Record<string, unknown>;
+    const gaps: RoleGap[] = [];
+
+    for (const role of MMO_CRITICAL_ROLES) {
+      const required = (config[role] as number) ?? (role === 'tank' ? 2 : 4);
+      const filled = filledByRole?.get(role) ?? 0;
+      if (filled < required) {
+        gaps.push({ role, required, filled, missing: required - filled });
+      }
+    }
+
+    return gaps;
+  }
+
+  /**
+   * ROK-536: Send a role gap alert to the event creator.
+   * Deduplicates via event_reminders_sent with reminderType 'role_gap_4h'.
+   */
+  async sendRoleGapAlert(
+    result: RoleGapResult,
+    defaultTimezone: string,
+  ): Promise<boolean> {
+    // Dedup: one alert per event per creator
+    const dedup = await this.db
+      .insert(schema.eventRemindersSent)
+      .values({
+        eventId: result.eventId,
+        userId: result.creatorId,
+        reminderType: ROLE_GAP_WINDOW.type,
+      })
+      .onConflictDoNothing({
+        target: [
+          schema.eventRemindersSent.eventId,
+          schema.eventRemindersSent.userId,
+          schema.eventRemindersSent.reminderType,
+        ],
+      })
+      .returning();
+
+    if (dedup.length === 0) return false;
+
+    // Build gap and roster summaries
+    const gapParts = result.gaps.map(
+      (g) => `${g.missing} ${g.role}${g.missing > 1 ? 's' : ''}`,
+    );
+    const gapSummary = `Missing ${gapParts.join(', ')}`;
+
+    const rosterParts = result.gaps.map(
+      (g) =>
+        `${g.role.charAt(0).toUpperCase() + g.role.slice(1)}s: ${g.filled}/${g.required}`,
+    );
+    const rosterSummary = rosterParts.join(' | ');
+
+    const roleList = result.gaps.map((g) => g.role).join('/');
+    const suggestedReason = `Not enough ${roleList} — ${gapSummary.toLowerCase()}`;
+
+    // Resolve timezone for time display
+    const creatorTz = await this.getUserTimezones([result.creatorId]);
+    const timezone = creatorTz[0]?.timezone ?? defaultTimezone;
+
+    const timeStr = result.startTime.toLocaleTimeString('en-US', {
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+      timeZoneName: 'short',
+      timeZone: timezone,
+    });
+
+    await this.notificationService.create({
+      userId: result.creatorId,
+      type: 'role_gap_alert',
+      title: 'Role Gap Alert',
+      message: `Your event "${result.title}" starts in ~4 hours at ${timeStr} and still needs roles filled. ${gapSummary}.`,
+      payload: {
+        eventId: result.eventId,
+        eventTitle: result.title,
+        startTime: result.startTime.toISOString(),
+        gapSummary,
+        rosterSummary,
+        suggestedReason,
+      },
+    });
+
+    return true;
   }
 
   /**

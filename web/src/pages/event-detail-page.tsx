@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, lazy, Suspense } from 'react';
-import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useEvent, useEventRoster } from '../hooks/use-events';
 import { useSignup, useCancelSignup, useUpdateSignupStatus } from '../hooks/use-signups';
@@ -130,6 +130,11 @@ export function EventDetailPage() {
     // ROK-439: Track pre-selected role and slot position for selection-first flow
     const [preSelectedRole, setPreSelectedRole] = useState<CharacterRole | undefined>(undefined);
     const [pendingSlot, setPendingSlot] = useState<{ role: RosterRole; position: number } | null>(null);
+    // ROK-536: Deep-link query params for cancel/reschedule modals
+    const [searchParams, setSearchParams] = useSearchParams();
+    const deepLinkAction = searchParams.get('action');
+    const deepLinkReason = searchParams.get('reason');
+
     const [showRescheduleModal, setShowRescheduleModal] = useState(false);
     const [showCancelModal, setShowCancelModal] = useState(false);
     const [showInviteModal, setShowInviteModal] = useState(false);
@@ -143,6 +148,12 @@ export function EventDetailPage() {
     const isEventCreator = user?.id != null && event?.creator?.id != null && user.id === event.creator.id;
     const canManageEvent = isOperatorOrAdmin(user);
     const canManageRoster = isEventCreator || canManageEvent;
+
+    // ROK-536: Derive deep-link modal visibility from search params (no effect needed)
+    const canDeepLink = !!event && (isEventCreator || canManageEvent);
+    const deepLinkShowCancel = canDeepLink && deepLinkAction === 'cancel';
+    const deepLinkShowReschedule = canDeepLink && deepLinkAction === 'reschedule';
+
     // ROK-374: Check if event is cancelled
     const isCancelled = !!event?.cancelledAt;
     // ROK-502: Check if event has ended
@@ -996,25 +1007,32 @@ export function EventDetailPage() {
                 </Suspense>
             )}
 
-            {/* ROK-374: Cancel Event Modal */}
-            {showCancelModal && event && (
+            {/* ROK-374: Cancel Event Modal (ROK-536: deep-link support) */}
+            {(showCancelModal || deepLinkShowCancel) && event && (
                 <Suspense fallback={null}>
                     <CancelEventModal
-                        isOpen={showCancelModal}
-                        onClose={() => setShowCancelModal(false)}
+                        isOpen={showCancelModal || deepLinkShowCancel}
+                        onClose={() => {
+                            setShowCancelModal(false);
+                            if (deepLinkAction) setSearchParams({}, { replace: true });
+                        }}
                         eventId={eventId}
                         eventTitle={event.title}
                         signupCount={event.signupCount}
+                        initialReason={deepLinkReason ?? undefined}
                     />
                 </Suspense>
             )}
 
-            {/* ROK-223: Reschedule Modal */}
-            {showRescheduleModal && event && (
+            {/* ROK-223: Reschedule Modal (ROK-536: deep-link support) */}
+            {(showRescheduleModal || deepLinkShowReschedule) && event && (
                 <Suspense fallback={null}>
                     <RescheduleModal
-                        isOpen={showRescheduleModal}
-                        onClose={() => setShowRescheduleModal(false)}
+                        isOpen={showRescheduleModal || deepLinkShowReschedule}
+                        onClose={() => {
+                            setShowRescheduleModal(false);
+                            if (deepLinkAction) setSearchParams({}, { replace: true });
+                        }}
                         eventId={eventId}
                         currentStartTime={event.startTime}
                         currentEndTime={event.endTime}
@@ -1025,6 +1043,7 @@ export function EventDetailPage() {
                         description={event.description}
                         creatorUsername={event.creator?.username}
                         signupCount={event.signupCount}
+                        initialReason={deepLinkReason ?? undefined}
                     />
                 </Suspense>
             )}

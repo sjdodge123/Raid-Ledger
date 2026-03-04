@@ -23,6 +23,8 @@ interface RescheduleModalProps {
     description?: string | null;
     creatorUsername?: string;
     signupCount?: number;
+    /** ROK-536: Reserved for future use — accepted but unused. */
+    initialReason?: string;
 }
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
