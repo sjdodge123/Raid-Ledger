@@ -6,6 +6,8 @@ import * as schema from '../../drizzle/schema';
 import { wowClassicBosses, wowClassicBossLoot } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { BlizzardService } from './blizzard.service';
+import { BossEncountersService } from './boss-encounters.service';
+import { DungeonQuestsService } from './dungeon-quests.service';
 
 const REGION = 'us';
 const NAMESPACE = `static-${REGION}`;
@@ -93,6 +95,8 @@ export class BossDataRefreshService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly blizzardService: BlizzardService,
+    private readonly bossEncountersService: BossEncountersService,
+    private readonly dungeonQuestsService: DungeonQuestsService,
   ) {}
 
   /**
@@ -127,6 +131,10 @@ export class BossDataRefreshService {
         // Rate limit: 100ms between instances
         await this.sleep(100);
       }
+
+      // Invalidate all cached boss and quest data after refresh (ROK-665)
+      await this.bossEncountersService.clearCache();
+      await this.dungeonQuestsService.clearCache();
 
       this.logger.log(
         `Boss data refresh complete: ${totalBosses} bosses, ${totalLoot} loot items`,

@@ -2,11 +2,18 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { BossEncountersService } from './boss-encounters.service';
 import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { REDIS_CLIENT } from '../../redis/redis.module';
 
 describe('BossEncountersService', () => {
   let service: BossEncountersService;
   let mockSeeder: { seed: jest.Mock; drop: jest.Mock };
   let mockDb: { select: jest.Mock };
+  let mockRedis: {
+    get: jest.Mock;
+    setex: jest.Mock;
+    keys: jest.Mock;
+    del: jest.Mock;
+  };
 
   beforeEach(async () => {
     mockSeeder = {
@@ -25,11 +32,19 @@ describe('BossEncountersService', () => {
       select: jest.fn().mockReturnValue({ from: mockFrom }),
     };
 
+    mockRedis = {
+      get: jest.fn().mockResolvedValue(null),
+      setex: jest.fn().mockResolvedValue('OK'),
+      keys: jest.fn().mockResolvedValue([]),
+      del: jest.fn().mockResolvedValue(0),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         BossEncountersService,
         { provide: BossEncounterSeeder, useValue: mockSeeder },
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: REDIS_CLIENT, useValue: mockRedis },
       ],
     }).compile();
 
@@ -93,19 +108,46 @@ describe('BossEncountersService', () => {
   });
 
   describe('seedBosses()', () => {
-    it('should delegate to seeder', async () => {
+    it('should delegate to seeder and clear cache', async () => {
       const result = await service.seedBosses();
 
       expect(mockSeeder.seed).toHaveBeenCalled();
+      expect(mockRedis.keys).toHaveBeenCalledWith('wow:bosses:*');
       expect(result).toEqual({ bossesInserted: 10, lootInserted: 20 });
     });
   });
 
   describe('dropBosses()', () => {
-    it('should delegate to seeder', async () => {
+    it('should delegate to seeder and clear cache', async () => {
       await service.dropBosses();
 
       expect(mockSeeder.drop).toHaveBeenCalled();
+      expect(mockRedis.keys).toHaveBeenCalledWith('wow:bosses:*');
+    });
+  });
+
+  describe('clearCache()', () => {
+    it('should delete matching Redis keys', async () => {
+      mockRedis.keys.mockResolvedValue([
+        'wow:bosses:instance:409:classic_era',
+        'wow:bosses:loot:1:classic_era',
+      ]);
+
+      await service.clearCache();
+
+      expect(mockRedis.keys).toHaveBeenCalledWith('wow:bosses:*');
+      expect(mockRedis.del).toHaveBeenCalledWith(
+        'wow:bosses:instance:409:classic_era',
+        'wow:bosses:loot:1:classic_era',
+      );
+    });
+
+    it('should not call del when no keys exist', async () => {
+      mockRedis.keys.mockResolvedValue([]);
+
+      await service.clearCache();
+
+      expect(mockRedis.del).not.toHaveBeenCalled();
     });
   });
 });
