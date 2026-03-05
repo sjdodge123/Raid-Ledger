@@ -412,7 +412,8 @@ describe('DepartureGraceProcessor', () => {
       expect(mockClientService.sendEmbedDM).toHaveBeenCalledWith(
         'creator-discord-123',
         expect.anything(), // EmbedBuilder
-        expect.anything(), // ActionRowBuilder
+        expect.anything(), // ActionRowBuilder (action buttons)
+        expect.anything(), // extraRows (View Event link, may be empty)
       );
     });
 
