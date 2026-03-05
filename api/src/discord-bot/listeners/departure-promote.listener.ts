@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   ActionRowBuilder,
   ButtonBuilder,
+  ButtonStyle,
   ComponentType,
   EmbedBuilder,
   type ButtonInteraction,
@@ -101,7 +102,7 @@ export class DeparturePromoteListener {
       if (action === DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE) {
         await this.handlePromote(interaction, eventId);
       } else {
-        await this.handleDismiss(interaction, role, position);
+        await this.handleDismiss(interaction, eventId, role, position);
       }
     } catch (error) {
       this.logger.error(
@@ -214,7 +215,7 @@ export class DeparturePromoteListener {
       dmText += `\n\n⚠️ ${result.warning}`;
     }
 
-    await this.editDMResult(interaction, dmText);
+    await this.editDMResult(interaction, dmText, eventId);
   }
 
   /**
@@ -222,12 +223,14 @@ export class DeparturePromoteListener {
    */
   private async handleDismiss(
     interaction: ButtonInteraction,
+    eventId: number,
     vacatedRole: string,
     vacatedPosition: number,
   ): Promise<void> {
     await this.editDMResult(
       interaction,
       `Slot left empty (**${vacatedRole}** position ${vacatedPosition}).`,
+      eventId,
     );
   }
 
@@ -237,6 +240,7 @@ export class DeparturePromoteListener {
   private async editDMResult(
     interaction: ButtonInteraction,
     resultText: string,
+    eventId?: number,
   ): Promise<void> {
     try {
       const originalMessage = interaction.message;
@@ -249,7 +253,7 @@ export class DeparturePromoteListener {
           )
         : new EmbedBuilder().setDescription(resultText);
 
-      // Disable all buttons
+      // Disable action buttons, keep link buttons as-is
       const updatedComponents: ActionRowBuilder<ButtonBuilder>[] = [];
 
       for (const row of originalMessage.components) {
@@ -257,13 +261,38 @@ export class DeparturePromoteListener {
         const newRow = new ActionRowBuilder<ButtonBuilder>();
         for (const component of row.components) {
           if (component.type === ComponentType.Button) {
-            const btn = ButtonBuilder.from(component).setDisabled(true);
+            const btn = ButtonBuilder.from(component);
+            // Only disable non-link buttons (keep View Event clickable)
+            if (component.style !== ButtonStyle.Link) {
+              btn.setDisabled(true);
+            }
             newRow.addComponents(btn);
           }
         }
         if (newRow.components.length > 0) {
           updatedComponents.push(newRow);
         }
+      }
+
+      // Add View Event link if not already present and eventId is available
+      const clientUrl = process.env.CLIENT_URL;
+      const hasLinkButton = originalMessage.components.some(
+        (row) =>
+          row.type === ComponentType.ActionRow &&
+          row.components.some(
+            (c) =>
+              c.type === ComponentType.Button && c.style === ButtonStyle.Link,
+          ),
+      );
+      if (clientUrl && eventId && !hasLinkButton) {
+        updatedComponents.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('View Event')
+              .setStyle(ButtonStyle.Link)
+              .setURL(`${clientUrl}/events/${eventId}`),
+          ),
+        );
       }
 
       await originalMessage.edit({

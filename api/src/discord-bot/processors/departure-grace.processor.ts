@@ -270,9 +270,9 @@ export class DepartureGraceProcessor extends WorkerHost {
           `**${departedName}** departed from the **${vacatedRole}** slot (position ${vacatedPosition}) in **${event.title}**.\n\nWould you like to promote a bench player to fill it?`,
         );
 
-      // Build button row
+      // Build button rows
       const customIdBase = `${event.id}:${vacatedRole}:${vacatedPosition}`;
-      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(
             `${DEPARTURE_PROMOTE_BUTTON_IDS.PROMOTE}:${customIdBase}`,
@@ -287,7 +287,25 @@ export class DepartureGraceProcessor extends WorkerHost {
           .setStyle(ButtonStyle.Secondary),
       );
 
-      await this.clientService.sendEmbedDM(creator.discordId, embed, row);
+      const extraRows: ActionRowBuilder<ButtonBuilder>[] = [];
+      const clientUrl = process.env.CLIENT_URL;
+      if (clientUrl) {
+        extraRows.push(
+          new ActionRowBuilder<ButtonBuilder>().addComponents(
+            new ButtonBuilder()
+              .setLabel('View Event')
+              .setStyle(ButtonStyle.Link)
+              .setURL(`${clientUrl}/events/${event.id}`),
+          ),
+        );
+      }
+
+      await this.clientService.sendEmbedDM(
+        creator.discordId,
+        embed,
+        actionRow,
+        extraRows,
+      );
       this.logger.log(
         `Sent promote DM to creator ${creator.discordId} for event ${event.id} slot ${vacatedRole}:${vacatedPosition}`,
       );

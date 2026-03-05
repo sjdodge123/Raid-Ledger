@@ -2043,10 +2043,6 @@ export class SignupsService {
       if (!event?.slotConfig) return null;
 
       const slotConfig = event.slotConfig as Record<string, unknown>;
-      if (slotConfig.type !== 'mmo') {
-        // Generic games don't use role calculation — direct assign to first open slot
-        return null;
-      }
 
       // 2. Get the signup's preferred roles and username
       const [signup] = await tx
@@ -2070,7 +2066,28 @@ export class SignupsService {
         if (user) username = user.username;
       }
 
-      // 3. Delete the bench assignment
+      if (slotConfig.type !== 'mmo') {
+        // Generic games: direct assign to first open 'player' slot
+        return this.promoteGenericSlot(tx, eventId, signupId, slotConfig, username);
+      }
+
+      // 3. Snapshot roster assignments before allocation to detect chain moves
+      const beforeAssignments = await tx
+        .select({
+          id: schema.rosterAssignments.id,
+          signupId: schema.rosterAssignments.signupId,
+          role: schema.rosterAssignments.role,
+          position: schema.rosterAssignments.position,
+        })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            sql`${schema.rosterAssignments.role} != 'bench'`,
+          ),
+        );
+
+      // 4. Delete the bench assignment
       await tx
         .delete(schema.rosterAssignments)
         .where(
@@ -2081,10 +2098,10 @@ export class SignupsService {
           ),
         );
 
-      // 4. Run the role calculation engine
+      // 5. Run the role calculation engine
       await this.autoAllocateSignup(tx, eventId, signupId, slotConfig);
 
-      // 5. Check where they ended up
+      // 6. Check where they ended up
       const [newAssignment] = await tx
         .select({
           role: schema.rosterAssignments.role,
@@ -2117,24 +2134,191 @@ export class SignupsService {
         };
       }
 
-      // 6. Check if assigned role matches preferences
+      // 7. Detect chain moves by comparing before/after roster state
+      const afterAssignments = await tx
+        .select({
+          id: schema.rosterAssignments.id,
+          signupId: schema.rosterAssignments.signupId,
+          role: schema.rosterAssignments.role,
+          position: schema.rosterAssignments.position,
+        })
+        .from(schema.rosterAssignments)
+        .where(
+          and(
+            eq(schema.rosterAssignments.eventId, eventId),
+            sql`${schema.rosterAssignments.role} != 'bench'`,
+          ),
+        );
+
+      const chainMoves = await this.detectChainMoves(
+        tx,
+        beforeAssignments,
+        afterAssignments,
+        signupId,
+      );
+
+      // 8. Build warning: promoted player's role mismatch + chain move details
       const prefs = (signup.preferredRoles as string[]) ?? [];
-      let warning: string | undefined;
+      const warnings: string[] = [];
+
       if (
         prefs.length > 0 &&
         newAssignment.role &&
         !prefs.includes(newAssignment.role)
       ) {
-        warning = `${username} was placed in **${newAssignment.role}** which is not in their preferred roles (${prefs.join(', ')}).`;
+        warnings.push(
+          `${username} was placed in **${newAssignment.role}** which is not in their preferred roles (${prefs.join(', ')}).`,
+        );
+      }
+
+      for (const move of chainMoves) {
+        warnings.push(
+          `${move.username} moved from **${move.fromRole}** to **${move.toRole}** to accommodate the promotion.`,
+        );
       }
 
       return {
         role: newAssignment.role ?? 'bench',
         position: newAssignment.position,
         username,
-        warning,
+        chainMoves: chainMoves.map(
+          (m) => `${m.username}: ${m.fromRole} → ${m.toRole}`,
+        ),
+        warning: warnings.length > 0 ? warnings.join('\n') : undefined,
       };
     });
+  }
+
+  /**
+   * ROK-627: Promote a bench player in a generic (non-MMO) event.
+   * Simply assigns to the first open 'player' slot.
+   */
+  private async promoteGenericSlot(
+    tx: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    signupId: number,
+    slotConfig: Record<string, unknown>,
+    username: string,
+  ): Promise<{
+    role: string;
+    position: number;
+    username: string;
+    chainMoves?: string[];
+    warning?: string;
+  } | null> {
+    const maxPlayers = (slotConfig.player as number) ?? null;
+
+    // Delete the bench assignment
+    await tx
+      .delete(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.signupId, signupId),
+          eq(schema.rosterAssignments.role, 'bench'),
+        ),
+      );
+
+    // Count current player slots and find first open position
+    const currentPlayers = await tx
+      .select({ position: schema.rosterAssignments.position })
+      .from(schema.rosterAssignments)
+      .where(
+        and(
+          eq(schema.rosterAssignments.eventId, eventId),
+          eq(schema.rosterAssignments.role, 'player'),
+        ),
+      );
+
+    if (maxPlayers !== null && currentPlayers.length >= maxPlayers) {
+      // All slots full — put back on bench
+      await tx.insert(schema.rosterAssignments).values({
+        eventId,
+        signupId,
+        role: 'bench',
+        position: 1,
+      });
+      return {
+        role: 'bench',
+        position: 1,
+        username,
+        warning: `All player slots are full — ${username} remains on bench.`,
+      };
+    }
+
+    // Find first gap in positions
+    const occupied = new Set(currentPlayers.map((p) => p.position));
+    let position = 1;
+    while (occupied.has(position)) position++;
+
+    await tx.insert(schema.rosterAssignments).values({
+      eventId,
+      signupId,
+      role: 'player',
+      position,
+      isOverride: 0,
+    });
+
+    // Auto-confirm the promoted player
+    await tx
+      .update(schema.eventSignups)
+      .set({ confirmationStatus: 'confirmed' })
+      .where(eq(schema.eventSignups.id, signupId));
+
+    return {
+      role: 'player',
+      position,
+      username,
+    };
+  }
+
+  /**
+   * ROK-627: Detect chain moves by comparing roster snapshots before and after
+   * autoAllocateSignup. Returns details of players who were moved to different roles.
+   */
+  private async detectChainMoves(
+    tx: PostgresJsDatabase<typeof schema>,
+    before: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    after: Array<{ id: number; signupId: number; role: string | null; position: number }>,
+    excludeSignupId: number,
+  ): Promise<Array<{ signupId: number; username: string; fromRole: string; toRole: string }>> {
+    const moves: Array<{ signupId: number; username: string; fromRole: string; toRole: string }> = [];
+    const beforeMap = new Map(before.map((a) => [a.signupId, a]));
+
+    for (const afterEntry of after) {
+      if (afterEntry.signupId === excludeSignupId) continue;
+      const beforeEntry = beforeMap.get(afterEntry.signupId);
+      if (!beforeEntry) continue;
+      if (beforeEntry.role !== afterEntry.role) {
+        // This player was moved — look up their username
+        const [signup] = await tx
+          .select({ userId: schema.eventSignups.userId, discordUsername: schema.eventSignups.discordUsername })
+          .from(schema.eventSignups)
+          .where(eq(schema.eventSignups.id, afterEntry.signupId))
+          .limit(1);
+
+        let moveUsername = 'Unknown';
+        if (signup?.discordUsername) {
+          moveUsername = signup.discordUsername;
+        } else if (signup?.userId) {
+          const [user] = await tx
+            .select({ username: schema.users.username })
+            .from(schema.users)
+            .where(eq(schema.users.id, signup.userId))
+            .limit(1);
+          if (user) moveUsername = user.username;
+        }
+
+        moves.push({
+          signupId: afterEntry.signupId,
+          username: moveUsername,
+          fromRole: beforeEntry.role ?? 'unknown',
+          toRole: afterEntry.role ?? 'unknown',
+        });
+      }
+    }
+
+    return moves;
   }
 
   /**
