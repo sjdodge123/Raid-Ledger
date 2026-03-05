@@ -52,10 +52,16 @@ describe('LogsService', () => {
       expect(result).toBe('Login attempt password=[REDACTED] from 10.0.0.1');
     });
 
-    it('should redact token= values', () => {
-      const input = 'Refresh token=abc123xyz used';
+    it('should redact sensitive token= values', () => {
+      const input = 'Using access_token=abc123xyz for auth';
       const result = service.scrubContent(input);
-      expect(result).toBe('Refresh token=[REDACTED] used');
+      expect(result).toBe('Using access_token=[REDACTED] for auth');
+    });
+
+    it('should not redact innocuous token references', () => {
+      const input = 'Pagination next_token=abc123 session_token=xyz';
+      const result = service.scrubContent(input);
+      expect(result).toBe(input);
     });
 
     it('should redact secret= values', () => {
@@ -171,9 +177,6 @@ describe('LogsService', () => {
     });
 
     it('should throw NotFoundException for missing file', () => {
-      (mockFs.realpathSync as unknown as jest.Mock).mockImplementation(
-        (p: string) => p,
-      );
       (mockFs.existsSync as jest.Mock).mockReturnValue(false);
 
       expect(() => service.getValidatedPath('missing.log')).toThrow(

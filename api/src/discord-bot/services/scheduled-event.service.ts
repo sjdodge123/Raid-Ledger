@@ -14,12 +14,49 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { perfLog } from '../../common/perf-logger';
 
 /** Discord API error code for "Unknown Scheduled Event" (manually deleted). */
 const UNKNOWN_SCHEDULED_EVENT = 10070;
 
 /** Maximum description length for Discord Scheduled Events. */
 const MAX_DESCRIPTION_LENGTH = 1000;
+
+/** Timeout (ms) for individual Discord API calls to prevent blocking cron ticks (ROK-685). */
+const DISCORD_API_TIMEOUT_MS = 5_000;
+
+/**
+ * Execute a Discord API call with [PERF] DISCORD instrumentation and a timeout guard (ROK-685).
+ * Rejects with a timeout error if the call takes longer than DISCORD_API_TIMEOUT_MS.
+ */
+async function timedDiscordCall<T>(
+  operation: string,
+  fn: () => Promise<T>,
+  meta?: Record<string, string | number | null | undefined>,
+): Promise<T> {
+  const start = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const result = await Promise.race([
+      fn(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(
+              new Error(
+                `Discord API timeout: ${operation} exceeded ${DISCORD_API_TIMEOUT_MS}ms`,
+              ),
+            ),
+          DISCORD_API_TIMEOUT_MS,
+        );
+      }),
+    ]);
+    perfLog('DISCORD', operation, performance.now() - start, meta);
+    return result;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export interface ScheduledEventData {
   title: string;
@@ -109,8 +146,10 @@ export class ScheduledEventService {
 
     for (const candidate of candidates) {
       try {
-        const scheduledEvent = await guild.scheduledEvents.fetch(
-          candidate.discordScheduledEventId!,
+        const scheduledEvent = await timedDiscordCall(
+          'scheduledEvents.fetch',
+          () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
+          { eventId: candidate.id },
         );
 
         if (scheduledEvent.status !== GuildScheduledEventStatus.Scheduled) {
@@ -118,9 +157,14 @@ export class ScheduledEventService {
           continue;
         }
 
-        await guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
-          status: GuildScheduledEventStatus.Active,
-        });
+        await timedDiscordCall(
+          'scheduledEvents.edit',
+          () =>
+            guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
+              status: GuildScheduledEventStatus.Active,
+            }),
+          { eventId: candidate.id, op: 'start' },
+        );
 
         this.logger.log(
           `Auto-started Discord Scheduled Event ${candidate.discordScheduledEventId} for event ${candidate.id}`,
@@ -214,15 +258,20 @@ export class ScheduledEventService {
         `Creating scheduled event for event ${eventId}: channel=${voiceChannelId}, start=${eventData.startTime}, end=${eventData.endTime}`,
       );
 
-      const scheduledEvent = await guild.scheduledEvents.create({
-        name: eventData.title,
-        scheduledStartTime: startTime,
-        scheduledEndTime: new Date(eventData.endTime),
-        privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-        entityType: GuildScheduledEventEntityType.Voice,
-        channel: voiceChannelId,
-        description,
-      });
+      const scheduledEvent = await timedDiscordCall(
+        'scheduledEvents.create',
+        () =>
+          guild.scheduledEvents.create({
+            name: eventData.title,
+            scheduledStartTime: startTime,
+            scheduledEndTime: new Date(eventData.endTime),
+            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+            entityType: GuildScheduledEventEntityType.Voice,
+            channel: voiceChannelId,
+            description,
+          }),
+        { eventId },
+      );
 
       await this.db
         .update(schema.events)
@@ -316,13 +365,18 @@ export class ScheduledEventService {
         ));
 
       try {
-        await guild.scheduledEvents.edit(event.discordScheduledEventId, {
-          name: eventData.title,
-          scheduledStartTime: startTime,
-          scheduledEndTime: endTime,
-          description,
-          ...(voiceChannelId ? { channel: voiceChannelId } : {}),
-        });
+        await timedDiscordCall(
+          'scheduledEvents.edit',
+          () =>
+            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+              name: eventData.title,
+              scheduledStartTime: startTime,
+              scheduledEndTime: endTime,
+              description,
+              ...(voiceChannelId ? { channel: voiceChannelId } : {}),
+            }),
+          { eventId, op: 'update' },
+        );
 
         this.logger.log(
           `Updated Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
@@ -379,7 +433,11 @@ export class ScheduledEventService {
       if (!event?.discordScheduledEventId) return;
 
       try {
-        await guild.scheduledEvents.delete(event.discordScheduledEventId);
+        await timedDiscordCall(
+          'scheduledEvents.delete',
+          () => guild.scheduledEvents.delete(event.discordScheduledEventId!),
+          { eventId },
+        );
         this.logger.log(
           `Deleted Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
         );
@@ -431,8 +489,10 @@ export class ScheduledEventService {
       if (!event?.discordScheduledEventId) return;
 
       try {
-        const scheduledEvent = await guild.scheduledEvents.fetch(
-          event.discordScheduledEventId,
+        const scheduledEvent = await timedDiscordCall(
+          'scheduledEvents.fetch',
+          () => guild.scheduledEvents.fetch(event.discordScheduledEventId!),
+          { eventId, op: 'complete' },
         );
 
         if (
@@ -445,13 +505,23 @@ export class ScheduledEventService {
         } else {
           if (scheduledEvent.status === GuildScheduledEventStatus.Scheduled) {
             // Must transition Scheduled -> Active before completing
-            await guild.scheduledEvents.edit(event.discordScheduledEventId, {
-              status: GuildScheduledEventStatus.Active,
-            });
+            await timedDiscordCall(
+              'scheduledEvents.edit',
+              () =>
+                guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+                  status: GuildScheduledEventStatus.Active,
+                }),
+              { eventId, op: 'complete-activate' },
+            );
           }
-          await guild.scheduledEvents.edit(event.discordScheduledEventId, {
-            status: GuildScheduledEventStatus.Completed,
-          });
+          await timedDiscordCall(
+            'scheduledEvents.edit',
+            () =>
+              guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+                status: GuildScheduledEventStatus.Completed,
+              }),
+            { eventId, op: 'complete' },
+          );
 
           this.logger.log(
             `Completed Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
@@ -503,9 +573,14 @@ export class ScheduledEventService {
       if (!event?.discordScheduledEventId) return;
 
       try {
-        await guild.scheduledEvents.edit(event.discordScheduledEventId, {
-          scheduledEndTime: newEndTime,
-        });
+        await timedDiscordCall(
+          'scheduledEvents.edit',
+          () =>
+            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+              scheduledEndTime: newEndTime,
+            }),
+          { eventId, op: 'updateEndTime' },
+        );
         this.logger.log(
           `Updated end time for scheduled event ${event.discordScheduledEventId} to ${newEndTime.toISOString()}`,
         );
@@ -558,9 +633,14 @@ export class ScheduledEventService {
       const description = await this.buildDescription(eventId, eventData);
 
       try {
-        await guild.scheduledEvents.edit(event.discordScheduledEventId, {
-          description,
-        });
+        await timedDiscordCall(
+          'scheduledEvents.edit',
+          () =>
+            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+              description,
+            }),
+          { eventId, op: 'updateDescription' },
+        );
         this.logger.debug(
           `Updated description for scheduled event ${event.discordScheduledEventId}`,
         );

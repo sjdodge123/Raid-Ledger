@@ -36,8 +36,8 @@ describe('EnvironmentSnapshotService', () => {
     >;
 
     mockDb.execute.mockResolvedValue([
-      { tag: '0063_migration_name', created_at: '2026-02-20T00:00:00Z' },
-      { tag: '0062_another_migration', created_at: '2026-02-19T00:00:00Z' },
+      { hash: '0063_migration_name', created_at: '2026-02-20T00:00:00Z' },
+      { hash: '0062_another_migration', created_at: '2026-02-19T00:00:00Z' },
     ]);
 
     const module = await Test.createTestingModule({
