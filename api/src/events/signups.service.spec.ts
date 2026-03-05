@@ -1731,7 +1731,9 @@ describe('SignupsService', () => {
 
     it('returns null when event has no slotConfig', async () => {
       // event.slotConfig is null
-      mockDb.select.mockReturnValueOnce(makeSelectChain([{ slotConfig: null }]));
+      mockDb.select.mockReturnValueOnce(
+        makeSelectChain([{ slotConfig: null }]),
+      );
 
       const result = await service.promoteFromBench(1, 1);
 
@@ -1762,9 +1764,13 @@ describe('SignupsService', () => {
       it('promotes bench player to first open player slot', async () => {
         // event with generic config
         mockDb.select
-          .mockReturnValueOnce(makeSelectChain([{ slotConfig: genericSlotConfig }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ slotConfig: genericSlotConfig }]),
+          )
           // signup
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: null, userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: null, userId: 1 }]),
+          )
           // username
           .mockReturnValueOnce(makeSelectChain([{ username: 'HeroPlayer' }]));
 
@@ -1772,7 +1778,9 @@ describe('SignupsService', () => {
         mockDb.delete.mockReturnValueOnce({
           where: jest.fn().mockResolvedValue(undefined),
         });
-        mockDb.select.mockReturnValueOnce(makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]));
+        mockDb.select.mockReturnValueOnce(
+          makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
+        );
 
         // insert player assignment
         mockDb.insert.mockReturnValueOnce({
@@ -1801,14 +1809,20 @@ describe('SignupsService', () => {
 
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: fullConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: null, userId: 1 }]))
-          .mockReturnValueOnce(makeSelectChain([{ username: 'BenchedPlayer' }]));
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: null, userId: 1 }]),
+          )
+          .mockReturnValueOnce(
+            makeSelectChain([{ username: 'BenchedPlayer' }]),
+          );
 
         mockDb.delete.mockReturnValueOnce({
           where: jest.fn().mockResolvedValue(undefined),
         });
         // 2 players already in slots (at capacity of 2)
-        mockDb.select.mockReturnValueOnce(makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]));
+        mockDb.select.mockReturnValueOnce(
+          makeSelectChainNoLimit([{ position: 1 }, { position: 2 }]),
+        );
 
         // re-insert back to bench
         mockDb.insert.mockReturnValueOnce({
@@ -1830,14 +1844,18 @@ describe('SignupsService', () => {
 
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: config }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: null, userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: null, userId: 1 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'GapFiller' }]));
 
         mockDb.delete.mockReturnValueOnce({
           where: jest.fn().mockResolvedValue(undefined),
         });
         // Positions 1 and 3 occupied — gap at 2
-        mockDb.select.mockReturnValueOnce(makeSelectChainNoLimit([{ position: 1 }, { position: 3 }]));
+        mockDb.select.mockReturnValueOnce(
+          makeSelectChainNoLimit([{ position: 1 }, { position: 3 }]),
+        );
 
         mockDb.insert.mockReturnValueOnce({
           values: jest.fn().mockResolvedValue(undefined),
@@ -1856,38 +1874,18 @@ describe('SignupsService', () => {
     });
 
     describe('MMO event promotion', () => {
-      function buildMmoSelectSequence({
-        slotConfig = mmoSlotConfig,
-        signupUserId = 1,
-        signupPreferredRoles = ['dps'] as string[] | null,
-        username = 'DragonSlayer99',
-        beforeAssignments = [] as Array<{ id: number; signupId: number; role: string; position: number }>,
-        afterAssignments = [] as Array<{ id: number; signupId: number; role: string; position: number }>,
-        newAssignment = { role: 'dps', position: 1 } as { role: string; position: number } | null,
-        allSignups = [] as Array<{ id: number; preferredRoles: string[] | null; status: string; signedUpAt: Date }>,
-        currentAssignments = [] as Array<{ id: number; signupId: number; role: string | null; position: number }>,
-      } = {}) {
-        return {
-          slotConfig,
-          signupUserId,
-          signupPreferredRoles,
-          username,
-          beforeAssignments,
-          afterAssignments,
-          newAssignment,
-          allSignups,
-          currentAssignments,
-        };
-      }
-
       it('uses autoAllocateSignup for MMO events and returns promotion result', async () => {
         mockDb.select
           // 1. event slotConfig
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
           // 2. signup
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]),
+          )
           // 3. username
-          .mockReturnValueOnce(makeSelectChain([{ username: 'DragonSlayer99' }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ username: 'DragonSlayer99' }]),
+          )
           // 4. before snapshot (no non-bench assignments)
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
@@ -1897,7 +1895,14 @@ describe('SignupsService', () => {
           // 5. autoAllocateSignup: all signups
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['dps'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['dps'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           // 6. autoAllocateSignup: current assignments
@@ -1911,7 +1916,11 @@ describe('SignupsService', () => {
           // 8. after snapshot
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 2, signupId: 1, role: 'dps', position: 1 }]),
+              where: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 2, signupId: 1, role: 'dps', position: 1 },
+                ]),
             }),
           });
 
@@ -1945,7 +1954,9 @@ describe('SignupsService', () => {
       it('returns bench result with warning when allocation fails for MMO event', async () => {
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['healer'], userId: 2 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['healer'], userId: 2 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'CasualCarl' }]))
           // before snapshot
           .mockReturnValueOnce({
@@ -1991,14 +2002,18 @@ describe('SignupsService', () => {
           position: 1,
           username: 'CasualCarl',
         });
-        expect(result?.warning).toMatch(/Could not find a suitable roster slot/);
+        expect(result?.warning).toMatch(
+          /Could not find a suitable roster slot/,
+        );
       });
 
       it('includes role mismatch warning when player is placed outside preferred roles', async () => {
         // Player prefers healer only but gets placed in dps due to chain rearrangement
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['healer'], userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['healer'], userId: 1 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'HealerWannabe' }]))
           // before snapshot
           .mockReturnValueOnce({
@@ -2009,7 +2024,14 @@ describe('SignupsService', () => {
           // autoAllocateSignup: all signups
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['healer'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['healer'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           // autoAllocateSignup: current assignments (healer slots full, dps open)
@@ -2028,7 +2050,11 @@ describe('SignupsService', () => {
           // after snapshot (same as current)
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 20, signupId: 1, role: 'dps', position: 1 }]),
+              where: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 20, signupId: 1, role: 'dps', position: 1 },
+                ]),
             }),
           });
 
@@ -2039,9 +2065,13 @@ describe('SignupsService', () => {
         });
 
         // insert assignment
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
@@ -2053,7 +2083,9 @@ describe('SignupsService', () => {
 
       it('includes chain move details when other players are rearranged', async () => {
         // signupId=1 is being promoted. signupId=2 was moved from dps to healer.
-        const beforeSnapshot = [{ id: 5, signupId: 2, role: 'dps', position: 1 }];
+        const beforeSnapshot = [
+          { id: 5, signupId: 2, role: 'dps', position: 1 },
+        ];
         const afterSnapshot = [
           { id: 5, signupId: 2, role: 'healer', position: 1 },
           { id: 6, signupId: 1, role: 'dps', position: 2 },
@@ -2061,7 +2093,9 @@ describe('SignupsService', () => {
 
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'NewGuy' }]))
           // before snapshot
           .mockReturnValueOnce({
@@ -2073,7 +2107,12 @@ describe('SignupsService', () => {
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
               where: jest.fn().mockResolvedValue([
-                { id: 1, preferredRoles: ['dps'], status: 'signed_up', signedUpAt: new Date() },
+                {
+                  id: 1,
+                  preferredRoles: ['dps'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
               ]),
             }),
           })
@@ -2092,18 +2131,26 @@ describe('SignupsService', () => {
             }),
           })
           // detectChainMoves: fetch signup info for signupId=2 (the moved player)
-          .mockReturnValueOnce(makeSelectChain([{ userId: 2, discordUsername: null }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ userId: 2, discordUsername: null }]),
+          )
           // detectChainMoves: fetch username for userId=2
-          .mockReturnValueOnce(makeSelectChain([{ username: 'ChainedPlayer' }]));
+          .mockReturnValueOnce(
+            makeSelectChain([{ username: 'ChainedPlayer' }]),
+          );
 
         mockDb.delete.mockReturnValueOnce({
           where: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue(undefined),
           }),
         });
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
@@ -2116,13 +2163,24 @@ describe('SignupsService', () => {
 
       it('does not include promoted player in chain moves list', async () => {
         // signupId=1 is promoted. The snapshot should not detect them as a chain move.
-        const beforeSnapshot: Array<{ id: number; signupId: number; role: string; position: number }> = [];
-        const afterSnapshot = [{ id: 6, signupId: 1, role: 'dps', position: 1 }];
+        const beforeSnapshot: Array<{
+          id: number;
+          signupId: number;
+          role: string;
+          position: number;
+        }> = [];
+        const afterSnapshot = [
+          { id: 6, signupId: 1, role: 'dps', position: 1 },
+        ];
 
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]))
-          .mockReturnValueOnce(makeSelectChain([{ username: 'PromotedPlayer' }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]),
+          )
+          .mockReturnValueOnce(
+            makeSelectChain([{ username: 'PromotedPlayer' }]),
+          )
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
               where: jest.fn().mockResolvedValue(beforeSnapshot),
@@ -2130,7 +2188,14 @@ describe('SignupsService', () => {
           })
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['dps'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['dps'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           .mockReturnValueOnce({
@@ -2150,9 +2215,13 @@ describe('SignupsService', () => {
             where: jest.fn().mockResolvedValue(undefined),
           }),
         });
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
@@ -2163,7 +2232,9 @@ describe('SignupsService', () => {
       });
 
       it('uses discordUsername when RL account is not linked for chain move detection', async () => {
-        const beforeSnapshot = [{ id: 5, signupId: 2, role: 'tank', position: 1 }];
+        const beforeSnapshot = [
+          { id: 5, signupId: 2, role: 'tank', position: 1 },
+        ];
         const afterSnapshot = [
           { id: 5, signupId: 2, role: 'dps', position: 1 },
           { id: 6, signupId: 1, role: 'tank', position: 2 },
@@ -2171,7 +2242,9 @@ describe('SignupsService', () => {
 
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['tank'], userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['tank'], userId: 1 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'RLUser' }]))
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
@@ -2180,7 +2253,14 @@ describe('SignupsService', () => {
           })
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['tank'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['tank'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           .mockReturnValueOnce({
@@ -2195,16 +2275,24 @@ describe('SignupsService', () => {
             }),
           })
           // detectChainMoves: signup for signupId=2 is anonymous (has discordUsername, no userId)
-          .mockReturnValueOnce(makeSelectChain([{ userId: null, discordUsername: 'DiscordAnon#1234' }]));
+          .mockReturnValueOnce(
+            makeSelectChain([
+              { userId: null, discordUsername: 'DiscordAnon#1234' },
+            ]),
+          );
 
         mockDb.delete.mockReturnValueOnce({
           where: jest.fn().mockReturnValue({
             where: jest.fn().mockResolvedValue(undefined),
           }),
         });
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
@@ -2215,7 +2303,9 @@ describe('SignupsService', () => {
       it('returns no warning when preferred role matches assigned role and no chain moves', async () => {
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['dps'], userId: 1 }]),
+          )
           .mockReturnValueOnce(makeSelectChain([{ username: 'PerfectMatch' }]))
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
@@ -2224,7 +2314,14 @@ describe('SignupsService', () => {
           })
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['dps'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['dps'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           .mockReturnValueOnce({
@@ -2237,7 +2334,11 @@ describe('SignupsService', () => {
           // after snapshot
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 2, signupId: 1, role: 'dps', position: 1 }]),
+              where: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 2, signupId: 1, role: 'dps', position: 1 },
+                ]),
             }),
           });
 
@@ -2246,9 +2347,13 @@ describe('SignupsService', () => {
             where: jest.fn().mockResolvedValue(undefined),
           }),
         });
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
@@ -2262,7 +2367,9 @@ describe('SignupsService', () => {
         mockDb.select
           .mockReturnValueOnce(makeSelectChain([{ slotConfig: mmoSlotConfig }]))
           // signup has no userId (anonymous)
-          .mockReturnValueOnce(makeSelectChain([{ preferredRoles: ['dps'], userId: null }]))
+          .mockReturnValueOnce(
+            makeSelectChain([{ preferredRoles: ['dps'], userId: null }]),
+          )
           // no username lookup because userId is null
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
@@ -2271,7 +2378,14 @@ describe('SignupsService', () => {
           })
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 1, preferredRoles: ['dps'], status: 'signed_up', signedUpAt: new Date() }]),
+              where: jest.fn().mockResolvedValue([
+                {
+                  id: 1,
+                  preferredRoles: ['dps'],
+                  status: 'signed_up',
+                  signedUpAt: new Date(),
+                },
+              ]),
             }),
           })
           .mockReturnValueOnce({
@@ -2282,7 +2396,11 @@ describe('SignupsService', () => {
           .mockReturnValueOnce(makeSelectChain([{ role: 'dps', position: 1 }]))
           .mockReturnValueOnce({
             from: jest.fn().mockReturnValue({
-              where: jest.fn().mockResolvedValue([{ id: 2, signupId: 1, role: 'dps', position: 1 }]),
+              where: jest
+                .fn()
+                .mockResolvedValue([
+                  { id: 2, signupId: 1, role: 'dps', position: 1 },
+                ]),
             }),
           });
 
@@ -2291,9 +2409,13 @@ describe('SignupsService', () => {
             where: jest.fn().mockResolvedValue(undefined),
           }),
         });
-        mockDb.insert.mockReturnValueOnce({ values: jest.fn().mockResolvedValue(undefined) });
+        mockDb.insert.mockReturnValueOnce({
+          values: jest.fn().mockResolvedValue(undefined),
+        });
         mockDb.update.mockReturnValueOnce({
-          set: jest.fn().mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
+          set: jest
+            .fn()
+            .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
         });
 
         const result = await service.promoteFromBench(1, 1);
