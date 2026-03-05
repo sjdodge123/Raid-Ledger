@@ -311,10 +311,9 @@ test.describe('Notifications', () => {
         await expect(page.getByRole('heading', { name: 'Notifications' })).toBeVisible({ timeout: 5_000 });
 
         // Should show either notification items or the empty state
-        const hasNotifications = await page.getByText('Roster Slot Available').first().isVisible({ timeout: 2_000 }).catch(() => false);
-        if (!hasNotifications) {
-            await expect(page.getByText('No notifications')).toBeVisible({ timeout: 5_000 });
-        }
+        const notificationItems = page.locator('.divide-y > *');
+        const emptyState = page.getByText('No notifications');
+        await expect(notificationItems.first().or(emptyState)).toBeVisible({ timeout: 5_000 });
     });
 
     test('Mark All Read button works', async ({ page }) => {
