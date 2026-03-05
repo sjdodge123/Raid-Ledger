@@ -284,6 +284,9 @@ export class DeparturePromoteListener {
               c.type === ComponentType.Button && c.style === ButtonStyle.Link,
           ),
       );
+      if (!clientUrl) {
+        this.logger.debug('Skipping View Event button: CLIENT_URL is not set');
+      }
       if (clientUrl && eventId && !hasLinkButton) {
         updatedComponents.push(
           new ActionRowBuilder<ButtonBuilder>().addComponents(

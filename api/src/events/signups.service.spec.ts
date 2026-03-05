@@ -2130,13 +2130,13 @@ describe('SignupsService', () => {
               where: jest.fn().mockResolvedValue(afterSnapshot),
             }),
           })
-          // detectChainMoves: fetch signup info for signupId=2 (the moved player)
+          // detectChainMoves: batch-fetch signups for moved players
           .mockReturnValueOnce(
-            makeSelectChain([{ userId: 2, discordUsername: null }]),
+            makeSelectChainNoLimit([{ id: 2, userId: 2, discordUsername: null }]),
           )
-          // detectChainMoves: fetch username for userId=2
+          // detectChainMoves: batch-fetch users for username fallback
           .mockReturnValueOnce(
-            makeSelectChain([{ username: 'ChainedPlayer' }]),
+            makeSelectChainNoLimit([{ id: 2, username: 'ChainedPlayer' }]),
           );
 
         mockDb.delete.mockReturnValueOnce({
@@ -2274,10 +2274,10 @@ describe('SignupsService', () => {
               where: jest.fn().mockResolvedValue(afterSnapshot),
             }),
           })
-          // detectChainMoves: signup for signupId=2 is anonymous (has discordUsername, no userId)
+          // detectChainMoves: batch-fetch signups for moved players (anonymous, has discordUsername)
           .mockReturnValueOnce(
-            makeSelectChain([
-              { userId: null, discordUsername: 'DiscordAnon#1234' },
+            makeSelectChainNoLimit([
+              { id: 2, userId: null, discordUsername: 'DiscordAnon#1234' },
             ]),
           );
 

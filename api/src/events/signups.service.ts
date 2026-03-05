@@ -2285,37 +2285,59 @@ export class SignupsService {
     const moves: Array<{ signupId: number; username: string; fromRole: string; toRole: string }> = [];
     const beforeMap = new Map(before.map((a) => [a.signupId, a]));
 
+    // Collect signupIds that actually changed roles
+    const movedEntries: Array<{ signupId: number; fromRole: string; toRole: string }> = [];
     for (const afterEntry of after) {
       if (afterEntry.signupId === excludeSignupId) continue;
       const beforeEntry = beforeMap.get(afterEntry.signupId);
       if (!beforeEntry) continue;
       if (beforeEntry.role !== afterEntry.role) {
-        // This player was moved — look up their username
-        const [signup] = await tx
-          .select({ userId: schema.eventSignups.userId, discordUsername: schema.eventSignups.discordUsername })
-          .from(schema.eventSignups)
-          .where(eq(schema.eventSignups.id, afterEntry.signupId))
-          .limit(1);
-
-        let moveUsername = 'Unknown';
-        if (signup?.discordUsername) {
-          moveUsername = signup.discordUsername;
-        } else if (signup?.userId) {
-          const [user] = await tx
-            .select({ username: schema.users.username })
-            .from(schema.users)
-            .where(eq(schema.users.id, signup.userId))
-            .limit(1);
-          if (user) moveUsername = user.username;
-        }
-
-        moves.push({
+        movedEntries.push({
           signupId: afterEntry.signupId,
-          username: moveUsername,
           fromRole: beforeEntry.role ?? 'unknown',
           toRole: afterEntry.role ?? 'unknown',
         });
       }
+    }
+
+    if (movedEntries.length === 0) return moves;
+
+    // Batch-fetch signups for all moved players
+    const movedSignupIds = movedEntries.map((m) => m.signupId);
+    const signups = await tx
+      .select({ id: schema.eventSignups.id, userId: schema.eventSignups.userId, discordUsername: schema.eventSignups.discordUsername })
+      .from(schema.eventSignups)
+      .where(inArray(schema.eventSignups.id, movedSignupIds));
+    const signupMap = new Map(signups.map((s) => [s.id, s]));
+
+    // Batch-fetch users for signups that need a username fallback
+    const userIds = signups
+      .filter((s) => !s.discordUsername && s.userId)
+      .map((s) => s.userId!);
+    const userMap = new Map<number, string>();
+    if (userIds.length > 0) {
+      const users = await tx
+        .select({ id: schema.users.id, username: schema.users.username })
+        .from(schema.users)
+        .where(inArray(schema.users.id, userIds));
+      for (const u of users) userMap.set(u.id, u.username);
+    }
+
+    for (const entry of movedEntries) {
+      const signup = signupMap.get(entry.signupId);
+      let moveUsername = 'Unknown';
+      if (signup?.discordUsername) {
+        moveUsername = signup.discordUsername;
+      } else if (signup?.userId) {
+        moveUsername = userMap.get(signup.userId) ?? 'Unknown';
+      }
+
+      moves.push({
+        signupId: entry.signupId,
+        username: moveUsername,
+        fromRole: entry.fromRole,
+        toRole: entry.toRole,
+      });
     }
 
     return moves;
