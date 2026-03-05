@@ -165,12 +165,15 @@ export class EnvironmentSnapshotService implements OnModuleInit {
     }
 
     try {
-      const rows = await this.db.execute<{ tag: string; created_at: string }>(
-        sql`SELECT tag, created_at FROM __drizzle_migrations ORDER BY created_at DESC LIMIT 10`,
+      const rows = await this.db.execute<{
+        hash: string;
+        created_at: string;
+      }>(
+        sql`SELECT hash, created_at FROM "drizzle"."__drizzle_migrations" ORDER BY created_at DESC LIMIT 10`,
       );
 
       return Array.from(rows).map((row) => ({
-        tag: row.tag,
+        tag: row.hash,
         appliedAt: row.created_at,
       }));
     } catch (err: unknown) {
