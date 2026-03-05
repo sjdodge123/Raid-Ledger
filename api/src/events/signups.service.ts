@@ -1088,19 +1088,8 @@ export class SignupsService {
    * @throws NotFoundException if event doesn't exist
    */
   async getRoster(eventId: number): Promise<EventRosterDto> {
-    // Verify event exists
-    const event = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
-
-    if (event.length === 0) {
-      throw new NotFoundException(`Event with ID ${eventId} not found`);
-    }
-
-    // Get signups with user and character info (single query with joins, ROK-421: exclude soft-deleted)
-    // ROK-596: Include departed signups so frontend can display them in the Departed section
+    // Single query: verify event exists via signups join, fetch user + character data
+    // ROK-421: exclude soft-deleted; ROK-596: include departed
     const signups = await this.db
       .select()
       .from(schema.eventSignups)
@@ -1117,6 +1106,18 @@ export class SignupsService {
         ),
       )
       .orderBy(schema.eventSignups.signedUpAt);
+
+    // If no signups, verify event exists (rare path — most events have at least the creator)
+    if (signups.length === 0) {
+      const [event] = await this.db
+        .select({ id: schema.events.id })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1);
+      if (!event) {
+        throw new NotFoundException(`Event with ID ${eventId} not found`);
+      }
+    }
 
     const signupResponses: SignupResponseDto[] = signups.map((row) => {
       const isAnonymous = !row.event_signups.userId;
@@ -1671,53 +1672,70 @@ export class SignupsService {
   async getRosterWithAssignments(
     eventId: number,
   ): Promise<RosterWithAssignments> {
-    // Verify event exists
-    const [event] = await this.db
-      .select()
-      .from(schema.events)
-      .where(eq(schema.events.id, eventId))
-      .limit(1);
+    // Fetch event (only fields needed for slot config) and signups+assignments in parallel
+    const [eventResult, signupsWithAssignments] = await Promise.all([
+      this.db
+        .select({
+          id: schema.events.id,
+          slotConfig: schema.events.slotConfig,
+          maxAttendees: schema.events.maxAttendees,
+          gameId: schema.events.gameId,
+        })
+        .from(schema.events)
+        .where(eq(schema.events.id, eventId))
+        .limit(1),
+      // Single query: signups + users + characters + roster assignments via LEFT JOIN
+      // ROK-421: exclude soft-deleted; ROK-596: include departed
+      this.db
+        .select()
+        .from(schema.eventSignups)
+        .leftJoin(
+          schema.users,
+          eq(schema.eventSignups.userId, schema.users.id),
+        )
+        .leftJoin(
+          schema.characters,
+          eq(schema.eventSignups.characterId, schema.characters.id),
+        )
+        .leftJoin(
+          schema.rosterAssignments,
+          and(
+            eq(
+              schema.rosterAssignments.signupId,
+              schema.eventSignups.id,
+            ),
+            eq(schema.rosterAssignments.eventId, eventId),
+          ),
+        )
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            ne(schema.eventSignups.status, 'roached_out'),
+            ne(schema.eventSignups.status, 'declined'),
+          ),
+        )
+        .orderBy(schema.eventSignups.signedUpAt),
+    ]);
 
+    const event = eventResult[0];
     if (!event) {
       throw new NotFoundException(`Event with ID ${eventId} not found`);
     }
 
-    // Get all signups with user and character data (exclude soft-deleted statuses)
-    // ROK-596: Include departed signups so frontend can display them in the Departed section
-    const signups = await this.db
-      .select()
-      .from(schema.eventSignups)
-      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-      .leftJoin(
-        schema.characters,
-        eq(schema.eventSignups.characterId, schema.characters.id),
-      )
-      .where(
-        and(
-          eq(schema.eventSignups.eventId, eventId),
-          ne(schema.eventSignups.status, 'roached_out'),
-          ne(schema.eventSignups.status, 'declined'),
-        ),
-      )
-      .orderBy(schema.eventSignups.signedUpAt);
-
-    // Get all assignments
-    const assignments = await this.db
-      .select()
-      .from(schema.rosterAssignments)
-      .where(eq(schema.rosterAssignments.eventId, eventId));
-
-    const assignmentBySignupId = new Map(
-      assignments.map((a) => [a.signupId, a]),
-    );
-
-    // Build response arrays
+    // Build response arrays from the single joined result
     const pool: RosterAssignmentResponse[] = [];
     const assigned: RosterAssignmentResponse[] = [];
 
-    for (const row of signups) {
-      const assignment = assignmentBySignupId.get(row.event_signups.id);
-      const response = this.buildRosterAssignmentResponse(row, assignment);
+    for (const row of signupsWithAssignments) {
+      const assignment = row.roster_assignments ?? undefined;
+      const response = this.buildRosterAssignmentResponse(
+        {
+          event_signups: row.event_signups,
+          users: row.users,
+          characters: row.characters,
+        },
+        assignment,
+      );
 
       if (assignment) {
         assigned.push(response);

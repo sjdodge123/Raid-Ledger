@@ -1451,31 +1451,24 @@ describe('SignupsService', () => {
         confirmationStatus: 'confirmed',
       };
 
-      mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([mockEvent]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
+      // ROK-686: getRoster now queries signups first (single query), skips event check when signups exist
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
-              leftJoin: jest.fn().mockReturnValue({
-                where: jest.fn().mockReturnValue({
-                  orderBy: jest.fn().mockResolvedValue([
-                    {
-                      event_signups: signupWithChar,
-                      users: mockUser,
-                      characters: mockCharacter,
-                    },
-                  ]),
-                }),
+              where: jest.fn().mockReturnValue({
+                orderBy: jest.fn().mockResolvedValue([
+                  {
+                    event_signups: signupWithChar,
+                    users: mockUser,
+                    characters: mockCharacter,
+                  },
+                ]),
               }),
             }),
           }),
-        });
+        }),
+      });
 
       const result = await service.getRoster(1);
 
@@ -1487,31 +1480,24 @@ describe('SignupsService', () => {
     });
 
     it('should return roster with null character for pending signups', async () => {
-      mockDb.select
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
-            where: jest.fn().mockReturnValue({
-              limit: jest.fn().mockResolvedValue([mockEvent]),
-            }),
-          }),
-        })
-        .mockReturnValueOnce({
-          from: jest.fn().mockReturnValue({
+      // ROK-686: getRoster now queries signups first (single query), skips event check when signups exist
+      mockDb.select.mockReturnValueOnce({
+        from: jest.fn().mockReturnValue({
+          leftJoin: jest.fn().mockReturnValue({
             leftJoin: jest.fn().mockReturnValue({
-              leftJoin: jest.fn().mockReturnValue({
-                where: jest.fn().mockReturnValue({
-                  orderBy: jest.fn().mockResolvedValue([
-                    {
-                      event_signups: mockSignup,
-                      users: mockUser,
-                      characters: null,
-                    },
-                  ]),
-                }),
+              where: jest.fn().mockReturnValue({
+                orderBy: jest.fn().mockResolvedValue([
+                  {
+                    event_signups: mockSignup,
+                    users: mockUser,
+                    characters: null,
+                  },
+                ]),
               }),
             }),
           }),
-        });
+        }),
+      });
 
       const result = await service.getRoster(1);
 
@@ -1520,13 +1506,28 @@ describe('SignupsService', () => {
     });
 
     it('should throw NotFoundException when event does not exist', async () => {
-      mockDb.select.mockReturnValueOnce({
-        from: jest.fn().mockReturnValue({
-          where: jest.fn().mockReturnValue({
-            limit: jest.fn().mockResolvedValue([]),
+      // ROK-686: getRoster now queries signups first; when empty, does event existence check
+      mockDb.select
+        // 1. Signups query returns empty
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            leftJoin: jest.fn().mockReturnValue({
+              leftJoin: jest.fn().mockReturnValue({
+                where: jest.fn().mockReturnValue({
+                  orderBy: jest.fn().mockResolvedValue([]),
+                }),
+              }),
+            }),
           }),
-        }),
-      });
+        })
+        // 2. Event existence check returns empty
+        .mockReturnValueOnce({
+          from: jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnValue({
+              limit: jest.fn().mockResolvedValue([]),
+            }),
+          }),
+        });
 
       await expect(service.getRoster(999)).rejects.toThrow(NotFoundException);
     });
