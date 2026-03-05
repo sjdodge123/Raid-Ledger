@@ -19,6 +19,14 @@ Implement this story from the spec below.
 - For new DB tables: use Drizzle schema + `npm run db:generate -w api` for migrations.
 - For new frontend pages: add routes in App.tsx, follow existing page component patterns.
 
+### File & Function Size Limits (STRICT — enforced by ESLint)
+- **Max 300 lines per file** (skipBlankLines, skipComments) — `max-lines: error`
+- **Max 30 lines per function** (skipBlankLines, skipComments) — `max-lines-per-function: error`
+- **Plan your code to fit within these limits BEFORE writing.** Do not write a large file and refactor after — design small, focused modules from the start.
+- Extract helpers, sub-services, utility modules, and child components proactively.
+- Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
+- If you find yourself approaching 300 lines in a file or 30 lines in a function, stop and split.
+
 ### Workflow
 1. You are already on branch `rok-<num>-<short-name>` in your worktree
 2. Implement all acceptance criteria

@@ -21,6 +21,14 @@ Monorepo: `api` (NestJS), `web` (React/Vite), `packages/contract` (shared types)
 - **DEMO_MODE=true** in root `.env` enables auth bypass with prefilled credentials
 - **Docker volume gotcha (handled automatically):** The deploy script uses `docker start` by name first, falling back to `docker compose` from the main repo's compose file. This prevents worktrees from creating separate volumes with wrong directory prefixes.
 
+## Code Size Limits (STRICT — enforced by ESLint)
+
+- **Max 300 lines per file** (`max-lines: error`, skipBlankLines + skipComments)
+- **Max 30 lines per function** (`max-lines-per-function: error`, skipBlankLines + skipComments)
+- **Design small from the start** — do not write large files and refactor after. Plan focused modules, extract helpers/sub-services/child components proactively.
+- Test files (`*.spec.ts`, `*.test.tsx`) have a relaxed **750-line** file limit (not 300).
+- Migration files are exempt from both limits.
+
 ## Testing
 
 - **Backend:** `npm run test -w api` (Jest). Coverage: `npm run test:cov -w api`
