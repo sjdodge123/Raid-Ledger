@@ -911,8 +911,9 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
 
       // user-1 plays the bound game, user-2 plays a different game
       mockPresenceDetector.detectGameForMember.mockImplementation(
-        async (member: { id: string }) => {
-          if (member.id === 'user-1') return { gameId: 1, gameName: 'Rise of Kingdoms' };
+        (member: { id: string }) => {
+          if (member.id === 'user-1')
+            return { gameId: 1, gameName: 'Rise of Kingdoms' };
           return { gameId: 99, gameName: 'Completely Different Game' };
         },
       );
@@ -1006,8 +1007,9 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
       ]);
 
       mockPresenceDetector.detectGameForMember.mockImplementation(
-        async (member: { id: string }) => {
-          if (member.id === 'user-3') return { gameId: 99, gameName: 'Other Game' };
+        (member: { id: string }) => {
+          if (member.id === 'user-3')
+            return { gameId: 99, gameName: 'Other Game' };
           return { gameId: 1, gameName: 'Rise of Kingdoms' };
         },
       );
@@ -1061,8 +1063,9 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
       const handler = await setupWithBinding('voice-ch', gameBinding);
 
       mockPresenceDetector.detectGameForMember.mockImplementation(
-        async (member: { id: string }) => {
-          if (member.id === 'user-1') return { gameId: 1, gameName: 'Rise of Kingdoms' };
+        (member: { id: string }) => {
+          if (member.id === 'user-1')
+            return { gameId: 1, gameName: 'Rise of Kingdoms' };
           return { gameId: null, gameName: 'Untitled Gaming Session' };
         },
       );
