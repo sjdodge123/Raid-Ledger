@@ -244,7 +244,7 @@ export function CalendarView({
     const handleSelectEvent = useCallback(
         (event: CalendarEvent) => {
             const isMobile = window.innerWidth < 768;
-            if (isMobile && view === Views.MONTH) {
+            if (isMobile && view === Views.MONTH && !isScheduleView) {
                 setCurrentDate(event.start);
                 setView(Views.DAY);
                 onCalendarViewChange?.('day');
