@@ -104,6 +104,18 @@ export class VoiceStateListener implements OnApplicationShutdown {
    */
   private pendingRechecks = new Map<string, NodeJS.Timeout>();
 
+  /**
+   * ROK-697: Pending quick play spawn timers per channel.
+   * When the minPlayers threshold is met but NOT all threshold players share
+   * the same game activity, we delay the spawn by 15 minutes. If the count
+   * drops below threshold during the wait, the timer is cancelled.
+   * Key: channelId
+   */
+  private pendingSpawnTimers = new Map<string, NodeJS.Timeout>();
+
+  /** ROK-697: Delay before spawning a quick play event without unanimous game activity. */
+  private static readonly SPAWN_DELAY_MS = 15 * 60 * 1000;
+
   constructor(
     private readonly clientService: DiscordBotClientService,
     private readonly adHocEventService: AdHocEventService,
@@ -198,6 +210,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
     this.pendingRechecks.clear();
 
+    // ROK-697: Clear pending spawn timers
+    for (const timer of this.pendingSpawnTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingSpawnTimers.clear();
+
     if (this.cacheSweepTimer) {
       clearInterval(this.cacheSweepTimer);
       this.cacheSweepTimer = null;
@@ -228,6 +246,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
       clearTimeout(timer);
     }
     this.pendingRechecks.clear();
+
+    // ROK-697: Clear pending spawn timers
+    for (const timer of this.pendingSpawnTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.pendingSpawnTimers.clear();
 
     if (this.cacheSweepTimer) {
       clearInterval(this.cacheSweepTimer);
@@ -515,13 +539,23 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
 
     // No event — check threshold
-    if (members.size < minPlayers) {
+    // ROK-697: For game-specific bindings, exclude members playing a different game
+    // from the threshold count. Members playing the bound game or no game count.
+    const { counted: filteredCount, allConfirmed } =
+      await this.getGameFilteredCount(channelId, binding);
+    if (filteredCount < minPlayers) {
       return;
     }
 
-    // ROK-611: Threshold met — roster ALL channel members, not just the trigger.
-    // This mirrors the general-lobby group detection pattern.
-    await this.handleGameSpecificGroupRoster(channelId, binding);
+    // ROK-697: Threshold met — if all counted members are confirmed playing the
+    // bound game (no null gameId), spawn immediately. Otherwise, 15-min delay.
+    if (allConfirmed) {
+      // All counted members confirmed playing the bound game → spawn immediately
+      this.cancelPendingSpawn(channelId);
+      await this.handleGameSpecificGroupRoster(channelId, binding);
+    } else {
+      this.scheduleDelayedSpawn(channelId, binding);
+    }
   }
 
   /**
@@ -617,11 +651,20 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
 
     // When we hit the threshold and no event exists, do group detection
+    // ROK-697: Check if all threshold members share the same game before spawning
     if (!state && memberCount >= minPlayers && guildMember) {
-      this.logger.debug(
-        `General lobby: threshold met (${memberCount}/${minPlayers}), running group detection`,
-      );
-      await this.handleGeneralLobbyGroupDetection(channelId, binding);
+      if (await this.shouldSpawnImmediately(channelId, binding)) {
+        this.logger.debug(
+          `General lobby: threshold met (${memberCount}/${minPlayers}), unanimous game — running group detection immediately`,
+        );
+        this.cancelPendingSpawn(channelId);
+        await this.handleGeneralLobbyGroupDetection(channelId, binding);
+      } else {
+        this.logger.debug(
+          `General lobby: threshold met (${memberCount}/${minPlayers}), no unanimous game — scheduling delayed spawn`,
+        );
+        this.scheduleDelayedSpawn(channelId, binding);
+      }
       return;
     }
 
@@ -863,6 +906,189 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
   }
 
+  /**
+   * ROK-697: For game-specific bindings, count channel members that are relevant
+   * to the threshold: playing the bound game OR no game detected.
+   * Members playing a DIFFERENT game are excluded — they're not here for this game.
+   * Returns { counted, allConfirmed } where allConfirmed means zero no-game members.
+   */
+  private async getGameFilteredCount(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): Promise<{ counted: number; allConfirmed: boolean }> {
+    const client = this.clientService.getClient();
+    if (!client) return { counted: 0, allConfirmed: false };
+
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return { counted: 0, allConfirmed: false };
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return { counted: 0, allConfirmed: false };
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased())
+      return { counted: 0, allConfirmed: false };
+
+    if (!binding.gameId) return { counted: 0, allConfirmed: false };
+
+    const voiceMembers = [...channel.members.values()];
+    let counted = 0;
+    let allConfirmed = true;
+
+    for (const member of voiceMembers) {
+      const detected = await this.presenceDetector.detectGameForMember(member);
+      if (detected.gameId !== null && detected.gameId !== binding.gameId) {
+        // Playing a different game — exclude entirely
+        continue;
+      }
+      counted++;
+      if (detected.gameId === null) {
+        allConfirmed = false;
+      }
+    }
+
+    return { counted, allConfirmed };
+  }
+
+  /**
+   * ROK-697: Check if all members in the channel share the same game activity.
+   * For game-specific bindings: checks if all counted members (excluding different-game
+   * players) are confirmed playing the bound game (no null gameId members).
+   * For general-lobby bindings: checks if all members are playing the same game.
+   * Returns true if unanimous game activity is detected (spawn immediately).
+   */
+  private async shouldSpawnImmediately(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): Promise<boolean> {
+    const client = this.clientService.getClient();
+    if (!client) return false;
+
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return false;
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return false;
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased()) return false;
+
+    const minPlayers = binding.config?.minPlayers ?? 2;
+    const voiceMembers = [...channel.members.values()];
+    if (voiceMembers.length < minPlayers) return false;
+
+    if (binding.bindingPurpose === 'general-lobby') {
+      // For general-lobby: check if all members play the same game
+      const detections = await Promise.all(
+        voiceMembers.map((m) => this.presenceDetector.detectGameForMember(m)),
+      );
+
+      // All must have a detected game (non-null gameId) and same gameId
+      const firstGameId = detections[0]?.gameId;
+      if (firstGameId === null || firstGameId === undefined) return false;
+
+      return detections.every((d) => d.gameId === firstGameId);
+    }
+
+    // Game-specific bindings use getGameFilteredCount directly in the join handler
+    return false;
+  }
+
+  /**
+   * ROK-697: Schedule a delayed quick play spawn for a channel.
+   * If a timer is already pending, this is a no-op (don't reset the timer
+   * on subsequent joins — only the first threshold-crossing sets the timer).
+   */
+  private scheduleDelayedSpawn(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): void {
+    if (this.pendingSpawnTimers.has(channelId)) {
+      this.logger.debug(
+        `ROK-697: delayed spawn already pending for channel ${channelId}, skipping`,
+      );
+      return;
+    }
+
+    this.logger.log(
+      `ROK-697: scheduling delayed spawn (${VoiceStateListener.SPAWN_DELAY_MS / 60000}min) for channel ${channelId}`,
+    );
+
+    const timer = setTimeout(() => {
+      this.pendingSpawnTimers.delete(channelId);
+
+      const execute = async () => {
+        // Re-check that threshold is still met
+        // ROK-697: For game-specific bindings, use filtered count (exclude different-game players)
+        const minPlayers = binding.config?.minPlayers ?? 2;
+        if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
+          const { counted } = await this.getGameFilteredCount(
+            channelId,
+            binding,
+          );
+          if (counted < minPlayers) {
+            this.logger.debug(
+              `ROK-697: delayed spawn fired but filtered threshold no longer met for channel ${channelId}`,
+            );
+            return;
+          }
+        } else {
+          const members = this.channelMembers.get(channelId);
+          if (!members || members.size < minPlayers) {
+            this.logger.debug(
+              `ROK-697: delayed spawn fired but threshold no longer met for channel ${channelId}`,
+            );
+            return;
+          }
+        }
+
+        // Re-check no active event exists
+        const state =
+          binding.bindingPurpose === 'general-lobby'
+            ? undefined // General lobby uses composite keys; group detection handles this
+            : this.adHocEventService.getActiveState(binding.bindingId);
+        if (state) {
+          this.logger.debug(
+            `ROK-697: delayed spawn fired but event already active for channel ${channelId}`,
+          );
+          return;
+        }
+
+        this.logger.log(
+          `ROK-697: delayed spawn firing for channel ${channelId}`,
+        );
+
+        if (binding.bindingPurpose === 'general-lobby') {
+          await this.handleGeneralLobbyGroupDetection(channelId, binding);
+        } else {
+          await this.handleGameSpecificGroupRoster(channelId, binding);
+        }
+      };
+
+      execute().catch((err) => {
+        this.logger.error(
+          `ROK-697: error executing delayed spawn for channel ${channelId}: ${err}`,
+        );
+      });
+    }, VoiceStateListener.SPAWN_DELAY_MS);
+
+    this.pendingSpawnTimers.set(channelId, timer);
+  }
+
+  /**
+   * ROK-697: Cancel a pending delayed spawn timer for a channel.
+   */
+  private cancelPendingSpawn(channelId: string): void {
+    const timer = this.pendingSpawnTimers.get(channelId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingSpawnTimers.delete(channelId);
+      this.logger.debug(
+        `ROK-697: cancelled pending spawn timer for channel ${channelId}`,
+      );
+    }
+  }
+
   private async handleChannelLeave(
     channelId: string,
     discordUserId: string,
@@ -917,6 +1143,12 @@ export class VoiceStateListener implements OnApplicationShutdown {
       members.delete(discordUserId);
       if (members.size === 0) {
         this.channelMembers.delete(channelId);
+      }
+
+      // ROK-697: Cancel pending spawn timer if count drops below threshold
+      const minPlayers = binding.config?.minPlayers ?? 2;
+      if (members.size < minPlayers) {
+        this.cancelPendingSpawn(channelId);
       }
     }
 
