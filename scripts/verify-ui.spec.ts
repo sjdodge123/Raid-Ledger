@@ -184,13 +184,7 @@ test.describe('Events list', () => {
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
         // Search for a nonsense term — should show empty state.
-        // Use native value setter to bypass React's controlled input value tracker,
-        // which can suppress onChange when pressSequentially races with React re-renders.
-        await searchInput.evaluate((el: HTMLInputElement) => {
-            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-            nativeSetter.call(el, 'xyznonexistent');
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await searchInput.fill('xyznonexistent');
         // Wait for the event cards to disappear (filtered out)
         await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
@@ -200,11 +194,7 @@ test.describe('Events list', () => {
         expect(count).toBe(0);
 
         // Clear search — events should reappear
-        await searchInput.evaluate((el: HTMLInputElement) => {
-            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
-            nativeSetter.call(el, '');
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        await searchInput.fill('');
         await expect(
             page.locator('.hidden.md\\:grid [role="button"]').first()
         ).toBeVisible({ timeout: 5_000 });
