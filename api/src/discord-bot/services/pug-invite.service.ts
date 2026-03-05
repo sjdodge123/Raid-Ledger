@@ -467,8 +467,10 @@ export class PugInviteService {
 
     // Add voice channel link if available (resolve voice monitor binding)
     const gameId = this.resolveIntegerGameId(event);
-    const channelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(gameId);
+    const channelId = await this.channelResolver.resolveVoiceChannelForEvent(
+      gameId,
+      event.recurrenceGroupId,
+    );
     if (channelId) {
       embed.addFields({
         name: 'Voice Channel',
@@ -580,7 +582,10 @@ export class PugInviteService {
       .setTimestamp();
 
     const voiceChannelId =
-      await this.channelResolver.resolveVoiceChannelForEvent(gameId);
+      await this.channelResolver.resolveVoiceChannelForEvent(
+        gameId,
+        event.recurrenceGroupId,
+      );
     if (voiceChannelId) {
       embed.addFields({
         name: 'Voice Channel',

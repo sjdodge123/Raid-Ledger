@@ -37,7 +37,10 @@ function makeSelectFromWhere(resolvedValue: unknown[]) {
 describe('LiveNoShowService', () => {
   let service: LiveNoShowService;
   let mockDb: Record<string, jest.Mock>;
-  let mockNotificationService: { create: jest.Mock };
+  let mockNotificationService: {
+    create: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
+  };
   let mockCronJobService: { executeWithTracking: jest.Mock };
   let mockVoiceAttendance: { isUserActive: jest.Mock };
 
@@ -71,6 +74,7 @@ describe('LiveNoShowService', () => {
 
     mockNotificationService = {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
     };
 
     mockCronJobService = {
