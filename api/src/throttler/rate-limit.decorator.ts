@@ -12,6 +12,7 @@ export const RATE_LIMIT_TIERS = {
   auth: { ttl: 60_000, limit: isTestEnv ? 999_999 : 10 },
   search: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
   admin: { ttl: 60_000, limit: isTestEnv ? 999_999 : 120 },
+  export: { ttl: 60_000, limit: isTestEnv ? 999_999 : 5 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;
