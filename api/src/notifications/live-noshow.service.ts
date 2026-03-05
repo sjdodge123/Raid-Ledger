@@ -89,6 +89,7 @@ export class LiveNoShowService {
       startTime: Date;
       endTime: Date;
       gameId: number | null;
+      recurrenceGroupId: string | null;
     }>
   > {
     // Events where: not ad-hoc, not cancelled, started at least 5 min ago,
@@ -101,6 +102,7 @@ export class LiveNoShowService {
         title: schema.events.title,
         creatorId: schema.events.creatorId,
         gameId: schema.events.gameId,
+        recurrenceGroupId: schema.events.recurrenceGroupId,
         duration: schema.events.duration,
       })
       .from(schema.events)
@@ -120,6 +122,7 @@ export class LiveNoShowService {
       title: r.title,
       creatorId: r.creatorId,
       gameId: r.gameId,
+      recurrenceGroupId: r.recurrenceGroupId,
       startTime: r.duration[0],
       endTime: r.duration[1],
     }));
@@ -136,12 +139,14 @@ export class LiveNoShowService {
     startTime: Date;
     endTime: Date;
     gameId: number | null;
+    recurrenceGroupId: string | null;
   }): Promise<void> {
     const absentPlayers = await this.getAbsentSignedUpPlayers(event.id);
     if (absentPlayers.length === 0) return;
 
-    // Resolve voice channel for the event's game
-    const voiceChannelId = await this.resolveVoiceChannelId(event.gameId);
+    // Resolve voice channel using 3-tier fallback (series → game → default) (ROK-693)
+    const voiceChannelId =
+      await this.notificationService.resolveVoiceChannelForEvent(event.id);
 
     for (const player of absentPlayers) {
       if (!player.userId) continue; // Skip anonymous signups for Phase 1 DMs
@@ -185,6 +190,7 @@ export class LiveNoShowService {
     startTime: Date;
     endTime: Date;
     gameId: number | null;
+    recurrenceGroupId: string | null;
   }): Promise<void> {
     // Check if we already sent the creator escalation for this event
     const alreadyEscalated = await this.hasReminderBeenSent(
@@ -307,6 +313,7 @@ export class LiveNoShowService {
     }>
   > {
     // Get all signups with status = 'signed_up' (exclude tentative, declined, roached_out, departed)
+    // ROK-695/ROK-696: Exclude benched players via NOT EXISTS subquery
     const signups = await this.db
       .select({
         userId: schema.eventSignups.userId,
@@ -318,10 +325,20 @@ export class LiveNoShowService {
         and(
           eq(schema.eventSignups.eventId, eventId),
           eq(schema.eventSignups.status, 'signed_up'),
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${schema.rosterAssignments}
+            WHERE ${schema.rosterAssignments.eventId} = ${schema.eventSignups.eventId}
+              AND ${schema.rosterAssignments.signupId} = ${schema.eventSignups.id}
+              AND ${schema.rosterAssignments.role} = 'bench'
+          )`,
         ),
       );
 
-    const absent: typeof signups = [];
+    const absent: Array<{
+      userId: number | null;
+      discordUserId: string | null;
+      discordUsername: string | null;
+    }> = [];
 
     for (const signup of signups) {
       // Fall back to users.discordId when signup doesn't have a discordUserId
@@ -461,28 +478,6 @@ export class LiveNoShowService {
       );
 
     return rows.map((r) => r.userId);
-  }
-
-  /**
-   * Resolve the voice channel ID for a game via channel_bindings.
-   */
-  private async resolveVoiceChannelId(
-    gameId: number | null,
-  ): Promise<string | null> {
-    if (!gameId) return null;
-
-    const [binding] = await this.db
-      .select({ channelId: schema.channelBindings.channelId })
-      .from(schema.channelBindings)
-      .where(
-        and(
-          eq(schema.channelBindings.gameId, gameId),
-          eq(schema.channelBindings.bindingPurpose, 'game-voice-monitor'),
-        ),
-      )
-      .limit(1);
-
-    return binding?.channelId ?? null;
   }
 
   /**
