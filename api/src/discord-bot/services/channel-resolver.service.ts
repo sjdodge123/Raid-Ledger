@@ -82,17 +82,16 @@ export class ChannelResolverService {
 
   /**
    * Resolve the voice channel for an event (for invite DM embeds).
-   * Looks for game-specific voice-monitor bindings only (ROK-592).
+   * 3-tier fallback: series binding → game binding → app setting default (ROK-693).
    * @param gameId - Games table PK (integer) for game-specific binding lookup
+   * @param recurrenceGroupId - Optional recurrence group ID for series-specific binding
    * @returns Voice channel ID string or null if none configured
    */
   async resolveVoiceChannelForEvent(
     gameId?: number | null,
+    recurrenceGroupId?: string | null,
   ): Promise<string | null> {
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return null;
-
-    return this.channelBindingsService.getVoiceChannelForGame(guildId, gameId);
+    return this.resolveVoiceChannelForScheduledEvent(gameId, recurrenceGroupId);
   }
 
   /**
@@ -121,8 +120,14 @@ export class ChannelResolverService {
     }
 
     // Tier 2: Game-specific voice binding
-    const voiceChannel = await this.resolveVoiceChannelForEvent(gameId);
-    if (voiceChannel) return voiceChannel;
+    if (guildId) {
+      const voiceChannel =
+        await this.channelBindingsService.getVoiceChannelForGame(
+          guildId,
+          gameId,
+        );
+      if (voiceChannel) return voiceChannel;
+    }
 
     // Tier 3: App setting fallback
     const defaultVoice =
