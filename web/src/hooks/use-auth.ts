@@ -122,6 +122,8 @@ export function useAuth() {
             // between refetchQueries and useQuery observers mounting on navigation
             const user = await fetchCurrentUser();
             queryClient.setQueryData(['auth', 'me'], user);
+            // Clear any stale event data cached before login (e.g. empty/401 responses)
+            queryClient.invalidateQueries({ queryKey: ['events'] });
             return user;
         } catch (error) {
             // Token is stored — will be fetched on next page load
