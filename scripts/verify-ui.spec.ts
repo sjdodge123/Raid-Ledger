@@ -183,10 +183,15 @@ test.describe('Events list', () => {
         const searchInput = desktopFilterBar.locator('input[aria-label="Search events"]');
         await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
-        // Search for a nonsense term — should show empty state
-        // Use pressSequentially to trigger input/change events that drive the search filter
-        await searchInput.pressSequentially('xyznonexistent', { delay: 50 });
-        // Wait for the event cards to disappear (filtered out) — allow extra time for CI debounce
+        // Search for a nonsense term — should show empty state.
+        // Use native value setter to bypass React's controlled input value tracker,
+        // which can suppress onChange when pressSequentially races with React re-renders.
+        await searchInput.evaluate((el: HTMLInputElement) => {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            nativeSetter.call(el, 'xyznonexistent');
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        // Wait for the event cards to disappear (filtered out)
         await expect(page.locator('.hidden.md\\:grid [role="button"]').first()).not.toBeVisible({ timeout: 10_000 });
 
         // Should show zero event cards
@@ -195,7 +200,11 @@ test.describe('Events list', () => {
         expect(count).toBe(0);
 
         // Clear search — events should reappear
-        await searchInput.clear();
+        await searchInput.evaluate((el: HTMLInputElement) => {
+            const nativeSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+            nativeSetter.call(el, '');
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        });
         await expect(
             page.locator('.hidden.md\\:grid [role="button"]').first()
         ).toBeVisible({ timeout: 5_000 });
