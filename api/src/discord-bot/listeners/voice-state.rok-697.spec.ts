@@ -568,7 +568,14 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
       mockChannelBindingsService.getBindingsWithGameNames.mockResolvedValue([]);
 
       let handler!: (oldState: unknown, newState: unknown) => void;
-      const mockClient = createMockClient(new Map([['unbound-ch', createVoiceChannel([{ id: 'user-1', displayName: 'P1' }])]]));
+      const mockClient = createMockClient(
+        new Map([
+          [
+            'unbound-ch',
+            createVoiceChannel([{ id: 'user-1', displayName: 'P1' }]),
+          ],
+        ]),
+      );
       mockClient.on.mockImplementation(
         (event: string, h: (...args: unknown[]) => void) => {
           if (event === (Events.VoiceStateUpdate as string)) handler = h;
@@ -647,7 +654,10 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
       // First member playing the game, second has null gameId → not unanimous
       mockPresenceDetector.detectGameForMember
         .mockResolvedValueOnce({ gameId: 1, gameName: 'Rise of Kingdoms' })
-        .mockResolvedValueOnce({ gameId: null, gameName: 'Untitled Gaming Session' });
+        .mockResolvedValueOnce({
+          gameId: null,
+          gameName: 'Untitled Gaming Session',
+        });
 
       mockAdHocEventService.getActiveState.mockReturnValue(undefined);
 
@@ -690,15 +700,11 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
 
   describe('edge cases', () => {
     it('does not schedule a second delayed spawn timer when a third player joins during the wait', async () => {
-      const handler = await setupWithBinding(
-        'voice-ch',
-        gameBinding,
-        [
-          { id: 'user-1', displayName: 'Player1' },
-          { id: 'user-2', displayName: 'Player2' },
-          { id: 'user-3', displayName: 'Player3' },
-        ],
-      );
+      const handler = await setupWithBinding('voice-ch', gameBinding, [
+        { id: 'user-1', displayName: 'Player1' },
+        { id: 'user-2', displayName: 'Player2' },
+        { id: 'user-3', displayName: 'Player3' },
+      ]);
 
       // No game activity → delayed spawn
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -892,6 +898,208 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints', () =>
       // After delay, client still null → group roster also cannot run → no spawn
       await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
       expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── AC6: Game-specific binding — filtered threshold logic ─────────────────
+
+  describe('AC6: game-specific binding — different-game members excluded from threshold', () => {
+    it('excludes members playing a different game from threshold count', async () => {
+      // 2 members in channel, minPlayers=2, but one plays a different game
+      // → only 1 counted member → below threshold → no spawn at all
+      const handler = await setupWithBinding('voice-ch', gameBinding);
+
+      // user-1 plays the bound game, user-2 plays a different game
+      mockPresenceDetector.detectGameForMember.mockImplementation(
+        async (member: { id: string }) => {
+          if (member.id === 'user-1') return { gameId: 1, gameName: 'Rise of Kingdoms' };
+          return { gameId: 99, gameName: 'Completely Different Game' };
+        },
+      );
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      handler(
+        { channelId: null, id: 'user-1' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-1',
+          member: {
+            displayName: 'Player1',
+            user: { username: 'Player1', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      handler(
+        { channelId: null, id: 'user-2' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-2',
+          member: {
+            displayName: 'Player2',
+            user: { username: 'Player2', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // No immediate spawn — filtered count is 1 (below minPlayers=2)
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      // No delayed spawn either — threshold was never met
+      await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+    });
+
+    it('counts no-game members toward threshold but triggers delayed path', async () => {
+      // 2 members, both have no game detected → counted=2, allConfirmed=false → delayed
+      const handler = await setupWithBinding('voice-ch', gameBinding);
+
+      mockPresenceDetector.detectGameForMember.mockResolvedValue({
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+      });
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      handler(
+        { channelId: null, id: 'user-1' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-1',
+          member: {
+            displayName: 'Player1',
+            user: { username: 'Player1', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      handler(
+        { channelId: null, id: 'user-2' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-2',
+          member: {
+            displayName: 'Player2',
+            user: { username: 'Player2', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // No immediate spawn — no-game members trigger delay
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      // Spawns after 15-min delay
+      await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    });
+
+    it('spawns immediately when 2 play bound game + 1 plays different game (minPlayers=2)', async () => {
+      // 3 members: user-1 and user-2 play bound game, user-3 plays a different game
+      // Filtered count: 2 (user-1 + user-2), allConfirmed=true → immediate spawn
+      const handler = await setupWithBinding('voice-ch', gameBinding, [
+        { id: 'user-1', displayName: 'Player1' },
+        { id: 'user-2', displayName: 'Player2' },
+        { id: 'user-3', displayName: 'Player3' },
+      ]);
+
+      mockPresenceDetector.detectGameForMember.mockImplementation(
+        async (member: { id: string }) => {
+          if (member.id === 'user-3') return { gameId: 99, gameName: 'Other Game' };
+          return { gameId: 1, gameName: 'Rise of Kingdoms' };
+        },
+      );
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      handler(
+        { channelId: null, id: 'user-1' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-1',
+          member: {
+            displayName: 'Player1',
+            user: { username: 'Player1', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      handler(
+        { channelId: null, id: 'user-2' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-2',
+          member: {
+            displayName: 'Player2',
+            user: { username: 'Player2', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      handler(
+        { channelId: null, id: 'user-3' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-3',
+          member: {
+            displayName: 'Player3',
+            user: { username: 'Player3', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // Different-game player excluded → 2 confirmed bound-game players → immediate
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
+    });
+
+    it('delays spawn when 1 plays bound game + 1 has no game (minPlayers=2)', async () => {
+      // user-1 plays bound game, user-2 has no game → counted=2, allConfirmed=false → delayed
+      const handler = await setupWithBinding('voice-ch', gameBinding);
+
+      mockPresenceDetector.detectGameForMember.mockImplementation(
+        async (member: { id: string }) => {
+          if (member.id === 'user-1') return { gameId: 1, gameName: 'Rise of Kingdoms' };
+          return { gameId: null, gameName: 'Untitled Gaming Session' };
+        },
+      );
+      mockAdHocEventService.getActiveState.mockReturnValue(undefined);
+
+      handler(
+        { channelId: null, id: 'user-1' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-1',
+          member: {
+            displayName: 'Player1',
+            user: { username: 'Player1', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      handler(
+        { channelId: null, id: 'user-2' },
+        {
+          channelId: 'voice-ch',
+          id: 'user-2',
+          member: {
+            displayName: 'Player2',
+            user: { username: 'Player2', avatar: null },
+          },
+        },
+      );
+      await jest.advanceTimersByTimeAsync(2100);
+
+      // No immediate spawn — no-game member triggers delay
+      expect(mockAdHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+
+      // Spawns after delay
+      await jest.advanceTimersByTimeAsync(SPAWN_DELAY_MS + 100);
+      expect(mockAdHocEventService.handleVoiceJoin).toHaveBeenCalled();
     });
   });
 

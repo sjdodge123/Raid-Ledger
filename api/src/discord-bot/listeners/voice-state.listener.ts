@@ -539,14 +539,18 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
 
     // No event — check threshold
-    if (members.size < minPlayers) {
+    // ROK-697: For game-specific bindings, exclude members playing a different game
+    // from the threshold count. Members playing the bound game or no game count.
+    const { counted: filteredCount, allConfirmed } =
+      await this.getGameFilteredCount(channelId, binding);
+    if (filteredCount < minPlayers) {
       return;
     }
 
-    // ROK-697: Threshold met — check if all threshold members share the same
-    // game activity. If yes, spawn immediately. If no, spawn after 15-min delay.
-    if (await this.shouldSpawnImmediately(channelId, binding)) {
-      // ROK-611: Threshold met — roster ALL channel members, not just the trigger.
+    // ROK-697: Threshold met — if all counted members are confirmed playing the
+    // bound game (no null gameId), spawn immediately. Otherwise, 15-min delay.
+    if (allConfirmed) {
+      // All counted members confirmed playing the bound game → spawn immediately
       this.cancelPendingSpawn(channelId);
       await this.handleGameSpecificGroupRoster(channelId, binding);
     } else {
@@ -903,8 +907,53 @@ export class VoiceStateListener implements OnApplicationShutdown {
   }
 
   /**
+   * ROK-697: For game-specific bindings, count channel members that are relevant
+   * to the threshold: playing the bound game OR no game detected.
+   * Members playing a DIFFERENT game are excluded — they're not here for this game.
+   * Returns { counted, allConfirmed } where allConfirmed means zero no-game members.
+   */
+  private async getGameFilteredCount(
+    channelId: string,
+    binding: ResolvedBinding,
+  ): Promise<{ counted: number; allConfirmed: boolean }> {
+    const client = this.clientService.getClient();
+    if (!client) return { counted: 0, allConfirmed: false };
+
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return { counted: 0, allConfirmed: false };
+
+    const guild = client.guilds.cache.get(guildId);
+    if (!guild) return { counted: 0, allConfirmed: false };
+
+    const channel = guild.channels.cache.get(channelId);
+    if (!channel || !channel.isVoiceBased())
+      return { counted: 0, allConfirmed: false };
+
+    if (!binding.gameId) return { counted: 0, allConfirmed: false };
+
+    const voiceMembers = [...channel.members.values()];
+    let counted = 0;
+    let allConfirmed = true;
+
+    for (const member of voiceMembers) {
+      const detected = await this.presenceDetector.detectGameForMember(member);
+      if (detected.gameId !== null && detected.gameId !== binding.gameId) {
+        // Playing a different game — exclude entirely
+        continue;
+      }
+      counted++;
+      if (detected.gameId === null) {
+        allConfirmed = false;
+      }
+    }
+
+    return { counted, allConfirmed };
+  }
+
+  /**
    * ROK-697: Check if all members in the channel share the same game activity.
-   * For game-specific bindings: checks if all members are playing the binding's game.
+   * For game-specific bindings: checks if all counted members (excluding different-game
+   * players) are confirmed playing the bound game (no null gameId members).
    * For general-lobby bindings: checks if all members are playing the same game.
    * Returns true if unanimous game activity is detected (spawn immediately).
    */
@@ -941,15 +990,8 @@ export class VoiceStateListener implements OnApplicationShutdown {
       return detections.every((d) => d.gameId === firstGameId);
     }
 
-    // Game-specific binding: check if all members are playing the binding's game
-    if (!binding.gameId || !binding.gameName) return false;
-
-    for (const member of voiceMembers) {
-      const detected = await this.presenceDetector.detectGameForMember(member);
-      if (detected.gameId !== binding.gameId) return false;
-    }
-
-    return true;
+    // Game-specific bindings use getGameFilteredCount directly in the join handler
+    return false;
   }
 
   /**
@@ -977,13 +1019,27 @@ export class VoiceStateListener implements OnApplicationShutdown {
 
       const execute = async () => {
         // Re-check that threshold is still met
-        const members = this.channelMembers.get(channelId);
+        // ROK-697: For game-specific bindings, use filtered count (exclude different-game players)
         const minPlayers = binding.config?.minPlayers ?? 2;
-        if (!members || members.size < minPlayers) {
-          this.logger.debug(
-            `ROK-697: delayed spawn fired but threshold no longer met for channel ${channelId}`,
+        if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
+          const { counted } = await this.getGameFilteredCount(
+            channelId,
+            binding,
           );
-          return;
+          if (counted < minPlayers) {
+            this.logger.debug(
+              `ROK-697: delayed spawn fired but filtered threshold no longer met for channel ${channelId}`,
+            );
+            return;
+          }
+        } else {
+          const members = this.channelMembers.get(channelId);
+          if (!members || members.size < minPlayers) {
+            this.logger.debug(
+              `ROK-697: delayed spawn fired but threshold no longer met for channel ${channelId}`,
+            );
+            return;
+          }
         }
 
         // Re-check no active event exists
