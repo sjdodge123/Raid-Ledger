@@ -369,10 +369,44 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const graceMs = cachedGraceMs ?? (await this.getGraceMinutes()) * 60 * 1000;
 
     // Load all voice sessions for this event
-    const sessions = await this.db
+    const allSessions = await this.db
       .select()
       .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
+
+    // ROK-707: Only classify voice sessions for users who are signed up.
+    // Non-signed-up users who briefly joined voice should be ignored.
+    const signups = await this.db
+      .select({ discordUserId: schema.eventSignups.discordUserId })
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
+        ),
+      );
+    const signedUpDiscordIds = new Set(
+      signups.map((s) => s.discordUserId).filter(Boolean),
+    );
+
+    const sessions = allSessions.filter((s) =>
+      signedUpDiscordIds.has(s.discordUserId),
+    );
+
+    // Delete voice session records for non-signed-up users
+    const orphanedSessionIds = allSessions
+      .filter((s) => !signedUpDiscordIds.has(s.discordUserId))
+      .map((s) => s.id);
+    if (orphanedSessionIds.length > 0) {
+      await this.db
+        .delete(schema.eventVoiceSessions)
+        .where(
+          sql`${schema.eventVoiceSessions.id} IN (${sql.join(orphanedSessionIds, sql`, `)})`,
+        );
+      this.logger.log(
+        `Removed ${orphanedSessionIds.length} voice session(s) for non-signed-up users in event ${eventId}`,
+      );
+    }
 
     if (sessions.length > 0) {
       // Classify all sessions in memory, then batch UPDATE
