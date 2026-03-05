@@ -8,8 +8,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as readline from 'node:readline';
 import { createGzip } from 'node:zlib';
-import { Readable, PassThrough } from 'node:stream';
+import { Readable, PassThrough, Transform } from 'node:stream';
 import type { LogFileDto, LogService } from '@raid-ledger/contract';
 
 /** Hardcoded production log directory — Docker volume-mounted, survives container recreation. */
@@ -26,7 +27,7 @@ const SCRUB_PATTERNS: RegExp[] = [
   /DATABASE_URL=\S+/gi,
   /JWT_SECRET=\S+/gi,
   /password=\S+/gi,
-  /token=\S+/gi,
+  /\b(?:access_token|refresh_token|api_token|auth_token|bearer_token)=\S+/gi,
   /secret=\S+/gi,
   /Authorization:\s*\S+(\s+\S+)?/gi,
 ];
@@ -111,11 +112,37 @@ export class LogsService {
 
   /**
    * Read a single log file and return scrubbed content as a readable stream.
+   * Uses line-by-line streaming to avoid loading large files into memory.
    */
   createScrubbedStream(filepath: string): Readable {
-    const content = fs.readFileSync(filepath, 'utf-8');
-    const scrubbed = this.scrubContent(content);
-    return Readable.from([scrubbed]);
+    const fileStream = fs.createReadStream(filepath, { encoding: 'utf-8' });
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+    const scrubber = this.createScrubTransform();
+
+    rl.on('line', (line) => {
+      if (!scrubber.write(this.scrubContent(line) + '\n')) {
+        rl.pause();
+        scrubber.once('drain', () => rl.resume());
+      }
+    });
+    rl.on('close', () => scrubber.end());
+    fileStream.on('error', (err) => scrubber.destroy(err));
+
+    return scrubber;
+  }
+
+  /**
+   * Create a passthrough transform for scrubbed content.
+   */
+  private createScrubTransform(): Transform {
+    return new Transform({
+      transform(chunk, _encoding, callback) {
+        callback(null, chunk);
+      },
+    });
   }
 
   /**

@@ -35,6 +35,7 @@ export class LogsController {
   }
 
   @Get('export')
+  @RateLimit('export')
   exportLogs(
     @Res() res: Response,
     @Query('service') service?: string,
