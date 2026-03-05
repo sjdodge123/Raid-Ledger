@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { EventsController } from './events.controller';
+import { EventsSignupsController } from './events-signups.controller';
+import { EventsAttendanceController } from './events-attendance.controller';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
 import { AttendanceService } from './attendance.service';
@@ -20,6 +22,8 @@ interface AuthenticatedRequest {
 
 describe('EventsController', () => {
   let controller: EventsController;
+  let signupsController: EventsSignupsController;
+  let attendanceController: EventsAttendanceController;
   let mockEventsService: Partial<EventsService>;
   let mockSignupsService: Partial<SignupsService>;
   let mockPugsService: Partial<PugsService>;
@@ -79,7 +83,7 @@ describe('EventsController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [EventsController],
+      controllers: [EventsController, EventsSignupsController, EventsAttendanceController],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
         { provide: SignupsService, useValue: mockSignupsService },
@@ -157,6 +161,8 @@ describe('EventsController', () => {
     }).compile();
 
     controller = module.get<EventsController>(EventsController);
+    signupsController = module.get<EventsSignupsController>(EventsSignupsController);
+    attendanceController = module.get<EventsAttendanceController>(EventsAttendanceController);
   });
 
   describe('create', () => {
@@ -413,7 +419,7 @@ describe('EventsController', () => {
     it('should confirm signup with valid character', async () => {
       const body = { characterId: validCharacterId };
 
-      const result = await controller.confirmSignup(
+      const result = await signupsController.confirmSignup(
         1,
         1,
         { user: mockUser } as AuthenticatedRequest,
@@ -434,7 +440,7 @@ describe('EventsController', () => {
       const body = { characterId: 'not-a-uuid' };
 
       await expect(
-        controller.confirmSignup(
+        signupsController.confirmSignup(
           1,
           1,
           { user: mockUser } as AuthenticatedRequest,
@@ -447,7 +453,7 @@ describe('EventsController', () => {
       const body = {};
 
       await expect(
-        controller.confirmSignup(
+        signupsController.confirmSignup(
           1,
           1,
           { user: mockUser } as AuthenticatedRequest,
@@ -472,23 +478,23 @@ describe('EventsController', () => {
     } as AuthenticatedRequest;
 
     it('should allow event creator to view voice sessions', async () => {
-      const result = await controller.getVoiceSessions(1, creatorReq);
+      const result = await attendanceController.getVoiceSessions(1, creatorReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should allow operator to view voice sessions', async () => {
-      const result = await controller.getVoiceSessions(1, operatorReq);
+      const result = await attendanceController.getVoiceSessions(1, operatorReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should allow admin to view voice sessions', async () => {
-      const result = await controller.getVoiceSessions(1, adminReq);
+      const result = await attendanceController.getVoiceSessions(1, adminReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should throw ForbiddenException for non-creator member', async () => {
       await expect(
-        controller.getVoiceSessions(1, nonCreatorReq),
+        attendanceController.getVoiceSessions(1, nonCreatorReq),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -508,23 +514,23 @@ describe('EventsController', () => {
     } as AuthenticatedRequest;
 
     it('should allow event creator to view voice attendance', async () => {
-      const result = await controller.getVoiceAttendance(1, creatorReq);
+      const result = await attendanceController.getVoiceAttendance(1, creatorReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should allow operator to view voice attendance', async () => {
-      const result = await controller.getVoiceAttendance(1, operatorReq);
+      const result = await attendanceController.getVoiceAttendance(1, operatorReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should allow admin to view voice attendance', async () => {
-      const result = await controller.getVoiceAttendance(1, adminReq);
+      const result = await attendanceController.getVoiceAttendance(1, adminReq);
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should throw ForbiddenException for non-creator member', async () => {
       await expect(
-        controller.getVoiceAttendance(1, nonCreatorReq),
+        attendanceController.getVoiceAttendance(1, nonCreatorReq),
       ).rejects.toThrow(ForbiddenException);
     });
   });
@@ -561,7 +567,7 @@ describe('EventsController', () => {
     });
 
     it('should return roster availability for event', async () => {
-      const result = await controller.getRosterAvailability(1, {});
+      const result = await signupsController.getRosterAvailability(1, {});
 
       expect(result.eventId).toBe(1);
       expect(result.users).toHaveLength(1);
@@ -578,7 +584,7 @@ describe('EventsController', () => {
         to: '2026-02-10T22:00:00.000Z',
       };
 
-      await controller.getRosterAvailability(1, query);
+      await signupsController.getRosterAvailability(1, query);
 
       expect(mockEventsService.getRosterAvailability).toHaveBeenCalledWith(
         1,

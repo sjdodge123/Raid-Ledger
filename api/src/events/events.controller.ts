@@ -10,107 +10,40 @@ import {
   UseGuards,
   Request,
   ParseIntPipe,
-  ParseUUIDPipe,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { OptionalJwtGuard } from '../auth/optional-jwt.guard';
 import { EventsService } from './events.service';
 import { SignupsService } from './signups.service';
-import { AttendanceService } from './attendance.service';
-import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
-import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
-import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
-import { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
-import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
-import { AnalyticsService } from './analytics.service';
 import {
   CreateEventSchema,
   UpdateEventSchema,
   EventListQuerySchema,
-  CreateSignupSchema,
-  ConfirmSignupSchema,
-  UpdateSignupStatusSchema,
   RescheduleEventSchema,
   CancelEventSchema,
-  RecordAttendanceSchema,
-  CreatePugSlotSchema,
-  UpdatePugSlotSchema,
   EventResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
-  SignupResponseDto,
-  EventRosterDto,
-  RosterAvailabilityResponse,
-  RosterAvailabilityQuerySchema,
-  UpdateRosterSchema,
-  RosterWithAssignments,
   AggregateGameTimeResponse,
-  PugSlotResponseDto,
-  PugSlotListResponseDto,
   ShareEventResponseDto,
-  AttendanceSummaryDto,
-  AdHocRosterResponseDto,
-  VoiceSessionsResponseDto,
-  VoiceAttendanceSummaryDto,
-  EventMetricsResponseDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
-
 import type { UserRole } from '@raid-ledger/contract';
-
-/** Helper: check if user has operator-or-above role */
-function isOperatorOrAdmin(role: UserRole): boolean {
-  return role === 'operator' || role === 'admin';
-}
+import { handleValidationError, isOperatorOrAdmin } from './controller.helpers';
 
 interface AuthenticatedRequest {
-  user: {
-    id: number;
-    role: UserRole;
-  };
+  user: { id: number; role: import('@raid-ledger/contract').UserRole };
 }
 
-/**
- * Handle Zod validation errors by converting to BadRequestException.
- * Rethrows non-Zod errors.
- */
-function handleValidationError(error: unknown): never {
-  // Use name check as instanceof may fail with multiple zod instances
-  if (error instanceof Error && error.name === 'ZodError') {
-    const zodError = error as ZodError;
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
-  }
-  throw error;
-}
-
-/**
- * Controller for event CRUD operations and signups.
- */
 @Controller('events')
 export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly signupsService: SignupsService,
-    private readonly attendanceService: AttendanceService,
-    private readonly pugsService: PugsService,
     private readonly shareService: ShareService,
-    private readonly adHocEventService: AdHocEventService,
-    private readonly voiceAttendanceService: VoiceAttendanceService,
-    private readonly channelResolverService: ChannelResolverService,
-    private readonly discordBotClientService: DiscordBotClientService,
-    private readonly analyticsService: AnalyticsService,
   ) {}
 
-  /**
-   * Create a new event.
-   * Requires authentication. Auto-signs up creator (AC-5).
-   */
   @Post()
   @UseGuards(AuthGuard('jwt'))
   async create(
@@ -120,14 +53,10 @@ export class EventsController {
     try {
       const dto = CreateEventSchema.parse(body);
       const result = await this.eventsService.create(req.user.id, dto);
-
-      // AC-5: Auto-signup creator when creating event (all instances for recurring)
       const eventIds = result.allEventIds ?? [result.id];
       await Promise.all(
         eventIds.map((id) => this.signupsService.signup(id, req.user.id)),
       );
-
-      // Strip internal allEventIds before returning
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { allEventIds, ...event } = result;
       return event;
@@ -136,10 +65,6 @@ export class EventsController {
     }
   }
 
-  /**
-   * Get paginated list of events.
-   * Public endpoint; optional JWT resolves "me" in creatorId/signedUpAs filters (ROK-213).
-   */
   @Get()
   @UseGuards(OptionalJwtGuard)
   async findAll(
@@ -154,11 +79,6 @@ export class EventsController {
     }
   }
 
-  /**
-   * Get organizer dashboard with stats (ROK-213).
-   * Requires authentication. Admins see all events, others see only their own.
-   * MUST be registered before :id to avoid route conflict.
-   */
   @Get('my-dashboard')
   @UseGuards(AuthGuard('jwt'))
   async getMyDashboard(
@@ -170,10 +90,6 @@ export class EventsController {
     );
   }
 
-  /**
-   * Get a single event by ID.
-   * Public endpoint.
-   */
   @Get(':id')
   async findOne(
     @Param('id', ParseIntPipe) id: number,
@@ -181,15 +97,6 @@ export class EventsController {
     return this.eventsService.findOne(id);
   }
 
-  // ============================================================
-  // Variant Context (ROK-587)
-  // ============================================================
-
-  /**
-   * Get the dominant game variant and region from an event's signups.
-   * Used to auto-populate the variant selector when importing a character
-   * in the context of an event signup.
-   */
   @Get(':id/variant-context')
   @UseGuards(AuthGuard('jwt'))
   async getVariantContext(
@@ -198,139 +105,6 @@ export class EventsController {
     return this.eventsService.getVariantContext(eventId);
   }
 
-  // ============================================================
-  // Voice Attendance Endpoints (ROK-490)
-  // ============================================================
-
-  /**
-   * Get raw voice sessions for an event.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Get(':id/voice-sessions')
-  @UseGuards(AuthGuard('jwt'))
-  async getVoiceSessions(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<VoiceSessionsResponseDto> {
-    const event = await this.eventsService.findOne(eventId);
-    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
-      throw new ForbiddenException(
-        'Only event creator or admin/operator can view voice sessions',
-      );
-    }
-    return this.voiceAttendanceService.getVoiceSessions(eventId);
-  }
-
-  /**
-   * Get voice attendance summary with classifications.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Get(':id/voice-attendance')
-  @UseGuards(AuthGuard('jwt'))
-  async getVoiceAttendance(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<VoiceAttendanceSummaryDto> {
-    const event = await this.eventsService.findOne(eventId);
-    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
-      throw new ForbiddenException(
-        'Only event creator or admin/operator can view voice attendance',
-      );
-    }
-    return this.voiceAttendanceService.getVoiceAttendanceSummary(eventId);
-  }
-
-  /**
-   * ROK-491: Get per-event metrics with attendance and voice data.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Get(':id/metrics')
-  @UseGuards(AuthGuard('jwt'))
-  async getEventMetrics(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<EventMetricsResponseDto> {
-    const event = await this.eventsService.findOne(eventId);
-    if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
-      throw new ForbiddenException(
-        'Only event creator or admin/operator can view event metrics',
-      );
-    }
-    return this.analyticsService.getEventMetrics(eventId);
-  }
-
-  /**
-   * ROK-293 / ROK-530: Get voice roster for an event.
-   * For ad-hoc events, delegates to AdHocEventService (DB-backed participants).
-   * For scheduled events, delegates to VoiceAttendanceService (in-memory sessions).
-   */
-  @Get(':id/ad-hoc-roster')
-  async getAdHocRoster(
-    @Param('id', ParseIntPipe) id: number,
-  ): Promise<AdHocRosterResponseDto> {
-    const event = await this.eventsService.findOne(id);
-    if (event.isAdHoc) {
-      return this.adHocEventService.getAdHocRoster(id);
-    }
-    return this.voiceAttendanceService.getActiveRoster(id);
-  }
-
-  /**
-   * ROK-530: Get the resolved voice channel for an event.
-   * Uses 2-tier fallback: game-specific voice binding → default voice channel.
-   */
-  @Get(':id/voice-channel')
-  @UseGuards(OptionalJwtGuard)
-  async getVoiceChannel(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: { user?: { id: number; role: UserRole } },
-  ): Promise<{
-    channelId: string | null;
-    channelName: string | null;
-    guildId: string | null;
-  }> {
-    const event = await this.eventsService.findOne(id);
-
-    // ROK-599: Per-event override → series binding → game binding → default
-    const channelId =
-      event.notificationChannelOverride ??
-      (await this.channelResolverService.resolveVoiceChannelForScheduledEvent(
-        event.game?.id ?? null,
-        event.recurrenceGroupId ?? null,
-      ));
-
-    if (!channelId) {
-      return { channelId: null, channelName: null, guildId: null };
-    }
-
-    // Resolve channel name from Discord (prefer cache to avoid REST calls)
-    try {
-      const guildId = this.discordBotClientService.getGuildId();
-      const client = this.discordBotClientService.getClient();
-      if (guildId && client) {
-        const guild =
-          client.guilds.cache.get(guildId) ??
-          (await client.guilds.fetch(guildId));
-        const channel =
-          guild.channels.cache.get(channelId) ??
-          (await guild.channels.fetch(channelId));
-        return {
-          channelId,
-          channelName: channel?.name ?? null,
-          guildId: req.user ? guildId : null,
-        };
-      }
-    } catch {
-      // Discord API failure — return ID without name
-    }
-
-    return { channelId, channelName: null, guildId: null };
-  }
-
-  /**
-   * Update an event.
-   * Requires authentication. Only creator or admin can update.
-   */
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'))
   async update(
@@ -351,11 +125,6 @@ export class EventsController {
     }
   }
 
-  /**
-   * Get aggregate game time for signed-up users (ROK-223).
-   * Returns heatmap data showing how many players are available at each day/hour.
-   * Public endpoint.
-   */
   @Get(':id/aggregate-game-time')
   async getAggregateGameTime(
     @Param('id', ParseIntPipe) id: number,
@@ -363,11 +132,6 @@ export class EventsController {
     return this.eventsService.getAggregateGameTime(id);
   }
 
-  /**
-   * Reschedule an event (ROK-223).
-   * Requires authentication. Only creator or admin can reschedule.
-   * Notifies all signed-up users.
-   */
   @Patch(':id/reschedule')
   @UseGuards(AuthGuard('jwt'))
   async reschedule(
@@ -388,11 +152,6 @@ export class EventsController {
     }
   }
 
-  /**
-   * Soft-cancel an event (ROK-374).
-   * Requires authentication. Only creator, operator, or admin can cancel.
-   * Notifies all signed-up users and updates Discord embed.
-   */
   @Patch(':id/cancel')
   @UseGuards(AuthGuard('jwt'))
   async cancel(
@@ -413,10 +172,6 @@ export class EventsController {
     }
   }
 
-  /**
-   * Delete an event.
-   * Requires authentication. Only creator or admin can delete.
-   */
   @Delete(':id')
   @UseGuards(AuthGuard('jwt'))
   async delete(
@@ -431,205 +186,6 @@ export class EventsController {
     return { message: 'Event deleted successfully' };
   }
 
-  // ============================================================
-  // Signup Endpoints (FR-006)
-  // ============================================================
-
-  /**
-   * Sign up for an event.
-   * Requires authentication. Idempotent - returns existing signup if already signed up.
-   */
-  @Post(':id/signup')
-  @UseGuards(AuthGuard('jwt'))
-  async signup(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<SignupResponseDto> {
-    try {
-      const dto =
-        body && typeof body === 'object' && Object.keys(body).length > 0
-          ? CreateSignupSchema.parse(body)
-          : undefined;
-      return this.signupsService.signup(eventId, req.user.id, dto);
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Cancel signup for an event.
-   * Requires authentication.
-   */
-  @Delete(':id/signup')
-  @UseGuards(AuthGuard('jwt'))
-  async cancelSignup(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<{ message: string }> {
-    await this.signupsService.cancel(eventId, req.user.id);
-    return { message: 'Signup canceled successfully' };
-  }
-
-  /**
-   * Get event roster (list of signups).
-   * Public endpoint.
-   */
-  @Get(':id/roster')
-  async getRoster(
-    @Param('id', ParseIntPipe) eventId: number,
-  ): Promise<EventRosterDto> {
-    return this.signupsService.getRoster(eventId);
-  }
-
-  /**
-   * Update roster assignments (ROK-114 AC-5).
-   * Requires authentication. Only event creator or admin can update.
-   */
-  @Patch(':id/roster')
-  @UseGuards(AuthGuard('jwt'))
-  async updateRoster(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<RosterWithAssignments> {
-    try {
-      const dto = UpdateRosterSchema.parse(body);
-      return this.signupsService.updateRoster(
-        eventId,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Self-unassign from roster slot (ROK-226).
-   * Removes the current user's roster assignment but keeps their signup.
-   * Dispatches slot_vacated notification to organizer.
-   */
-  @Delete(':id/roster/me')
-  @UseGuards(AuthGuard('jwt'))
-  async selfUnassign(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<RosterWithAssignments> {
-    return this.signupsService.selfUnassign(eventId, req.user.id);
-  }
-
-  /**
-   * Get roster with assignment data (ROK-114 AC-6).
-   * Returns pool and assignments for RosterBuilder component.
-   * Public endpoint.
-   */
-  @Get(':id/roster/assignments')
-  async getRosterWithAssignments(
-    @Param('id', ParseIntPipe) eventId: number,
-  ): Promise<RosterWithAssignments> {
-    return this.signupsService.getRosterWithAssignments(eventId);
-  }
-
-  /**
-   * Get roster availability for heatmap visualization (ROK-113).
-   * Returns availability data for all signed-up users within the event timeframe.
-   * Public endpoint.
-   */
-  @Get(':id/roster/availability')
-  async getRosterAvailability(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Query() query: Record<string, string>,
-  ): Promise<RosterAvailabilityResponse> {
-    try {
-      const dto = RosterAvailabilityQuerySchema.parse(query);
-      return this.eventsService.getRosterAvailability(
-        eventId,
-        dto.from,
-        dto.to,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Confirm signup with character selection (ROK-131 AC-2).
-   * Requires authentication. User must own the signup.
-   */
-  @Patch(':id/signups/:signupId/confirm')
-  @UseGuards(AuthGuard('jwt'))
-  async confirmSignup(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Param('signupId', ParseIntPipe) signupId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<SignupResponseDto> {
-    try {
-      const dto = ConfirmSignupSchema.parse(body);
-      return this.signupsService.confirmSignup(
-        eventId,
-        signupId,
-        req.user.id,
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Update signup status (ROK-137).
-   * Allows changing between signed_up, tentative, declined.
-   * Requires authentication.
-   */
-  @Patch(':id/signup/status')
-  @UseGuards(AuthGuard('jwt'))
-  async updateSignupStatus(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<SignupResponseDto> {
-    try {
-      const dto = UpdateSignupStatusSchema.parse(body);
-      return this.signupsService.updateStatus(
-        eventId,
-        { userId: req.user.id },
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Admin-remove a signup from an event (ROK-402).
-   * Deletes the signup AND roster assignment.
-   * Works for both registered users and anonymous PUG participants.
-   * Only event creator, admin, or operator can perform this action.
-   */
-  @Delete(':id/signups/:signupId')
-  @UseGuards(AuthGuard('jwt'))
-  async adminRemoveSignup(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Param('signupId', ParseIntPipe) signupId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<{ message: string }> {
-    await this.signupsService.adminRemoveSignup(
-      eventId,
-      signupId,
-      req.user.id,
-      isOperatorOrAdmin(req.user.role),
-    );
-    return { message: 'User removed from event successfully' };
-  }
-
-  /**
-   * Invite a registered member to an event (ROK-292).
-   * Sends a notification instead of creating a PUG slot.
-   * Requires authentication.
-   */
   @Post(':id/invite-member')
   @UseGuards(AuthGuard('jwt'))
   async inviteMember(
@@ -648,18 +204,12 @@ export class EventsController {
     );
   }
 
-  /**
-   * Share event to bound Discord channels (ROK-263).
-   * Posts announcement embed to all game-bound text channels.
-   * Requires authentication. Only creator, operator, or admin.
-   */
   @Post(':id/share')
   @UseGuards(AuthGuard('jwt'))
   async shareEvent(
     @Param('id', ParseIntPipe) eventId: number,
     @Request() req: AuthenticatedRequest,
   ): Promise<ShareEventResponseDto> {
-    // Verify the event exists and user has permission
     const event = await this.eventsService.findOne(eventId);
     if (event.creator.id !== req.user.id && !isOperatorOrAdmin(req.user.role)) {
       throw new BadRequestException(
@@ -667,154 +217,5 @@ export class EventsController {
       );
     }
     return this.shareService.shareToDiscordChannels(eventId);
-  }
-
-  // ============================================================
-  // Attendance Tracking Endpoints (ROK-421)
-  // ============================================================
-
-  /**
-   * Record attendance for a signup on a past event.
-   * Requires authentication. Only event creator or admin.
-   */
-  @Patch(':id/attendance')
-  @UseGuards(AuthGuard('jwt'))
-  async recordAttendance(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<SignupResponseDto> {
-    try {
-      const dto = RecordAttendanceSchema.parse(body);
-      return this.attendanceService.recordAttendance(
-        eventId,
-        dto,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Get attendance summary for an event.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Get(':id/attendance')
-  @UseGuards(AuthGuard('jwt'))
-  async getAttendanceSummary(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<AttendanceSummaryDto> {
-    return this.attendanceService.getAttendanceSummary(
-      eventId,
-      req.user.id,
-      isOperatorOrAdmin(req.user.role),
-    );
-  }
-
-  // ============================================================
-  // PUG Slot Endpoints (ROK-262)
-  // ============================================================
-
-  /**
-   * Add a PUG slot to an event.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Post(':id/pugs')
-  @UseGuards(AuthGuard('jwt'))
-  async createPug(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<PugSlotResponseDto> {
-    try {
-      const dto = CreatePugSlotSchema.parse(body);
-      return this.pugsService.create(
-        eventId,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * List PUG slots for an event.
-   * Public endpoint.
-   */
-  @Get(':id/pugs')
-  async listPugs(
-    @Param('id', ParseIntPipe) eventId: number,
-  ): Promise<PugSlotListResponseDto> {
-    return this.pugsService.findAll(eventId);
-  }
-
-  /**
-   * Update a PUG slot.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Patch(':id/pugs/:pugId')
-  @UseGuards(AuthGuard('jwt'))
-  async updatePug(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Param('pugId', ParseUUIDPipe) pugId: string,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<PugSlotResponseDto> {
-    try {
-      const dto = UpdatePugSlotSchema.parse(body);
-      return this.pugsService.update(
-        eventId,
-        pugId,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        dto,
-      );
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  /**
-   * Regenerate invite code for a PUG slot (ROK-263).
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Post(':id/pugs/:pugId/regenerate-code')
-  @UseGuards(AuthGuard('jwt'))
-  async regeneratePugInviteCode(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Param('pugId', ParseUUIDPipe) pugId: string,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<PugSlotResponseDto> {
-    return this.pugsService.regenerateInviteCode(
-      eventId,
-      pugId,
-      req.user.id,
-      isOperatorOrAdmin(req.user.role),
-    );
-  }
-
-  /**
-   * Remove a PUG slot.
-   * Requires authentication. Only event creator or admin/operator.
-   */
-  @Delete(':id/pugs/:pugId')
-  @UseGuards(AuthGuard('jwt'))
-  async deletePug(
-    @Param('id', ParseIntPipe) eventId: number,
-    @Param('pugId', ParseUUIDPipe) pugId: string,
-    @Request() req: AuthenticatedRequest,
-  ): Promise<{ message: string }> {
-    await this.pugsService.remove(
-      eventId,
-      pugId,
-      req.user.id,
-      isOperatorOrAdmin(req.user.role),
-    );
-    return { message: 'PUG slot removed successfully' };
   }
 }
