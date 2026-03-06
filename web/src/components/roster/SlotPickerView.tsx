@@ -83,7 +83,7 @@ function SlotRoleGroup({
     role, label, slots, playerRole, onSlotPick,
 }: {
     role: string; label: string; slots: AvailableSlot[];
-    playerRole?: string; onSlotPick: (role: RosterRole, position: number) => void;
+    playerRole?: string | null; onSlotPick: (role: RosterRole, position: number) => void;
 }) {
     return (
         <div className="assignment-popup__section">

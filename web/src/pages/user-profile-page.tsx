@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { useUserProfile, useUserHeartedGames } from '../hooks/use-user-profile';
 import { useGameRegistry } from '../hooks/use-game-registry';

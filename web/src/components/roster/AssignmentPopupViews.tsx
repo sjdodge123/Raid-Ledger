@@ -1,4 +1,5 @@
-import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
+import type { JSX } from 'react';
+import type { CharacterDto, RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { Modal } from '../ui/modal';
 import { CharacterSelectionView } from './CharacterSelectionView';
 import { SlotPickerView, ReassignSlotPickerView } from './SlotPickerView';
@@ -8,7 +9,7 @@ import { SearchBar, SelfAssignSection, OccupantSection, MatchingSection, OtherSe
 /** Character selection step view */
 export function SelectionStepView({ isOpen, title, selectionTarget, playerCharacters, isLoadingCharacters, selectedCharacterId, slotRole, onSelectCharacter, onConfirm, onSkip, onBack, onClose }: {
     isOpen: boolean; title: string; selectionTarget: RosterAssignmentResponse;
-    playerCharacters: Array<{ id: string; name: string; role?: string }>; isLoadingCharacters: boolean;
+    playerCharacters: CharacterDto[]; isLoadingCharacters: boolean;
     selectedCharacterId: string | null; slotRole: RosterRole | null;
     onSelectCharacter: (charId: string, role?: RosterRole) => void;
     onConfirm: () => void; onSkip: () => void; onBack: () => void; onClose: () => void;

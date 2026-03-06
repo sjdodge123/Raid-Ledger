@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState } from 'react';
 import { toast } from '../../lib/toast';
 import { usePluginAdmin } from '../../hooks/use-plugin-admin';

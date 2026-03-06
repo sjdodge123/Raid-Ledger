@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { CharacterDto, InviteCodeResolveResponseDto, PugRole } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
 import { WowArmoryImportForm } from '../../plugins/wow/components/wow-armory-import-form';
@@ -71,7 +72,7 @@ interface SuccessStepProps {
     stepLabels: string[];
     totalSteps: number;
     event: InviteCodeResolveResponseDto['event'];
-    discordInviteUrl: string | undefined;
+    discordInviteUrl: string | null | undefined;
     discordJoinLabel: string;
     discordJoinClicked: boolean;
     onDiscordJoinClick: () => void;

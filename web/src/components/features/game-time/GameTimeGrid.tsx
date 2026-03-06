@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useRef, useState, useMemo } from 'react';
 import type { GameTimeGridProps } from './game-time-grid.types';
 import { formatTooltip } from './game-time-grid.utils';

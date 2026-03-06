@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { getGameTimeBlockStyle } from '../../../constants/game-colors';
 import { RichEventBlock } from './RichEventBlock';

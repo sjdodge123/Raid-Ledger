@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
 import { PlayerCard } from '../events/player-card';
 import { ROLE_SLOT_COLORS, formatRole } from '../../lib/role-colors';

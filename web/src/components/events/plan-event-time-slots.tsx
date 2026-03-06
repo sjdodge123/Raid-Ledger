@@ -1,4 +1,4 @@
-import type { PollOption, TimeSuggestionResult } from '@raid-ledger/contract';
+import type { PollOption, TimeSuggestionsResponse } from '@raid-ledger/contract';
 
 const POLL_DURATION_PRESETS = [
     { label: '6h', hours: 6 },
@@ -9,7 +9,7 @@ const POLL_DURATION_PRESETS = [
 ] as const;
 
 interface TimeSlotsProps {
-    suggestions: TimeSuggestionResult | undefined;
+    suggestions: TimeSuggestionsResponse | undefined;
     suggestionsLoading: boolean;
     selectedTimeSlots: PollOption[];
     alreadySelected: Set<string>;
@@ -44,7 +44,7 @@ export function TimeSlotsSection({
                         </p>
                     )}
                     <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
-                        {suggestions.suggestions.map((s) => {
+                        {suggestions.suggestions.map((s: TimeSuggestionsResponse['suggestions'][number]) => {
                             const isSelected = alreadySelected.has(s.date);
                             return (
                                 <button

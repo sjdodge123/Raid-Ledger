@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
@@ -68,7 +69,7 @@ export function LoginPage(): JSX.Element {
         }
     };
 
-    const handlePostLoginRedirect = (user: { role: string; onboardingCompletedAt: string | null }): void => {
+    const handlePostLoginRedirect = (user: { role?: string; onboardingCompletedAt: string | null }): void => {
         const hasSeenWelcome = localStorage.getItem('rl-welcome-shown');
         if (isFirstRun && !hasSeenWelcome) {
             localStorage.setItem('rl-welcome-shown', 'true');

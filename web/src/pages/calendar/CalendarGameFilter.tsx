@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useMemo, useState } from 'react';
 import { BottomSheet } from '../../components/ui/bottom-sheet';
 import { Modal } from '../../components/ui/modal';

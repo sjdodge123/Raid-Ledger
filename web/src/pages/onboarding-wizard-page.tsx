@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth, isAdmin } from '../hooks/use-auth';

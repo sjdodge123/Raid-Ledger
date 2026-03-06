@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useAdminSettings } from '../../hooks/use-admin-settings';
 import { toast } from '../../lib/toast';
 

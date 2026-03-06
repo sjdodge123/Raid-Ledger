@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { GridDims } from './game-time-grid.types';
 
 interface TodayHighlightProps {

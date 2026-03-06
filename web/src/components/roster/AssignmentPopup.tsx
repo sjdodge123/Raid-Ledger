@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { AssignmentPopupProps } from './assignment-popup.types';
 import { SelectionStepView, ReassignStepView, SlotStepView, PlayerListView } from './AssignmentPopupViews';
 import { useAssignmentPopup } from './use-assignment-popup';

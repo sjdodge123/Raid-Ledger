@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { RichEventBlock } from './RichEventBlock';
 import type { GameTimePreviewBlock, GridDims } from './game-time-grid.types';

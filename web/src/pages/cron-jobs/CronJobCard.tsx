@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { CronJobDto } from '@raid-ledger/contract';
 import { formatJobName, getCronLabel, formatTimestamp, THEME_COLORS } from './cron-utils';
 

@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { getCellClasses, getVisualGroup } from './game-time-grid.utils';
 import { computeRounding, neighborGroup, computeShadows, computeHeatmapBg, computeCellClasses, computeCellStyle } from './grid-cell.utils';

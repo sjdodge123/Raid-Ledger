@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState, useMemo } from "react";
 import { FunnelIcon, CheckIcon } from "@heroicons/react/24/outline";
 import { useGamesDiscover } from "../hooks/use-games-discover";

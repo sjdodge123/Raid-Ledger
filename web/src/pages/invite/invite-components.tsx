@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
 

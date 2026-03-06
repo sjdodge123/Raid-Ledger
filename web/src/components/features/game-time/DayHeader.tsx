@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { DAYS, FULL_DAYS } from './game-time-grid.utils';
 
 interface DayHeaderProps {

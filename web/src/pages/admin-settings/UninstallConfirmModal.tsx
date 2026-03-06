@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { Modal } from '../../components/ui/modal';
 import type { PluginInfoDto } from '@raid-ledger/contract';
 

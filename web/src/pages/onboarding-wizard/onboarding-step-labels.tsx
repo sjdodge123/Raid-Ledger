@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { GameRegistryDto } from '@raid-ledger/contract';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { isDiscordLinked } from '../../lib/avatar';

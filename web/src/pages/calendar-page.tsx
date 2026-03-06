@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState, useCallback, useMemo, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';

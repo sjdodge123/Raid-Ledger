@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteEvents } from "../hooks/use-events";

@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useNewBadge } from '../../../hooks/use-new-badge';
 import { getPluginBadge } from '../../../plugins/plugin-registry';
 import { AdminPluginSection } from '../../../components/admin/AdminPluginSection';

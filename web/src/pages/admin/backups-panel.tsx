@@ -1,11 +1,12 @@
+import type { JSX } from 'react';
 import { useState } from 'react';
 import type { BackupFileDto } from '@raid-ledger/contract';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBackups } from '../../hooks/use-backups';
 import { useTimezoneStore } from '../../stores/timezone-store';
 import { toast } from 'sonner';
-import { formatSize, formatDate, TYPE_BADGE } from './backups/backup-utils';
-import { DeleteModal, RestoreModal, ResetModal } from './backups/backup-modals';
+import { formatSize, formatDate, TYPE_BADGE } from './backup-panel-utils';
+import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
 
 type FilterType = 'all' | 'daily' | 'migration';
 

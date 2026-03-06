@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { Fragment } from 'react';
 import type { GameTimeSlot } from '@raid-ledger/contract';
 import { DAYS, formatHour } from './game-time-grid.utils';

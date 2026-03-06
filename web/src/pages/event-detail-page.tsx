@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import { toast } from '../lib/toast';
@@ -8,6 +9,7 @@ import { EventBanner } from '../components/events/EventBanner';
 import { RosterBuilder } from '../components/roster';
 import { AttendeeAvatars } from '../components/calendar/AttendeeAvatars';
 import { isMMOSlotConfig } from '../utils/game-utils';
+import type { EventResponseDto, EventRosterDto, RosterWithAssignments } from '@raid-ledger/contract';
 import { useGameRegistry } from '../hooks/use-game-registry';
 import { useMyCharacters } from '../hooks/use-characters';
 import { getEventStatus } from '../lib/event-utils';
@@ -227,7 +229,7 @@ export function EventDetailPage(): JSX.Element | null {
                 isSignedUp={isSignedUp}
                 userSignup={userSignup}
                 canManageRoster={canManageRoster}
-                canJoinSlot={canJoinSlot}
+                canJoinSlot={!!canJoinSlot}
                 isMMOGame={isMMOGame}
                 handlers={handlers}
                 user={user}
@@ -481,7 +483,6 @@ function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
                                     avatar: s.user.avatar ?? null,
                                     discordId: s.user.discordId ?? null,
                                     customAvatarUrl: s.user.customAvatarUrl ?? null,
-                                    characters: s.user.characters,
                                 }))}
                                 gameId={event.game?.id ?? undefined}
                                 totalCount={roster!.count}
@@ -504,10 +505,10 @@ function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
 /** Roster slot section with RosterBuilder */
 // eslint-disable-next-line max-lines-per-function
 function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user }: {
-    event: { autoUnbench?: boolean; title: string; startTime: string; endTime: string; game?: { id?: number; name?: string; slug?: string; coverUrl?: string } | null; description?: string | null; creator?: { username: string } | null };
+    event: EventResponseDto;
     eventId: number;
-    roster: { count: number; signups: Array<{ id: number; user: { username: string; avatar?: string | null } }> } | undefined;
-    rosterAssignments: { pool: Array<{ userId: number }>; assignments: Array<unknown>; slots: unknown } | undefined;
+    roster: EventRosterDto | undefined;
+    rosterAssignments: RosterWithAssignments | undefined;
     isAuthenticated: boolean;
     isSignedUp: boolean;
     userSignup: { status: string } | undefined;

@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { EventsTab } from '../../components/events/events-mobile-toolbar';
 

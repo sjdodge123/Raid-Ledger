@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { resolveAvatar, toAvatarUser } from '../../lib/avatar';
 import type { NowPlayingPlayerDto, GameTopPlayerDto } from '@raid-ledger/contract';
 

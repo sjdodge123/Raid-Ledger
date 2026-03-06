@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { UserLink } from '../../components/common/UserLink';
 import { toAvatarUser } from '../../lib/avatar';
 import { CharacterCardCompact } from '../../components/characters/character-card-compact';
@@ -15,23 +16,24 @@ interface SignupItem {
     user: {
         id: number;
         username: string;
-        avatar?: string | null;
+        avatar: string | null;
         discordId?: string | null;
         customAvatarUrl?: string | null;
-        characters?: unknown[];
+        characters?: Array<{ gameId: string | number; name?: string; avatarUrl: string | null }>;
     };
     character?: {
         id: string;
         name: string;
         avatarUrl: string | null;
-        faction: string | null;
-        level: number | null;
-        race: string | null;
+        faction?: string | null;
+        level?: number | null;
+        race?: string | null;
         class: string | null;
         spec: string | null;
         role: string | null;
         itemLevel: number | null;
-    };
+        isMain?: boolean;
+    } | null;
 }
 
 interface EventDetailRosterProps {

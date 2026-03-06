@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 /**
  * Equipment grid and slot components for the character detail page.
  * Renders WoW character equipment in a paperdoll-style layout.

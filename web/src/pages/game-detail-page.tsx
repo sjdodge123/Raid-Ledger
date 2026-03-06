@@ -1,4 +1,5 @@
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import type { JSX } from 'react';
+import { useParams, Link, useNavigate, type NavigateFunction } from 'react-router-dom';
 import { useGameDetail, useGameStreams } from '../hooks/use-games-discover';
 import { useEvents } from '../hooks/use-events';
 import { useWantToPlay } from '../hooks/use-want-to-play';
@@ -84,7 +85,7 @@ export function GameDetailPage(): JSX.Element {
 }
 
 /** Smart back button */
-function BackButton({ navigate }: { navigate: (to: string | number) => void }): JSX.Element {
+function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
     return (
         <button onClick={() => { if (window.history.length > 1) { navigate(-1); } else { navigate('/games'); } }}
             className="inline-flex items-center gap-1 text-muted hover:text-foreground transition-colors mb-6 bg-transparent border-none cursor-pointer p-0">
@@ -154,8 +155,8 @@ function DetailsGrid({ modes, playerCount, platforms, crossplay, releaseDate }: 
 /** Want to Play button and interest avatars */
 // eslint-disable-next-line max-lines-per-function
 function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggling, gameId }: {
-    wantToPlay: boolean; count: number; source: string | null;
-    players: { userId: number; username: string; avatar: string | null }[];
+    wantToPlay: boolean; count: number; source: string | null | undefined;
+    players: { id: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
     toggle: (v: boolean) => void; isToggling: boolean; gameId: number | undefined;
 }): JSX.Element {
     return (
@@ -178,7 +179,7 @@ function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggl
 /** Upcoming events for this game */
 function UpcomingEventsSection({ events, igdbId, navigate }: {
     events: { id: number; signupCount: number; [k: string]: unknown }[];
-    igdbId: number | undefined; navigate: (path: string) => void;
+    igdbId: number | null | undefined; navigate: NavigateFunction;
 }): JSX.Element {
     return (
         <section className="mb-8">
@@ -196,14 +197,14 @@ function UpcomingEventsSection({ events, igdbId, navigate }: {
 }
 
 /** Trailers / YouTube embeds section */
-function TrailersSection({ videos }: { videos: { videoId: string; name: string }[] }): JSX.Element {
+function TrailersSection({ videos }: { videos: { videoId: string; name?: string }[] }): JSX.Element {
     return (
         <section className="mb-8">
             <h2 className="text-lg font-semibold text-foreground mb-3">Trailers</h2>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {videos.slice(0, 4).map((video) => (
                     <div key={video.videoId} className="aspect-video rounded-xl overflow-hidden bg-black">
-                        <iframe src={`https://www.youtube.com/embed/${video.videoId}`} className="w-full h-full" allowFullScreen title={video.name} loading="lazy" />
+                        <iframe src={`https://www.youtube.com/embed/${video.videoId}`} className="w-full h-full" allowFullScreen title={video.name ?? 'Trailer'} loading="lazy" />
                     </div>
                 ))}
             </div>

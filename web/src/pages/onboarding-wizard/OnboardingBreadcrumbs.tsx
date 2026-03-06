@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import type { StepDef } from './onboarding-types';
 import { ConnectStepLabel, CharacterStepLabel, StepDot } from './onboarding-step-labels';
 

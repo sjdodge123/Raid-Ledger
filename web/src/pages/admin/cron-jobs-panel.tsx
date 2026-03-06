@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 import { useState } from 'react';
 import type { CronJobDto } from '@raid-ledger/contract';
 import { useCronJobs } from '../../hooks/use-cron-jobs';

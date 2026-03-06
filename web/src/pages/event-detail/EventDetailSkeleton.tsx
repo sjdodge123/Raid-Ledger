@@ -1,3 +1,4 @@
+import type { JSX } from 'react';
 /**
  * Skeleton loader for event detail page.
  */
