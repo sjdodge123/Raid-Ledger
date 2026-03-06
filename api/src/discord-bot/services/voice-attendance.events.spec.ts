@@ -34,12 +34,9 @@ import { UsersService } from '../../users/users.service';
 import { Events, Collection } from 'discord.js';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DepartureGraceService } from '../services/departure-grace.service';
-import { EventsController } from '../../events/events.controller';
+import { EventsAttendanceController } from '../../events/events-attendance.controller';
 import { EventsService } from '../../events/events.service';
-import { SignupsService } from '../../events/signups.service';
 import { AttendanceService } from '../../events/attendance.service';
-import { PugsService } from '../../events/pugs.service';
-import { ShareService } from '../../events/share.service';
 import { AnalyticsService } from '../../events/analytics.service';
 
 import type { UserRole } from '@raid-ledger/contract';
@@ -398,7 +395,7 @@ describe('VoiceStateListener — scheduled event branch (ROK-490)', () => {
 // ─── 5. EventsController — voice endpoint auth (403 for non-creator/non-admin) ─
 
 describe('EventsController — voice endpoint authorization', () => {
-  let controller: EventsController;
+  let controller: EventsAttendanceController;
   let module: TestingModule;
   let mockEventsService: Partial<EventsService>;
   let mockVoiceAttendanceService: {
@@ -449,28 +446,15 @@ describe('EventsController — voice endpoint authorization', () => {
     };
 
     module = await Test.createTestingModule({
-      controllers: [EventsController],
+      controllers: [EventsAttendanceController],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
-        {
-          provide: SignupsService,
-          useValue: {
-            signup: jest.fn(),
-            cancel: jest.fn(),
-            getRoster: jest.fn(),
-          },
-        },
         {
           provide: AttendanceService,
           useValue: {
             recordAttendance: jest.fn(),
             getAttendanceSummary: jest.fn(),
           },
-        },
-        { provide: PugsService, useValue: {} },
-        {
-          provide: ShareService,
-          useValue: { shareToDiscordChannels: jest.fn() },
         },
         {
           provide: AdHocEventService,
@@ -495,7 +479,7 @@ describe('EventsController — voice endpoint authorization', () => {
       ],
     }).compile();
 
-    controller = module.get<EventsController>(EventsController);
+    controller = module.get<EventsAttendanceController>(EventsAttendanceController);
   });
 
   describe('GET :id/voice-sessions', () => {
