@@ -38,6 +38,35 @@ export interface RoleSelectOptions {
   characterVerb?: string;
 }
 
+/** Build character dropdown option entries from character data. */
+function buildCharacterOptions(opts: CharacterSelectOptions): Array<{
+  label: string;
+  value: string;
+  description?: string;
+  emoji?: ComponentEmojiResolvable;
+  default: boolean;
+}> {
+  const mainChar = opts.characters.find((c) => c.isMain);
+  return opts.characters.slice(0, 25).map((char) => {
+    const parts: string[] = [];
+    if (char.class) {
+      parts.push(char.spec ? `${char.class} (${char.spec})` : char.class);
+    }
+    if (char.level) parts.push(`Level ${char.level}`);
+    if (char.isMain) parts.push('\u2B50');
+    const classEmoji = char.class
+      ? opts.emojiService.getClassEmojiComponent(char.class)
+      : undefined;
+    return {
+      label: char.name,
+      value: char.id,
+      description: parts.join(' \u2014 ') || undefined,
+      emoji: classEmoji,
+      default: opts.characters.length > 1 && mainChar?.id === char.id,
+    };
+  });
+}
+
 /**
  * Build a character select dropdown menu and send it as an ephemeral reply.
  */
@@ -45,54 +74,54 @@ export async function showCharacterSelect(
   interaction: ButtonInteraction,
   opts: CharacterSelectOptions,
 ): Promise<void> {
-  const mainChar = opts.characters.find((c) => c.isMain);
-
-  const options = opts.characters.slice(0, 25).map((char) => {
-    const parts: string[] = [];
-    if (char.class) {
-      parts.push(char.spec ? `${char.class} (${char.spec})` : char.class);
-    }
-    if (char.level) {
-      parts.push(`Level ${char.level}`);
-    }
-    if (char.isMain) {
-      parts.push('\u2B50');
-    }
-
-    const classEmoji = char.class
-      ? opts.emojiService.getClassEmojiComponent(char.class)
-      : undefined;
-
-    return {
-      label: char.name,
-      value: char.id,
-      description: parts.join(' \u2014 ') || undefined,
-      emoji: classEmoji,
-      // Only pre-select main when there are multiple characters.
-      // With 1 character, pre-selecting prevents Discord from firing
-      // the interaction (no "change" detected on click).
-      default: opts.characters.length > 1 && mainChar?.id === char.id,
-    };
-  });
-
+  const options = buildCharacterOptions(opts);
   let customId = `${opts.customIdPrefix}:${opts.eventId}`;
-  if (opts.customIdSuffix) {
-    customId += `:${opts.customIdSuffix}`;
-  }
-
+  if (opts.customIdSuffix) customId += `:${opts.customIdSuffix}`;
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId(customId)
     .setPlaceholder('Select a character')
     .addOptions(options);
-
   const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     selectMenu,
   );
-
   await interaction.editReply({
     content: `Pick a character for **${opts.eventTitle}**`,
     components: [row],
   });
+}
+
+/** Build the role option entries with emoji components. */
+function buildRoleOptions(
+  emojiService: DiscordEmojiService,
+): Array<{ label: string; value: string; emoji?: ComponentEmojiResolvable }> {
+  return [
+    {
+      label: 'Tank',
+      value: 'tank',
+      emoji: emojiService.getRoleEmojiComponent('tank'),
+    },
+    {
+      label: 'Healer',
+      value: 'healer',
+      emoji: emojiService.getRoleEmojiComponent('healer'),
+    },
+    {
+      label: 'DPS',
+      value: 'dps',
+      emoji: emojiService.getRoleEmojiComponent('dps'),
+    },
+  ];
+}
+
+/** Build the content text for the role select prompt. */
+function buildRoleSelectContent(opts: RoleSelectOptions): string {
+  const verb = opts.characterVerb ?? 'Signing up as';
+  const roleHint = opts.characterInfo?.role
+    ? ` (current: ${opts.characterInfo.role})`
+    : '';
+  return opts.characterInfo
+    ? `${verb} **${opts.characterInfo.name}**${roleHint} — select your preferred role(s):`
+    : 'Select your preferred role(s):';
 }
 
 /**
@@ -105,53 +134,18 @@ export async function showRoleSelect(
   let customId = opts.characterId
     ? `${opts.customIdPrefix}:${opts.eventId}:${opts.characterId}`
     : `${opts.customIdPrefix}:${opts.eventId}`;
-  if (opts.customIdSuffix) {
-    customId += `:${opts.customIdSuffix}`;
-  }
-
-  const roleOptions: Array<{
-    label: string;
-    value: string;
-    emoji?: ComponentEmojiResolvable;
-  }> = [
-    {
-      label: 'Tank',
-      value: 'tank',
-      emoji: opts.emojiService.getRoleEmojiComponent('tank'),
-    },
-    {
-      label: 'Healer',
-      value: 'healer',
-      emoji: opts.emojiService.getRoleEmojiComponent('healer'),
-    },
-    {
-      label: 'DPS',
-      value: 'dps',
-      emoji: opts.emojiService.getRoleEmojiComponent('dps'),
-    },
-  ];
-
+  if (opts.customIdSuffix) customId += `:${opts.customIdSuffix}`;
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId(customId)
     .setPlaceholder('Select your preferred role(s)')
     .setMinValues(1)
     .setMaxValues(3)
-    .addOptions(roleOptions);
-
+    .addOptions(buildRoleOptions(opts.emojiService));
   const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     selectMenu,
   );
-
-  const verb = opts.characterVerb ?? 'Signing up as';
-  const roleHint = opts.characterInfo?.role
-    ? ` (current: ${opts.characterInfo.role})`
-    : '';
-  const content = opts.characterInfo
-    ? `${verb} **${opts.characterInfo.name}**${roleHint} — select your preferred role(s):`
-    : 'Select your preferred role(s):';
-
   await interaction.editReply({
-    content,
+    content: buildRoleSelectContent(opts),
     components: [row],
   });
 }

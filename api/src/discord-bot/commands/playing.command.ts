@@ -54,45 +54,47 @@ export class PlayingCommand
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     const gameName = interaction.options.getString('game');
-    const userId = interaction.user.id;
-
     if (!gameName) {
-      // Clear override
-      this.presenceDetector.clearManualOverride(userId);
-
-      const embed = new EmbedBuilder()
-        .setColor(EMBED_COLORS.SYSTEM)
-        .setDescription(
-          'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
-        );
-
-      await interaction.reply({ embeds: [embed], ephemeral: true });
+      await this.clearOverride(interaction);
       return;
     }
+    await this.setOverride(interaction, gameName);
+  }
 
-    // Verify game exists
+  /** Clear the manual game override. */
+  private async clearOverride(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<void> {
+    this.presenceDetector.clearManualOverride(interaction.user.id);
+    const embed = new EmbedBuilder()
+      .setColor(EMBED_COLORS.SYSTEM)
+      .setDescription(
+        'Game override cleared. The bot will use Discord Rich Presence to detect your game.',
+      );
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+
+  /** Resolve game name and set override. */
+  private async setOverride(
+    interaction: ChatInputCommandInteraction,
+    gameName: string,
+  ): Promise<void> {
     const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
       .where(ilike(schema.games.name, gameName))
       .limit(1);
-
-    const resolvedName = match?.name ?? gameName;
-
-    // Set manual override
-    this.presenceDetector.setManualOverride(userId, resolvedName);
-
+    const resolved = match?.name ?? gameName;
+    this.presenceDetector.setManualOverride(interaction.user.id, resolved);
     const embed = new EmbedBuilder()
       .setColor(EMBED_COLORS.LIVE_EVENT)
       .setDescription(
-        `You are now marked as playing **${resolvedName}**.\n` +
+        `You are now marked as playing **${resolved}**.\n` +
           'This override lasts 30 minutes or until you clear it with `/playing`.',
       );
-
     await interaction.reply({ embeds: [embed], ephemeral: true });
-
     this.logger.debug(
-      `User ${userId} set manual game override: "${resolvedName}"`,
+      `User ${interaction.user.id} set game override: "${resolved}"`,
     );
   }
 

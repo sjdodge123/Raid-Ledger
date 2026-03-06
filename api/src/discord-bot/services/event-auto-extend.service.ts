@@ -62,27 +62,31 @@ export class EventAutoExtendService {
   async checkAndExtendEvents(): Promise<void> {
     const enabled = await this.settingsService.getEventAutoExtendEnabled();
     if (!enabled) return;
+    const config = await this.loadExtendConfig();
+    const now = new Date();
+    const candidates = await this.queryCandidates(now);
+    if (candidates.length === 0) return;
+    for (const c of candidates) {
+      await this.tryExtendCandidate(c, config);
+    }
+  }
 
+  /** Load auto-extend configuration from settings. */
+  private async loadExtendConfig(): Promise<ExtendConfig> {
     const [incrementMinutes, maxOverageMinutes, minVoiceMembers] =
       await Promise.all([
         this.settingsService.getEventAutoExtendIncrementMinutes(),
         this.settingsService.getEventAutoExtendMaxOverageMinutes(),
         this.settingsService.getEventAutoExtendMinVoiceMembers(),
       ]);
+    return { incrementMinutes, maxOverageMinutes, minVoiceMembers };
+  }
 
-    const now = new Date();
-    // Look for events whose effective end time is within the look-ahead window
-    // or has passed within the look-behind window (to catch events that just ended).
-    const windowAhead = new Date(now.getTime() + WINDOW_AHEAD_MS);
-    const windowBehind = new Date(now.getTime() - WINDOW_BEHIND_MS);
-
-    // Find events (scheduled and ad-hoc) that are candidates for extension:
-    // - Not cancelled
-    // - Start time has passed (event is live)
-    // - For ad-hoc: must still be in 'live' status (not grace_period/ended)
-    // - Effective end time (COALESCE(extended_until, upper(duration))) is
-    //   between windowBehind and windowAhead
-    const candidates = await this.db
+  /** Find events approaching their effective end time. */
+  private async queryCandidates(now: Date): Promise<ExtendCandidate[]> {
+    const ahead = new Date(now.getTime() + WINDOW_AHEAD_MS);
+    const behind = new Date(now.getTime() - WINDOW_BEHIND_MS);
+    return this.db
       .select({
         id: schema.events.id,
         duration: schema.events.duration,
@@ -97,90 +101,84 @@ export class EventAutoExtendService {
           sql`${schema.events.cancelledAt} IS NULL`,
           sql`(${schema.events.isAdHoc} = false OR ${schema.events.adHocStatus} = 'live')`,
           sql`lower(${schema.events.duration}) <= ${now.toISOString()}::timestamptz`,
-          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${windowBehind.toISOString()}::timestamptz`,
-          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${windowAhead.toISOString()}::timestamptz`,
+          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${behind.toISOString()}::timestamptz`,
+          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${ahead.toISOString()}::timestamptz`,
         ),
       );
+  }
 
-    if (candidates.length === 0) return;
-
-    for (const candidate of candidates) {
-      // Unified voice count — all events track via VoiceAttendanceService
-      const activeCount = this.voiceAttendanceService.getActiveCount(
-        candidate.id,
+  /** Check and extend a single candidate event. */
+  private async tryExtendCandidate(
+    c: ExtendCandidate,
+    config: ExtendConfig,
+  ): Promise<void> {
+    const activeCount = this.voiceAttendanceService.getActiveCount(c.id);
+    if (activeCount < config.minVoiceMembers) {
+      this.logger.debug(
+        `Event ${c.id}: ${activeCount} voice members (threshold: ${config.minVoiceMembers}), skip`,
       );
+      return;
+    }
+    const newEnd = this.computeNewEnd(c, config);
+    if (!newEnd) return;
+    await this.applyExtension(c, newEnd, activeCount);
+  }
 
-      if (activeCount < minVoiceMembers) {
-        this.logger.debug(
-          `Event ${candidate.id}: ${activeCount} active voice members (threshold: ${minVoiceMembers}), not extending`,
-        );
-        continue;
-      }
+  /** Compute the new extended end time, or null if max overage reached. */
+  private computeNewEnd(c: ExtendCandidate, config: ExtendConfig): Date | null {
+    const originalEnd = c.duration[1];
+    const effectiveEnd = c.extendedUntil ?? originalEnd;
+    const maxOverageMs = config.maxOverageMinutes * 60 * 1000;
+    if (effectiveEnd.getTime() - originalEnd.getTime() >= maxOverageMs) {
+      this.logger.debug(`Event ${c.id}: max overage reached, skip`);
+      return null;
+    }
+    const incrementMs = config.incrementMinutes * 60 * 1000;
+    const maxEnd = new Date(originalEnd.getTime() + maxOverageMs);
+    const raw = new Date(effectiveEnd.getTime() + incrementMs);
+    return raw > maxEnd ? maxEnd : raw;
+  }
 
-      const originalEnd = candidate.duration[1];
-      const currentEffectiveEnd = candidate.extendedUntil ?? originalEnd;
-
-      // Check max overage cap
-      const currentOverageMs =
-        currentEffectiveEnd.getTime() - originalEnd.getTime();
-      const maxOverageMs = maxOverageMinutes * 60 * 1000;
-
-      if (currentOverageMs >= maxOverageMs) {
-        this.logger.debug(
-          `Event ${candidate.id}: max overage reached (${maxOverageMinutes} min), not extending further`,
-        );
-        continue;
-      }
-
-      // Calculate new extended end time
-      const incrementMs = incrementMinutes * 60 * 1000;
-      let newExtendedUntil = new Date(
-        currentEffectiveEnd.getTime() + incrementMs,
-      );
-
-      // Cap at max overage
-      const maxEnd = new Date(originalEnd.getTime() + maxOverageMs);
-      if (newExtendedUntil > maxEnd) {
-        newExtendedUntil = maxEnd;
-      }
-
-      // Update the event
-      await this.db
-        .update(schema.events)
-        .set({
-          extendedUntil: newExtendedUntil,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.events.id, candidate.id));
-
-      this.logger.log(
-        `Extended event ${candidate.id} until ${newExtendedUntil.toISOString()} (${activeCount} active voice members)`,
-      );
-
-      // Emit WebSocket event for real-time UI update
-      this.adHocGateway.emitEndTimeExtended(
-        candidate.id,
-        newExtendedUntil.toISOString(),
-      );
-
-      // Update Discord embed for ad-hoc events so duration stays current
-      if (candidate.isAdHoc && candidate.channelBindingId) {
-        this.adHocNotificationService.queueUpdate(
-          candidate.id,
-          candidate.channelBindingId,
-        );
-      }
-
-      // Update Discord Scheduled Event end time
-      if (candidate.discordScheduledEventId) {
-        this.scheduledEventService
-          .updateEndTime(candidate.id, newExtendedUntil)
-          .catch((err: unknown) => {
-            this.logger.warn(
-              `Failed to update Discord scheduled event end time for event ${candidate.id}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-            );
-          });
-      }
+  /** Persist extension and fire side effects. */
+  private async applyExtension(
+    c: ExtendCandidate,
+    newEnd: Date,
+    activeCount: number,
+  ): Promise<void> {
+    await this.db
+      .update(schema.events)
+      .set({ extendedUntil: newEnd, updatedAt: new Date() })
+      .where(eq(schema.events.id, c.id));
+    this.logger.log(
+      `Extended event ${c.id} until ${newEnd.toISOString()} (${activeCount} voice members)`,
+    );
+    this.adHocGateway.emitEndTimeExtended(c.id, newEnd.toISOString());
+    if (c.isAdHoc && c.channelBindingId) {
+      this.adHocNotificationService.queueUpdate(c.id, c.channelBindingId);
+    }
+    if (c.discordScheduledEventId) {
+      this.scheduledEventService
+        .updateEndTime(c.id, newEnd)
+        .catch((err: unknown) => {
+          this.logger.warn(
+            `Failed to update scheduled event end time for ${c.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
+          );
+        });
     }
   }
+}
+
+interface ExtendConfig {
+  incrementMinutes: number;
+  maxOverageMinutes: number;
+  minVoiceMembers: number;
+}
+
+interface ExtendCandidate {
+  id: number;
+  duration: Date[];
+  extendedUntil: Date | null;
+  discordScheduledEventId: string | null;
+  isAdHoc: boolean;
+  channelBindingId: string | null;
 }

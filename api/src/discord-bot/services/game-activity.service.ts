@@ -6,59 +6,31 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import {
-  eq,
-  and,
-  isNull,
-  lt,
-  sql,
-  isNotNull,
-  gte,
-  sum,
-  inArray,
-} from 'drizzle-orm';
+import { and, isNull, lt } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import {
+  FLUSH_INTERVAL_MS,
+  MAX_SESSION_DURATION_SECONDS,
+  type ActivitySource,
+  type BufferedEvent,
+  type SessionOpenEvent,
+  type SessionCloseEvent,
+  resolveGameNames,
+  processOpenEvents,
+  processCloseEvents,
+  closeOrphanedSessions,
+  aggregateRollups,
+  autoHeartCheck,
+} from './game-activity.helpers';
 
-/** Maximum session duration in seconds (24 hours) */
-const MAX_SESSION_DURATION_SECONDS = 24 * 60 * 60;
-
-/** How often to flush the in-memory buffer to the database (ms) */
-const FLUSH_INTERVAL_MS = 30_000;
-
-/** Source of a game activity detection */
-export type ActivitySource = 'presence' | 'voice';
-
-interface SessionOpenEvent {
-  type: 'open';
-  userId: number;
-  gameId: number | null;
-  discordActivityName: string;
-  startedAt: Date;
-}
-
-interface SessionCloseEvent {
-  type: 'close';
-  userId: number;
-  discordActivityName: string;
-  endedAt: Date;
-}
-
-type BufferedEvent = SessionOpenEvent | SessionCloseEvent;
+export type { ActivitySource } from './game-activity.helpers';
 
 /**
  * GameActivityService — handles game session tracking from Discord presence
  * updates (ROK-442).
- *
- * Responsibilities:
- * - Buffers presence events in memory and flushes to DB periodically
- * - Resolves Discord activity names to game IDs via exact match + mappings table
- * - Sweeps stale sessions (users who went offline without explicit stop)
- * - Closes leftover sessions on startup (from prior bot restart)
- * - Aggregates sessions into rollups via daily cron
- * - Deduplicates multiple sources (presence + voice) for the same user+game (ROK-591)
  */
 @Injectable()
 export class GameActivityService
@@ -74,9 +46,6 @@ export class GameActivityService
   /**
    * Tracks active sources per user+game combination (ROK-591).
    * Key: `${userId}:${discordActivityName}`, Value: set of active sources.
-   * Used to deduplicate when both Rich Presence and voice channel
-   * report the same game — only the first source creates a session,
-   * and the session only closes when ALL sources have stopped.
    */
   private activeSources = new Map<string, Set<ActivitySource>>();
 
@@ -87,15 +56,13 @@ export class GameActivityService
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // Start the periodic flush timer
     this.flushTimer = setInterval(() => {
       this.flush().catch((err) =>
         this.logger.error(`Buffer flush failed: ${err}`),
       );
     }, FLUSH_INTERVAL_MS);
 
-    // Close any sessions left open from a prior restart
-    await this.closeOrphanedSessions();
+    await closeOrphanedSessions(this.db, this.logger);
   }
 
   onApplicationShutdown(): void {
@@ -106,12 +73,9 @@ export class GameActivityService
     this.activeSources.clear();
   }
 
-  // ─── Public API (called by ActivityListener / VoiceStateListener) ──
-
   /**
    * Buffer a game activity start event.
-   * @param source — 'presence' (Rich Presence) or 'voice' (voice channel).
-   *   Defaults to 'presence' for backward compatibility.
+   * @param source — 'presence' or 'voice'. Defaults to 'presence'.
    */
   bufferStart(
     userId: number,
@@ -123,35 +87,17 @@ export class GameActivityService
     const sources = this.activeSources.get(sourceKey);
 
     if (sources) {
-      // Another source is already tracking this user+game — dedup
       sources.add(source);
-      this.logger.debug(
-        `Dedup: added source '${source}' for ${sourceKey} (now: ${[...sources].join(',')})`,
-      );
       return;
     }
 
-    // First source — create the session
     this.activeSources.set(sourceKey, new Set([source]));
-
-    // Resolve game ID synchronously from cache if possible
     const gameId = this.gameNameCache.get(discordActivityName);
-    if (gameId !== undefined) {
-      this.buffer.push({
-        type: 'open',
-        userId,
-        gameId,
-        discordActivityName,
-        startedAt,
-      });
-      return;
-    }
 
-    // If not cached, push with a sentinel and resolve during flush
     this.buffer.push({
       type: 'open',
       userId,
-      gameId: null, // will be resolved in flush
+      gameId: gameId !== undefined ? gameId : null,
       discordActivityName,
       startedAt,
     });
@@ -159,8 +105,7 @@ export class GameActivityService
 
   /**
    * Buffer a game activity stop event.
-   * @param source — 'presence' (Rich Presence) or 'voice' (voice channel).
-   *   Defaults to 'presence' for backward compatibility.
+   * @param source — 'presence' or 'voice'. Defaults to 'presence'.
    */
   bufferStop(
     userId: number,
@@ -173,16 +118,7 @@ export class GameActivityService
 
     if (sources) {
       sources.delete(source);
-
-      if (sources.size > 0) {
-        // Other source(s) still active — don't close the session yet
-        this.logger.debug(
-          `Dedup: removed source '${source}' for ${sourceKey}, remaining: ${[...sources].join(',')}`,
-        );
-        return;
-      }
-
-      // All sources gone — close the session
+      if (sources.size > 0) return;
       this.activeSources.delete(sourceKey);
     }
 
@@ -194,9 +130,7 @@ export class GameActivityService
     });
   }
 
-  /**
-   * Check if a source is currently active for a user+game (for testing).
-   */
+  /** Check if a source is currently active for a user+game. */
   hasActiveSource(
     userId: number,
     discordActivityName: string,
@@ -206,143 +140,42 @@ export class GameActivityService
     return this.activeSources.get(sourceKey)?.has(source) ?? false;
   }
 
-  /**
-   * Get all active sources for a user+game (for testing).
-   */
+  /** Get all active sources for a user+game. */
   getActiveSources(
     userId: number,
     discordActivityName: string,
   ): Set<ActivitySource> | undefined {
-    const sourceKey = `${userId}:${discordActivityName}`;
-    return this.activeSources.get(sourceKey);
+    return this.activeSources.get(`${userId}:${discordActivityName}`);
   }
 
-  // ─── Periodic flush ───────────────────────────────────────────
-
-  /**
-   * Flush buffered events to the database. Called every 30 seconds.
-   */
+  /** Flush buffered events to the database. */
   async flush(): Promise<void> {
     if (this.buffer.length === 0) return;
 
-    // Drain the buffer
     const events = this.buffer.splice(0);
 
-    // Collect unique activity names that need resolution
     const unresolvedNames = new Set<string>();
     for (const ev of events) {
-      if (
-        ev.type === 'open' &&
-        !this.gameNameCache.has(ev.discordActivityName)
-      ) {
+      if (ev.type === 'open' && !this.gameNameCache.has(ev.discordActivityName)) {
         unresolvedNames.add(ev.discordActivityName);
       }
     }
 
-    // Resolve game IDs for uncached names
     if (unresolvedNames.size > 0) {
-      await this.resolveGameNames([...unresolvedNames]);
+      await resolveGameNames(
+        this.db, [...unresolvedNames], this.gameNameCache,
+      );
     }
 
-    // Process opens
     const opens = events.filter(
       (e): e is SessionOpenEvent => e.type === 'open',
     );
-    for (const ev of opens) {
-      // Re-resolve game ID from cache (may have been resolved during this flush)
-      const resolvedGameId = this.gameNameCache.get(ev.discordActivityName);
-      const gameId = resolvedGameId !== undefined ? resolvedGameId : null;
-
-      try {
-        // DB-level safety net (ROK-591): check for existing open session
-        // before inserting to prevent duplicate sessions after bot restart
-        const [existingOpen] = await this.db
-          .select({ id: schema.gameActivitySessions.id })
-          .from(schema.gameActivitySessions)
-          .where(
-            and(
-              eq(schema.gameActivitySessions.userId, ev.userId),
-              eq(
-                schema.gameActivitySessions.discordActivityName,
-                ev.discordActivityName,
-              ),
-              isNull(schema.gameActivitySessions.endedAt),
-            ),
-          )
-          .limit(1);
-
-        if (existingOpen) {
-          this.logger.debug(
-            `Skipping duplicate session insert for user ${ev.userId} / "${ev.discordActivityName}" — open session ${existingOpen.id} already exists`,
-          );
-          continue;
-        }
-
-        await this.db.insert(schema.gameActivitySessions).values({
-          userId: ev.userId,
-          gameId,
-          discordActivityName: ev.discordActivityName,
-          startedAt: ev.startedAt,
-        });
-      } catch (err) {
-        this.logger.warn(
-          `Failed to insert session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
-        );
-      }
-    }
-
-    // Process closes
     const closes = events.filter(
       (e): e is SessionCloseEvent => e.type === 'close',
     );
-    for (const ev of closes) {
-      try {
-        // Find the open session for this user + activity name
-        const [session] = await this.db
-          .select({
-            id: schema.gameActivitySessions.id,
-            startedAt: schema.gameActivitySessions.startedAt,
-          })
-          .from(schema.gameActivitySessions)
-          .where(
-            and(
-              eq(schema.gameActivitySessions.userId, ev.userId),
-              eq(
-                schema.gameActivitySessions.discordActivityName,
-                ev.discordActivityName,
-              ),
-              isNull(schema.gameActivitySessions.endedAt),
-            ),
-          )
-          .orderBy(schema.gameActivitySessions.startedAt)
-          .limit(1);
 
-        if (session) {
-          const durationSeconds = Math.max(
-            0,
-            Math.floor(
-              (ev.endedAt.getTime() - session.startedAt.getTime()) / 1000,
-            ),
-          );
-          const cappedDuration = Math.min(
-            durationSeconds,
-            MAX_SESSION_DURATION_SECONDS,
-          );
-
-          await this.db
-            .update(schema.gameActivitySessions)
-            .set({
-              endedAt: ev.endedAt,
-              durationSeconds: cappedDuration,
-            })
-            .where(eq(schema.gameActivitySessions.id, session.id));
-        }
-      } catch (err) {
-        this.logger.warn(
-          `Failed to close session for user ${ev.userId} / "${ev.discordActivityName}": ${err}`,
-        );
-      }
-    }
+    await processOpenEvents(this.db, opens, this.gameNameCache, this.logger);
+    await processCloseEvents(this.db, closes, this.logger);
 
     if (opens.length > 0 || closes.length > 0) {
       this.logger.debug(
@@ -351,47 +184,7 @@ export class GameActivityService
     }
   }
 
-  // ─── Game name resolution ─────────────────────────────────────
-
-  /**
-   * Resolve Discord activity names to game IDs.
-   * 1. Exact match against games.name
-   * 2. Lookup in discord_game_mappings table
-   * 3. Store null for unmatched names
-   */
-  private async resolveGameNames(names: string[]): Promise<void> {
-    for (const name of names) {
-      // 1. Check discord_game_mappings first (admin overrides take priority)
-      const [mapping] = await this.db
-        .select({ gameId: schema.discordGameMappings.gameId })
-        .from(schema.discordGameMappings)
-        .where(eq(schema.discordGameMappings.discordActivityName, name))
-        .limit(1);
-
-      if (mapping) {
-        this.gameNameCache.set(name, mapping.gameId);
-        continue;
-      }
-
-      // 2. Exact match against games.name
-      const [game] = await this.db
-        .select({ id: schema.games.id })
-        .from(schema.games)
-        .where(eq(schema.games.name, name))
-        .limit(1);
-
-      if (game) {
-        this.gameNameCache.set(name, game.id);
-        continue;
-      }
-
-      // 3. Unmatched — store null
-      this.gameNameCache.set(name, null);
-    }
-  }
-
-  // ─── Stale session sweep (every 15 min) ───────────────────────
-
+  /** Sweep stale sessions every 15 min. */
   @Cron('30 */15 * * * *', {
     name: 'GameActivityService_sweepStaleSessions',
   })
@@ -402,7 +195,6 @@ export class GameActivityService
         const cutoff = new Date(
           Date.now() - MAX_SESSION_DURATION_SECONDS * 1000,
         );
-
         const result = await this.db
           .update(schema.gameActivitySessions)
           .set({
@@ -418,16 +210,13 @@ export class GameActivityService
           .returning({ id: schema.gameActivitySessions.id });
 
         if (result.length > 0) {
-          this.logger.log(
-            `Swept ${result.length} stale session(s) older than 24h`,
-          );
+          this.logger.log(`Swept ${result.length} stale session(s)`);
         }
       },
     );
   }
 
-  // ─── Rollup cron (daily at 5 AM) ─────────────────────────────
-
+  /** Daily rollup cron at 5 AM. */
   @Cron('40 0 5 * * *', {
     name: 'GameActivityService_dailyRollup',
   })
@@ -435,328 +224,19 @@ export class GameActivityService
     await this.cronJobService.executeWithTracking(
       'GameActivityService_dailyRollup',
       async () => {
-        await this.aggregateRollups();
-        await this.autoHeartCheck();
+        await aggregateRollups(this.db, this.logger);
+        await autoHeartCheck(this.db, this.logger);
       },
     );
   }
 
-  /**
-   * Aggregate closed sessions with non-null game_id into rollup rows.
-   * Produces day, week, and month period rows.
-   * Uses upsert (ON CONFLICT UPDATE) for idempotency.
-   */
+  /** @VisibleForTesting */
   async aggregateRollups(): Promise<void> {
-    // Process sessions closed in the last 48 hours to catch any stragglers
-    const since = new Date();
-    since.setHours(since.getHours() - 48);
-
-    const closedSessions = await this.db
-      .select({
-        userId: schema.gameActivitySessions.userId,
-        gameId: schema.gameActivitySessions.gameId,
-        startedAt: schema.gameActivitySessions.startedAt,
-        durationSeconds: schema.gameActivitySessions.durationSeconds,
-      })
-      .from(schema.gameActivitySessions)
-      .where(
-        and(
-          isNotNull(schema.gameActivitySessions.endedAt),
-          isNotNull(schema.gameActivitySessions.gameId),
-          isNotNull(schema.gameActivitySessions.durationSeconds),
-          gte(schema.gameActivitySessions.endedAt, since),
-        ),
-      );
-
-    if (closedSessions.length === 0) {
-      this.logger.debug('No closed sessions to roll up');
-      return;
-    }
-
-    // Group by user + game + period
-    const rollupMap = new Map<
-      string,
-      {
-        userId: number;
-        gameId: number;
-        period: string;
-        periodStart: string;
-        totalSeconds: number;
-      }
-    >();
-
-    for (const session of closedSessions) {
-      if (!session.gameId || !session.durationSeconds) continue;
-
-      const sessionDate = session.startedAt;
-
-      // Day period
-      const dayStart = this.formatDate(sessionDate);
-      this.addToRollupMap(
-        rollupMap,
-        session.userId,
-        session.gameId,
-        'day',
-        dayStart,
-        session.durationSeconds,
-      );
-
-      // Week period (ISO week, Monday start)
-      const weekStart = this.getWeekStart(sessionDate);
-      this.addToRollupMap(
-        rollupMap,
-        session.userId,
-        session.gameId,
-        'week',
-        weekStart,
-        session.durationSeconds,
-      );
-
-      // Month period
-      const monthStart = `${sessionDate.getFullYear()}-${String(sessionDate.getMonth() + 1).padStart(2, '0')}-01`;
-      this.addToRollupMap(
-        rollupMap,
-        session.userId,
-        session.gameId,
-        'month',
-        monthStart,
-        session.durationSeconds,
-      );
-    }
-
-    // Upsert rollup rows
-    let upsertCount = 0;
-    for (const rollup of rollupMap.values()) {
-      await this.db
-        .insert(schema.gameActivityRollups)
-        .values({
-          userId: rollup.userId,
-          gameId: rollup.gameId,
-          period: rollup.period,
-          periodStart: rollup.periodStart,
-          totalSeconds: rollup.totalSeconds,
-        })
-        .onConflictDoUpdate({
-          target: [
-            schema.gameActivityRollups.userId,
-            schema.gameActivityRollups.gameId,
-            schema.gameActivityRollups.period,
-            schema.gameActivityRollups.periodStart,
-          ],
-          set: {
-            totalSeconds: sql`EXCLUDED.total_seconds`,
-          },
-        });
-      upsertCount++;
-    }
-
-    this.logger.log(
-      `Rolled up ${closedSessions.length} session(s) into ${upsertCount} rollup row(s)`,
-    );
+    await aggregateRollups(this.db, this.logger);
   }
 
-  // ─── Startup cleanup ─────────────────────────────────────────
-
-  /**
-   * Close any sessions left open from a prior bot restart.
-   * Sets ended_at to now and caps duration at 24h.
-   */
-  private async closeOrphanedSessions(): Promise<void> {
-    const now = new Date();
-    const cutoff = new Date(
-      now.getTime() - MAX_SESSION_DURATION_SECONDS * 1000,
-    );
-
-    // Sessions started more than 24h ago — cap at max duration
-    const staleResult = await this.db
-      .update(schema.gameActivitySessions)
-      .set({
-        endedAt: now,
-        durationSeconds: MAX_SESSION_DURATION_SECONDS,
-      })
-      .where(
-        and(
-          isNull(schema.gameActivitySessions.endedAt),
-          lt(schema.gameActivitySessions.startedAt, cutoff),
-        ),
-      )
-      .returning({ id: schema.gameActivitySessions.id });
-
-    // Sessions started within last 24h — compute actual duration
-    const recentResult = await this.db
-      .update(schema.gameActivitySessions)
-      .set({
-        endedAt: now,
-        durationSeconds: sql`EXTRACT(EPOCH FROM ${now.toISOString()}::timestamp - ${schema.gameActivitySessions.startedAt})::integer`,
-      })
-      .where(
-        and(
-          isNull(schema.gameActivitySessions.endedAt),
-          gte(schema.gameActivitySessions.startedAt, cutoff),
-        ),
-      )
-      .returning({ id: schema.gameActivitySessions.id });
-
-    const total = staleResult.length + recentResult.length;
-    if (total > 0) {
-      this.logger.log(
-        `Closed ${total} orphaned session(s) from prior restart (${staleResult.length} stale, ${recentResult.length} recent)`,
-      );
-    }
-  }
-
-  // ─── Auto-heart check (ROK-444) ──────────────────────────────
-
-  /** Minimum cumulative playtime (seconds) to trigger auto-heart */
-  private static readonly AUTO_HEART_THRESHOLD_SECONDS = 18_000; // 5 hours
-
-  /**
-   * Auto-heart games where a user's total playtime crosses the 5-hour threshold.
-   * Skips users who disabled auto-heart, already-hearted games, and suppressed pairs.
-   */
-  // @VisibleForTesting
+  /** @VisibleForTesting */
   async autoHeartCheck(): Promise<void> {
-    // 1. Find (user, game) pairs with >= 5h total duration
-    const candidates = await this.db
-      .select({
-        userId: schema.gameActivitySessions.userId,
-        gameId: schema.gameActivitySessions.gameId,
-      })
-      .from(schema.gameActivitySessions)
-      .where(
-        and(
-          isNotNull(schema.gameActivitySessions.gameId),
-          isNotNull(schema.gameActivitySessions.endedAt),
-        ),
-      )
-      .groupBy(
-        schema.gameActivitySessions.userId,
-        schema.gameActivitySessions.gameId,
-      )
-      .having(
-        gte(
-          sum(schema.gameActivitySessions.durationSeconds),
-          String(GameActivityService.AUTO_HEART_THRESHOLD_SECONDS),
-        ),
-      );
-
-    if (candidates.length === 0) {
-      this.logger.debug('Auto-heart: no candidates above threshold');
-      return;
-    }
-
-    // Extract unique candidate user IDs for scoped queries
-    const candidateUserIds = [...new Set(candidates.map((c) => c.userId))];
-
-    // 2. Get users who have opted out (autoHeartGames = false)
-    const optedOut = await this.db
-      .select({ userId: schema.userPreferences.userId })
-      .from(schema.userPreferences)
-      .where(
-        and(
-          eq(schema.userPreferences.key, 'autoHeartGames'),
-          sql`${schema.userPreferences.value}::text = 'false'`,
-        ),
-      );
-    const optedOutSet = new Set(optedOut.map((r) => r.userId));
-
-    // 3. Get existing interests (scoped to candidate users)
-    const existingInterests = await this.db
-      .select({
-        userId: schema.gameInterests.userId,
-        gameId: schema.gameInterests.gameId,
-      })
-      .from(schema.gameInterests)
-      .where(inArray(schema.gameInterests.userId, candidateUserIds));
-    const existingSet = new Set(
-      existingInterests.map((r) => `${r.userId}:${r.gameId}`),
-    );
-
-    // 4. Get suppressions (scoped to candidate users)
-    const suppressions = await this.db
-      .select({
-        userId: schema.gameInterestSuppressions.userId,
-        gameId: schema.gameInterestSuppressions.gameId,
-      })
-      .from(schema.gameInterestSuppressions)
-      .where(inArray(schema.gameInterestSuppressions.userId, candidateUserIds));
-    const suppressedSet = new Set(
-      suppressions.map((r) => `${r.userId}:${r.gameId}`),
-    );
-
-    // 5. Filter and batch insert
-    const toInsert = candidates.filter((c) => {
-      if (!c.gameId) return false;
-      if (optedOutSet.has(c.userId)) return false;
-      const key = `${c.userId}:${c.gameId}`;
-      if (existingSet.has(key)) return false;
-      if (suppressedSet.has(key)) return false;
-      return true;
-    });
-
-    if (toInsert.length === 0) {
-      this.logger.debug('Auto-heart: no new hearts to insert');
-      return;
-    }
-
-    await this.db
-      .insert(schema.gameInterests)
-      .values(
-        toInsert.map((row) => ({
-          userId: row.userId,
-          gameId: row.gameId!,
-          source: 'discord',
-        })),
-      )
-      .onConflictDoNothing();
-
-    this.logger.log(`Auto-hearted ${toInsert.length} game(s) for users`);
-  }
-
-  // ─── Helpers ──────────────────────────────────────────────────
-
-  private addToRollupMap(
-    map: Map<
-      string,
-      {
-        userId: number;
-        gameId: number;
-        period: string;
-        periodStart: string;
-        totalSeconds: number;
-      }
-    >,
-    userId: number,
-    gameId: number,
-    period: string,
-    periodStart: string,
-    durationSeconds: number,
-  ): void {
-    const key = `${userId}:${gameId}:${period}:${periodStart}`;
-    const existing = map.get(key);
-    if (existing) {
-      existing.totalSeconds += durationSeconds;
-    } else {
-      map.set(key, {
-        userId,
-        gameId,
-        period,
-        periodStart,
-        totalSeconds: durationSeconds,
-      });
-    }
-  }
-
-  private formatDate(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  }
-
-  private getWeekStart(date: Date): string {
-    const d = new Date(date);
-    const day = d.getDay();
-    // Adjust to Monday (ISO week start)
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-    d.setDate(diff);
-    return this.formatDate(d);
+    await autoHeartCheck(this.db, this.logger);
   }
 }

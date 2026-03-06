@@ -1,11 +1,7 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import {
-  type EmbedBuilder,
-  type ActionRowBuilder,
-  type ButtonBuilder,
-} from 'discord.js';
+import type { EmbedBuilder, ActionRowBuilder, ButtonBuilder } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -17,10 +13,23 @@ import {
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { EMBED_STATES } from '../discord-bot.constants';
+import {
+  findExistingEmbedRecord,
+  querySignupRows,
+  queryRoleCounts,
+  filterActiveSignups,
+  buildSignupMentions,
+  isUnknownMessageError,
+} from './embed-poster.helpers';
+
+interface ChannelOpts {
+  gameId?: number | null;
+  recurrenceGroupId?: string | null;
+  notificationChannelOverride?: string | null;
+}
 
 /**
  * Shared embed posting logic (ROK-434).
- *
  * Extracted from DiscordEventListener so that both the event listener
  * and the EmbedSchedulerService can post embeds without duplication.
  */
@@ -37,20 +46,7 @@ export class EmbedPosterService {
     private readonly settingsService: SettingsService,
   ) {}
 
-  /**
-   * Post an embed for an event to the appropriate Discord channel.
-   * Resolves the channel, builds the embed, sends it, and inserts the
-   * tracking row into discord_event_messages.
-   *
-   * ROK-551: Idempotent — if a discord_event_messages row already exists,
-   * edits the existing Discord message instead of posting a duplicate.
-   * Falls back to posting a new message if the original was deleted.
-   *
-   * @param eventId - The event ID
-   * @param event - Event data for embed construction
-   * @param gameId - Optional game ID for channel resolution
-   * @returns true if the embed was posted successfully, false otherwise
-   */
+  /** Post an embed for an event to the appropriate Discord channel. */
   async postEmbed(
     eventId: number,
     event: EmbedEventData,
@@ -58,110 +54,138 @@ export class EmbedPosterService {
     recurrenceGroupId?: string | null,
     notificationChannelOverride?: string | null,
   ): Promise<boolean> {
-    if (!this.clientService.isConnected()) {
-      this.logger.debug('Bot not connected, skipping embed post');
-      return false;
-    }
-
-    const channelId = await this.channelResolver.resolveChannelForEvent(
+    if (!this.clientService.isConnected()) return false;
+    const opts: ChannelOpts = {
       gameId,
       recurrenceGroupId,
       notificationChannelOverride,
-    );
-    if (!channelId) return false;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) {
-      this.logger.warn('Bot is not in any guild, skipping embed post');
-      return false;
-    }
-
+    };
+    const resolved = await this.resolvePostTargets(opts);
+    if (!resolved) return false;
     try {
-      // ROK-551: Check for existing embed row (idempotency guard)
-      const [existingRecord] = await this.db
-        .select({
-          id: schema.discordEventMessages.id,
-          channelId: schema.discordEventMessages.channelId,
-          messageId: schema.discordEventMessages.messageId,
-        })
-        .from(schema.discordEventMessages)
-        .where(
-          and(
-            eq(schema.discordEventMessages.eventId, eventId),
-            eq(schema.discordEventMessages.guildId, guildId),
-          ),
-        )
-        .limit(1);
-
-      // Enrich with live roster data so the embed reflects current signups
-      const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
-
-      // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
-      const voiceChannelId =
-        notificationChannelOverride ??
-        (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-          gameId,
-          recurrenceGroupId,
-        ));
-      if (voiceChannelId) {
-        enrichedEvent.voiceChannelId = voiceChannelId;
-      }
-
-      const context = await this.buildContext();
-      const { embed, row } = this.embedFactory.buildEventEmbed(
-        enrichedEvent,
-        context,
-      );
-
-      if (existingRecord) {
-        // ROK-551: Embed already posted — edit in place instead of duplicating
-        return await this.editExistingEmbed(
-          eventId,
-          existingRecord,
-          embed,
-          row,
-          gameId,
-          recurrenceGroupId,
-          notificationChannelOverride,
-        );
-      }
-
-      const message = await this.clientService.sendEmbed(channelId, embed, row);
-
-      await this.db.insert(schema.discordEventMessages).values({
+      return await this.postOrEditEmbed(
         eventId,
-        guildId,
-        channelId,
-        messageId: message.id,
-        embedState: EMBED_STATES.POSTED,
-      });
-
-      this.logger.log(
-        `Posted event embed for event ${eventId} to channel ${channelId} (msg: ${message.id})`,
+        event,
+        resolved.channelId,
+        resolved.guildId,
+        opts,
       );
-      return true;
     } catch (error) {
-      this.logger.error(
-        `Failed to post event embed for event ${eventId}:`,
-        error,
-      );
+      this.logger.error(`Failed to post embed for event ${eventId}:`, error);
       return false;
     }
   }
 
-  /**
-   * ROK-551: Edit an existing Discord embed message. If the message was
-   * deleted from Discord, falls back to posting a new one and updating the
-   * stored message ID.
-   */
+  /** Check if an event already has a discord_event_messages row. */
+  async hasEmbed(eventId: number): Promise<boolean> {
+    const rows = await this.db
+      .select({ id: schema.discordEventMessages.id })
+      .from(schema.discordEventMessages)
+      .where(eq(schema.discordEventMessages.eventId, eventId))
+      .limit(1);
+    return rows.length > 0;
+  }
+
+  /** Enrich event data with live roster/signup information from the DB. */
+  async enrichWithLiveRoster(
+    eventId: number,
+    event: EmbedEventData,
+  ): Promise<EmbedEventData> {
+    const signupRows = await querySignupRows(this.db, eventId);
+    const activeSignups = filterActiveSignups(signupRows);
+    const roleCounts = await queryRoleCounts(this.db, eventId);
+    const signupMentions = buildSignupMentions(activeSignups);
+    return {
+      ...event,
+      signupCount: activeSignups.length,
+      roleCounts,
+      signupMentions,
+    };
+  }
+
+  // --- Private helpers ---
+
+  private async resolvePostTargets(
+    opts: ChannelOpts,
+  ): Promise<{ channelId: string; guildId: string } | null> {
+    const channelId = await this.channelResolver.resolveChannelForEvent(
+      opts.gameId,
+      opts.recurrenceGroupId,
+      opts.notificationChannelOverride,
+    );
+    if (!channelId) return null;
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return null;
+    return { channelId, guildId };
+  }
+
+  private async buildContext(): Promise<EmbedContext> {
+    const [branding, clientUrl, timezone] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
+    ]);
+    return { communityName: branding.communityName, clientUrl, timezone };
+  }
+
+  private async postOrEditEmbed(
+    eventId: number,
+    event: EmbedEventData,
+    channelId: string,
+    guildId: string,
+    opts: ChannelOpts,
+  ): Promise<boolean> {
+    const existing = await findExistingEmbedRecord(this.db, eventId, guildId);
+    const enrichedEvent = await this.enrichWithLiveRoster(eventId, event);
+    await this.applyVoiceChannel(enrichedEvent, opts);
+    const context = await this.buildContext();
+    const { embed, row } = this.embedFactory.buildEventEmbed(
+      enrichedEvent,
+      context,
+    );
+    if (existing)
+      return this.editExistingEmbed(eventId, existing, embed, row, opts);
+    return this.postNewEmbed(eventId, channelId, guildId, embed, row);
+  }
+
+  private async applyVoiceChannel(
+    enrichedEvent: EmbedEventData,
+    opts: ChannelOpts,
+  ): Promise<void> {
+    const voiceChannelId =
+      opts.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        opts.gameId,
+        opts.recurrenceGroupId,
+      ));
+    if (voiceChannelId) enrichedEvent.voiceChannelId = voiceChannelId;
+  }
+
+  private async postNewEmbed(
+    eventId: number,
+    channelId: string,
+    guildId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+  ): Promise<boolean> {
+    const message = await this.clientService.sendEmbed(channelId, embed, row);
+    await this.db.insert(schema.discordEventMessages).values({
+      eventId,
+      guildId,
+      channelId,
+      messageId: message.id,
+      embedState: EMBED_STATES.POSTED,
+    });
+    this.logger.log(`Posted embed for event ${eventId} (msg: ${message.id})`);
+    return true;
+  }
+
   private async editExistingEmbed(
     eventId: number,
     record: { id: string; channelId: string; messageId: string },
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
-    gameId?: number | null,
-    recurrenceGroupId?: string | null,
-    notificationChannelOverride?: string | null,
+    opts?: ChannelOpts,
   ): Promise<boolean> {
     try {
       await this.clientService.editEmbed(
@@ -175,160 +199,43 @@ export class EmbedPosterService {
       );
       return true;
     } catch (editError) {
-      // Discord API error 10008 = Unknown Message (deleted)
-      const isUnknownMessage =
-        editError instanceof Error &&
-        (editError.message.includes('Unknown Message') ||
-          (editError as Error & { code?: number }).code === 10008);
-
-      if (!isUnknownMessage) {
+      if (!isUnknownMessageError(editError)) {
         this.logger.error(
-          `Failed to edit existing embed for event ${eventId} (msg: ${record.messageId}):`,
+          `Failed to edit embed for event ${eventId}:`,
           editError,
         );
         return false;
       }
-
-      // Message was deleted — post a new one and update the record
-      this.logger.warn(
-        `Existing embed for event ${eventId} was deleted (msg: ${record.messageId}), posting replacement`,
-      );
-
-      const guildId = this.clientService.getGuildId();
-      if (!guildId) return false;
-
-      const channelId = await this.channelResolver.resolveChannelForEvent(
-        gameId,
-        recurrenceGroupId,
-        notificationChannelOverride,
-      );
-      if (!channelId) return false;
-
-      const message = await this.clientService.sendEmbed(channelId, embed, row);
-
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({
-          channelId,
-          messageId: message.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.discordEventMessages.id, record.id));
-
-      this.logger.log(
-        `Posted replacement embed for event ${eventId} (msg: ${message.id})`,
-      );
-      return true;
+      return this.replaceDeletedEmbed(eventId, record.id, embed, row, opts);
     }
   }
 
-  /**
-   * Check if an event already has a discord_event_messages row.
-   */
-  async hasEmbed(eventId: number): Promise<boolean> {
-    const rows = await this.db
-      .select({ id: schema.discordEventMessages.id })
-      .from(schema.discordEventMessages)
-      .where(eq(schema.discordEventMessages.eventId, eventId))
-      .limit(1);
-    return rows.length > 0;
-  }
-
-  /**
-   * Enrich event data with live roster/signup information from the DB.
-   * The caller's payload may have stale or empty signup data (e.g. scheduler
-   * hardcodes signupCount: 0). This queries the current state so the embed
-   * is accurate at post time.
-   */
-  async enrichWithLiveRoster(
+  private async replaceDeletedEmbed(
     eventId: number,
-    event: EmbedEventData,
-  ): Promise<EmbedEventData> {
-    const signupRows = await this.db
-      .select({
-        discordId: sql<
-          string | null
-        >`COALESCE(${schema.users.discordId}, ${schema.eventSignups.discordUserId})`,
-        username: schema.users.username,
-        role: schema.rosterAssignments.role,
-        status: schema.eventSignups.status,
-        preferredRoles: schema.eventSignups.preferredRoles,
-        className: schema.characters.class,
-      })
-      .from(schema.eventSignups)
-      .leftJoin(schema.users, eq(schema.eventSignups.userId, schema.users.id))
-      .leftJoin(
-        schema.rosterAssignments,
-        eq(schema.eventSignups.id, schema.rosterAssignments.signupId),
-      )
-      .leftJoin(
-        schema.characters,
-        eq(schema.eventSignups.characterId, schema.characters.id),
-      )
-      .where(eq(schema.eventSignups.eventId, eventId));
-
-    const activeSignups = signupRows.filter(
-      (r) =>
-        r.status !== 'declined' &&
-        r.status !== 'roached_out' &&
-        r.status !== 'departed',
+    recordId: string,
+    embed: EmbedBuilder,
+    row?: ActionRowBuilder<ButtonBuilder>,
+    opts?: ChannelOpts,
+  ): Promise<boolean> {
+    this.logger.warn(
+      `Existing embed for event ${eventId} was deleted, posting replacement`,
     );
-
-    const roleRows = await this.db
-      .select({
-        role: schema.rosterAssignments.role,
-        count: sql<number>`count(*)::int`,
-      })
-      .from(schema.rosterAssignments)
-      .innerJoin(
-        schema.eventSignups,
-        eq(schema.rosterAssignments.signupId, schema.eventSignups.id),
-      )
-      .where(
-        and(
-          eq(schema.rosterAssignments.eventId, eventId),
-          sql`${schema.eventSignups.status} != 'declined'`,
-        ),
-      )
-      .groupBy(schema.rosterAssignments.role);
-
-    const roleCounts: Record<string, number> = {};
-    for (const row of roleRows) {
-      if (row.role) roleCounts[row.role] = row.count;
-    }
-
-    const signupMentions = activeSignups
-      .filter((r) => r.discordId !== null || r.username !== null)
-      .map((r) => ({
-        discordId: r.discordId,
-        username: r.username,
-        role: r.role ?? null,
-        preferredRoles: r.preferredRoles,
-        status: r.status ?? null,
-        className: r.className ?? null,
-      }));
-
-    return {
-      ...event,
-      signupCount: activeSignups.length,
-      roleCounts,
-      signupMentions,
-    };
-  }
-
-  /**
-   * Build shared embed context from settings.
-   */
-  private async buildContext(): Promise<EmbedContext> {
-    const [branding, clientUrl, timezone] = await Promise.all([
-      this.settingsService.getBranding(),
-      this.settingsService.getClientUrl(),
-      this.settingsService.getDefaultTimezone(),
-    ]);
-    return {
-      communityName: branding.communityName,
-      clientUrl,
-      timezone,
-    };
+    const guildId = this.clientService.getGuildId();
+    if (!guildId) return false;
+    const channelId = await this.channelResolver.resolveChannelForEvent(
+      opts?.gameId,
+      opts?.recurrenceGroupId,
+      opts?.notificationChannelOverride,
+    );
+    if (!channelId) return false;
+    const message = await this.clientService.sendEmbed(channelId, embed, row);
+    await this.db
+      .update(schema.discordEventMessages)
+      .set({ channelId, messageId: message.id, updatedAt: new Date() })
+      .where(eq(schema.discordEventMessages.id, recordId));
+    this.logger.log(
+      `Posted replacement embed for event ${eventId} (msg: ${message.id})`,
+    );
+    return true;
   }
 }
