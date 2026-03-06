@@ -56,6 +56,20 @@ async function assignIfUnassigned(
   }
 }
 
+async function buildDuplicateResponse(
+  db: PostgresJsDatabase<typeof schema>,
+  existing: SignupRow,
+  user: UserRow,
+): Promise<{ isDuplicate: true; response: SignupResponseDto }> {
+  const character = existing.characterId
+    ? await getCharacterById(db, existing.characterId)
+    : null;
+  return {
+    isDuplicate: true as const,
+    response: buildSignupResponse(existing, user, character),
+  };
+}
+
 export async function handleDuplicateSignup(
   tx: PostgresJsDatabase<typeof schema>,
   db: PostgresJsDatabase<typeof schema>,
@@ -80,14 +94,7 @@ export async function handleDuplicateSignup(
     autoBench,
     benchPromo,
   );
-
-  const character = existing.characterId
-    ? await getCharacterById(db, existing.characterId)
-    : null;
-  return {
-    isDuplicate: true as const,
-    response: buildSignupResponse(existing, user, character),
-  };
+  return buildDuplicateResponse(db, existing, user);
 }
 
 function isCancelledStatus(status: string): boolean {
