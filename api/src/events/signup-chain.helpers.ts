@@ -22,38 +22,41 @@ interface QueueEntry {
   usedSignupIds: Set<number>;
 }
 
+type Assignment = {
+  id: number;
+  signupId: number;
+  role: string | null;
+  position: number;
+};
+type SignupPrefs = { id: number; preferredRoles: string[] | null };
+
+/** Initializes the BFS queue with entries for each preferred role. */
+function initQueue(
+  newPrefs: string[],
+  roleCapacity: Record<string, number>,
+): QueueEntry[] {
+  return newPrefs
+    .filter((pref) => pref in roleCapacity)
+    .map((pref) => ({
+      roleToFree: pref,
+      moves: [],
+      usedSignupIds: new Set<number>(),
+    }));
+}
+
+/** Finds a chain of role swaps that frees a slot for the new player. */
 export function findRearrangementChain(
   newPrefs: string[],
-  currentAssignments: Array<{
-    id: number;
-    signupId: number;
-    role: string | null;
-    position: number;
-  }>,
-  allSignups: Array<{
-    id: number;
-    preferredRoles: string[] | null;
-  }>,
+  currentAssignments: Assignment[],
+  allSignups: SignupPrefs[],
   roleCapacity: Record<string, number>,
   filledPerRole: Record<string, number>,
 ): ChainResult | null {
   const MAX_DEPTH = 3;
-  const queue: QueueEntry[] = [];
-
-  for (const pref of newPrefs) {
-    if (pref in roleCapacity) {
-      queue.push({
-        roleToFree: pref,
-        moves: [],
-        usedSignupIds: new Set(),
-      });
-    }
-  }
-
+  const queue = initQueue(newPrefs, roleCapacity);
   while (queue.length > 0) {
     const entry = queue.shift()!;
     if (entry.moves.length >= MAX_DEPTH) continue;
-
     const result = processQueueEntry(
       entry,
       currentAssignments,
@@ -64,57 +67,55 @@ export function findRearrangementChain(
     );
     if (result) return result;
   }
-
   return null;
 }
 
+/** Processes one BFS queue entry, checking all occupants of the target role. */
 function processQueueEntry(
   entry: QueueEntry,
-  currentAssignments: Array<{
-    id: number;
-    signupId: number;
-    role: string | null;
-    position: number;
-  }>,
-  allSignups: Array<{
-    id: number;
-    preferredRoles: string[] | null;
-  }>,
+  assignments: Assignment[],
+  allSignups: SignupPrefs[],
   roleCapacity: Record<string, number>,
   filledPerRole: Record<string, number>,
   queue: QueueEntry[],
 ): ChainResult | null {
-  const occupants = currentAssignments.filter(
+  const occupants = assignments.filter(
     (a) => a.role === entry.roleToFree && !entry.usedSignupIds.has(a.signupId),
   );
-
-  for (const occupant of occupants) {
-    const result = tryOccupantMoves(
-      occupant,
+  for (const occ of occupants) {
+    const r = tryOccupantMoves(
+      occ,
       entry,
       allSignups,
       roleCapacity,
       filledPerRole,
       queue,
     );
-    if (result) return result;
+    if (r) return r;
   }
-
   return null;
 }
 
-function tryOccupantMoves(
-  occupant: {
-    id: number;
-    signupId: number;
-    role: string | null;
-    position: number;
-  },
+/** Builds a ChainMove from an occupant being moved to an alt role. */
+function buildMove(
+  occupant: Assignment,
   entry: QueueEntry,
-  allSignups: Array<{
-    id: number;
-    preferredRoles: string[] | null;
-  }>,
+  altRole: string,
+): ChainMove {
+  return {
+    assignmentId: occupant.id,
+    signupId: occupant.signupId,
+    fromRole: entry.roleToFree,
+    toRole: altRole,
+    position: occupant.position,
+  };
+}
+
+/** Tries moving an occupant to each of their alternate preferred roles. */
+function tryOccupantMoves(
+  occupant: Assignment,
+  entry: QueueEntry,
+  allSignups: SignupPrefs[],
   roleCapacity: Record<string, number>,
   filledPerRole: Record<string, number>,
   queue: QueueEntry[],
@@ -122,40 +123,24 @@ function tryOccupantMoves(
   const signup = allSignups.find((s) => s.id === occupant.signupId);
   const prefs = (signup?.preferredRoles as string[] | null) ?? [];
   if (prefs.length <= 1) return null;
-
-  for (const altRole of prefs) {
-    if (altRole === entry.roleToFree || !(altRole in roleCapacity)) {
-      continue;
-    }
-
-    const move: ChainMove = {
-      assignmentId: occupant.id,
-      signupId: occupant.signupId,
-      fromRole: entry.roleToFree,
-      toRole: altRole,
-      position: occupant.position,
-    };
+  for (const alt of prefs) {
+    if (alt === entry.roleToFree || !(alt in roleCapacity)) continue;
+    const move = buildMove(occupant, entry, alt);
     const newMoves = [...entry.moves, move];
-    const netFilled = computeNetFilled(altRole, newMoves, filledPerRole);
-
-    if (netFilled <= roleCapacity[altRole]) {
+    const net = computeNetFilled(alt, newMoves, filledPerRole);
+    if (net <= roleCapacity[alt]) {
       const freedRole =
         entry.moves.length === 0 ? entry.roleToFree : entry.moves[0].fromRole;
       return { freedRole, moves: newMoves };
     }
-
     const newUsed = new Set(entry.usedSignupIds);
     newUsed.add(occupant.signupId);
-    queue.push({
-      roleToFree: altRole,
-      moves: newMoves,
-      usedSignupIds: newUsed,
-    });
+    queue.push({ roleToFree: alt, moves: newMoves, usedSignupIds: newUsed });
   }
-
   return null;
 }
 
+/** Computes net filled count for a role after applying pending moves. */
 function computeNetFilled(
   role: string,
   moves: ChainMove[],

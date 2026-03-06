@@ -4,24 +4,16 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import type { PollAnswerResult } from './event-plans-poll.helpers';
-import {
-  determineWinner,
-  computeTotalRosterSlots,
-} from './event-plans-poll.helpers';
-import {
-  postDiscordPoll,
-  fetchPollResults,
-  lookupGameInfo,
-  dmOrganizer,
-} from './event-plans-discord.helpers';
-import type { PollOptionResult, PollResultsResponse } from '@raid-ledger/contract';
+import { computeTotalRosterSlots } from './event-plans-poll.helpers';
+import { dmOrganizer } from './event-plans-discord.helpers';
+import type {
+  PollOptionResult,
+  PollResultsResponse,
+} from '@raid-ledger/contract';
 
 const logger = new Logger('EventPlansLifecycle');
 
-/**
- * Process the standard-mode "None wins" check.
- * Returns true if the plan should stop processing (None wins → expired).
- */
+/** Process standard-mode "None wins" check. Returns true if plan should stop. */
 export async function handleStandardNoneWins(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
@@ -31,34 +23,27 @@ export async function handleStandardNoneWins(
 ): Promise<boolean> {
   const noneResult = results.get(noneIndex);
   const noneVotes = noneResult?.registeredVotes ?? 0;
-  const maxRegisteredVotes = Math.max(
+  const maxVotes = Math.max(
     ...Array.from(results.values()).map((r) => r.registeredVotes),
     0,
   );
-
-  if (noneVotes > 0 && noneVotes >= maxRegisteredVotes) {
+  if (noneVotes > 0 && noneVotes >= maxVotes) {
     await db
       .update(schema.eventPlans)
       .set({ status: 'expired', updatedAt: new Date() })
       .where(eq(schema.eventPlans.id, plan.id));
-
     await dmOrganizer(
       db,
       discordClient,
       plan.creatorId,
       `The poll for "${plan.title}" closed and "None of these work" got the most votes. No event was created.`,
-    ).catch((e) =>
-      logger.warn(`Failed to DM organizer ${plan.creatorId}:`, e),
-    );
+    ).catch((e) => logger.warn(`Failed to DM organizer ${plan.creatorId}:`, e));
     return true;
   }
   return false;
 }
 
-/**
- * Handle All-or-Nothing re-poll when someone voted "None" and threshold not met.
- * Returns true if repoll condition triggered (regardless of outcome).
- */
+/** Check if all-or-nothing mode should trigger a re-poll. */
 export function shouldRepollAllOrNothing(
   plan: typeof schema.eventPlans.$inferSelect,
   results: Map<number, PollAnswerResult>,
@@ -68,25 +53,17 @@ export function shouldRepollAllOrNothing(
   const noneResult = results.get(noneIndex);
   const noneVotes = noneResult?.registeredVotes ?? 0;
   if (noneVotes <= 0) return false;
-
-  const totalRosterSlots = computeTotalRosterSlots(plan.slotConfig);
-
-  // When totalRosterSlots is 0, no threshold can be met → re-poll
-  if (totalRosterSlots > 0) {
+  const totalSlots = computeTotalRosterSlots(plan.slotConfig);
+  if (totalSlots > 0) {
     for (const [idx, result] of results.entries()) {
-      if (idx === noneIndex) continue;
-      if (idx >= pollOptionsLength) continue;
-      if (result.registeredVotes >= totalRosterSlots) {
-        return false; // threshold met
-      }
+      if (idx === noneIndex || idx >= pollOptionsLength) continue;
+      if (result.registeredVotes >= totalSlots) return false;
     }
   }
-  return true; // should repoll
+  return true;
 }
 
-/**
- * Handle no-winner scenario (no votes at all).
- */
+/** Handle no-winner scenario (no votes at all). */
 export async function handleNoWinner(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
@@ -96,7 +73,6 @@ export async function handleNoWinner(
     .update(schema.eventPlans)
     .set({ status: 'expired', updatedAt: new Date() })
     .where(eq(schema.eventPlans.id, plan.id));
-
   await dmOrganizer(
     db,
     discordClient,
@@ -105,9 +81,58 @@ export async function handleNoWinner(
   ).catch((e) => logger.warn(`Failed to DM organizer ${plan.creatorId}:`, e));
 }
 
-/**
- * Build poll results response DTO with voter details.
- */
+/** Looks up usernames for a set of Discord IDs. */
+async function lookupUsernames(
+  db: PostgresJsDatabase<typeof schema>,
+  discordIds: Set<string>,
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (discordIds.size === 0) return map;
+  const users = await db
+    .select({
+      discordId: schema.users.discordId,
+      username: schema.users.username,
+      displayName: schema.users.displayName,
+    })
+    .from(schema.users)
+    .where(inArray(schema.users.discordId, Array.from(discordIds)));
+  for (const u of users) {
+    if (u.discordId) map.set(u.discordId, u.displayName ?? u.username);
+  }
+  return map;
+}
+
+/** Maps raw poll results to PollOptionResult entries. */
+function mapOptionResults(
+  rawResults: Map<number, PollAnswerResult>,
+  pollOptions: Array<{ date: string; label: string }>,
+  usernameMap: Map<string, string>,
+): { optionResults: PollOptionResult[]; noneOption: PollOptionResult | null } {
+  const noneIndex = pollOptions.length;
+  const optionResults: PollOptionResult[] = [];
+  let noneOption: PollOptionResult | null = null;
+  for (const [idx, raw] of rawResults.entries()) {
+    const voters = raw.registeredVoterIds.map((discordId) => ({
+      discordId,
+      username: usernameMap.get(discordId) ?? null,
+      isRegistered: true,
+    }));
+    const label =
+      idx < pollOptions.length ? pollOptions[idx].label : 'None of these work';
+    const result: PollOptionResult = {
+      index: idx,
+      label,
+      totalVotes: raw.totalVotes,
+      registeredVotes: raw.registeredVotes,
+      voters,
+    };
+    if (idx === noneIndex) noneOption = result;
+    else if (idx < pollOptions.length) optionResults.push(result);
+  }
+  return { optionResults, noneOption };
+}
+
+/** Build poll results response DTO with voter details. */
 export async function buildPollResultsResponse(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
@@ -118,74 +143,23 @@ export async function buildPollResultsResponse(
     date: string;
     label: string;
   }>;
-  const noneIndex = pollOptions.length;
-
-  // Collect all registered voter Discord IDs to look up usernames
-  const allRegisteredIds = new Set<string>();
-  for (const result of rawResults.values()) {
-    for (const id of result.registeredVoterIds) {
-      allRegisteredIds.add(id);
-    }
-  }
-
-  // Look up usernames for registered voters
-  const usernameMap = new Map<string, string>();
-  if (allRegisteredIds.size > 0) {
-    const users = await db
-      .select({
-        discordId: schema.users.discordId,
-        username: schema.users.username,
-        displayName: schema.users.displayName,
-      })
-      .from(schema.users)
-      .where(inArray(schema.users.discordId, Array.from(allRegisteredIds)));
-
-    for (const u of users) {
-      if (u.discordId) {
-        usernameMap.set(u.discordId, u.displayName ?? u.username);
-      }
-    }
-  }
-
-  // Build poll option results
-  const optionResults: PollOptionResult[] = [];
-  let noneOption: PollOptionResult | null = null;
-
-  for (const [idx, raw] of rawResults.entries()) {
-    const voters = raw.registeredVoterIds.map((discordId) => ({
-      discordId,
-      username: usernameMap.get(discordId) ?? null,
-      isRegistered: true,
-    }));
-
-    const optionResult: PollOptionResult = {
-      index: idx,
-      label:
-        idx < pollOptions.length
-          ? pollOptions[idx].label
-          : 'None of these work',
-      totalVotes: raw.totalVotes,
-      registeredVotes: raw.registeredVotes,
-      voters,
-    };
-
-    if (idx === noneIndex) {
-      noneOption = optionResult;
-    } else if (idx < pollOptions.length) {
-      optionResults.push(optionResult);
-    }
-  }
-
+  const allIds = new Set<string>();
+  for (const r of rawResults.values())
+    r.registeredVoterIds.forEach((id) => allIds.add(id));
+  const usernameMap = await lookupUsernames(db, allIds);
+  const { optionResults, noneOption } = mapOptionResults(
+    rawResults,
+    pollOptions,
+    usernameMap,
+  );
   return {
     pollOptions: optionResults,
     noneOption,
-    totalRegisteredVoters: allRegisteredIds.size,
+    totalRegisteredVoters: allIds.size,
   };
 }
 
-/**
- * Schedule a BullMQ poll-close job.
- */
+/** Schedule a BullMQ poll-close job. */
 export interface SchedulePollCloseParams {
   planId: string;
   delayMs: number;

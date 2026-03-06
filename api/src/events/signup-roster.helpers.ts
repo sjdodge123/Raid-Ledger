@@ -121,7 +121,12 @@ async function fetchSignupsWithAssignments(
 async function fetchEventForRoster(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
-): Promise<{ id: number; slotConfig: unknown; maxAttendees: number | null; gameId: number | null }> {
+): Promise<{
+  id: number;
+  slotConfig: unknown;
+  maxAttendees: number | null;
+  gameId: number | null;
+}> {
   const [event] = await db
     .select({
       id: schema.events.id,
@@ -144,7 +149,11 @@ function partitionAssignments(
   for (const row of rows) {
     const assignment = row.roster_assignments ?? undefined;
     const response = buildRosterAssignmentResponse(
-      { event_signups: row.event_signups, users: row.users, characters: row.characters },
+      {
+        event_signups: row.event_signups,
+        users: row.users,
+        characters: row.characters,
+      },
       assignment,
     );
     if (assignment) assigned.push(response);
@@ -155,10 +164,15 @@ function partitionAssignments(
 
 async function resolveSlots(
   db: PostgresJsDatabase<typeof schema>,
-  event: { slotConfig: unknown; maxAttendees: number | null; gameId: number | null },
+  event: {
+    slotConfig: unknown;
+    maxAttendees: number | null;
+    gameId: number | null;
+  },
   assigned: RosterAssignmentResponse[],
 ): Promise<RosterWithAssignments['slots']> {
-  if (event.slotConfig) return slotConfigFromEvent(event.slotConfig as Record<string, unknown>);
+  if (event.slotConfig)
+    return slotConfigFromEvent(event.slotConfig as Record<string, unknown>);
   if (event.maxAttendees) {
     const benchedCount = assigned.filter((a) => a.slot === 'bench').length;
     return { player: event.maxAttendees, bench: Math.max(benchedCount, 2) };
@@ -232,7 +246,10 @@ async function getUserDiscordId(
   userId: number,
 ): Promise<{ discordId: string; username: string } | null> {
   const [user] = await db
-    .select({ discordId: schema.users.discordId, username: schema.users.username })
+    .select({
+      discordId: schema.users.discordId,
+      username: schema.users.username,
+    })
     .from(schema.users)
     .where(eq(schema.users.id, userId))
     .limit(1);
@@ -262,7 +279,10 @@ async function deletePugSlotsByDiscord(
   if (result.length > 0) {
     logger.log(
       'Cleaned up %d stale PUG slot(s) for user %d (discord: %s) on event %d',
-      result.length, userId, user.discordId, eventId,
+      result.length,
+      userId,
+      user.discordId,
+      eventId,
     );
   }
 }

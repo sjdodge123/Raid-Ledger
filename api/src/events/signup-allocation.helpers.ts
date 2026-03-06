@@ -3,10 +3,8 @@ import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { BenchPromotionService } from './bench-promotion.service';
-import {
-  findRearrangementChain,
-  type ChainResult,
-} from './signup-chain.helpers';
+import { findRearrangementChain } from './signup-chain.helpers';
+import { executeChainMoves } from './signup-chain-exec.helpers';
 import { displaceTentativeForSlot } from './signup-tentative.helpers';
 
 const logger = new Logger('SignupAllocation');
@@ -70,26 +68,31 @@ function resolveNewPrefs(
   newSignupId: number,
 ): string[] | null {
   const newSignup = allSignups.find((s) => s.id === newSignupId);
-  if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0) return null;
+  if (!newSignup?.preferredRoles || newSignup.preferredRoles.length === 0)
+    return null;
   const rolePriority: Record<string, number> = { tank: 0, healer: 1, dps: 2 };
   return [...newSignup.preferredRoles].sort(
     (a, b) => (rolePriority[a] ?? 99) - (rolePriority[b] ?? 99),
   );
 }
 
-async function buildAllocationContext(
-  tx: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  newSignupId: number,
+/** Builds role capacity from slot config. */
+function buildRoleCapacity(
   slotConfig: Record<string, unknown> | null,
-): Promise<AllocationContext | null> {
-  const roleCapacity: Record<string, number> = {
+): Record<string, number> {
+  return {
     tank: (slotConfig?.tank as number) ?? 2,
     healer: (slotConfig?.healer as number) ?? 4,
     dps: (slotConfig?.dps as number) ?? 14,
   };
+}
 
-  const [allSignups, currentAssignments] = await Promise.all([
+/** Fetches signups and assignments for an event. */
+async function fetchAllocationData(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+) {
+  return Promise.all([
     tx
       .select({
         id: schema.eventSignups.id,
@@ -104,32 +107,53 @@ async function buildAllocationContext(
       .from(schema.rosterAssignments)
       .where(eq(schema.rosterAssignments.eventId, eventId)),
   ]);
-
-  const { filledPerRole, occupied } = initRoleCounters();
-  tallyAssignments(currentAssignments, filledPerRole, occupied);
-
-  const newPrefs = resolveNewPrefs(allSignups, newSignupId);
-  if (!newPrefs) return null;
-
-  return { newPrefs, roleCapacity, filledPerRole, occupied, currentAssignments, allSignups };
 }
 
+async function buildAllocationContext(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  newSignupId: number,
+  slotConfig: Record<string, unknown> | null,
+): Promise<AllocationContext | null> {
+  const roleCapacity = buildRoleCapacity(slotConfig);
+  const [allSignups, currentAssignments] = await fetchAllocationData(
+    tx,
+    eventId,
+  );
+  const { filledPerRole, occupied } = initRoleCounters();
+  tallyAssignments(currentAssignments, filledPerRole, occupied);
+  const newPrefs = resolveNewPrefs(allSignups, newSignupId);
+  if (!newPrefs) return null;
+  return {
+    newPrefs,
+    roleCapacity,
+    filledPerRole,
+    occupied,
+    currentAssignments,
+    allSignups,
+  };
+}
+
+/** Tries to place the signup directly into an open preferred-role slot. */
 async function tryDirectSlot(
   tx: PostgresJsDatabase<typeof schema>,
   eventId: number,
   signupId: number,
-  prefs: string[],
-  capacity: Record<string, number>,
-  filled: Record<string, number>,
+  ctx: AllocationContext,
   findPos: (role: string) => number,
   benchPromo: BenchPromotionService,
 ): Promise<boolean> {
-  for (const role of prefs) {
-    if (role in capacity && filled[role] < capacity[role]) {
+  for (const role of ctx.newPrefs) {
+    if (
+      role in ctx.roleCapacity &&
+      ctx.filledPerRole[role] < ctx.roleCapacity[role]
+    ) {
       const position = findPos(role);
       await insertAssignment(tx, eventId, signupId, role, position);
       await confirmSignup(tx, signupId);
-      logger.log(`Auto-allocated signup ${signupId} to ${role} slot ${position} (direct match)`);
+      logger.log(
+        `Auto-allocated signup ${signupId} to ${role} slot ${position} (direct match)`,
+      );
       await benchPromo.cancelPromotion(eventId, role, position);
       return true;
     }
@@ -148,11 +172,80 @@ async function tryTentativeDisplacement(
   const status = ctx.allSignups.find((s) => s.id === newSignupId)?.status;
   if (status === 'tentative') return false;
   return displaceTentativeForSlot(
-    tx, eventId, newSignupId, ctx.newPrefs, ctx.currentAssignments,
-    ctx.allSignups, ctx.roleCapacity, ctx.occupied, findPos, benchPromo,
+    tx,
+    eventId,
+    newSignupId,
+    ctx.newPrefs,
+    ctx.currentAssignments,
+    ctx.allSignups,
+    ctx.roleCapacity,
+    ctx.occupied,
+    findPos,
+    benchPromo,
   );
 }
 
+/** Attempts chain rearrangement to free a slot for the new signup. */
+async function tryChainRearrangement(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  newSignupId: number,
+  ctx: AllocationContext,
+  findPos: (role: string) => number,
+  benchPromo: BenchPromotionService,
+): Promise<boolean> {
+  const chain = findRearrangementChain(
+    ctx.newPrefs,
+    ctx.currentAssignments,
+    ctx.allSignups,
+    ctx.roleCapacity,
+    ctx.filledPerRole,
+  );
+  if (!chain) return false;
+  await executeChainMoves(
+    tx,
+    eventId,
+    newSignupId,
+    chain,
+    ctx.occupied,
+    ctx.filledPerRole,
+    findPos,
+    benchPromo,
+  );
+  return true;
+}
+
+/** Runs allocation strategies in priority order. Returns true if placed. */
+async function runStrategies(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  signupId: number,
+  ctx: AllocationContext,
+  benchPromo: BenchPromotionService,
+): Promise<boolean> {
+  const findPos = (role: string) =>
+    findFirstAvailablePosition(ctx.occupied, role);
+  if (await tryDirectSlot(tx, eventId, signupId, ctx, findPos, benchPromo))
+    return true;
+  if (
+    await tryChainRearrangement(tx, eventId, signupId, ctx, findPos, benchPromo)
+  )
+    return true;
+  if (
+    await tryTentativeDisplacement(
+      tx,
+      ctx,
+      eventId,
+      signupId,
+      findPos,
+      benchPromo,
+    )
+  )
+    return true;
+  return false;
+}
+
+/** Orchestrates auto-allocation strategies in priority order. */
 export async function autoAllocateSignup(
   tx: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -160,63 +253,16 @@ export async function autoAllocateSignup(
   slotConfig: Record<string, unknown> | null,
   benchPromo: BenchPromotionService,
 ): Promise<void> {
-  const ctx = await buildAllocationContext(tx, eventId, newSignupId, slotConfig);
+  const ctx = await buildAllocationContext(
+    tx,
+    eventId,
+    newSignupId,
+    slotConfig,
+  );
   if (!ctx) return;
-
-  const findPos = (role: string) => findFirstAvailablePosition(ctx.occupied, role);
-
-  if (await tryDirectSlot(tx, eventId, newSignupId, ctx.newPrefs, ctx.roleCapacity, ctx.filledPerRole, findPos, benchPromo)) return;
-
-  const chain = findRearrangementChain(ctx.newPrefs, ctx.currentAssignments, ctx.allSignups, ctx.roleCapacity, ctx.filledPerRole);
-  if (chain) {
-    await executeChainMoves(tx, eventId, newSignupId, chain, ctx.occupied, ctx.filledPerRole, findPos, benchPromo);
-    return;
-  }
-
-  if (await tryTentativeDisplacement(tx, ctx, eventId, newSignupId, findPos, benchPromo)) return;
-  logger.log(`Auto-allocation: signup ${newSignupId} could not be placed`);
-}
-
-function applyChainMove(
-  move: { fromRole: string; toRole: string; position: number },
-  nextMove: { fromRole: string; position: number } | null,
-  occupied: Record<string, Set<number>>,
-  filledPerRole: Record<string, number>,
-  findPos: (role: string) => number,
-): number {
-  const newPos = nextMove?.fromRole === move.toRole ? nextMove.position : findPos(move.toRole);
-  occupied[move.fromRole]?.delete(move.position);
-  occupied[move.toRole]?.add(newPos);
-  if (!nextMove || nextMove.fromRole !== move.toRole) {
-    filledPerRole[move.toRole]++;
-  }
-  return newPos;
-}
-
-async function executeChainMoves(
-  tx: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  newSignupId: number,
-  chain: ChainResult,
-  occupied: Record<string, Set<number>>,
-  filledPerRole: Record<string, number>,
-  findPos: (role: string) => number,
-  benchPromo: BenchPromotionService,
-): Promise<void> {
-  for (let i = chain.moves.length - 1; i >= 0; i--) {
-    const move = chain.moves[i];
-    const nextMove = i < chain.moves.length - 1 ? chain.moves[i + 1] : null;
-    const newPos = applyChainMove(move, nextMove, occupied, filledPerRole, findPos);
-    await tx.update(schema.rosterAssignments).set({ role: move.toRole, position: newPos }).where(eq(schema.rosterAssignments.id, move.assignmentId));
-    logger.log(`Chain rearrange: signup ${move.signupId} moved from ${move.fromRole} to ${move.toRole} slot ${newPos}`);
-  }
-
-  const { freedRole } = chain;
-  const freedPosition = chain.moves[0].position;
-  await insertAssignment(tx, eventId, newSignupId, freedRole, freedPosition);
-  await confirmSignup(tx, newSignupId);
-  logger.log(`Auto-allocated signup ${newSignupId} to ${freedRole} slot ${freedPosition} (chain rearrangement)`);
-  await benchPromo.cancelPromotion(eventId, freedRole, freedPosition);
+  const placed = await runStrategies(tx, eventId, newSignupId, ctx, benchPromo);
+  if (!placed)
+    logger.log(`Auto-allocation: signup ${newSignupId} could not be placed`);
 }
 
 export async function insertAssignment(

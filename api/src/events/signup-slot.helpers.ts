@@ -21,9 +21,80 @@ interface SlotContext {
   isMMO: boolean;
 }
 
+interface SlotAssignParams {
+  tx: PostgresJsDatabase<typeof schema>;
+  event: EventRow;
+  eventId: number;
+  dto: CreateSignupDto | undefined;
+  autoBench: boolean;
+  benchPromo: BenchPromotionService;
+}
+
 function getSlotContext(event: EventRow): SlotContext {
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
   return { slotConfig, isMMO: slotConfig?.type === 'mmo' };
+}
+
+/** Checks whether MMO auto-allocation should run for this signup. */
+function needsAutoAllocate(
+  event: EventRow,
+  preferredRoles: string[] | null | undefined,
+  dto: CreateSignupDto | undefined,
+  autoBench: boolean,
+): {
+  slotConfig: Record<string, unknown> | null;
+  hasSingle: boolean | string | null | undefined;
+} | null {
+  const { slotConfig, isMMO } = getSlotContext(event);
+  if (!isMMO || autoBench || dto?.slotRole === 'bench') return null;
+  const hasPreferred = preferredRoles && preferredRoles.length > 0;
+  const hasSingle = !hasPreferred && dto?.slotRole && !autoBench;
+  if (!hasPreferred && !hasSingle) return null;
+  return { slotConfig, hasSingle };
+}
+
+/** Attempts MMO auto-allocation if applicable. Returns true if handled. */
+async function tryAutoAllocateSlot(
+  p: SlotAssignParams,
+  signup: SignupRow,
+  preferredRoles: string[] | null | undefined,
+): Promise<boolean> {
+  const check = needsAutoAllocate(p.event, preferredRoles, p.dto, p.autoBench);
+  if (!check) return false;
+  await runAutoAllocation(
+    p.tx,
+    p.eventId,
+    signup.id,
+    p.dto?.slotRole,
+    check.hasSingle,
+    check.slotConfig,
+    p.benchPromo,
+  );
+  await syncConfirmationStatus(p.tx, signup);
+  return true;
+}
+
+/** Resolves and assigns the manual/generic slot role. */
+async function assignManualSlot(
+  p: SlotAssignParams,
+  signup: SignupRow,
+): Promise<string | null> {
+  const slotRole = p.autoBench
+    ? 'bench'
+    : (p.dto?.slotRole ??
+      (await resolveGenericSlotRole(p.tx, p.event, p.eventId)));
+  if (!slotRole) return null;
+  await assignWithPosition(
+    p.tx,
+    p.eventId,
+    signup.id,
+    slotRole,
+    p.dto?.slotPosition,
+    p.autoBench,
+    p.benchPromo,
+  );
+  if (slotRole !== 'bench') signup.confirmationStatus = 'confirmed';
+  return slotRole;
 }
 
 export async function assignNewSignupSlot(
@@ -35,47 +106,17 @@ export async function assignNewSignupSlot(
   autoBench: boolean,
   benchPromo: BenchPromotionService,
 ): Promise<void> {
-  const { slotConfig, isMMO } = getSlotContext(event);
-  const hasPreferredRoles =
-    dto?.preferredRoles && dto.preferredRoles.length > 0;
-  const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
-
-  if (
-    shouldAutoAllocate(
-      isMMO,
-      hasPreferredRoles,
-      hasSingleSlotRole,
-      autoBench,
-      dto?.slotRole,
-    )
-  ) {
-    await runAutoAllocation(
-      tx,
-      eventId,
-      inserted.id,
-      dto?.slotRole,
-      hasSingleSlotRole,
-      slotConfig,
-      benchPromo,
-    );
-    await syncConfirmationStatus(tx, inserted);
-    return;
-  }
-
-  const slotRole = autoBench
-    ? 'bench'
-    : (dto?.slotRole ?? (await resolveGenericSlotRole(tx, event, eventId)));
+  const p: SlotAssignParams = {
+    tx,
+    event,
+    eventId,
+    dto,
+    autoBench,
+    benchPromo,
+  };
+  if (await tryAutoAllocateSlot(p, inserted, dto?.preferredRoles)) return;
+  const slotRole = await assignManualSlot(p, inserted);
   if (slotRole) {
-    await assignWithPosition(
-      tx,
-      eventId,
-      inserted.id,
-      slotRole,
-      dto?.slotPosition,
-      autoBench,
-      benchPromo,
-    );
-    if (slotRole !== 'bench') inserted.confirmationStatus = 'confirmed';
     logger.log(
       `Assigned user ${inserted.userId} to ${slotRole} slot${autoBench ? ' (auto-benched)' : ''}`,
     );
@@ -91,47 +132,17 @@ export async function assignExistingSignupSlot(
   autoBench: boolean,
   benchPromo: BenchPromotionService,
 ): Promise<void> {
-  const { slotConfig, isMMO } = getSlotContext(event);
-  const hasPreferredRoles =
-    existing.preferredRoles && existing.preferredRoles.length > 0;
-  const hasSingleSlotRole = !hasPreferredRoles && dto?.slotRole && !autoBench;
-
-  if (
-    shouldAutoAllocate(
-      isMMO,
-      hasPreferredRoles,
-      hasSingleSlotRole,
-      autoBench,
-      dto?.slotRole,
-    )
-  ) {
-    await runAutoAllocation(
-      tx,
-      eventId,
-      existing.id,
-      dto?.slotRole,
-      hasSingleSlotRole,
-      slotConfig,
-      benchPromo,
-    );
-    await syncConfirmationStatus(tx, existing);
-    return;
-  }
-
-  const slotRole = autoBench
-    ? 'bench'
-    : (dto?.slotRole ?? (await resolveGenericSlotRole(tx, event, eventId)));
+  const p: SlotAssignParams = {
+    tx,
+    event,
+    eventId,
+    dto,
+    autoBench,
+    benchPromo,
+  };
+  if (await tryAutoAllocateSlot(p, existing, existing.preferredRoles)) return;
+  const slotRole = await assignManualSlot(p, existing);
   if (slotRole) {
-    await assignWithPosition(
-      tx,
-      eventId,
-      existing.id,
-      slotRole,
-      dto?.slotPosition,
-      autoBench,
-      benchPromo,
-    );
-    if (slotRole !== 'bench') existing.confirmationStatus = 'confirmed';
     logger.log(
       `Re-assigned user ${existing.userId} to ${slotRole} slot (existing signup)`,
     );
@@ -169,21 +180,6 @@ export async function assignDiscordSignupSlot(
   if (assignRole) {
     await assignNextPosition(tx, eventId, signupId, assignRole);
   }
-}
-
-function shouldAutoAllocate(
-  isMMO: boolean,
-  hasPreferredRoles: boolean | 0 | null | undefined,
-  hasSingleSlotRole: boolean | string | null | undefined,
-  autoBench: boolean,
-  slotRole: string | undefined,
-): boolean {
-  return (
-    isMMO &&
-    !!(hasPreferredRoles || hasSingleSlotRole) &&
-    !autoBench &&
-    slotRole !== 'bench'
-  );
 }
 
 async function runAutoAllocation(

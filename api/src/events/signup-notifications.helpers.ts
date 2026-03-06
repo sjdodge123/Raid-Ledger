@@ -8,10 +8,96 @@ function formatLabel(r: string): string {
   return r.charAt(0).toUpperCase() + r.slice(1);
 }
 
-/**
- * ROK-390: Detect role changes between old and new roster assignments
- * and send notifications to affected players.
- */
+type NotifyContext = {
+  discordUrl: string | null;
+  voiceChannelId: string | null;
+};
+
+/** Resolves notification context (Discord URL + voice channel). */
+async function resolveContext(
+  notificationService: NotificationService,
+  eventId: number,
+): Promise<NotifyContext> {
+  const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
+  const voiceChannelId =
+    await notificationService.resolveVoiceChannelForEvent(eventId);
+  return { discordUrl, voiceChannelId };
+}
+
+/** Builds the optional payload fields from notification context. */
+function contextPayload(ctx: NotifyContext): Record<string, string> {
+  return {
+    ...(ctx.discordUrl ? { discordUrl: ctx.discordUrl } : {}),
+    ...(ctx.voiceChannelId ? { voiceChannelId: ctx.voiceChannelId } : {}),
+  };
+}
+
+/** Sends a bench-promoted notification. */
+async function notifyBenchPromotion(
+  svc: NotificationService,
+  userId: number,
+  eventId: number,
+  eventTitle: string,
+  newRole: string,
+  ctx: NotifyContext,
+): Promise<void> {
+  await svc.create({
+    userId,
+    type: 'bench_promoted',
+    title: 'Promoted from Bench',
+    message: `You've been moved from bench to ${formatLabel(newRole)} for ${eventTitle}`,
+    payload: { eventId, ...contextPayload(ctx) },
+  });
+}
+
+/** Sends a role-change notification (non-bench). */
+async function notifyRoleChange(
+  svc: NotificationService,
+  userId: number,
+  eventId: number,
+  eventTitle: string,
+  oldRole: string,
+  newRole: string,
+  ctx: NotifyContext,
+): Promise<void> {
+  const isBenched = newRole === 'bench';
+  await svc.create({
+    userId,
+    type: 'roster_reassigned',
+    title: isBenched ? 'Moved to Bench' : 'Role Changed',
+    message: isBenched
+      ? `You've been moved from ${formatLabel(oldRole)} to bench for ${eventTitle}`
+      : `Your role changed from ${formatLabel(oldRole)} to ${formatLabel(newRole)} for ${eventTitle}`,
+    payload: { eventId, oldRole, newRole, ...contextPayload(ctx) },
+  });
+}
+
+/** Sends the appropriate role-change notification for a single assignment. */
+async function notifySingleRoleChange(
+  svc: NotificationService,
+  userId: number,
+  eventId: number,
+  eventTitle: string,
+  oldRole: string,
+  newSlot: string,
+  ctx: NotifyContext,
+): Promise<void> {
+  if (oldRole === 'bench' && newSlot !== 'bench') {
+    await notifyBenchPromotion(svc, userId, eventId, eventTitle, newSlot, ctx);
+  } else {
+    await notifyRoleChange(
+      svc,
+      userId,
+      eventId,
+      eventTitle,
+      oldRole,
+      newSlot,
+      ctx,
+    );
+  }
+}
+
+/** Detects role changes and sends notifications to affected players. */
 export async function notifyRoleChanges(
   notificationService: NotificationService,
   eventId: number,
@@ -20,62 +106,26 @@ export async function notifyRoleChanges(
   signupByUserId: Map<number | null, SignupRow>,
   oldRoleBySignupId: Map<number, string | null>,
 ): Promise<void> {
-  const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await notificationService.resolveVoiceChannelForEvent(eventId);
-
-  for (const assignment of newAssignments) {
-    if (!assignment.userId) continue;
-
-    const signup = signupByUserId.get(assignment.userId);
+  const ctx = await resolveContext(notificationService, eventId);
+  for (const a of newAssignments) {
+    if (!a.userId) continue;
+    const signup = signupByUserId.get(a.userId);
     if (!signup) continue;
-
     const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
-    const newRole = assignment.slot;
-
-    if (oldRole === newRole) continue;
-    if (oldRole === null) continue;
-    if (newRole === null) continue;
-
-    if (oldRole === 'bench' && newRole !== 'bench') {
-      await notificationService.create({
-        userId: assignment.userId,
-        type: 'bench_promoted',
-        title: 'Promoted from Bench',
-        message: `You've been moved from bench to ${formatLabel(newRole)} for ${eventTitle}`,
-        payload: {
-          eventId,
-          ...(discordUrl ? { discordUrl } : {}),
-          ...(voiceChannelId ? { voiceChannelId } : {}),
-        },
-      });
-    } else {
-      const oldLabel = formatLabel(oldRole);
-      const newLabel = formatLabel(newRole);
-      const isBenched = newRole === 'bench';
-
-      await notificationService.create({
-        userId: assignment.userId,
-        type: 'roster_reassigned',
-        title: isBenched ? 'Moved to Bench' : 'Role Changed',
-        message: isBenched
-          ? `You've been moved from ${oldLabel} to bench for ${eventTitle}`
-          : `Your role changed from ${oldLabel} to ${newLabel} for ${eventTitle}`,
-        payload: {
-          eventId,
-          oldRole,
-          newRole,
-          ...(discordUrl ? { discordUrl } : {}),
-          ...(voiceChannelId ? { voiceChannelId } : {}),
-        },
-      });
-    }
+    if (oldRole === a.slot || oldRole === null || a.slot === null) continue;
+    await notifySingleRoleChange(
+      notificationService,
+      a.userId,
+      eventId,
+      eventTitle,
+      oldRole,
+      a.slot,
+      ctx,
+    );
   }
 }
 
-/**
- * ROK-461: Notify players who were newly assigned to a slot.
- */
+/** Notifies players who were newly assigned to a slot. */
 export async function notifyNewAssignments(
   notificationService: NotificationService,
   eventId: number,
@@ -84,37 +134,22 @@ export async function notifyNewAssignments(
   signupByUserId: Map<number | null, SignupRow>,
   oldRoleBySignupId: Map<number, string | null>,
 ): Promise<void> {
-  const discordUrl = await notificationService.getDiscordEmbedUrl(eventId);
-  const voiceChannelId =
-    await notificationService.resolveVoiceChannelForEvent(eventId);
-
-  for (const assignment of newAssignments) {
-    if (!assignment.userId) continue;
-
-    const signup = signupByUserId.get(assignment.userId);
+  const ctx = await resolveContext(notificationService, eventId);
+  for (const a of newAssignments) {
+    if (!a.userId) continue;
+    const signup = signupByUserId.get(a.userId);
     if (!signup) continue;
-
     const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
-    const newRole = assignment.slot;
-
-    if (oldRole !== null) continue;
-    if (newRole === null) continue;
-
-    const isGeneric = newRole === 'player';
-
+    if (oldRole !== null || a.slot === null) continue;
+    const isGeneric = a.slot === 'player';
     await notificationService.create({
-      userId: assignment.userId,
+      userId: a.userId,
       type: 'roster_reassigned',
       title: 'Roster Assignment',
       message: isGeneric
         ? `You've been assigned to the roster for ${eventTitle}`
-        : `You've been assigned to the ${formatLabel(newRole)} role for ${eventTitle}`,
-      payload: {
-        eventId,
-        newRole,
-        ...(discordUrl ? { discordUrl } : {}),
-        ...(voiceChannelId ? { voiceChannelId } : {}),
-      },
+        : `You've been assigned to the ${formatLabel(a.slot)} role for ${eventTitle}`,
+      payload: { eventId, newRole: a.slot, ...contextPayload(ctx) },
     });
   }
 }

@@ -22,67 +22,60 @@ export interface PostDiscordPollParams {
   };
 }
 
-/**
- * Post a Discord poll using the native poll API.
- * Returns the message ID.
- */
-export async function postDiscordPoll(
+/** Fetches a text channel from Discord or throws. */
+async function fetchTextChannel(
   discordClient: DiscordBotClientService,
-  params: PostDiscordPollParams,
-): Promise<string> {
-  const { EmbedBuilder } = await import('discord.js');
+  channelId: string,
+): Promise<import('discord.js').TextChannel> {
   const client = discordClient.getClient();
-  if (!client?.isReady()) {
-    throw new Error('Discord bot is not connected');
-  }
-
-  const channel = await client.channels.fetch(params.channelId);
+  if (!client?.isReady()) throw new Error('Discord bot is not connected');
+  const channel = await client.channels.fetch(channelId);
   if (!channel || !('send' in channel)) {
-    throw new Error(
-      `Channel ${params.channelId} not found or not a text channel`,
-    );
+    throw new Error(`Channel ${channelId} not found or not a text channel`);
   }
+  return channel as import('discord.js').TextChannel;
+}
 
-  const textChannel = channel as import('discord.js').TextChannel;
-
-  const pollAnswers = [
-    ...params.options.map((opt) => ({ text: opt.label })),
-    { text: 'None of these work' },
-  ];
-
-  const content =
-    params.round > 1
-      ? `Not everyone was available — here are new time options! (Round ${params.round})`
-      : undefined;
-
+/** Builds the poll embed for the initial message. */
+async function buildPollEmbed(
+  params: PostDiscordPollParams,
+): Promise<import('discord.js').EmbedBuilder> {
+  const { EmbedBuilder } = await import('discord.js');
   const embed = new EmbedBuilder()
     .setAuthor({ name: 'Raid Ledger' })
-    .setTitle(`📅 ${params.title}`)
+    .setTitle(`\u{1F4C5} ${params.title}`)
     .setColor(0x8b5cf6);
-
   const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN;
-  if (clientUrl && clientUrl !== 'auto') {
+  if (clientUrl && clientUrl !== 'auto')
     embed.setURL(`${clientUrl}/events?tab=plans`);
-  }
-
   const bodyLines = buildPollEmbedBody(
     params.options,
     params.details,
     params.durationHours,
   );
   embed.setDescription(bodyLines.join('\n'));
-
-  if (params.details?.gameCoverUrl) {
+  if (params.details?.gameCoverUrl)
     embed.setThumbnail(params.details.gameCoverUrl);
-  }
+  embed.setFooter({ text: 'Raid Ledger' }).setTimestamp();
+  return embed;
+}
 
-  embed.setFooter({ text: 'Raid Ledger' });
-  embed.setTimestamp();
-
-  // Send embed as a separate message first so it appears ABOVE the poll
+/** Posts a Discord poll and returns the message ID. */
+export async function postDiscordPoll(
+  discordClient: DiscordBotClientService,
+  params: PostDiscordPollParams,
+): Promise<string> {
+  const textChannel = await fetchTextChannel(discordClient, params.channelId);
+  const embed = await buildPollEmbed(params);
+  const content =
+    params.round > 1
+      ? `Not everyone was available \u2014 here are new time options! (Round ${params.round})`
+      : undefined;
   await textChannel.send({ content, embeds: [embed] });
-
-  // Then send the poll as its own message
+  const pollAnswers = [
+    ...params.options.map((opt) => ({ text: opt.label })),
+    { text: 'None of these work' },
+  ];
   const message = await textChannel.send({
     poll: {
       question: { text: `When should we play "${params.title}"?` },
@@ -91,85 +84,65 @@ export async function postDiscordPoll(
       allowMultiselect: true,
     },
   });
-
   return message.id;
 }
 
-/**
- * Fetch poll results from a Discord message.
- * Fetches individual voters and cross-references with registered Raid Ledger users.
- */
+/** Collects voter IDs per answer from a Discord poll message. */
+async function collectVoters(
+  poll: import('discord.js').Poll,
+): Promise<Map<number, string[]>> {
+  const answerVoters = new Map<number, string[]>();
+  let idx = 0;
+  for (const [, answer] of poll.answers) {
+    const voters = await answer.voters.fetch();
+    answerVoters.set(
+      idx,
+      voters.map((user) => user.id),
+    );
+    idx++;
+  }
+  return answerVoters;
+}
+
+/** Looks up which Discord IDs are registered Raid Ledger users. */
+async function findRegisteredUserIds(
+  db: PostgresJsDatabase<typeof schema>,
+  discordIds: string[],
+): Promise<Set<string>> {
+  if (discordIds.length === 0) return new Set();
+  const rows = await db
+    .select({ discordId: schema.users.discordId })
+    .from(schema.users)
+    .where(inArray(schema.users.discordId, discordIds));
+  return new Set(rows.map((r) => r.discordId).filter(Boolean) as string[]);
+}
+
+/** Fetches poll results from a Discord message. */
 export async function fetchPollResults(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
   channelId: string,
   messageId: string,
 ): Promise<Map<number, PollAnswerResult>> {
-  const client = discordClient.getClient();
-  if (!client?.isReady()) {
-    throw new Error('Discord bot is not connected');
-  }
-
-  const channel = await client.channels.fetch(channelId);
-  if (!channel || !('messages' in channel)) {
-    throw new Error(`Channel ${channelId} not found`);
-  }
-
-  const textChannel = channel as import('discord.js').TextChannel;
+  const textChannel = await fetchTextChannel(discordClient, channelId);
   const message = await textChannel.messages.fetch(messageId);
-
+  if (!message.poll?.answers) return new Map();
+  const answerVoters = await collectVoters(message.poll);
+  const allIds = [...new Set([...answerVoters.values()].flat())];
+  const registered = await findRegisteredUserIds(db, allIds);
   const results = new Map<number, PollAnswerResult>();
-
-  if (!message.poll?.answers) {
-    return results;
-  }
-
-  // Collect all voter Discord IDs across all answers
-  const allVoterIds = new Set<string>();
-  const answerVoters = new Map<number, string[]>();
-
-  let idx = 0;
-  for (const [, answer] of message.poll.answers) {
-    const voters = await answer.voters.fetch();
-    const voterIds = voters.map((user) => user.id);
-    answerVoters.set(idx, voterIds);
-    for (const id of voterIds) {
-      allVoterIds.add(id);
-    }
-    idx++;
-  }
-
-  // Batch query: find all registered users matching any voter Discord ID
-  const allVoterIdArray = Array.from(allVoterIds);
-  const registeredUserSet = new Set<string>();
-  if (allVoterIdArray.length > 0) {
-    const registeredUsers = await db
-      .select({ discordId: schema.users.discordId })
-      .from(schema.users)
-      .where(inArray(schema.users.discordId, allVoterIdArray));
-    for (const u of registeredUsers) {
-      if (u.discordId) registeredUserSet.add(u.discordId);
-    }
-  }
-
-  // Build results with registered filtering
-  for (const [answerIdx, voterIds] of answerVoters.entries()) {
-    const registeredVoterIds = voterIds.filter((id) =>
-      registeredUserSet.has(id),
-    );
-    results.set(answerIdx, {
+  for (const [idx, voterIds] of answerVoters.entries()) {
+    const regIds = voterIds.filter((id) => registered.has(id));
+    results.set(idx, {
       totalVotes: voterIds.length,
-      registeredVotes: registeredVoterIds.length,
-      registeredVoterIds,
+      registeredVotes: regIds.length,
+      registeredVoterIds: regIds,
     });
   }
-
   return results;
 }
 
-/**
- * Look up game name and cover URL for Discord embeds.
- */
+/** Look up game name and cover URL for Discord embeds. */
 export async function lookupGameInfo(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number | null,
@@ -180,15 +153,10 @@ export async function lookupGameInfo(
     .from(schema.games)
     .where(eq(schema.games.id, gameId))
     .limit(1);
-  return {
-    gameName: game?.name ?? null,
-    gameCoverUrl: game?.coverUrl ?? null,
-  };
+  return { gameName: game?.name ?? null, gameCoverUrl: game?.coverUrl ?? null };
 }
 
-/**
- * DM the organizer (best effort).
- */
+/** DM the organizer (best effort). */
 export async function dmOrganizer(
   db: PostgresJsDatabase<typeof schema>,
   discordClient: DiscordBotClientService,
@@ -200,7 +168,6 @@ export async function dmOrganizer(
     .from(schema.users)
     .where(eq(schema.users.id, userId))
     .limit(1);
-
   if (user?.discordId) {
     await discordClient.sendDirectMessage(user.discordId, message);
   }

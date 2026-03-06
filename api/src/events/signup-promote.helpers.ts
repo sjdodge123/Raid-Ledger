@@ -2,6 +2,43 @@ import { eq, and, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 
+/** Fetches current player positions for the event. */
+async function fetchPlayerPositions(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<number[]> {
+  const rows = await tx
+    .select({ position: schema.rosterAssignments.position })
+    .from(schema.rosterAssignments)
+    .where(
+      and(
+        eq(schema.rosterAssignments.eventId, eventId),
+        eq(schema.rosterAssignments.role, 'player'),
+      ),
+    );
+  return rows.map((r) => r.position);
+}
+
+/** Inserts a player assignment and confirms the signup. */
+async function insertPlayerAssignment(
+  tx: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  signupId: number,
+  position: number,
+): Promise<void> {
+  await tx.insert(schema.rosterAssignments).values({
+    eventId,
+    signupId,
+    role: 'player',
+    position,
+    isOverride: 0,
+  });
+  await tx
+    .update(schema.eventSignups)
+    .set({ confirmationStatus: 'confirmed' })
+    .where(eq(schema.eventSignups.id, signupId));
+}
+
 export async function promoteGenericSlot(
   tx: PostgresJsDatabase<typeof schema>,
   eventId: number,
@@ -15,20 +52,9 @@ export async function promoteGenericSlot(
   warning?: string;
 } | null> {
   const maxPlayers = (slotConfig.player as number) ?? null;
-
   await deleteBenchAssignment(tx, eventId, signupId);
-
-  const currentPlayers = await tx
-    .select({ position: schema.rosterAssignments.position })
-    .from(schema.rosterAssignments)
-    .where(
-      and(
-        eq(schema.rosterAssignments.eventId, eventId),
-        eq(schema.rosterAssignments.role, 'player'),
-      ),
-    );
-
-  if (maxPlayers !== null && currentPlayers.length >= maxPlayers) {
+  const positions = await fetchPlayerPositions(tx, eventId);
+  if (maxPlayers !== null && positions.length >= maxPlayers) {
     await reinsertBench(tx, eventId, signupId);
     return {
       role: 'bench',
@@ -37,22 +63,8 @@ export async function promoteGenericSlot(
       warning: `All player slots are full — ${username} remains on bench.`,
     };
   }
-
-  const position = findFirstGap(currentPlayers.map((p) => p.position));
-
-  await tx.insert(schema.rosterAssignments).values({
-    eventId,
-    signupId,
-    role: 'player',
-    position,
-    isOverride: 0,
-  });
-
-  await tx
-    .update(schema.eventSignups)
-    .set({ confirmationStatus: 'confirmed' })
-    .where(eq(schema.eventSignups.id, signupId));
-
+  const position = findFirstGap(positions);
+  await insertPlayerAssignment(tx, eventId, signupId, position);
   return { role: 'player', position, username };
 }
 
@@ -118,13 +130,58 @@ function findMovedEntries(
   return entries;
 }
 
+type SignupLookup = {
+  id: number;
+  userId: number | null;
+  discordUsername: string | null;
+};
+
+/** Fetches signup rows for the given IDs. */
+async function fetchSignupLookups(
+  tx: PostgresJsDatabase<typeof schema>,
+  signupIds: number[],
+): Promise<SignupLookup[]> {
+  return tx
+    .select({
+      id: schema.eventSignups.id,
+      userId: schema.eventSignups.userId,
+      discordUsername: schema.eventSignups.discordUsername,
+    })
+    .from(schema.eventSignups)
+    .where(inArray(schema.eventSignups.id, signupIds));
+}
+
+/** Builds a userId->username map from users table. */
+async function fetchUserMap(
+  tx: PostgresJsDatabase<typeof schema>,
+  signups: SignupLookup[],
+): Promise<Map<number, string>> {
+  const userIds = signups
+    .filter((s) => !s.discordUsername && s.userId)
+    .map((s) => s.userId!);
+  const userMap = new Map<number, string>();
+  if (userIds.length === 0) return userMap;
+  const users = await tx
+    .select({ id: schema.users.id, username: schema.users.username })
+    .from(schema.users)
+    .where(inArray(schema.users.id, userIds));
+  for (const u of users) userMap.set(u.id, u.username);
+  return userMap;
+}
+
+/** Resolves a username from signup data and user map. */
+function resolveEntryUsername(
+  signup: SignupLookup | undefined,
+  userMap: Map<number, string>,
+): string {
+  if (signup?.discordUsername) return signup.discordUsername;
+  if (signup?.userId) return userMap.get(signup.userId) ?? 'Unknown';
+  return 'Unknown';
+}
+
 async function resolveMovedUsernames(
   tx: PostgresJsDatabase<typeof schema>,
-  entries: Array<{
-    signupId: number;
-    fromRole: string;
-    toRole: string;
-  }>,
+  entries: Array<{ signupId: number; fromRole: string; toRole: string }>,
 ): Promise<
   Array<{
     signupId: number;
@@ -133,42 +190,16 @@ async function resolveMovedUsernames(
     toRole: string;
   }>
 > {
-  const ids = entries.map((m) => m.signupId);
-  const signups = await tx
-    .select({
-      id: schema.eventSignups.id,
-      userId: schema.eventSignups.userId,
-      discordUsername: schema.eventSignups.discordUsername,
-    })
-    .from(schema.eventSignups)
-    .where(inArray(schema.eventSignups.id, ids));
+  const signups = await fetchSignupLookups(
+    tx,
+    entries.map((m) => m.signupId),
+  );
   const signupMap = new Map(signups.map((s) => [s.id, s]));
-
-  const userIds = signups
-    .filter((s) => !s.discordUsername && s.userId)
-    .map((s) => s.userId!);
-  const userMap = new Map<number, string>();
-  if (userIds.length > 0) {
-    const users = await tx
-      .select({
-        id: schema.users.id,
-        username: schema.users.username,
-      })
-      .from(schema.users)
-      .where(inArray(schema.users.id, userIds));
-    for (const u of users) userMap.set(u.id, u.username);
-  }
-
-  return entries.map((entry) => {
-    const signup = signupMap.get(entry.signupId);
-    let username = 'Unknown';
-    if (signup?.discordUsername) {
-      username = signup.discordUsername;
-    } else if (signup?.userId) {
-      username = userMap.get(signup.userId) ?? 'Unknown';
-    }
-    return { ...entry, username };
-  });
+  const userMap = await fetchUserMap(tx, signups);
+  return entries.map((entry) => ({
+    ...entry,
+    username: resolveEntryUsername(signupMap.get(entry.signupId), userMap),
+  }));
 }
 
 export async function resolveGenericSlotRole(
