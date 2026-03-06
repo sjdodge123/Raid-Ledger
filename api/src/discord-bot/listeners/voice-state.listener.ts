@@ -16,105 +16,55 @@ import { GameActivityService } from '../services/game-activity.service';
 import { UsersService } from '../../users/users.service';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
-import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
+import {
+  DEBOUNCE_MS,
+  buildDiscordMember,
+  clearTimerMap,
+  resolveBinding,
+  type DiscordMemberInfo,
+  type ResolvedBinding,
+} from './voice-state.helpers';
+import {
+  handlePresenceChange,
+  trackScheduledEventJoin,
+  type VoiceHandlerDeps,
+} from './voice-state.handlers';
+import {
+  handleGameBindingJoin,
+  handleGeneralLobbyJoin,
+} from './voice-state-join.handlers';
+import { recoverFromVoiceChannels } from './voice-state-recovery.handlers';
+import {
+  cancelPendingSpawn,
+  handleChannelLeave,
+  scheduleDelayedSpawn,
+  schedulePresenceRecheck,
+  type TimerMaps,
+} from './voice-state-leave.handlers';
 
-/** Debounce window per user to avoid rapid join/leave thrashing. */
-const DEBOUNCE_MS = 2000;
+const SPAWN_DELAY_MS = 15 * 60 * 1000;
 
-/** TTL for channel binding cache entries (ms). */
-const CACHE_TTL_MS = 60 * 1000;
-
-interface ResolvedBinding {
-  bindingId: string;
-  gameId: number | null;
-  gameName: string | null;
-  bindingPurpose: string;
-  config: {
-    minPlayers?: number;
-    gracePeriod?: number;
-    notificationChannelId?: string;
-    allowJustChatting?: boolean;
-  } | null;
-}
-
-/**
- * VoiceStateListener — listens for Discord `voiceStateUpdate` events and
- * delegates ad-hoc event management to AdHocEventService (ROK-293).
- *
- * ROK-515: Extended to support general-lobby bindings. When a channel has
- * bindingPurpose 'general-lobby', the listener uses PresenceGameDetectorService
- * to detect what game members are playing via Discord Rich Presence.
- *
- * Follows the same pattern as ActivityListener:
- * - Registers on bot connect, unregisters on disconnect.
- * - Per-user debounce to avoid rapid state changes.
- * - Startup recovery: scans voice channels for current members.
- */
+/** Listens for Discord voiceStateUpdate and delegates ad-hoc event management. */
 @Injectable()
 export class VoiceStateListener implements OnApplicationShutdown {
   private readonly logger = new Logger(VoiceStateListener.name);
-
-  /** Bound handler reference for cleanup */
-  private boundHandler:
-    | ((oldState: VoiceState, newState: VoiceState) => void)
-    | null = null;
-
-  /** Presence update handler for mid-session game switching */
-  private presenceHandler:
-    | ((oldPresence: Presence | null, newPresence: Presence) => void)
-    | null = null;
-
-  /** Debounce timers per user to avoid rapid join/leave noise */
+  private boundHandler: ((o: VoiceState, n: VoiceState) => void) | null = null;
+  private presenceHandler: ((o: Presence | null, n: Presence) => void) | null =
+    null;
   private debounceTimers = new Map<string, NodeJS.Timeout>();
-
-  /** Periodic sweep timer to evict stale cache entries */
   private cacheSweepTimer: ReturnType<typeof setInterval> | null = null;
-
-  /** Cache: channelId -> binding info (avoids repeated DB lookups) */
   private channelBindingCache = new Map<
     string,
-    {
-      cachedAt: number;
-      value: ResolvedBinding | null;
-    }
+    { cachedAt: number; value: ResolvedBinding | null }
   >();
-
-  /** Tracks members per channel for threshold checking */
   private channelMembers = new Map<string, Set<string>>();
-
-  /** Tracks which channel each user is in (for presence change handling) */
   private userChannelMap = new Map<string, string>();
-
-  /**
-   * Tracks game context per user for the voice→activity bridge (ROK-591).
-   * Key: discordUserId, Value: { gameName, userId (RL user ID) }.
-   * Populated on voice join for linked users in game-bound channels,
-   * consumed on voice leave so bufferStop has the game name.
-   */
   private voiceGameTracker = new Map<
     string,
     { gameName: string; userId: number }
   >();
-
-  /**
-   * ROK-651: Pending presence re-check timers per user.
-   * When a user joins a general-lobby channel with no game detected,
-   * we schedule a delayed re-check to catch the race condition where
-   * Discord delivers the voice state update before the presence update.
-   */
   private pendingRechecks = new Map<string, NodeJS.Timeout>();
-
-  /**
-   * ROK-697: Pending quick play spawn timers per channel.
-   * When the minPlayers threshold is met but NOT all threshold players share
-   * the same game activity, we delay the spawn by 15 minutes. If the count
-   * drops below threshold during the wait, the timer is cancelled.
-   * Key: channelId
-   */
   private pendingSpawnTimers = new Map<string, NodeJS.Timeout>();
-
-  /** ROK-697: Delay before spawning a quick play event without unanimous game activity. */
-  private static readonly SPAWN_DELAY_MS = 15 * 60 * 1000;
 
   constructor(
     private readonly clientService: DiscordBotClientService,
@@ -128,135 +78,103 @@ export class VoiceStateListener implements OnApplicationShutdown {
     private readonly adHocEventsGateway: AdHocEventsGateway,
   ) {}
 
+  private get deps(): VoiceHandlerDeps {
+    return {
+      logger: this.logger,
+      clientService: this.clientService,
+      adHocEventService: this.adHocEventService,
+      voiceAttendanceService: this.voiceAttendanceService,
+      departureGraceService: this.departureGraceService,
+      presenceDetector: this.presenceDetector,
+      gameActivityService: this.gameActivityService,
+      usersService: this.usersService,
+      adHocEventsGateway: this.adHocEventsGateway,
+      voiceGameTracker: this.voiceGameTracker,
+      userChannelMap: this.userChannelMap,
+      channelMembers: this.channelMembers,
+    };
+  }
+
+  private get timers(): TimerMaps {
+    return {
+      pendingRechecks: this.pendingRechecks,
+      pendingSpawnTimers: this.pendingSpawnTimers,
+    };
+  }
+
   @OnEvent(DISCORD_BOT_EVENTS.CONNECTED)
   async onBotConnected(): Promise<void> {
     const client = this.clientService.getClient();
     if (!client) return;
-
-    // Remove any existing handler first (handles reconnects)
-    if (this.boundHandler) {
-      client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
-    }
-    if (this.presenceHandler) {
-      client.removeListener(Events.PresenceUpdate, this.presenceHandler);
-    }
-
-    this.boundHandler = (oldState: VoiceState, newState: VoiceState) => {
-      this.handleVoiceStateUpdate(oldState, newState);
-    };
-
-    client.on(Events.VoiceStateUpdate, this.boundHandler);
-
-    // Listen for presence changes to handle mid-session game switching
-    this.presenceHandler = (
-      _oldPresence: Presence | null,
-      newPresence: Presence,
-    ) => {
-      this.handlePresenceChange(newPresence).catch((err) =>
-        this.logger.error(`Error handling presence change: ${err}`),
-      );
-    };
-    client.on(Events.PresenceUpdate, this.presenceHandler);
-
-    this.logger.log('Registered voiceStateUpdate listener for ad-hoc events');
-
-    // ROK-490: Recover voice attendance sessions from live channels
+    this.removeListeners(client);
+    this.registerListeners(client);
     await this.voiceAttendanceService.recoverActiveSessions();
-
-    // Startup recovery: scan voice channels for current members
-    await this.recoverFromVoiceChannels();
-
-    // Periodic cache sweep — evict entries older than 10 minutes
-    this.cacheSweepTimer = setInterval(
-      () => {
-        const now = Date.now();
-        for (const [key, entry] of this.channelBindingCache) {
-          if (now - entry.cachedAt > 10 * 60 * 1000) {
-            this.channelBindingCache.delete(key);
-          }
-        }
-      },
-      10 * 60 * 1000,
+    await recoverFromVoiceChannels(
+      this.deps,
+      (ch) => this.resolveBinding(ch),
+      (ch, dm, gm) => this.handleChannelJoin(ch, dm, gm),
     );
+    this.startCacheSweep();
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
   onBotDisconnected(): void {
     const client = this.clientService.getClient();
-    if (client) {
-      if (this.boundHandler) {
-        client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
-      }
-      if (this.presenceHandler) {
-        client.removeListener(Events.PresenceUpdate, this.presenceHandler);
-      }
-    }
+    if (client) this.removeListeners(client);
     this.boundHandler = null;
     this.presenceHandler = null;
-    this.channelBindingCache.clear();
-    this.channelMembers.clear();
-    this.userChannelMap.clear();
-    this.voiceGameTracker.clear();
-
-    // Clear all debounce timers
-    for (const timer of this.debounceTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.debounceTimers.clear();
-
-    // ROK-651: Clear pending presence re-check timers
-    for (const timer of this.pendingRechecks.values()) {
-      clearTimeout(timer);
-    }
-    this.pendingRechecks.clear();
-
-    // ROK-697: Clear pending spawn timers
-    for (const timer of this.pendingSpawnTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.pendingSpawnTimers.clear();
-
-    if (this.cacheSweepTimer) {
-      clearInterval(this.cacheSweepTimer);
-      this.cacheSweepTimer = null;
-    }
-
-    this.logger.log('Unregistered voiceStateUpdate listener');
+    this.clearAllState();
   }
 
-  /**
-   * ROK-604: Clear in-memory state on application shutdown.
-   * Mirrors the pattern in GameActivityService.onApplicationShutdown —
-   * ensures voiceGameTracker is cleaned up even if the bot disconnect
-   * event does not fire before the process exits.
-   */
   onApplicationShutdown(): void {
-    this.voiceGameTracker.clear();
+    this.clearAllState();
+  }
+
+  private registerListeners(client: import('discord.js').Client): void {
+    this.boundHandler = (o: VoiceState, n: VoiceState) => {
+      this.handleVoiceStateUpdate(o, n);
+    };
+    client.on(Events.VoiceStateUpdate, this.boundHandler);
+    this.presenceHandler = (_o: Presence | null, n: Presence) => {
+      this.onPresenceUpdate(n).catch((e) =>
+        this.logger.error(`Presence error: ${e}`),
+      );
+    };
+    client.on(Events.PresenceUpdate, this.presenceHandler);
+  }
+
+  private removeListeners(client: import('discord.js').Client): void {
+    if (this.boundHandler)
+      client.removeListener(Events.VoiceStateUpdate, this.boundHandler);
+    if (this.presenceHandler)
+      client.removeListener(Events.PresenceUpdate, this.presenceHandler);
+  }
+
+  private clearAllState(): void {
+    this.channelBindingCache.clear();
     this.channelMembers.clear();
     this.userChannelMap.clear();
-    this.channelBindingCache.clear();
-
-    for (const timer of this.debounceTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.debounceTimers.clear();
-
-    // ROK-651: Clear pending presence re-check timers
-    for (const timer of this.pendingRechecks.values()) {
-      clearTimeout(timer);
-    }
-    this.pendingRechecks.clear();
-
-    // ROK-697: Clear pending spawn timers
-    for (const timer of this.pendingSpawnTimers.values()) {
-      clearTimeout(timer);
-    }
-    this.pendingSpawnTimers.clear();
-
+    this.voiceGameTracker.clear();
+    clearTimerMap(this.debounceTimers);
+    clearTimerMap(this.pendingRechecks);
+    clearTimerMap(this.pendingSpawnTimers);
     if (this.cacheSweepTimer) {
       clearInterval(this.cacheSweepTimer);
       this.cacheSweepTimer = null;
     }
+  }
+
+  private startCacheSweep(): void {
+    this.cacheSweepTimer = setInterval(
+      () => {
+        const now = Date.now();
+        for (const [key, entry] of this.channelBindingCache) {
+          if (now - entry.cachedAt > 10 * 60 * 1000)
+            this.channelBindingCache.delete(key);
+        }
+      },
+      10 * 60 * 1000,
+    );
   }
 
   private handleVoiceStateUpdate(
@@ -264,1020 +182,138 @@ export class VoiceStateListener implements OnApplicationShutdown {
     newState: VoiceState,
   ): void {
     const userId = newState.id;
-    const oldChannelId = oldState.channelId;
-    const newChannelId = newState.channelId;
-
-    this.logger.debug(
-      `voiceStateUpdate: user=${userId} old=${oldChannelId} new=${newChannelId}`,
-    );
-
-    // Same channel — ignore (mute/deafen/etc.)
-    if (oldChannelId === newChannelId) return;
-
-    // Debounce per user
-    const existingTimer = this.debounceTimers.get(userId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-    }
-
+    const oldCh = oldState.channelId,
+      newCh = newState.channelId;
+    if (oldCh === newCh) return;
+    const existing = this.debounceTimers.get(userId);
+    if (existing) clearTimeout(existing);
     const timer = setTimeout(() => {
       this.debounceTimers.delete(userId);
-
-      const process = async () => {
-        // Handle leave from old channel
-        if (oldChannelId) {
-          this.userChannelMap.delete(userId);
-          await this.handleChannelLeave(oldChannelId, userId);
-        }
-
-        // Handle join to new channel
-        if (newChannelId) {
-          this.userChannelMap.set(userId, newChannelId);
-          const member = newState.member;
-          await this.handleChannelJoin(
-            newChannelId,
-            {
-              discordUserId: userId,
-              discordUsername:
-                member?.displayName ?? member?.user?.username ?? 'Unknown',
-              discordAvatarHash: member?.user?.avatar ?? null,
-            },
-            member ?? undefined,
-          );
-        }
-      };
-
-      process().catch((err) => {
-        this.logger.error(
-          `Error processing voice state for user ${userId}: ${err}`,
-        );
-      });
+      this.processVoiceChange(
+        userId,
+        oldCh,
+        newCh,
+        newState.member ?? undefined,
+      ).catch((e) =>
+        this.logger.error(`Voice state error for ${userId}: ${e}`),
+      );
     }, DEBOUNCE_MS);
-
     this.debounceTimers.set(userId, timer);
   }
 
-  /**
-   * Handle presence changes for users in general-lobby channels.
-   * If a user switches games mid-session, move them between events.
-   */
-  private async handlePresenceChange(newPresence: Presence): Promise<void> {
-    const userId = newPresence.userId;
-    const channelId = this.userChannelMap.get(userId);
+  private async processVoiceChange(
+    userId: string,
+    oldCh: string | null,
+    newCh: string | null,
+    member?: GuildMember,
+  ): Promise<void> {
+    if (oldCh) {
+      this.userChannelMap.delete(userId);
+      await handleChannelLeave(
+        this.deps,
+        oldCh,
+        userId,
+        this.timers,
+        this.adHocEventService,
+        (ch) => this.resolveBinding(ch),
+      );
+    }
+    if (newCh) {
+      this.userChannelMap.set(userId, newCh);
+      await this.handleChannelJoin(
+        newCh,
+        buildDiscordMember(userId, member),
+        member,
+      );
+    }
+  }
+
+  private async onPresenceUpdate(np: Presence): Promise<void> {
+    const channelId = this.userChannelMap.get(np.userId);
     if (!channelId) return;
-
     const binding = await this.resolveBinding(channelId);
-    if (!binding || binding.bindingPurpose !== 'general-lobby') return;
-
-    // Get the GuildMember to read presence
-    const guildMember = newPresence.member;
-    if (!guildMember) return;
-
-    let detected = await this.presenceDetector.detectGameForMember(guildMember);
-
-    // If user stopped playing a game, handle based on "Just Chatting" toggle
-    if (detected.gameId === null) {
-      const allowJustChatting = binding.config?.allowJustChatting ?? false;
-      if (!allowJustChatting) {
-        // ROK-591: Stop voice activity tracking for the old game
-        const oldVoiceGame = this.voiceGameTracker.get(userId);
-        if (oldVoiceGame) {
-          this.voiceGameTracker.delete(userId);
-          this.gameActivityService.bufferStop(
-            oldVoiceGame.userId,
-            oldVoiceGame.gameName,
-            new Date(),
-            'voice',
-          );
-        }
-
-        // Just leave the event — don't create a null-game event
-        await this.adHocEventService.handleVoiceLeave(
-          binding.bindingId,
-          userId,
-        );
-        this.logger.debug(
-          `Presence change: ${userId} stopped playing, removed from event in general-lobby ${channelId}`,
-        );
-        return;
-      }
-      // "Just Chatting" enabled — rename and fall through to move them
-      detected = { gameId: null, gameName: 'Just Chatting' };
-    }
-
-    // Check if user is already in an event for this game
-    const currentState = this.adHocEventService.getActiveState(
-      binding.bindingId,
-      detected.gameId,
-    );
-    if (currentState?.memberSet.has(userId)) return;
-
-    // ROK-591: Mid-session game switch — stop old game, start new game
-    const oldVoiceGame = this.voiceGameTracker.get(userId);
-    if (oldVoiceGame) {
-      this.gameActivityService.bufferStop(
-        oldVoiceGame.userId,
-        oldVoiceGame.gameName,
-        new Date(),
-        'voice',
-      );
-      this.voiceGameTracker.delete(userId);
-    }
-
-    // User is playing a different game — leave old event, join new
-    await this.adHocEventService.handleVoiceLeave(binding.bindingId, userId);
-
-    const rlUser = await this.usersService.findByDiscordId(userId);
-
-    // ROK-591: Start tracking the new game via voice→activity bridge
-    if (detected.gameId !== null && rlUser?.id) {
-      this.voiceGameTracker.set(userId, {
-        gameName: detected.gameName,
-        userId: rlUser.id,
-      });
-      this.gameActivityService.bufferStart(
-        rlUser.id,
-        detected.gameName,
-        new Date(),
-        'voice',
-      );
-    }
-
-    const memberInfo: VoiceMemberInfo = {
-      discordUserId: userId,
-      discordUsername:
-        guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
-      discordAvatarHash: guildMember.user?.avatar ?? null,
-      userId: rlUser?.id ?? null,
-    };
-
-    await this.adHocEventService.handleVoiceJoin(
-      binding.bindingId,
-      memberInfo,
-      binding,
-      detected.gameId,
-      detected.gameName,
-    );
-
-    this.logger.debug(
-      `Presence change: moved ${userId} to game "${detected.gameName}" in general-lobby ${channelId}`,
-    );
+    if (!binding || binding.bindingPurpose !== 'general-lobby' || !np.member)
+      return;
+    await handlePresenceChange(this.deps, np.userId, binding, np.member);
   }
 
   private async handleChannelJoin(
-    channelId: string,
-    discordMember: {
-      discordUserId: string;
-      discordUsername: string;
-      discordAvatarHash: string | null;
-    },
-    guildMember?: GuildMember,
+    chId: string,
+    dm: DiscordMemberInfo,
+    gm?: GuildMember,
   ): Promise<void> {
-    // ROK-490: Track voice attendance for active scheduled events
-    // This fires independently of (before) the ad-hoc event path.
     try {
-      const activeScheduledEvents =
-        await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
-      if (activeScheduledEvents.length > 0) {
-        const rlUser = await this.usersService.findByDiscordId(
-          discordMember.discordUserId,
-        );
-        for (const { eventId } of activeScheduledEvents) {
-          this.voiceAttendanceService.handleJoin(
-            eventId,
-            discordMember.discordUserId,
-            discordMember.discordUsername,
-            rlUser?.id ?? null,
-            discordMember.discordAvatarHash,
-          );
-          // ROK-596: Handle departure grace rejoin (cancel timer or priority rejoin)
-          await this.departureGraceService.onMemberRejoin(
-            eventId,
-            discordMember.discordUserId,
-          );
-          // ROK-530: Emit live roster update via WebSocket
-          const roster = this.voiceAttendanceService.getActiveRoster(eventId);
-          this.adHocEventsGateway.emitRosterUpdate(
-            eventId,
-            roster.participants,
-            roster.activeCount,
-          );
-        }
-      }
+      await trackScheduledEventJoin(this.deps, chId, dm);
     } catch (err) {
-      this.logger.error(
-        `Voice attendance join tracking failed for ${discordMember.discordUserId}: ${err}`,
-      );
+      this.logger.error(`Join tracking failed for ${dm.discordUserId}: ${err}`);
     }
-
-    const binding = await this.resolveBinding(channelId);
-    this.logger.debug(
-      `handleChannelJoin: channel=${channelId} binding=${binding ? `${binding.bindingPurpose} (${binding.bindingId})` : 'NONE'}`,
-    );
+    const binding = await this.resolveBinding(chId);
     if (!binding) return;
+    this.trackChannelMember(chId, dm.discordUserId);
+    if (binding.bindingPurpose === 'general-lobby') {
+      await this.dispatchLobbyJoin(chId, binding, dm, gm);
+    } else {
+      await handleGameBindingJoin(this.deps, chId, binding, dm, {
+        scheduleSpawn: () =>
+          scheduleDelayedSpawn(
+            this.deps,
+            chId,
+            binding,
+            this.timers,
+            SPAWN_DELAY_MS,
+          ),
+        cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
+      });
+    }
+  }
 
-    // Track member in channel
+  private async dispatchLobbyJoin(
+    chId: string,
+    binding: ResolvedBinding,
+    dm: DiscordMemberInfo,
+    gm?: GuildMember,
+  ): Promise<void> {
+    const fns = {
+      scheduleRecheck: () =>
+        schedulePresenceRecheck({
+          timers: this.timers,
+          dm,
+          channelId: chId,
+          guildMember: gm!,
+          userChannelMap: this.userChannelMap,
+          presenceDetector: this.presenceDetector,
+          handleJoinFn: (ch, d, g) => this.handleChannelJoin(ch, d, g),
+          logError: (m) => this.logger.error(m),
+        }),
+      scheduleSpawn: () =>
+        scheduleDelayedSpawn(
+          this.deps,
+          chId,
+          binding,
+          this.timers,
+          SPAWN_DELAY_MS,
+        ),
+      cancelSpawn: () => cancelPendingSpawn(this.timers, chId),
+    };
+    await handleGeneralLobbyJoin(this.deps, chId, binding, dm, gm, fns);
+  }
+
+  private trackChannelMember(channelId: string, userId: string): void {
     let members = this.channelMembers.get(channelId);
     if (!members) {
       members = new Set();
       this.channelMembers.set(channelId, members);
     }
-    members.add(discordMember.discordUserId);
-
-    // For general-lobby bindings, detect the game via presence
-    if (binding.bindingPurpose === 'general-lobby') {
-      await this.handleGeneralLobbyJoin(
-        channelId,
-        binding,
-        discordMember,
-        guildMember,
-      );
-      return;
-    }
-
-    // Game-specific binding — original behavior
-    const minPlayers = binding.config?.minPlayers ?? 2;
-    const state = this.adHocEventService.getActiveState(binding.bindingId);
-
-    // Resolve RL user (needed for both ad-hoc roster and voice→activity bridge)
-    const rlUser = await this.usersService.findByDiscordId(
-      discordMember.discordUserId,
-    );
-
-    // ROK-591: Voice→activity bridge — track game activity for linked users
-    // in game-bound channels with a known game.
-    // NOTE (ROK-604): This intentionally fires BEFORE the minPlayers threshold
-    // check below. Voice activity tracks independently of ad-hoc event creation —
-    // a user's game_activity_session may exist without a corresponding ad-hoc event
-    // (e.g., solo user in a channel that requires 2+ players for event spawn).
-    if (rlUser?.id && binding.gameId && binding.gameName) {
-      this.voiceGameTracker.set(discordMember.discordUserId, {
-        gameName: binding.gameName,
-        userId: rlUser.id,
-      });
-      this.gameActivityService.bufferStart(
-        rlUser.id,
-        binding.gameName,
-        new Date(),
-        'voice',
-      );
-    }
-
-    // If event already exists, always add the triggering member
-    if (state) {
-      const memberInfo: VoiceMemberInfo = {
-        ...discordMember,
-        userId: rlUser?.id ?? null,
-      };
-
-      await this.adHocEventService.handleVoiceJoin(
-        binding.bindingId,
-        memberInfo,
-        binding,
-      );
-      return;
-    }
-
-    // No event — check threshold
-    // ROK-697: For game-specific bindings, exclude members playing a different game
-    // from the threshold count. Members playing the bound game or no game count.
-    const { counted: filteredCount, allConfirmed } =
-      await this.getGameFilteredCount(channelId, binding);
-    if (filteredCount < minPlayers) {
-      return;
-    }
-
-    // ROK-697: Threshold met — if all counted members are confirmed playing the
-    // bound game (no null gameId), spawn immediately. Otherwise, 15-min delay.
-    if (allConfirmed) {
-      // All counted members confirmed playing the bound game → spawn immediately
-      this.cancelPendingSpawn(channelId);
-      await this.handleGameSpecificGroupRoster(channelId, binding);
-    } else {
-      this.scheduleDelayedSpawn(channelId, binding);
-    }
+    members.add(userId);
   }
 
-  /**
-   * Handle a join to a general-lobby channel.
-   * Detects game via presence and passes it to AdHocEventService.
-   */
-  private async handleGeneralLobbyJoin(
-    channelId: string,
-    binding: ResolvedBinding,
-    discordMember: {
-      discordUserId: string;
-      discordUsername: string;
-      discordAvatarHash: string | null;
-    },
-    guildMember?: GuildMember,
-  ): Promise<void> {
-    let detected: { gameId: number | null; gameName: string };
-
-    if (guildMember) {
-      detected = await this.presenceDetector.detectGameForMember(guildMember);
-      this.logger.debug(
-        `General lobby game detection: user=${discordMember.discordUserId} game="${detected.gameName}" gameId=${detected.gameId}`,
-      );
-    } else {
-      detected = { gameId: null, gameName: 'Untitled Gaming Session' };
-    }
-
-    // General-lobby requires an actual game unless "Just Chatting" is enabled.
-    // No game means the member is just hanging out — track for presence changes only.
-    if (detected.gameId === null) {
-      const allowJustChatting = binding.config?.allowJustChatting ?? false;
-      if (!allowJustChatting) {
-        this.logger.debug(
-          `General lobby: no game detected for ${discordMember.discordUserId}, tracking for presence changes only`,
-        );
-
-        // ROK-651: Schedule a delayed re-check to catch the race condition where
-        // Discord delivers the voice state update before the presence update.
-        // If the user's presence arrives within the window, handlePresenceChange
-        // will fire separately — this re-check covers the gap.
-        if (guildMember) {
-          this.schedulePresenceRecheck(
-            channelId,
-            binding,
-            discordMember,
-            guildMember,
-          );
-        }
-
-        return;
-      }
-      // Rename to "Just Chatting" for clarity
-      detected = { gameId: null, gameName: 'Just Chatting' };
-    }
-
-    // Resolve RL user once — used for both the voice→activity bridge and ad-hoc roster
-    const rlUser = await this.usersService.findByDiscordId(
-      discordMember.discordUserId,
-    );
-
-    // ROK-591: Voice→activity bridge for general-lobby (game detected via presence).
-    // NOTE (ROK-604): Like game-bound channels, this fires BEFORE the minPlayers
-    // threshold check. Voice activity tracks independently of ad-hoc event creation.
-    if (detected.gameId !== null && rlUser?.id) {
-      this.voiceGameTracker.set(discordMember.discordUserId, {
-        gameName: detected.gameName,
-        userId: rlUser.id,
-      });
-      this.gameActivityService.bufferStart(
-        rlUser.id,
-        detected.gameName,
-        new Date(),
-        'voice',
-      );
-    }
-
-    const minPlayers = binding.config?.minPlayers ?? 2;
-    const members = this.channelMembers.get(channelId);
-    const memberCount = members?.size ?? 0;
-
-    // Check if event exists for this game
-    const state = this.adHocEventService.getActiveState(
-      binding.bindingId,
-      detected.gameId,
-    );
-
-    // If no event exists and below threshold, wait
-    if (!state && memberCount < minPlayers) {
-      this.logger.debug(
-        `General lobby: below threshold (${memberCount}/${minPlayers}), waiting`,
-      );
-      return;
-    }
-
-    // When we hit the threshold and no event exists, do group detection
-    // ROK-697: Check if all threshold members share the same game before spawning
-    if (!state && memberCount >= minPlayers && guildMember) {
-      if (await this.shouldSpawnImmediately(channelId, binding)) {
-        this.logger.debug(
-          `General lobby: threshold met (${memberCount}/${minPlayers}), unanimous game — running group detection immediately`,
-        );
-        this.cancelPendingSpawn(channelId);
-        await this.handleGeneralLobbyGroupDetection(channelId, binding);
-      } else {
-        this.logger.debug(
-          `General lobby: threshold met (${memberCount}/${minPlayers}), no unanimous game — scheduling delayed spawn`,
-        );
-        this.scheduleDelayedSpawn(channelId, binding);
-      }
-      return;
-    }
-
-    const memberInfo: VoiceMemberInfo = {
-      ...discordMember,
-      userId: rlUser?.id ?? null,
-    };
-
-    await this.adHocEventService.handleVoiceJoin(
-      binding.bindingId,
-      memberInfo,
-      binding,
-      detected.gameId,
-      detected.gameName,
-    );
-  }
-
-  /**
-   * ROK-651: Schedule a delayed presence re-check for a user who joined a
-   * general-lobby channel with no detected game activity. Discord can deliver
-   * voice state updates before presence updates, so the user's game activity
-   * may not be available at voice join time. This re-check fires after a short
-   * delay to catch the late-arriving presence data.
-   */
-  private schedulePresenceRecheck(
-    channelId: string,
-    binding: ResolvedBinding,
-    discordMember: {
-      discordUserId: string;
-      discordUsername: string;
-      discordAvatarHash: string | null;
-    },
-    guildMember: GuildMember,
-  ): void {
-    // Cancel any existing re-check for this user
-    const existing = this.pendingRechecks.get(discordMember.discordUserId);
-    if (existing) {
-      clearTimeout(existing);
-    }
-
-    const timer = setTimeout(() => {
-      this.pendingRechecks.delete(discordMember.discordUserId);
-
-      // Verify the user is still in this channel
-      if (this.userChannelMap.get(discordMember.discordUserId) !== channelId) {
-        return;
-      }
-
-      this.presenceDetector
-        .detectGameForMember(guildMember)
-        .then(async (detected) => {
-          if (detected.gameId === null) {
-            this.logger.debug(
-              `ROK-651 re-check: still no game for ${discordMember.discordUserId} after delay, giving up`,
-            );
-            return;
-          }
-
-          this.logger.log(
-            `ROK-651 re-check: detected game "${detected.gameName}" (id=${detected.gameId}) for ${discordMember.discordUserId} on delayed re-check`,
-          );
-
-          // Re-run the general-lobby join path now that a game is detected
-          await this.handleGeneralLobbyJoin(
-            channelId,
-            binding,
-            discordMember,
-            guildMember,
-          );
-        })
-        .catch((err) => {
-          this.logger.error(
-            `ROK-651 re-check failed for ${discordMember.discordUserId}: ${err}`,
-          );
-        });
-    }, 7000);
-
-    this.pendingRechecks.set(discordMember.discordUserId, timer);
-
-    this.logger.debug(
-      `ROK-651: scheduled presence re-check for ${discordMember.discordUserId} in 7s`,
-    );
-  }
-
-  /**
-   * ROK-611: When a game-specific channel hits the minPlayers threshold,
-   * roster ALL members currently in the voice channel — not just the trigger.
-   * Mirrors the general-lobby group detection pattern.
-   */
-  private async handleGameSpecificGroupRoster(
-    channelId: string,
-    binding: ResolvedBinding,
-  ): Promise<void> {
-    const client = this.clientService.getClient();
-    if (!client) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
-
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel || !channel.isVoiceBased()) return;
-
-    for (const [memberId, guildMember] of channel.members) {
-      const rlUser = await this.usersService.findByDiscordId(memberId);
-      const memberInfo: VoiceMemberInfo = {
-        discordUserId: memberId,
-        discordUsername:
-          guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
-        discordAvatarHash: guildMember.user?.avatar ?? null,
-        userId: rlUser?.id ?? null,
-      };
-
-      await this.adHocEventService.handleVoiceJoin(
-        binding.bindingId,
-        memberInfo,
-        binding,
-      );
-    }
-  }
-
-  /**
-   * When a general-lobby channel hits the threshold, detect games for all
-   * members and create events based on consensus logic.
-   */
-  private async handleGeneralLobbyGroupDetection(
-    channelId: string,
-    binding: ResolvedBinding,
-  ): Promise<void> {
-    const client = this.clientService.getClient();
-    if (!client) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
-
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel || !channel.isVoiceBased()) return;
-
-    const voiceMembers = [...channel.members.values()];
-    this.logger.debug(
-      `Group detection: ${voiceMembers.length} voice members, activities: ${voiceMembers.map((m) => `${m.id}=[${m.presence?.activities?.map((a) => `${a.type}:${a.name}`).join(',') ?? 'no-presence'}]`).join(', ')}`,
-    );
-    if (voiceMembers.length === 0) return;
-
-    // Detect games for all members
-    const allGroups = await this.presenceDetector.detectGames(voiceMembers);
-    const allowJustChatting = binding.config?.allowJustChatting ?? false;
-
-    // Filter out no-game groups unless "Just Chatting" is enabled
-    const groups = allowJustChatting
-      ? allGroups.map((g) =>
-          g.gameId === null ? { ...g, gameName: 'Just Chatting' } : g,
-        )
-      : allGroups.filter((g) => g.gameId !== null);
-
-    if (groups.length === 0) {
-      this.logger.debug(
-        'Group detection: no games detected among members, no events created',
-      );
-      return;
-    }
-
-    // Track which members have been added to an event (for ROK-593 dedup)
-    const addedMembers = new Set<string>();
-
-    for (const group of groups) {
-      for (const memberId of group.memberIds) {
-        const guildMember = channel.members.get(memberId);
-        if (!guildMember) continue;
-
-        const rlUser = await this.usersService.findByDiscordId(memberId);
-        const memberInfo: VoiceMemberInfo = {
-          discordUserId: memberId,
-          discordUsername:
-            guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
-          discordAvatarHash: guildMember.user?.avatar ?? null,
-          userId: rlUser?.id ?? null,
-        };
-
-        await this.adHocEventService.handleVoiceJoin(
-          binding.bindingId,
-          memberInfo,
-          binding,
-          group.gameId,
-          group.gameName,
-        );
-        addedMembers.add(memberId);
-
-        // ROK-591: Voice→activity bridge for group detection
-        if (group.gameId !== null && rlUser?.id) {
-          this.voiceGameTracker.set(memberId, {
-            gameName: group.gameName,
-            userId: rlUser.id,
-          });
-          this.gameActivityService.bufferStart(
-            rlUser.id,
-            group.gameName,
-            new Date(),
-            'voice',
-          );
-        }
-      }
-    }
-
-    // ROK-593: Add remaining voice channel members to the first (primary) event.
-    // These are members without detectable game activity who are still in the channel.
-    // NOTE (ROK-604): These members intentionally do NOT get voice→activity tracking
-    // via bufferStart. The voice→activity bridge requires a detected game to attribute
-    // the session to — members added here have no game presence, so there is no game
-    // name to record. They appear on the ad-hoc event roster but without individual
-    // game_activity_session rows.
-    if (groups.length > 0) {
-      const primaryGroup = groups[0];
-      for (const [memberId, guildMember] of channel.members) {
-        if (addedMembers.has(memberId)) continue;
-
-        const rlUser = await this.usersService.findByDiscordId(memberId);
-        const memberInfo: VoiceMemberInfo = {
-          discordUserId: memberId,
-          discordUsername:
-            guildMember.displayName ?? guildMember.user?.username ?? 'Unknown',
-          discordAvatarHash: guildMember.user?.avatar ?? null,
-          userId: rlUser?.id ?? null,
-        };
-
-        await this.adHocEventService.handleVoiceJoin(
-          binding.bindingId,
-          memberInfo,
-          binding,
-          primaryGroup.gameId,
-          primaryGroup.gameName,
-        );
-      }
-    }
-  }
-
-  /**
-   * ROK-697: For game-specific bindings, count channel members that are relevant
-   * to the threshold: playing the bound game OR no game detected.
-   * Members playing a DIFFERENT game are excluded — they're not here for this game.
-   * Returns { counted, allConfirmed } where allConfirmed means zero no-game members.
-   */
-  private async getGameFilteredCount(
-    channelId: string,
-    binding: ResolvedBinding,
-  ): Promise<{ counted: number; allConfirmed: boolean }> {
-    const client = this.clientService.getClient();
-    if (!client) return { counted: 0, allConfirmed: false };
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return { counted: 0, allConfirmed: false };
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return { counted: 0, allConfirmed: false };
-
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel || !channel.isVoiceBased())
-      return { counted: 0, allConfirmed: false };
-
-    if (!binding.gameId) return { counted: 0, allConfirmed: false };
-
-    const voiceMembers = [...channel.members.values()];
-    let counted = 0;
-    let allConfirmed = true;
-
-    for (const member of voiceMembers) {
-      const detected = await this.presenceDetector.detectGameForMember(member);
-      if (detected.gameId !== null && detected.gameId !== binding.gameId) {
-        // Playing a different game — exclude entirely
-        continue;
-      }
-      counted++;
-      if (detected.gameId === null) {
-        allConfirmed = false;
-      }
-    }
-
-    return { counted, allConfirmed };
-  }
-
-  /**
-   * ROK-697: Check if all members in the channel share the same game activity.
-   * For game-specific bindings: checks if all counted members (excluding different-game
-   * players) are confirmed playing the bound game (no null gameId members).
-   * For general-lobby bindings: checks if all members are playing the same game.
-   * Returns true if unanimous game activity is detected (spawn immediately).
-   */
-  private async shouldSpawnImmediately(
-    channelId: string,
-    binding: ResolvedBinding,
-  ): Promise<boolean> {
-    const client = this.clientService.getClient();
-    if (!client) return false;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return false;
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return false;
-
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel || !channel.isVoiceBased()) return false;
-
-    const minPlayers = binding.config?.minPlayers ?? 2;
-    const voiceMembers = [...channel.members.values()];
-    if (voiceMembers.length < minPlayers) return false;
-
-    if (binding.bindingPurpose === 'general-lobby') {
-      // For general-lobby: check if all members play the same game
-      const detections = await Promise.all(
-        voiceMembers.map((m) => this.presenceDetector.detectGameForMember(m)),
-      );
-
-      // All must have a detected game (non-null gameId) and same gameId
-      const firstGameId = detections[0]?.gameId;
-      if (firstGameId === null || firstGameId === undefined) return false;
-
-      return detections.every((d) => d.gameId === firstGameId);
-    }
-
-    // Game-specific bindings use getGameFilteredCount directly in the join handler
-    return false;
-  }
-
-  /**
-   * ROK-697: Schedule a delayed quick play spawn for a channel.
-   * If a timer is already pending, this is a no-op (don't reset the timer
-   * on subsequent joins — only the first threshold-crossing sets the timer).
-   */
-  private scheduleDelayedSpawn(
-    channelId: string,
-    binding: ResolvedBinding,
-  ): void {
-    if (this.pendingSpawnTimers.has(channelId)) {
-      this.logger.debug(
-        `ROK-697: delayed spawn already pending for channel ${channelId}, skipping`,
-      );
-      return;
-    }
-
-    this.logger.log(
-      `ROK-697: scheduling delayed spawn (${VoiceStateListener.SPAWN_DELAY_MS / 60000}min) for channel ${channelId}`,
-    );
-
-    const timer = setTimeout(() => {
-      this.pendingSpawnTimers.delete(channelId);
-
-      const execute = async () => {
-        // Re-check that threshold is still met
-        // ROK-697: For game-specific bindings, use filtered count (exclude different-game players)
-        const minPlayers = binding.config?.minPlayers ?? 2;
-        if (binding.bindingPurpose !== 'general-lobby' && binding.gameId) {
-          const { counted } = await this.getGameFilteredCount(
-            channelId,
-            binding,
-          );
-          if (counted < minPlayers) {
-            this.logger.debug(
-              `ROK-697: delayed spawn fired but filtered threshold no longer met for channel ${channelId}`,
-            );
-            return;
-          }
-        } else {
-          const members = this.channelMembers.get(channelId);
-          if (!members || members.size < minPlayers) {
-            this.logger.debug(
-              `ROK-697: delayed spawn fired but threshold no longer met for channel ${channelId}`,
-            );
-            return;
-          }
-        }
-
-        // Re-check no active event exists
-        const state =
-          binding.bindingPurpose === 'general-lobby'
-            ? undefined // General lobby uses composite keys; group detection handles this
-            : this.adHocEventService.getActiveState(binding.bindingId);
-        if (state) {
-          this.logger.debug(
-            `ROK-697: delayed spawn fired but event already active for channel ${channelId}`,
-          );
-          return;
-        }
-
-        this.logger.log(
-          `ROK-697: delayed spawn firing for channel ${channelId}`,
-        );
-
-        if (binding.bindingPurpose === 'general-lobby') {
-          await this.handleGeneralLobbyGroupDetection(channelId, binding);
-        } else {
-          await this.handleGameSpecificGroupRoster(channelId, binding);
-        }
-      };
-
-      execute().catch((err) => {
-        this.logger.error(
-          `ROK-697: error executing delayed spawn for channel ${channelId}: ${err}`,
-        );
-      });
-    }, VoiceStateListener.SPAWN_DELAY_MS);
-
-    this.pendingSpawnTimers.set(channelId, timer);
-  }
-
-  /**
-   * ROK-697: Cancel a pending delayed spawn timer for a channel.
-   */
-  private cancelPendingSpawn(channelId: string): void {
-    const timer = this.pendingSpawnTimers.get(channelId);
-    if (timer) {
-      clearTimeout(timer);
-      this.pendingSpawnTimers.delete(channelId);
-      this.logger.debug(
-        `ROK-697: cancelled pending spawn timer for channel ${channelId}`,
-      );
-    }
-  }
-
-  private async handleChannelLeave(
-    channelId: string,
-    discordUserId: string,
-  ): Promise<void> {
-    // ROK-651: Cancel any pending presence re-check for this user
-    const pendingRecheck = this.pendingRechecks.get(discordUserId);
-    if (pendingRecheck) {
-      clearTimeout(pendingRecheck);
-      this.pendingRechecks.delete(discordUserId);
-    }
-
-    // ROK-591: Voice→activity bridge — stop tracking game activity on leave
-    const voiceGame = this.voiceGameTracker.get(discordUserId);
-    if (voiceGame) {
-      this.voiceGameTracker.delete(discordUserId);
-      this.gameActivityService.bufferStop(
-        voiceGame.userId,
-        voiceGame.gameName,
-        new Date(),
-        'voice',
-      );
-    }
-
-    // ROK-490: Track voice attendance leave for active scheduled events
-    try {
-      const activeScheduledEvents =
-        await this.voiceAttendanceService.findActiveScheduledEvents(channelId);
-      for (const { eventId } of activeScheduledEvents) {
-        this.voiceAttendanceService.handleLeave(eventId, discordUserId);
-        // ROK-596: Start departure grace timer for scheduled events
-        await this.departureGraceService.onMemberLeave(eventId, discordUserId);
-        // ROK-530: Emit live roster update via WebSocket
-        const roster = this.voiceAttendanceService.getActiveRoster(eventId);
-        this.adHocEventsGateway.emitRosterUpdate(
-          eventId,
-          roster.participants,
-          roster.activeCount,
-        );
-      }
-    } catch (err) {
-      this.logger.error(
-        `Voice attendance leave tracking failed for ${discordUserId}: ${err}`,
-      );
-    }
-
-    const binding = await this.resolveBinding(channelId);
-    if (!binding) return;
-
-    // Remove from channel tracking
-    const members = this.channelMembers.get(channelId);
-    if (members) {
-      members.delete(discordUserId);
-      if (members.size === 0) {
-        this.channelMembers.delete(channelId);
-      }
-
-      // ROK-697: Cancel pending spawn timer if count drops below threshold
-      const minPlayers = binding.config?.minPlayers ?? 2;
-      if (members.size < minPlayers) {
-        this.cancelPendingSpawn(channelId);
-      }
-    }
-
-    await this.adHocEventService.handleVoiceLeave(
-      binding.bindingId,
-      discordUserId,
-    );
-  }
-
-  /**
-   * Resolve a channel ID to a binding (cached with TTL).
-   * ROK-515: Also matches 'general-lobby' binding purpose.
-   */
   private async resolveBinding(
     channelId: string,
   ): Promise<ResolvedBinding | null> {
-    const cached = this.channelBindingCache.get(channelId);
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
-      return cached.value;
-    }
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) {
-      this.channelBindingCache.set(channelId, {
-        cachedAt: Date.now(),
-        value: null,
-      });
-      return null;
-    }
-
-    // Look up binding for this voice channel — match both game-voice-monitor
-    // and general-lobby binding purposes. Uses getBindingsWithGameNames so the
-    // voice→activity bridge (ROK-591) can map gameId to a game name.
-    const bindings =
-      await this.channelBindingsService.getBindingsWithGameNames(guildId);
-    const binding = bindings.find(
-      (b) =>
-        b.channelId === channelId &&
-        (b.bindingPurpose === 'game-voice-monitor' ||
-          b.bindingPurpose === 'general-lobby'),
-    );
-
-    if (!binding) {
-      this.channelBindingCache.set(channelId, {
-        cachedAt: Date.now(),
-        value: null,
-      });
-      return null;
-    }
-
-    const result: ResolvedBinding = {
-      bindingId: binding.id,
-      gameId: binding.gameId,
-      gameName: binding.gameName ?? null,
-      bindingPurpose: binding.bindingPurpose,
-      config: binding.config as {
-        minPlayers?: number;
-        gracePeriod?: number;
-        notificationChannelId?: string;
-        allowJustChatting?: boolean;
-      } | null,
+    const d = {
+      clientService: this.clientService,
+      channelBindingsService: this.channelBindingsService,
     };
-
-    this.channelBindingCache.set(channelId, {
-      cachedAt: Date.now(),
-      value: result,
-    });
-    return result;
-  }
-
-  /**
-   * Startup recovery: scan all voice channels in the guild for current members.
-   * If members are present in bound channels, reconcile with active events.
-   */
-  private async recoverFromVoiceChannels(): Promise<void> {
-    const client = this.clientService.getClient();
-    if (!client) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const guild = client.guilds.cache.get(guildId);
-    if (!guild) return;
-
-    try {
-      const voiceChannels = guild.channels.cache.filter((ch) =>
-        ch.isVoiceBased(),
-      );
-
-      for (const [channelId, channel] of voiceChannels) {
-        if (!channel.isVoiceBased()) continue;
-
-        const members = channel.members;
-        if (members.size === 0) continue;
-
-        const binding = await this.resolveBinding(channelId);
-        if (!binding) continue;
-
-        // Track these members and trigger joins if no active event exists
-        const memberSet = new Set<string>();
-        for (const [memberId] of members) {
-          memberSet.add(memberId);
-          this.userChannelMap.set(memberId, channelId);
-        }
-        this.channelMembers.set(channelId, memberSet);
-
-        // Trigger handleChannelJoin for each member so the ad-hoc service
-        // can reconcile or create events for channels occupied at startup
-        for (const [memberId, guildMember] of members) {
-          await this.handleChannelJoin(
-            channelId,
-            {
-              discordUserId: memberId,
-              discordUsername:
-                guildMember.displayName ??
-                guildMember.user?.username ??
-                'Unknown',
-              discordAvatarHash: guildMember.user?.avatar ?? null,
-            },
-            guildMember,
-          );
-        }
-
-        this.logger.log(
-          `Recovery: reconciled ${members.size} member(s) in bound channel ${channelId}`,
-        );
-      }
-    } catch (err) {
-      this.logger.error(`Voice channel recovery failed: ${err}`);
-    }
+    return resolveBinding(d, channelId, this.channelBindingCache);
   }
 }

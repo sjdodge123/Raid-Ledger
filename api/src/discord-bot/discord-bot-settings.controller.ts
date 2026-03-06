@@ -35,21 +35,7 @@ import {
   type DiscordSetupStatus,
   type CharacterDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
-
-/**
- * Handle Zod validation errors by converting to BadRequestException.
- */
-function handleValidationError(error: unknown): never {
-  if (error instanceof Error && error.name === 'ZodError') {
-    const zodError = error as ZodError;
-    throw new BadRequestException({
-      message: 'Validation failed',
-      errors: zodError.issues.map((e) => `${e.path.join('.')}: ${e.message}`),
-    });
-  }
-  throw error;
-}
+import { handleValidationError } from './validation.util';
 
 @Controller('admin/settings/discord-bot')
 @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -120,17 +106,12 @@ export class DiscordBotSettingsController {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const config = DiscordBotConfigSchema.parse(body);
-
       await this.settingsService.setDiscordBotConfig(
         config.botToken,
         config.enabled,
       );
-
       this.logger.log('Discord bot configuration updated via admin UI');
-
-      // Directly trigger connection as a reliable fallback.
-      // The event-based path (DISCORD_BOT_UPDATED) also fires, but
-      // ensureConnected is a no-op if a connection is already in progress.
+      // Trigger connection as a reliable fallback (no-op if already connecting)
       this.discordBotService
         .ensureConnected({ token: config.botToken, enabled: config.enabled })
         .catch((err: unknown) => {
@@ -139,11 +120,7 @@ export class DiscordBotSettingsController {
             err instanceof Error ? err.message : err,
           );
         });
-
-      return {
-        success: true,
-        message: 'Configuration saved.',
-      };
+      return { success: true, message: 'Configuration saved.' };
     } catch (error) {
       handleValidationError(error);
     }
@@ -154,21 +131,13 @@ export class DiscordBotSettingsController {
   async testConnection(@Body() body: unknown): Promise<DiscordBotTestResult> {
     try {
       const dto = DiscordBotTestConnectionSchema.parse(body);
-
-      // Use provided token or fall back to stored one
       let token = dto.botToken;
-
       if (!token) {
         const config = await this.settingsService.getDiscordBotConfig();
-        if (!config) {
-          return {
-            success: false,
-            message: 'No bot token configured',
-          };
-        }
+        if (!config)
+          return { success: false, message: 'No bot token configured' };
         token = config.token;
       }
-
       return this.discordBotService.testToken(token);
     } catch (error) {
       handleValidationError(error);
@@ -177,18 +146,10 @@ export class DiscordBotSettingsController {
 
   @Post('clear')
   @HttpCode(HttpStatus.OK)
-  async clearConfig(): Promise<{
-    success: boolean;
-    message: string;
-  }> {
+  async clearConfig(): Promise<{ success: boolean; message: string }> {
     await this.settingsService.clearDiscordBotConfig();
-
     this.logger.log('Discord bot configuration cleared via admin UI');
-
-    return {
-      success: true,
-      message: 'Discord bot configuration cleared.',
-    };
+    return { success: true, message: 'Discord bot configuration cleared.' };
   }
 
   @Get('channels')
@@ -209,15 +170,9 @@ export class DiscordBotSettingsController {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const { channelId } = DiscordBotSetDefaultChannelSchema.parse(body);
-
       await this.settingsService.setDiscordBotDefaultChannel(channelId);
-
       this.logger.log('Discord bot default channel updated via admin UI');
-
-      return {
-        success: true,
-        message: 'Default channel updated.',
-      };
+      return { success: true, message: 'Default channel updated.' };
     } catch (error) {
       handleValidationError(error);
     }
@@ -248,14 +203,9 @@ export class DiscordBotSettingsController {
       this.logger.log('Discord bot reconnected via admin UI');
       return { success: true, message: 'Bot reconnected successfully.' };
     } catch (error) {
-      this.logger.error(
-        'Reconnect failed:',
-        error instanceof Error ? error.message : error,
-      );
-      return {
-        success: false,
-        message: `Reconnect failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Reconnect failed:', msg);
+      return { success: false, message: `Reconnect failed: ${msg}` };
     }
   }
 
@@ -268,54 +218,47 @@ export class DiscordBotSettingsController {
     if (!this.discordBotClientService.isConnected()) {
       throw new BadRequestException('Discord bot must be connected');
     }
-
     const channelId = await this.settingsService.getDiscordBotDefaultChannel();
     if (!channelId) {
       throw new BadRequestException(
         'No default notification channel configured',
       );
     }
-
     try {
-      const { EmbedBuilder } = await import('discord.js');
-      const [branding, clientUrl] = await Promise.all([
-        this.settingsService.getBranding(),
-        this.settingsService.getClientUrl(),
-      ]);
-      const name = branding.communityName || 'Raid Ledger';
-
-      const description = [
-        `**${name}** is now online and ready to go!`,
-        '',
-        '📅 Schedule raids, track attendance, and manage your roster — all from one place.',
-      ];
-      if (clientUrl) {
-        description.push('', `🔗 [Open ${name}](${clientUrl})`);
-      }
-
-      const embed = new EmbedBuilder()
-        .setTitle(`${name} is Online`)
-        .setDescription(description.join('\n'))
-        .setColor(0x10b981)
-        .setFooter({ text: 'Powered by Raid Ledger' })
-        .setTimestamp();
-
-      await this.discordBotClientService.sendEmbed(channelId, embed);
+      await this.sendTestEmbed(channelId);
       this.logger.log('Test message sent via admin UI');
       return {
         success: true,
         message: 'Test message sent to default channel.',
       };
     } catch (error) {
-      this.logger.error(
-        'Test message failed:',
-        error instanceof Error ? error.message : error,
-      );
-      return {
-        success: false,
-        message: `Failed to send test message: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      };
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error('Test message failed:', msg);
+      return { success: false, message: `Failed to send test message: ${msg}` };
     }
+  }
+
+  /** Build and send the test embed to the given channel. */
+  private async sendTestEmbed(channelId: string): Promise<void> {
+    const { EmbedBuilder } = await import('discord.js');
+    const [branding, clientUrl] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+    ]);
+    const name = branding.communityName || 'Raid Ledger';
+    const desc = [
+      `**${name}** is now online and ready to go!`,
+      '',
+      '\u{1F4C5} Schedule raids, track attendance, and manage your roster \u2014 all from one place.',
+    ];
+    if (clientUrl) desc.push('', `\u{1F517} [Open ${name}](${clientUrl})`);
+    const embed = new EmbedBuilder()
+      .setTitle(`${name} is Online`)
+      .setDescription(desc.join('\n'))
+      .setColor(0x10b981)
+      .setFooter({ text: 'Powered by Raid Ledger' })
+      .setTimestamp();
+    await this.discordBotClientService.sendEmbed(channelId, embed);
   }
 
   /**
@@ -329,18 +272,12 @@ export class DiscordBotSettingsController {
     try {
       const { discordId, gameId } =
         DiscordMemberCharactersQuerySchema.parse(query);
-
-      // Look up the Raid Ledger user linked to this Discord ID
       const [linkedUser] = await this.db
         .select({ id: schema.users.id })
         .from(schema.users)
         .where(eq(schema.users.discordId, discordId))
         .limit(1);
-
-      if (!linkedUser) {
-        return [];
-      }
-
+      if (!linkedUser) return [];
       const result = await this.charactersService.findAllForUser(
         linkedUser.id,
         gameId,
@@ -379,15 +316,9 @@ export class DiscordBotSettingsController {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const { channelId } = DiscordBotSetVoiceChannelSchema.parse(body);
-
       await this.settingsService.setDiscordBotDefaultVoiceChannel(channelId);
-
-      this.logger.log('Discord bot default voice channel updated via admin UI');
-
-      return {
-        success: true,
-        message: 'Default voice channel updated.',
-      };
+      this.logger.log('Default voice channel updated via admin UI');
+      return { success: true, message: 'Default voice channel updated.' };
     } catch (error) {
       handleValidationError(error);
     }
@@ -412,17 +343,10 @@ export class DiscordBotSettingsController {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const { enabled } = DiscordBotSetAdHocStatusSchema.parse(body);
-
       await this.settingsService.setAdHocEventsEnabled(enabled);
-
-      this.logger.log(
-        `Ad-hoc events ${enabled ? 'enabled' : 'disabled'} via admin UI`,
-      );
-
-      return {
-        success: true,
-        message: `Ad-hoc events ${enabled ? 'enabled' : 'disabled'}.`,
-      };
+      const label = enabled ? 'enabled' : 'disabled';
+      this.logger.log(`Ad-hoc events ${label} via admin UI`);
+      return { success: true, message: `Ad-hoc events ${label}.` };
     } catch (error) {
       handleValidationError(error);
     }

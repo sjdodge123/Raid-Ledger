@@ -35,48 +35,44 @@ export class ChannelResolverService {
     recurrenceGroupId?: string | null,
     notificationChannelOverride?: string | null,
   ): Promise<string | null> {
-    // Priority 0: Per-event notification channel override (ROK-599)
-    if (notificationChannelOverride) {
-      return notificationChannelOverride;
-    }
-
+    if (notificationChannelOverride) return notificationChannelOverride;
     const guildId = this.clientService.getGuildId();
-
-    // Priority 1: Series-specific binding (ROK-435)
-    if (recurrenceGroupId && guildId) {
-      const seriesChannel =
-        await this.channelBindingsService.getChannelForSeries(
-          guildId,
-          recurrenceGroupId,
-        );
-      if (seriesChannel) {
-        return seriesChannel;
-      }
-    }
-
-    // Priority 2: Game-specific binding
-    if (gameId && guildId) {
-      const boundChannel = await this.channelBindingsService.getChannelForGame(
-        guildId,
-        gameId,
-      );
-      if (boundChannel) {
-        return boundChannel;
-      }
-    }
-
-    // Priority 3: Default channel from bot settings
+    const bound = await this.resolveBindingChannel(
+      guildId,
+      gameId,
+      recurrenceGroupId,
+    );
+    if (bound) return bound;
     const defaultChannel =
       await this.settingsService.getDiscordBotDefaultChannel();
-    if (defaultChannel) {
-      return defaultChannel;
-    }
-
-    // Priority 4: No channel configured
+    if (defaultChannel) return defaultChannel;
     this.logger.warn(
       'No Discord channel configured for event posting. ' +
         'Set a default channel in the Discord bot settings or bind a channel with /bind.',
     );
+    return null;
+  }
+
+  /** Resolve channel from series or game bindings. */
+  private async resolveBindingChannel(
+    guildId: string | null,
+    gameId?: number | null,
+    recurrenceGroupId?: string | null,
+  ): Promise<string | null> {
+    if (recurrenceGroupId && guildId) {
+      const ch = await this.channelBindingsService.getChannelForSeries(
+        guildId,
+        recurrenceGroupId,
+      );
+      if (ch) return ch;
+    }
+    if (gameId && guildId) {
+      const ch = await this.channelBindingsService.getChannelForGame(
+        guildId,
+        gameId,
+      );
+      if (ch) return ch;
+    }
     return null;
   }
 

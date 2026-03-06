@@ -4,6 +4,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { ActivityType, type GuildMember } from 'discord.js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { groupByGame, applyConsensus } from './presence-game-detector.helpers';
 
 /** TTL for manual /playing overrides (30 minutes). */
 const MANUAL_OVERRIDE_TTL_MS = 30 * 60 * 1000;
@@ -124,121 +125,51 @@ export class PresenceGameDetectorService implements OnModuleInit {
   async detectGames(members: GuildMember[]): Promise<DetectedGameGroup[]> {
     if (members.length === 0) return [];
 
-    // Collect activity names per member
-    const memberActivities = new Map<string, string | null>();
+    const memberActivities = this.collectActivities(members);
+    const gamesByMember = await this.resolveActivities(memberActivities);
+    const groups = groupByGame(gamesByMember);
 
+    return applyConsensus(groups, members);
+  }
+
+  /** Collect activity name (or manual override) per member. */
+  private collectActivities(
+    members: GuildMember[],
+  ): Map<string, string | null> {
+    const result = new Map<string, string | null>();
     for (const member of members) {
-      // Check manual override first
       const override = this.getManualOverride(member.id);
       if (override) {
-        memberActivities.set(member.id, override);
+        result.set(member.id, override);
         continue;
       }
-
-      // Read Discord Rich Presence
-      const playingActivity = member.presence?.activities?.find(
+      const playing = member.presence?.activities?.find(
         (a) => a.type === ActivityType.Playing,
       );
-      memberActivities.set(member.id, playingActivity?.name ?? null);
+      result.set(member.id, playing?.name ?? null);
     }
+    return result;
+  }
 
-    // Resolve activity names to games
-    const gamesByMember = new Map<
+  /** Resolve activity names to game info. */
+  private async resolveActivities(
+    activities: Map<string, string | null>,
+  ): Promise<Map<string, { gameId: number | null; gameName: string }>> {
+    const result = new Map<
       string,
       { gameId: number | null; gameName: string }
     >();
-
-    for (const [memberId, activityName] of memberActivities) {
-      if (!activityName) {
-        // No activity detected — will be grouped as fallback
-        gamesByMember.set(memberId, {
+    for (const [memberId, name] of activities) {
+      if (!name) {
+        result.set(memberId, {
           gameId: null,
           gameName: 'Untitled Gaming Session',
         });
         continue;
       }
-
-      const resolved = await this.resolveGame(activityName);
-      gamesByMember.set(memberId, resolved);
+      result.set(memberId, await this.resolveGame(name));
     }
-
-    // Group members by resolved game
-    const groups = new Map<string, DetectedGameGroup>();
-    for (const [memberId, game] of gamesByMember) {
-      // Use gameId as key for matched games, gameName for unmatched
-      const key =
-        game.gameId !== null ? `id:${game.gameId}` : `name:${game.gameName}`;
-      const existing = groups.get(key);
-      if (existing) {
-        existing.memberIds.push(memberId);
-      } else {
-        groups.set(key, {
-          gameId: game.gameId,
-          gameName: game.gameName,
-          memberIds: [memberId],
-        });
-      }
-    }
-
-    // Apply consensus logic
-    const totalMembers = members.length;
-    const groupArray = [...groups.values()];
-
-    // Check if any single game has a strict majority (>50%)
-    const majorityGroup = groupArray.find(
-      (g) => g.memberIds.length > totalMembers / 2 && g.gameId !== null,
-    );
-
-    if (majorityGroup) {
-      // Majority consensus — all members join this game's event
-      return [
-        {
-          gameId: majorityGroup.gameId,
-          gameName: majorityGroup.gameName,
-          memberIds: members.map((m) => m.id),
-        },
-      ];
-    }
-
-    // No majority — check if everyone has no game detected
-    const allNoGame = groupArray.every((g) => g.gameId === null);
-    if (allNoGame) {
-      return [
-        {
-          gameId: null,
-          gameName: 'Untitled Gaming Session',
-          memberIds: members.map((m) => m.id),
-        },
-      ];
-    }
-
-    // Split into separate groups — filter out single-member "no game" entries
-    // and merge them into the largest game group
-    const gameGroups = groupArray.filter((g) => g.gameId !== null);
-    const noGameMembers = groupArray
-      .filter((g) => g.gameId === null)
-      .flatMap((g) => g.memberIds);
-
-    if (gameGroups.length === 0) {
-      // Shouldn't happen given allNoGame check above, but be safe
-      return [
-        {
-          gameId: null,
-          gameName: 'Untitled Gaming Session',
-          memberIds: members.map((m) => m.id),
-        },
-      ];
-    }
-
-    // Assign no-game members to the largest game group
-    if (noGameMembers.length > 0) {
-      const largest = gameGroups.reduce((a, b) =>
-        a.memberIds.length >= b.memberIds.length ? a : b,
-      );
-      largest.memberIds.push(...noGameMembers);
-    }
-
-    return gameGroups;
+    return result;
   }
 
   /**
@@ -281,13 +212,33 @@ export class PresenceGameDetectorService implements OnModuleInit {
   async resolveGame(
     activityName: string,
   ): Promise<{ gameId: number | null; gameName: string }> {
-    // Check cache
     const cached = this.gameCache.get(activityName);
     if (cached && Date.now() - cached.cachedAt < GAME_CACHE_TTL_MS) {
       return { gameId: cached.gameId, gameName: cached.gameName };
     }
 
-    // 1. Check discord_game_mappings (admin overrides)
+    const result =
+      (await this.resolveViaMapping(activityName)) ??
+      (await this.resolveViaExactMatch(activityName)) ??
+      (await this.resolveViaIlike(activityName)) ??
+      (await this.resolveViaTrigram(activityName));
+
+    if (result) {
+      this.cacheGame(activityName, result.gameId, result.gameName);
+      return result;
+    }
+
+    this.logger.warn(
+      `Game detection fell through to null for "${activityName}"`,
+    );
+    this.cacheGame(activityName, null, activityName);
+    return { gameId: null, gameName: activityName };
+  }
+
+  /** Step 1: Check discord_game_mappings table (admin overrides). */
+  private async resolveViaMapping(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
     const [mapping] = await this.db
       .select({
         gameId: schema.discordGameMappings.gameId,
@@ -300,66 +251,54 @@ export class PresenceGameDetectorService implements OnModuleInit {
       )
       .where(eq(schema.discordGameMappings.discordActivityName, activityName))
       .limit(1);
+    return mapping
+      ? { gameId: mapping.gameId, gameName: mapping.gameName }
+      : null;
+  }
 
-    if (mapping) {
-      this.cacheGame(activityName, mapping.gameId, mapping.gameName);
-      return { gameId: mapping.gameId, gameName: mapping.gameName };
-    }
-
-    // 2. Exact match against games.name
-    const [exactMatch] = await this.db
+  /** Step 2: Exact match against games.name. */
+  private async resolveViaExactMatch(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
       .where(eq(schema.games.name, activityName))
       .limit(1);
+    return match ? { gameId: match.id, gameName: match.name } : null;
+  }
 
-    if (exactMatch) {
-      this.cacheGame(activityName, exactMatch.id, exactMatch.name);
-      return { gameId: exactMatch.id, gameName: exactMatch.name };
-    }
-
-    // 3. Case-insensitive match (ILIKE)
-    const [fuzzyMatch] = await this.db
+  /** Step 3: Case-insensitive match (ILIKE). */
+  private async resolveViaIlike(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
+    const [match] = await this.db
       .select({ id: schema.games.id, name: schema.games.name })
       .from(schema.games)
       .where(ilike(schema.games.name, activityName))
       .limit(1);
+    return match ? { gameId: match.id, gameName: match.name } : null;
+  }
 
-    if (fuzzyMatch) {
-      this.cacheGame(activityName, fuzzyMatch.id, fuzzyMatch.name);
-      return { gameId: fuzzyMatch.id, gameName: fuzzyMatch.name };
-    }
-
-    // 4. Trigram similarity search (fuzzy matching for typos/abbreviations)
-    // Uses pg_trgm extension if available — gracefully falls back
+  /** Step 4: Trigram similarity search (pg_trgm). */
+  private async resolveViaTrigram(
+    activityName: string,
+  ): Promise<{ gameId: number; gameName: string } | null> {
     try {
-      const [trigramMatch] = await this.db
+      const [match] = await this.db
         .select({ id: schema.games.id, name: schema.games.name })
         .from(schema.games)
         .where(sql`similarity(${schema.games.name}, ${activityName}) > 0.3`)
         .orderBy(sql`similarity(${schema.games.name}, ${activityName}) DESC`)
         .limit(1);
-
-      if (trigramMatch) {
-        this.cacheGame(activityName, trigramMatch.id, trigramMatch.name);
-        this.logger.debug(
-          `Fuzzy matched "${activityName}" -> "${trigramMatch.name}" (id=${trigramMatch.id})`,
-        );
-        return { gameId: trigramMatch.id, gameName: trigramMatch.name };
+      if (match) {
+        this.logger.debug(`Fuzzy matched "${activityName}" -> "${match.name}"`);
+        return { gameId: match.id, gameName: match.name };
       }
     } catch {
-      // pg_trgm extension may not be installed — skip trigram matching
-      this.logger.debug(
-        `Trigram matching unavailable for "${activityName}" — pg_trgm may not be installed`,
-      );
+      this.logger.debug(`Trigram unavailable for "${activityName}"`);
     }
-
-    // 5. No match — use activity name as-is with null gameId
-    this.logger.warn(
-      `Game detection fell through to null for activity "${activityName}" — no mapping, exact, ILIKE, or trigram match found`,
-    );
-    this.cacheGame(activityName, null, activityName);
-    return { gameId: null, gameName: activityName };
+    return null;
   }
 
   private cacheGame(

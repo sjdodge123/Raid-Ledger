@@ -1,6 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  SlashCommandBuilder,
   type ChatInputCommandInteraction,
   type AutocompleteInteraction,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -22,6 +21,7 @@ import { MagicLinkService } from '../../auth/magic-link.service';
 import { parseNaturalTime, toDiscordTimestamp } from '../utils/time-parser';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
+import { buildEventCommandDefinition, buildSlotConfig } from './event-create.helpers';
 
 const DEFAULT_SLOTS = 20;
 const DEFAULT_DURATION_HOURS = 2;
@@ -45,92 +45,15 @@ export class EventCreateCommand
   ) {}
 
   getDefinition(): RESTPostAPIChatInputApplicationCommandsJSONBody {
-    return new SlashCommandBuilder()
-      .setName('event')
-      .setDescription('Event management commands')
-      .setDMPermission(true)
-      .addSubcommand((sub) =>
-        sub
-          .setName('create')
-          .setDescription('Quick-create an event from Discord')
-          .addStringOption((opt) =>
-            opt
-              .setName('title')
-              .setDescription('Event title')
-              .setRequired(true),
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName('game')
-              .setDescription('Game name')
-              .setRequired(true)
-              .setAutocomplete(true),
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName('time')
-              .setDescription(
-                'When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")',
-              )
-              .setRequired(true),
-          )
-          .addStringOption((opt) =>
-            opt
-              .setName('roster')
-              .setDescription('Roster type (default: generic)')
-              .addChoices(
-                { name: 'Generic (headcount only)', value: 'generic' },
-                { name: 'MMO Roles (Tank/Healer/DPS)', value: 'mmo' },
-              ),
-          )
-          .addIntegerOption((opt) =>
-            opt
-              .setName('slots')
-              .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
-              .setMinValue(1)
-              .setMaxValue(100),
-          )
-          .addIntegerOption((opt) =>
-            opt
-              .setName('tanks')
-              .setDescription('Number of tank slots (MMO roster only)')
-              .setMinValue(0)
-              .setMaxValue(20),
-          )
-          .addIntegerOption((opt) =>
-            opt
-              .setName('healers')
-              .setDescription('Number of healer slots (MMO roster only)')
-              .setMinValue(0)
-              .setMaxValue(20),
-          )
-          .addIntegerOption((opt) =>
-            opt
-              .setName('dps')
-              .setDescription('Number of DPS slots (MMO roster only)')
-              .setMinValue(0)
-              .setMaxValue(50),
-          ),
-      )
-      .addSubcommand((sub) =>
-        sub
-          .setName('plan')
-          .setDescription(
-            'Plan an event with a community poll to find the best time',
-          ),
-      )
-      .toJSON();
+    return buildEventCommandDefinition();
   }
 
   async handleInteraction(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
-    const subcommand = interaction.options.getSubcommand();
-    if (subcommand === 'create') {
-      await this.handleCreate(interaction);
-    } else if (subcommand === 'plan') {
-      await this.handlePlan(interaction);
-    }
+    const sub = interaction.options.getSubcommand();
+    if (sub === 'create') await this.handleCreate(interaction);
+    else if (sub === 'plan') await this.handlePlan(interaction);
   }
 
   async handleAutocomplete(
@@ -147,86 +70,18 @@ export class EventCreateCommand
   ): Promise<void> {
     await interaction.deferReply({ ephemeral: true });
 
-    const title = interaction.options.getString('title', true);
-    const gameName = interaction.options.getString('game', true);
-    const timeInput = interaction.options.getString('time', true);
-    const rosterType = interaction.options.getString('roster') ?? 'generic';
-    const slots = interaction.options.getInteger('slots') ?? DEFAULT_SLOTS;
-    const tanks = interaction.options.getInteger('tanks');
-    const healers = interaction.options.getInteger('healers');
-    const dps = interaction.options.getInteger('dps');
+    const user = await this.resolveUser(interaction);
+    if (!user) return;
 
-    // Resolve the Discord user to a Raid Ledger user
-    const discordId = interaction.user.id;
-    const user = await this.usersService.findByDiscordId(discordId);
-    if (!user) {
-      await interaction.editReply(
-        'You need a Raid Ledger account linked to Discord to create events. ' +
-          'Log in to Raid Ledger via Discord OAuth first.',
-      );
-      return;
-    }
+    const { title, game, parsed, slotConfig, maxAttendees } =
+      await this.parseCreateOptions(interaction, user.id);
+    if (!parsed) return;
 
-    // Resolve the game from the IGDB games catalog
-    const matchedGames = await this.db
-      .select()
-      .from(schema.games)
-      .where(ilike(schema.games.name, gameName))
-      .limit(1);
-
-    const game = matchedGames[0] ?? null;
-
-    // Use the user's timezone preference, falling back to community default
-    const userTzPref = await this.preferencesService.getUserPreference(
-      user.id,
-      'timezone',
-    );
-    const userTz = userTzPref?.value as string | undefined;
-    const defaultTz = await this.settingsService.get('default_timezone');
-    const timezone =
-      (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
-
-    // Parse natural language time
-    const parsed = parseNaturalTime(timeInput, timezone);
-    if (!parsed) {
-      await interaction.editReply(
-        `Could not parse time: "${timeInput}". Try something like "tonight 8pm" or "Friday 7:30pm".`,
-      );
-      return;
-    }
-
-    // Calculate end time (default 2 hours after start)
     const startTime = parsed.date;
     const endTime = new Date(
       startTime.getTime() + DEFAULT_DURATION_HOURS * 60 * 60 * 1000,
     );
 
-    // Build slot config based on roster type
-    let slotConfig:
-      | {
-          type: 'generic' | 'mmo';
-          tank?: number;
-          healer?: number;
-          dps?: number;
-        }
-      | undefined;
-    let maxAttendees = slots;
-
-    if (rosterType === 'mmo') {
-      const tankSlots = tanks ?? 1;
-      const healerSlots = healers ?? 1;
-      const dpsSlots = dps ?? 3;
-      maxAttendees = tankSlots + healerSlots + dpsSlots;
-
-      slotConfig = {
-        type: 'mmo',
-        tank: tankSlots,
-        healer: healerSlots,
-        dps: dpsSlots,
-      };
-    }
-
-    // Create the event via EventsService
     try {
       const event = await this.eventsService.create(user.id, {
         title,
@@ -237,113 +92,42 @@ export class EventCreateCommand
         slotConfig,
       });
 
-      // Build ephemeral confirmation for creator
-      const clientUrl =
-        process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
-      let magicLinkUrl: string | null = null;
-      if (clientUrl && clientUrl !== 'auto') {
-        magicLinkUrl = await this.magicLinkService.generateLink(
-          user.id,
-          `/events/${event.id}/edit`,
-          clientUrl,
-        );
-      }
-
-      const rosterInfo =
-        rosterType === 'mmo' && slotConfig
-          ? `Roster: **MMO** (${slotConfig.tank}T / ${slotConfig.healer}H / ${slotConfig.dps}D)`
-          : `Slots: **${maxAttendees}**`;
-
-      const confirmEmbed = new EmbedBuilder()
-        .setColor(0x34d399) // Emerald
-        .setTitle('Event Created')
-        .setDescription(
-          [
-            `**${title}**`,
-            '',
-            `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
-            game ? `Game: **${game.name}**` : null,
-            rosterInfo,
-            '',
-            `Timezone: ${parsed.timezone}`,
-          ]
-            .filter(Boolean)
-            .join('\n'),
-        );
-
-      const components: ActionRowBuilder<ButtonBuilder>[] = [];
-      if (magicLinkUrl) {
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setLabel('Configure in Raid Ledger')
-            .setStyle(ButtonStyle.Link)
-            .setURL(magicLinkUrl)
-            .setEmoji({ name: '\u2699\uFE0F' }),
-        );
-        components.push(row);
-      }
-
-      await interaction.editReply({
-        embeds: [confirmEmbed],
-        components,
-      });
-
-      // Public announcement embed is posted automatically by DiscordEventListener
-      // when EventsService.create() emits the 'event.created' app event.
-    } catch (error) {
-      this.logger.error('Failed to create event via slash command:', error);
-      await interaction.editReply(
-        'Failed to create event. Please try again or use the web app.',
+      await this.replyWithConfirmation(
+        interaction, event.id, user.id, title,
+        game, slotConfig, maxAttendees, parsed, startTime,
       );
+    } catch (error) {
+      this.logger.error('Failed to create event:', error);
+      await interaction.editReply('Failed to create event.');
     }
   }
 
-  /**
-   * Handle the /event plan subcommand.
-   * Generates a magic link to the web plan form.
-   */
   private async handlePlan(
     interaction: ChatInputCommandInteraction,
   ): Promise<void> {
     await interaction.deferReply({ ephemeral: true });
 
-    const discordId = interaction.user.id;
-    const user = await this.usersService.findByDiscordId(discordId);
-    if (!user) {
-      await interaction.editReply(
-        'You need a Raid Ledger account linked to Discord to plan events. ' +
-          'Log in to Raid Ledger via Discord OAuth first.',
-      );
-      return;
-    }
+    const user = await this.resolveUser(interaction);
+    if (!user) return;
 
     const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
     if (!clientUrl || clientUrl === 'auto') {
-      await interaction.editReply(
-        'The web app URL is not configured. Contact an admin.',
-      );
+      await interaction.editReply('The web app URL is not configured.');
       return;
     }
 
     const magicLinkUrl = await this.magicLinkService.generateLink(
-      user.id,
-      '/events/plan',
-      clientUrl,
+      user.id, '/events/plan', clientUrl,
     );
-
     if (!magicLinkUrl) {
-      await interaction.editReply(
-        'Failed to generate a link. Please try again.',
-      );
+      await interaction.editReply('Failed to generate a link.');
       return;
     }
 
     const embed = new EmbedBuilder()
-      .setColor(0x8b5cf6) // Violet
+      .setColor(0x8b5cf6)
       .setTitle('Plan an Event')
-      .setDescription(
-        'Use the web form to pick candidate time slots and start a community poll.',
-      );
+      .setDescription('Use the web form to pick time slots and start a poll.');
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -353,16 +137,132 @@ export class EventCreateCommand
         .setEmoji({ name: '\uD83D\uDCCA' }),
     );
 
-    await interaction.editReply({
-      embeds: [embed],
-      components: [row],
-    });
+    await interaction.editReply({ embeds: [embed], components: [row] });
   }
 
-  /**
-   * Autocomplete handler for game names.
-   * Searches the full IGDB games catalog, not just the game registry.
-   */
+  // ─── Helpers ──────────────────────────────────────────────
+
+  private async resolveUser(
+    interaction: ChatInputCommandInteraction,
+  ): Promise<{ id: number } | null> {
+    const user = await this.usersService.findByDiscordId(interaction.user.id);
+    if (!user) {
+      await interaction.editReply(
+        'You need a Raid Ledger account linked to Discord.',
+      );
+      return null;
+    }
+    return user;
+  }
+
+  private async parseCreateOptions(
+    interaction: ChatInputCommandInteraction,
+    userId: number,
+  ): Promise<{
+    title: string;
+    game: { id: number; name: string } | null;
+    parsed: ReturnType<typeof parseNaturalTime>;
+    slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'];
+    maxAttendees: number;
+  }> {
+    const title = interaction.options.getString('title', true);
+    const gameName = interaction.options.getString('game', true);
+    const timeInput = interaction.options.getString('time', true);
+    const rosterType = interaction.options.getString('roster') ?? 'generic';
+    const slots = interaction.options.getInteger('slots') ?? DEFAULT_SLOTS;
+    const tanks = interaction.options.getInteger('tanks');
+    const healers = interaction.options.getInteger('healers');
+    const dps = interaction.options.getInteger('dps');
+
+    const game = await this.resolveGame(gameName);
+    const timezone = await this.resolveTimezone(userId);
+    const parsed = parseNaturalTime(timeInput, timezone);
+
+    if (!parsed) {
+      await interaction.editReply(
+        `Could not parse time: "${timeInput}". Try "tonight 8pm".`,
+      );
+    }
+
+    const { slotConfig, maxAttendees } = buildSlotConfig(
+      rosterType, slots, tanks, healers, dps,
+    );
+    return { title, game, parsed, slotConfig, maxAttendees };
+  }
+
+  private async resolveGame(
+    gameName: string,
+  ): Promise<{ id: number; name: string } | null> {
+    const matches = await this.db
+      .select()
+      .from(schema.games)
+      .where(ilike(schema.games.name, gameName))
+      .limit(1);
+    return matches[0] ?? null;
+  }
+
+  private async resolveTimezone(userId: number): Promise<string> {
+    const pref = await this.preferencesService.getUserPreference(
+      userId, 'timezone',
+    );
+    const userTz = pref?.value as string | undefined;
+    const defaultTz = await this.settingsService.get('default_timezone');
+    return (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
+  }
+
+  private async replyWithConfirmation(
+    interaction: ChatInputCommandInteraction,
+    eventId: number,
+    userId: number,
+    title: string,
+    game: { id: number; name: string } | null,
+    slotConfig: ReturnType<typeof buildSlotConfig>['slotConfig'],
+    maxAttendees: number,
+    parsed: NonNullable<ReturnType<typeof parseNaturalTime>>,
+    startTime: Date,
+  ): Promise<void> {
+    const clientUrl =
+      process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
+    let magicLinkUrl: string | null = null;
+    if (clientUrl && clientUrl !== 'auto') {
+      magicLinkUrl = await this.magicLinkService.generateLink(
+        userId, `/events/${eventId}/edit`, clientUrl,
+      );
+    }
+
+    const rosterInfo =
+      slotConfig?.type === 'mmo'
+        ? `Roster: **MMO** (${slotConfig.tank}T / ${slotConfig.healer}H / ${slotConfig.dps}D)`
+        : `Slots: **${maxAttendees}**`;
+
+    const embed = new EmbedBuilder()
+      .setColor(0x34d399)
+      .setTitle('Event Created')
+      .setDescription(
+        [
+          `**${title}**`, '',
+          `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
+          game ? `Game: **${game.name}**` : null,
+          rosterInfo, '', `Timezone: ${parsed.timezone}`,
+        ].filter(Boolean).join('\n'),
+      );
+
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
+    if (magicLinkUrl) {
+      components.push(
+        new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder()
+            .setLabel('Configure in Raid Ledger')
+            .setStyle(ButtonStyle.Link)
+            .setURL(magicLinkUrl)
+            .setEmoji({ name: '\u2699\uFE0F' }),
+        ),
+      );
+    }
+
+    await interaction.editReply({ embeds: [embed], components });
+  }
+
   private async autocompleteGame(
     interaction: AutocompleteInteraction,
     query: string,

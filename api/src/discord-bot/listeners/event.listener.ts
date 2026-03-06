@@ -1,6 +1,5 @@
 import { Injectable, Inject, Logger, Optional } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -20,26 +19,29 @@ import {
   shouldPostEmbed,
   getLeadTimeFromRecurrence,
 } from '../utils/embed-lead-time';
+import {
+  findEventMessages,
+  findDiscordMessageRecord,
+  updateEmbedRecord,
+  enrichEventData,
+  cancelEmbedRecord,
+  deleteEmbedRecord,
+  updateEmbedStateForRecords,
+  type EventListenerDeps,
+} from './event.listener.handlers';
 
 /** Default lead time for standalone (non-recurring) events: 6 days. */
 const STANDALONE_LEAD_TIME_MS = 6 * 24 * 60 * 60 * 1000;
 
-/**
- * Payload emitted with event lifecycle events.
- */
+/** Payload emitted with event lifecycle events. */
 export interface EventPayload {
   eventId: number;
   event: EmbedEventData;
   gameId?: number | null;
-  /** Recurrence rule from the event, if it's part of a series. */
-  recurrenceRule?: {
-    frequency: 'weekly' | 'biweekly' | 'monthly';
-  } | null;
+  recurrenceRule?: { frequency: 'weekly' | 'biweekly' | 'monthly' } | null;
   recurrenceGroupId?: string | null;
   creatorId?: number;
-  /** ROK-293: Ad-hoc events skip Discord Scheduled Event creation */
   isAdHoc?: boolean;
-  /** ROK-599: Per-event notification channel override */
   notificationChannelOverride?: string | null;
 }
 
@@ -65,38 +67,131 @@ export class DiscordEventListener {
     private readonly gameAffinityNotificationService: GameAffinityNotificationService | null,
   ) {}
 
+  private get deps(): EventListenerDeps {
+    return {
+      db: this.db,
+      clientService: this.clientService,
+      embedFactory: this.embedFactory,
+      embedPoster: this.embedPoster,
+      channelResolver: this.channelResolver,
+      logger: this.logger,
+    };
+  }
+
   @OnEvent(APP_EVENT_EVENTS.CREATED)
   async handleEventCreated(payload: EventPayload): Promise<void> {
     this.logger.log(
-      `handleEventCreated fired for event ${payload.eventId} (isAdHoc=${payload.isAdHoc}, connected=${this.clientService.isConnected()})`,
+      `handleEventCreated fired for event ${payload.eventId} (isAdHoc=${payload.isAdHoc})`,
     );
+    if (payload.isAdHoc) return;
+    if (!this.clientService.isConnected()) return;
+    if (!this.isWithinLeadTime(payload)) return;
+    const posted = await this.postEmbedAndScheduledEvent(payload);
+    await this.sendGameAffinityNotifications(payload, posted);
+  }
 
-    // ROK-293: Ad-hoc events do NOT trigger Discord Scheduled Event / embed creation
-    if (payload.isAdHoc) {
-      this.logger.log(`Skipping embed for ad-hoc event ${payload.eventId}`);
+  @OnEvent(APP_EVENT_EVENTS.UPDATED)
+  async handleEventUpdated(payload: EventPayload): Promise<void> {
+    this.fireScheduledEventUpdate(payload);
+    if (!this.clientService.isConnected()) return;
+    const records = await findEventMessages(this.deps, payload.eventId);
+    if (records.length === 0) {
+      await this.handleMissingEmbedOnUpdate(payload);
       return;
     }
+    await this.updateExistingEmbeds(payload, records);
+  }
 
-    if (!this.clientService.isConnected()) {
-      this.logger.warn('Bot not connected, skipping event.created embed');
-      return;
+  @OnEvent(APP_EVENT_EVENTS.CANCELLED)
+  async handleEventCancelled(payload: EventPayload): Promise<void> {
+    this.fireScheduledEventDelete(payload.eventId);
+    if (!this.clientService.isConnected()) return;
+    const records = await findEventMessages(this.deps, payload.eventId);
+    if (records.length === 0) return;
+    const context = await this.buildContext();
+    for (const record of records) {
+      try {
+        await cancelEmbedRecord(
+          this.deps,
+          record,
+          payload.event,
+          context,
+          payload.eventId,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to cancel embed for event ${payload.eventId}:`,
+          error,
+        );
+      }
     }
+  }
 
-    // ROK-434: Lead-time gating — determine if this event should post now
-    const recurrenceRule = payload.recurrenceRule ?? null;
+  @OnEvent(APP_EVENT_EVENTS.DELETED)
+  async handleEventDeleted(payload: { eventId: number }): Promise<void> {
+    await this.scheduledEventService.deleteScheduledEvent(payload.eventId);
+    if (!this.clientService.isConnected()) return;
+    const records = await findEventMessages(this.deps, payload.eventId);
+    for (const record of records) {
+      try {
+        await deleteEmbedRecord(this.deps, record, payload.eventId);
+      } catch (error) {
+        this.logger.error(
+          `Failed to delete embed for event ${payload.eventId}:`,
+          error,
+        );
+      }
+    }
+  }
+
+  /** Update the embed state for an event and re-render the embed. */
+  async updateEmbedState(
+    eventId: number,
+    newState: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
+    event: EmbedEventData,
+  ): Promise<void> {
+    if (!this.clientService.isConnected()) return;
+    const records = await findEventMessages(this.deps, eventId);
+    if (records.length === 0) return;
+    const context = await this.buildContext();
+    await updateEmbedStateForRecords(
+      this.deps,
+      records,
+      event,
+      context,
+      newState,
+      eventId,
+    );
+  }
+
+  // --- Private helpers ---
+
+  private async buildContext(): Promise<EmbedContext> {
+    const [branding, clientUrl, timezone] = await Promise.all([
+      this.settingsService.getBranding(),
+      this.settingsService.getClientUrl(),
+      this.settingsService.getDefaultTimezone(),
+    ]);
+    return { communityName: branding.communityName, clientUrl, timezone };
+  }
+
+  private isWithinLeadTime(payload: EventPayload): boolean {
+    const rule = payload.recurrenceRule ?? null;
     const leadTimeMs =
-      getLeadTimeFromRecurrence(recurrenceRule) ?? STANDALONE_LEAD_TIME_MS;
-
-    const timezone = (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-
+      getLeadTimeFromRecurrence(rule) ?? STANDALONE_LEAD_TIME_MS;
+    const timezone = 'UTC';
     if (!shouldPostEmbed(payload.event.startTime, leadTimeMs, timezone)) {
       this.logger.log(
-        `Event ${payload.eventId} outside lead-time window (start=${payload.event.startTime}, leadTime=${leadTimeMs}ms, tz=${timezone}), deferring`,
+        `Event ${payload.eventId} outside lead-time window, deferring`,
       );
-      return;
+      return false;
     }
+    return true;
+  }
 
-    // Within the posting window — post immediately via shared service
+  private async postEmbedAndScheduledEvent(
+    payload: EventPayload,
+  ): Promise<boolean> {
     const posted = await this.embedPoster.postEmbed(
       payload.eventId,
       payload.event,
@@ -104,8 +199,6 @@ export class DiscordEventListener {
       payload.recurrenceGroupId,
       payload.notificationChannelOverride,
     );
-
-    // ROK-471: Create Discord Scheduled Event (fire-and-forget)
     this.scheduledEventService
       .createScheduledEvent(
         payload.eventId,
@@ -116,61 +209,47 @@ export class DiscordEventListener {
       )
       .catch((err: unknown) => {
         this.logger.warn(
-          `Failed to create scheduled event for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          `Failed to create scheduled event for ${payload.eventId}: ${String(err)}`,
         );
       });
+    return posted;
+  }
 
-    // ROK-440: Notify users with game affinity AFTER embed is successfully posted
-    if (
+  private async sendGameAffinityNotifications(
+    payload: EventPayload,
+    posted: boolean,
+  ): Promise<void> {
+    if (!this.canSendAffinityNotification(payload)) return;
+    const discordMessage = posted
+      ? await findDiscordMessageRecord(this.deps, payload.eventId)
+      : null;
+    const context = await this.buildContext();
+    this.gameAffinityNotificationService!.notifyGameAffinity({
+      eventId: payload.eventId,
+      eventTitle: payload.event.title,
+      gameName: payload.event.game!.name,
+      gameId: payload.gameId!,
+      startTime: payload.event.startTime,
+      creatorId: payload.creatorId!,
+      clientUrl: context.clientUrl,
+      discordMessage,
+    }).catch((err: unknown) => {
+      this.logger.warn(
+        `Failed to send game affinity notifications: ${String(err)}`,
+      );
+    });
+  }
+
+  private canSendAffinityNotification(payload: EventPayload): boolean {
+    return !!(
       this.gameAffinityNotificationService &&
       payload.gameId &&
       payload.event.game?.name &&
       payload.creatorId
-    ) {
-      // ROK-504: Look up Discord message record for "View in Discord" link
-      let discordMessage: {
-        guildId: string;
-        channelId: string;
-        messageId: string;
-      } | null = null;
-      if (posted) {
-        const [msgRecord] = await this.db
-          .select({
-            guildId: schema.discordEventMessages.guildId,
-            channelId: schema.discordEventMessages.channelId,
-            messageId: schema.discordEventMessages.messageId,
-          })
-          .from(schema.discordEventMessages)
-          .where(eq(schema.discordEventMessages.eventId, payload.eventId))
-          .limit(1);
-        if (msgRecord) {
-          discordMessage = msgRecord;
-        }
-      }
-
-      const context = await this.buildContext();
-      this.gameAffinityNotificationService
-        .notifyGameAffinity({
-          eventId: payload.eventId,
-          eventTitle: payload.event.title,
-          gameName: payload.event.game.name,
-          gameId: payload.gameId,
-          startTime: payload.event.startTime,
-          creatorId: payload.creatorId,
-          clientUrl: context.clientUrl,
-          discordMessage,
-        })
-        .catch((err: unknown) => {
-          this.logger.warn(
-            `Failed to send game affinity notifications for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          );
-        });
-    }
+    );
   }
 
-  @OnEvent(APP_EVENT_EVENTS.UPDATED)
-  async handleEventUpdated(payload: EventPayload): Promise<void> {
-    // ROK-471: Update Discord Scheduled Event (fire-and-forget, runs in parallel with embed update)
+  private fireScheduledEventUpdate(payload: EventPayload): void {
     this.scheduledEventService
       .updateScheduledEvent(
         payload.eventId,
@@ -180,291 +259,62 @@ export class DiscordEventListener {
       )
       .catch((err: unknown) => {
         this.logger.warn(
-          `Failed to update scheduled event for event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          `Failed to update scheduled event for ${payload.eventId}: ${String(err)}`,
         );
       });
-
-    if (!this.clientService.isConnected()) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    // Find all message records for this event
-    const records = await this.db
-      .select()
-      .from(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.eventId, payload.eventId),
-          eq(schema.discordEventMessages.guildId, guildId),
-        ),
-      );
-
-    if (records.length === 0) {
-      // ROK-434 Edge Case: Event was rescheduled to be closer and is now
-      // within lead time. Post immediately (bypass 1pm gate).
-      const recurrenceRule = payload.recurrenceRule ?? null;
-      const leadTimeMs =
-        getLeadTimeFromRecurrence(recurrenceRule) ?? STANDALONE_LEAD_TIME_MS;
-      const timezone =
-        (await this.settingsService.getDefaultTimezone()) ?? 'UTC';
-
-      if (shouldPostEmbed(payload.event.startTime, leadTimeMs, timezone)) {
-        this.logger.log(
-          `Rescheduled event ${payload.eventId} is now within lead-time window, posting embed`,
-        );
-        await this.embedPoster.postEmbed(
-          payload.eventId,
-          payload.event,
-          payload.gameId,
-          payload.recurrenceGroupId,
-          payload.notificationChannelOverride,
-        );
-      } else {
-        this.logger.debug(
-          `No Discord message found for event ${payload.eventId}, skipping update`,
-        );
-      }
-      return;
-    }
-
-    const context = await this.buildContext();
-
-    // Enrich with live roster data so the embed reflects current signups
-    const eventData = await this.embedPoster.enrichWithLiveRoster(
-      payload.eventId,
-      payload.event,
-    );
-
-    // ROK-507/ROK-599: Resolve voice channel — per-event override takes priority
-    const voiceChannelId =
-      payload.notificationChannelOverride ??
-      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        payload.gameId,
-        payload.recurrenceGroupId,
-      ));
-    if (voiceChannelId) {
-      eventData.voiceChannelId = voiceChannelId;
-    }
-
-    for (const record of records) {
-      try {
-        const currentState =
-          record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
-        const { embed, row } = this.embedFactory.buildEventEmbed(
-          eventData,
-          context,
-          { state: currentState },
-        );
-
-        await this.clientService.editEmbed(
-          record.channelId,
-          record.messageId,
-          embed,
-          row,
-        );
-
-        await this.db
-          .update(schema.discordEventMessages)
-          .set({ updatedAt: new Date() })
-          .where(eq(schema.discordEventMessages.id, record.id));
-
-        this.logger.log(
-          `Updated event embed for event ${payload.eventId} (msg: ${record.messageId})`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to update event embed for event ${payload.eventId} (msg: ${record.messageId}):`,
-          error,
-        );
-      }
-    }
   }
 
-  @OnEvent(APP_EVENT_EVENTS.CANCELLED)
-  async handleEventCancelled(payload: EventPayload): Promise<void> {
-    // ROK-471: Delete Discord Scheduled Event on cancel (fire-and-forget)
+  private fireScheduledEventDelete(eventId: number): void {
     this.scheduledEventService
-      .deleteScheduledEvent(payload.eventId)
+      .deleteScheduledEvent(eventId)
       .catch((err: unknown) => {
         this.logger.warn(
-          `Failed to delete scheduled event for cancelled event ${payload.eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          `Failed to delete scheduled event for ${eventId}: ${String(err)}`,
         );
       });
-
-    if (!this.clientService.isConnected()) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const records = await this.db
-      .select()
-      .from(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.eventId, payload.eventId),
-          eq(schema.discordEventMessages.guildId, guildId),
-        ),
-      );
-
-    if (records.length === 0) return;
-
-    const context = await this.buildContext();
-
-    for (const record of records) {
-      try {
-        const { embed } = this.embedFactory.buildEventCancelled(
-          payload.event,
-          context,
-        );
-
-        await this.clientService.editEmbed(
-          record.channelId,
-          record.messageId,
-          embed,
-        );
-
-        await this.db
-          .update(schema.discordEventMessages)
-          .set({
-            embedState: EMBED_STATES.CANCELLED,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.discordEventMessages.id, record.id));
-
-        this.logger.log(
-          `Cancelled event embed for event ${payload.eventId} (msg: ${record.messageId})`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to cancel event embed for event ${payload.eventId} (msg: ${record.messageId}):`,
-          error,
-        );
-      }
-    }
   }
 
-  @OnEvent(APP_EVENT_EVENTS.DELETED)
-  async handleEventDeleted(payload: { eventId: number }): Promise<void> {
-    // ROK-471: Delete Discord Scheduled Event BEFORE DB delete
-    // (event.deleted is emitted before DB row removal — confirmed safe)
-    await this.scheduledEventService.deleteScheduledEvent(payload.eventId);
-
-    if (!this.clientService.isConnected()) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const records = await this.db
-      .select()
-      .from(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.eventId, payload.eventId),
-          eq(schema.discordEventMessages.guildId, guildId),
-        ),
-      );
-
-    if (records.length === 0) return;
-
-    for (const record of records) {
-      try {
-        await this.clientService.deleteMessage(
-          record.channelId,
-          record.messageId,
-        );
-        this.logger.log(
-          `Deleted Discord message for event ${payload.eventId} (msg: ${record.messageId})`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `Failed to delete Discord message for event ${payload.eventId} (msg: ${record.messageId}):`,
-          error,
-        );
-      }
-
-      await this.db
-        .delete(schema.discordEventMessages)
-        .where(eq(schema.discordEventMessages.id, record.id));
-    }
-  }
-
-  /**
-   * Update the embed state for an event and re-render the embed.
-   * Called by scheduled tasks or state machine triggers.
-   */
-  async updateEmbedState(
-    eventId: number,
-    newState: (typeof EMBED_STATES)[keyof typeof EMBED_STATES],
-    event: EmbedEventData,
+  private async handleMissingEmbedOnUpdate(
+    payload: EventPayload,
   ): Promise<void> {
-    if (!this.clientService.isConnected()) return;
-
-    const guildId = this.clientService.getGuildId();
-    if (!guildId) return;
-
-    const records = await this.db
-      .select()
-      .from(schema.discordEventMessages)
-      .where(
-        and(
-          eq(schema.discordEventMessages.eventId, eventId),
-          eq(schema.discordEventMessages.guildId, guildId),
-        ),
+    if (this.isWithinLeadTime(payload)) {
+      this.logger.log(
+        `Rescheduled event ${payload.eventId} is now within lead-time, posting`,
       );
+      await this.embedPoster.postEmbed(
+        payload.eventId,
+        payload.event,
+        payload.gameId,
+        payload.recurrenceGroupId,
+        payload.notificationChannelOverride,
+      );
+    }
+  }
 
-    if (records.length === 0) return;
-
+  private async updateExistingEmbeds(
+    payload: EventPayload,
+    records: (typeof schema.discordEventMessages.$inferSelect)[],
+  ): Promise<void> {
     const context = await this.buildContext();
-
+    const eventData = await enrichEventData(this.deps, payload);
     for (const record of records) {
       try {
-        const { embed, row } = this.embedFactory.buildEventEmbed(
-          event,
+        const state =
+          record.embedState as (typeof EMBED_STATES)[keyof typeof EMBED_STATES];
+        await updateEmbedRecord(
+          this.deps,
+          record,
+          eventData,
           context,
-          { state: newState },
-        );
-
-        await this.clientService.editEmbed(
-          record.channelId,
-          record.messageId,
-          embed,
-          row,
-        );
-
-        await this.db
-          .update(schema.discordEventMessages)
-          .set({
-            embedState: newState,
-            updatedAt: new Date(),
-          })
-          .where(eq(schema.discordEventMessages.id, record.id));
-
-        this.logger.log(
-          `Updated embed state for event ${eventId} to ${newState} (msg: ${record.messageId})`,
+          state,
+          payload.eventId,
         );
       } catch (error) {
         this.logger.error(
-          `Failed to update embed state for event ${eventId} (msg: ${record.messageId}):`,
+          `Failed to update embed for event ${payload.eventId}:`,
           error,
         );
       }
     }
-  }
-
-  /**
-   * Build shared embed context from settings.
-   */
-  private async buildContext(): Promise<EmbedContext> {
-    const [branding, clientUrl, timezone] = await Promise.all([
-      this.settingsService.getBranding(),
-      this.settingsService.getClientUrl(),
-      this.settingsService.getDefaultTimezone(),
-    ]);
-    return {
-      communityName: branding.communityName,
-      clientUrl,
-      timezone,
-    };
   }
 }

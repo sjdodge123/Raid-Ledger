@@ -2,10 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { isPerfEnabled, perfLog } from '../common/perf-logger';
 import {
-  Client,
-  GatewayIntentBits,
-  Events,
-  PermissionsBitField,
+  type Client,
   type Guild,
   type EmbedBuilder,
   type ActionRowBuilder,
@@ -17,54 +14,14 @@ import {
   DISCORD_BOT_EVENTS,
   friendlyDiscordErrorMessage,
 } from './discord-bot.constants';
+import {
+  REQUIRED_PERMISSIONS,
+  createDiscordClient,
+  type GuildInfo,
+  type PermissionCheckResult,
+} from './discord-bot-client.helpers';
 
-export interface GuildInfo {
-  name: string;
-  memberCount: number;
-}
-
-export interface PermissionCheckResult {
-  name: string;
-  granted: boolean;
-}
-
-/**
- * The permissions the bot needs to function properly.
- * Maps a human-readable label → discord.js permission flag.
- */
-const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
-  { label: 'Manage Roles', flag: PermissionsBitField.Flags.ManageRoles },
-  { label: 'Manage Channels', flag: PermissionsBitField.Flags.ManageChannels },
-  {
-    label: 'Create Instant Invite',
-    flag: PermissionsBitField.Flags.CreateInstantInvite,
-  },
-  { label: 'View Channels', flag: PermissionsBitField.Flags.ViewChannel },
-  { label: 'Send Messages', flag: PermissionsBitField.Flags.SendMessages },
-  { label: 'Embed Links', flag: PermissionsBitField.Flags.EmbedLinks },
-  {
-    label: 'Read Message History',
-    flag: PermissionsBitField.Flags.ReadMessageHistory,
-  },
-  { label: 'Send Polls', flag: PermissionsBitField.Flags.SendPolls },
-  {
-    label: 'Manage Guild Expressions',
-    flag: PermissionsBitField.Flags.ManageGuildExpressions,
-  },
-  {
-    label: 'Create Guild Expressions',
-    flag: PermissionsBitField.Flags.CreateGuildExpressions,
-  },
-  {
-    label: 'Manage Events',
-    flag: PermissionsBitField.Flags.ManageEvents,
-  },
-  {
-    label: 'Create Events',
-    flag: PermissionsBitField.Flags.CreateEvents,
-  },
-  { label: 'Connect', flag: PermissionsBitField.Flags.Connect },
-];
+export type { GuildInfo, PermissionCheckResult } from './discord-bot-client.helpers';
 
 @Injectable()
 export class DiscordBotClientService {
@@ -76,104 +33,31 @@ export class DiscordBotClientService {
   constructor(private readonly eventEmitter: EventEmitter2) {}
 
   async connect(token: string): Promise<void> {
-    // Disconnect any existing client first
-    if (this.client) {
-      await this.disconnect();
-    }
+    if (this.client) await this.disconnect();
 
-    this.client = new Client({
-      intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.GuildMembers,
-        GatewayIntentBits.GuildVoiceStates,
-        GatewayIntentBits.GuildPresences,
-        GatewayIntentBits.GuildScheduledEvents,
-        GatewayIntentBits.DirectMessages,
-        GatewayIntentBits.MessageContent,
-      ],
-    });
-
+    const client = createDiscordClient();
+    this.client = client;
     this.connecting = true;
 
     return new Promise<void>((resolve, reject) => {
-      const client = this.client!;
-
       this.connectTimeout = setTimeout(() => {
         this.connectTimeout = null;
         this.connecting = false;
         reject(new Error('Discord bot connection timed out after 15s'));
       }, 15_000);
 
-      client.once(Events.ClientReady, () => {
-        clearTimeout(this.connectTimeout!);
-        this.connectTimeout = null;
-        this.connecting = false;
-        this.logger.log(`Discord bot connected as ${client.user?.tag}`);
-
-        // Warn if bot is in multiple guilds — we only use the first one
-        const guildCount = client.guilds.cache.size;
-        if (guildCount > 1) {
-          this.logger.warn(
-            `Bot is in ${guildCount} guilds but only the first one is used. ` +
-              `Remove the bot from extra guilds to avoid confusion.`,
-          );
-        }
-
-        // Use emitAsync so async @OnEvent(CONNECTED) handlers (command
-        // registration, etc.) are properly awaited before connect()
-        // resolves.  Errors in handlers are logged but do not reject connect().
-        if (typeof this.eventEmitter.emitAsync === 'function') {
-          this.eventEmitter
-            .emitAsync(DISCORD_BOT_EVENTS.CONNECTED)
-            .catch((err: unknown) => {
-              this.logger.error(
-                'Error in CONNECTED event handlers:',
-                err instanceof Error ? err.message : err,
-              );
-            })
-            .finally(() => {
-              resolve();
-            });
-        } else {
-          this.logger.warn(
-            'EventEmitter2.emitAsync unavailable — falling back to synchronous emit',
-          );
-          this.eventEmitter.emit(DISCORD_BOT_EVENTS.CONNECTED);
-          resolve();
-        }
-      });
-
-      client.once(Events.Error, (error: Error) => {
-        clearTimeout(this.connectTimeout!);
-        this.connectTimeout = null;
-        this.connecting = false;
-        const message = friendlyDiscordErrorMessage(error);
-        this.logger.error('Discord bot connection error:', message);
-        this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error);
-        reject(new Error(message));
-      });
-
-      client.login(token).catch((err: unknown) => {
-        clearTimeout(this.connectTimeout!);
-        this.connectTimeout = null;
-        this.connecting = false;
-        const message = friendlyDiscordErrorMessage(err);
-        this.logger.error('Discord bot login failed:', message);
-        this.client = null;
-        reject(new Error(message));
-      });
+      this.setupReadyHandler(client, resolve);
+      this.setupErrorHandler(client, reject);
+      this.doLogin(client, token, reject);
     });
   }
 
   async disconnect(): Promise<void> {
     this.connecting = false;
-
     if (this.connectTimeout) {
       clearTimeout(this.connectTimeout);
       this.connectTimeout = null;
     }
-
     if (!this.client) return;
 
     try {
@@ -191,10 +75,6 @@ export class DiscordBotClientService {
     return this.client?.isReady() ?? false;
   }
 
-  /**
-   * Get the underlying Discord.js Client instance.
-   * Used by interaction handlers to register event listeners.
-   */
   getClient(): Client | null {
     return this.client;
   }
@@ -203,57 +83,40 @@ export class DiscordBotClientService {
     return this.connecting;
   }
 
-  /**
-   * Get the first (primary) guild the bot is connected to.
-   * Returns null if the bot is not ready or no guild is cached.
-   */
   getGuild(): Guild | null {
     if (!this.client?.isReady()) return null;
     return this.client.guilds.cache.first() ?? null;
   }
 
   getGuildInfo(): GuildInfo | null {
-    if (!this.client?.isReady()) return null;
-
     try {
-      const guild = this.client.guilds.cache.first();
+      const guild = this.getGuild();
       if (!guild) return null;
-
-      return {
-        name: guild.name,
-        memberCount: guild.memberCount,
-      };
+      return { name: guild.name, memberCount: guild.memberCount };
     } catch (error) {
       this.logger.error('Failed to get guild info:', error);
       return null;
     }
   }
 
-  async sendDirectMessage(discordId: string, content: string): Promise<void> {
+  async sendDirectMessage(
+    discordId: string,
+    content: string,
+  ): Promise<void> {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
     }
-
     const start = isPerfEnabled() ? performance.now() : 0;
-
-    try {
-      const user = await this.client.users.fetch(discordId);
-      await user.send(content);
-      if (start)
-        perfLog('DISCORD', 'sendDirectMessage', performance.now() - start, {
-          discordId,
-        });
-    } catch (error) {
-      this.logger.error(`Failed to send DM to ${discordId}:`, error);
-      throw error;
+    const user = await this.client.users.fetch(discordId);
+    await user.send(content);
+    if (start) {
+      perfLog('DISCORD', 'sendDirectMessage', performance.now() - start, {
+        discordId,
+      });
     }
   }
 
-  /**
-   * Send a rich embed DM to a user by their Discord ID.
-   * Used by the Discord notification system (ROK-180).
-   * Supports multiple action rows (ROK-378: Roach Out button on reminders).
-   */
+  /** Send a rich embed DM to a user. */
   async sendEmbedDM(
     discordId: string,
     embed: EmbedBuilder,
@@ -263,163 +126,103 @@ export class DiscordBotClientService {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
     }
-
     const start = isPerfEnabled() ? performance.now() : 0;
+    const user = await this.client.users.fetch(discordId);
 
-    try {
-      const user = await this.client.users.fetch(discordId);
-      const messagePayload: {
-        embeds: EmbedBuilder[];
-        components?: ActionRowBuilder<ButtonBuilder>[];
-      } = { embeds: [embed] };
+    const components: ActionRowBuilder<ButtonBuilder>[] = [];
+    if (extraRows) components.push(...extraRows);
+    if (row) components.push(row);
 
-      const components: ActionRowBuilder<ButtonBuilder>[] = [];
-      if (extraRows) {
-        components.push(...extraRows);
-      }
-      if (row) {
-        components.push(row);
-      }
-      if (components.length > 0) {
-        messagePayload.components = components;
-      }
+    const payload: {
+      embeds: EmbedBuilder[];
+      components?: ActionRowBuilder<ButtonBuilder>[];
+    } = { embeds: [embed] };
+    if (components.length > 0) payload.components = components;
 
-      await user.send(messagePayload);
-      if (start)
-        perfLog('DISCORD', 'sendEmbedDM', performance.now() - start, {
-          discordId,
-        });
-    } catch (error) {
-      this.logger.error(`Failed to send embed DM to ${discordId}:`, error);
-      throw error;
+    await user.send(payload);
+    if (start) {
+      perfLog('DISCORD', 'sendEmbedDM', performance.now() - start, {
+        discordId,
+      });
     }
   }
 
-  /**
-   * Get the guild ID of the first (primary) guild the bot is in.
-   */
   getGuildId(): string | null {
-    if (!this.client?.isReady()) return null;
-    const guild = this.client.guilds.cache.first();
-    return guild?.id ?? null;
+    return this.getGuild()?.id ?? null;
   }
 
-  /**
-   * Get the bot's application/client ID.
-   * Used for slash command registration.
-   */
   getClientId(): string | null {
     if (!this.client?.isReady()) return null;
     return this.client.user?.id ?? null;
   }
 
-  /**
-   * Send an embed message to a specific channel.
-   * @returns The sent Message object for tracking
-   */
+  /** Send an embed message to a channel. */
   async sendEmbed(
     channelId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
   ): Promise<Message> {
-    if (!this.client?.isReady()) {
-      throw new Error('Discord bot is not connected');
-    }
-
+    const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
 
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !('send' in channel)) {
-      throw new Error(`Channel ${channelId} not found or not a text channel`);
-    }
-
-    const textChannel = channel as TextChannel;
-    const messagePayload: {
+    const payload: {
       embeds: EmbedBuilder[];
       components?: ActionRowBuilder<ButtonBuilder>[];
     } = { embeds: [embed] };
+    if (row) payload.components = [row];
 
-    if (row) {
-      messagePayload.components = [row];
+    const result = await channel.send(payload);
+    if (start) {
+      perfLog('DISCORD', 'sendEmbed', performance.now() - start, {
+        channelId,
+      });
     }
-
-    const result = await textChannel.send(messagePayload);
-    if (start)
-      perfLog('DISCORD', 'sendEmbed', performance.now() - start, { channelId });
     return result;
   }
 
-  /**
-   * Edit an existing embed message in a channel.
-   */
+  /** Edit an existing embed message in a channel. */
   async editEmbed(
     channelId: string,
     messageId: string,
     embed: EmbedBuilder,
     row?: ActionRowBuilder<ButtonBuilder>,
   ): Promise<Message> {
-    if (!this.client?.isReady()) {
-      throw new Error('Discord bot is not connected');
-    }
-
+    const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
 
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !('messages' in channel)) {
-      throw new Error(`Channel ${channelId} not found or not a text channel`);
-    }
-
-    const textChannel = channel as TextChannel;
-    const message = await textChannel.messages.fetch(messageId);
-
-    const messagePayload: {
-      embeds: EmbedBuilder[];
-      components: ActionRowBuilder<ButtonBuilder>[];
-    } = {
+    const message = await channel.messages.fetch(messageId);
+    const result = await message.edit({
       embeds: [embed],
       components: row ? [row] : [],
-    };
+    });
 
-    const result = await message.edit(messagePayload);
-    if (start)
+    if (start) {
       perfLog('DISCORD', 'editEmbed', performance.now() - start, {
-        channelId,
-        messageId,
+        channelId, messageId,
       });
+    }
     return result;
   }
 
-  /**
-   * Delete a message from a channel.
-   */
-  async deleteMessage(channelId: string, messageId: string): Promise<void> {
-    if (!this.client?.isReady()) {
-      throw new Error('Discord bot is not connected');
-    }
-
+  /** Delete a message from a channel. */
+  async deleteMessage(
+    channelId: string,
+    messageId: string,
+  ): Promise<void> {
+    const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
-
-    const channel = await this.client.channels.fetch(channelId);
-    if (!channel || !('messages' in channel)) {
-      throw new Error(`Channel ${channelId} not found or not a text channel`);
-    }
-
-    const textChannel = channel as TextChannel;
-    const message = await textChannel.messages.fetch(messageId);
+    const message = await channel.messages.fetch(messageId);
     await message.delete();
-    if (start)
+    if (start) {
       perfLog('DISCORD', 'deleteMessage', performance.now() - start, {
-        channelId,
-        messageId,
+        channelId, messageId,
       });
+    }
   }
 
-  /**
-   * List text channels from the connected guild.
-   */
+  /** List text channels from the guild. */
   getTextChannels(): { id: string; name: string }[] {
-    if (!this.client?.isReady()) return [];
-    const guild = this.client.guilds.cache.first();
+    const guild = this.getGuild();
     if (!guild) return [];
     return guild.channels.cache
       .filter((ch) => ch.isTextBased() && !ch.isThread() && !ch.isDMBased())
@@ -427,12 +230,9 @@ export class DiscordBotClientService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * List voice channels from the connected guild.
-   */
+  /** List voice channels from the guild. */
   getVoiceChannels(): { id: string; name: string }[] {
-    if (!this.client?.isReady()) return [];
-    const guild = this.client.guilds.cache.first();
+    const guild = this.getGuild();
     if (!guild) return [];
     return guild.channels.cache
       .filter((ch) => ch.isVoiceBased() && !ch.isDMBased())
@@ -440,61 +240,44 @@ export class DiscordBotClientService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  /**
-   * ROK-292: Search guild members by username query.
-   * Returns up to 10 matching members with id, username, and avatar hash.
-   */
+  /** Search guild members by username query. */
   async searchGuildMembers(
     query: string,
-  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
-    if (!this.client?.isReady()) return [];
-
-    const guild = this.client.guilds.cache.first();
+  ): Promise<
+    { discordId: string; username: string; avatar: string | null }[]
+  > {
+    const guild = this.getGuild();
     if (!guild) return [];
 
     const start = isPerfEnabled() ? performance.now() : 0;
-
     try {
-      const members = await guild.members.fetch({
-        query,
-        limit: 10,
-      });
-
-      if (start)
+      const members = await guild.members.fetch({ query, limit: 10 });
+      if (start) {
         perfLog('DISCORD', 'searchGuildMembers', performance.now() - start, {
           query,
         });
-
+      }
       return members.map((m) => ({
         discordId: m.user.id,
         username: m.user.username,
         avatar: m.user.avatar,
       }));
-    } catch (error) {
-      this.logger.warn(
-        'Failed to search guild members for "%s": %s',
-        query,
-        error instanceof Error ? error.message : 'Unknown error',
-      );
+    } catch {
       return [];
     }
   }
 
-  /**
-   * ROK-292: List guild members (no query required).
-   * Returns up to `limit` members for initial display in the Invite modal.
-   */
+  /** List guild members (no query required). */
   async listGuildMembers(
     limit = 25,
-  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
-    if (!this.client?.isReady()) return [];
-
-    const guild = this.client.guilds.cache.first();
+  ): Promise<
+    { discordId: string; username: string; avatar: string | null }[]
+  > {
+    const guild = this.getGuild();
     if (!guild) return [];
 
     try {
       const members = await guild.members.list({ limit });
-
       return members
         .filter((m) => !m.user.bot)
         .map((m) => ({
@@ -503,65 +286,111 @@ export class DiscordBotClientService {
           avatar: m.user.avatar,
         }))
         .sort((a, b) => a.username.localeCompare(b.username));
-    } catch (error) {
-      this.logger.warn(
-        'Failed to list guild members: %s',
-        error instanceof Error ? error.message : 'Unknown error',
-      );
+    } catch {
       return [];
     }
   }
 
-  /**
-   * Check if a Discord user is a member of the bot's guild (ROK-403).
-   * @param discordUserId The Discord user ID to check
-   * @returns true if the user is in the guild, false otherwise
-   */
+  /** Check if a Discord user is in the guild (ROK-403). */
   async isGuildMember(discordUserId: string): Promise<boolean> {
-    if (!this.client?.isReady()) return false;
-
-    const guild = this.client.guilds.cache.first();
+    const guild = this.getGuild();
     if (!guild) return false;
 
     try {
       const member = await guild.members.fetch(discordUserId);
       return !!member;
     } catch {
-      // GuildMember not found throws DiscordAPIError — that means not a member
       return false;
     }
   }
 
-  /**
-   * Check whether the bot has every required permission in its guild.
-   */
+  /** Check bot permissions in the guild. */
   checkPermissions(): PermissionCheckResult[] {
-    if (!this.client?.isReady()) {
-      return REQUIRED_PERMISSIONS.map((p) => ({
-        name: p.label,
-        granted: false,
-      }));
-    }
-
-    const guild = this.client.guilds.cache.first();
-    if (!guild) {
-      return REQUIRED_PERMISSIONS.map((p) => ({
-        name: p.label,
-        granted: false,
-      }));
-    }
-
-    const me = guild.members.me;
-    if (!me) {
-      return REQUIRED_PERMISSIONS.map((p) => ({
-        name: p.label,
-        granted: false,
-      }));
-    }
-
+    const guild = this.getGuild();
+    const me = guild?.members.me;
     return REQUIRED_PERMISSIONS.map((p) => ({
       name: p.label,
-      granted: me.permissions.has(p.flag),
+      granted: me ? me.permissions.has(p.flag) : false,
     }));
+  }
+
+  // ─── Private helpers ──────────────────────────────────────
+
+  private setupReadyHandler(
+    client: Client,
+    resolve: () => void,
+  ): void {
+    client.once('ready', () => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      this.logger.log(`Discord bot connected as ${client.user?.tag}`);
+
+      const guildCount = client.guilds.cache.size;
+      if (guildCount > 1) {
+        this.logger.warn(
+          `Bot is in ${guildCount} guilds but only the first one is used.`,
+        );
+      }
+
+      this.emitConnected().then(resolve, resolve);
+    });
+  }
+
+  private setupErrorHandler(
+    client: Client,
+    reject: (err: Error) => void,
+  ): void {
+    client.once('error', (error: Error) => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      const message = friendlyDiscordErrorMessage(error);
+      this.logger.error('Discord bot connection error:', message);
+      this.eventEmitter.emit(DISCORD_BOT_EVENTS.ERROR, error);
+      reject(new Error(message));
+    });
+  }
+
+  private doLogin(
+    client: Client,
+    token: string,
+    reject: (err: Error) => void,
+  ): void {
+    client.login(token).catch((err: unknown) => {
+      clearTimeout(this.connectTimeout!);
+      this.connectTimeout = null;
+      this.connecting = false;
+      const message = friendlyDiscordErrorMessage(err);
+      this.logger.error('Discord bot login failed:', message);
+      this.client = null;
+      reject(new Error(message));
+    });
+  }
+
+  private async emitConnected(): Promise<void> {
+    if (typeof this.eventEmitter.emitAsync === 'function') {
+      try {
+        await this.eventEmitter.emitAsync(DISCORD_BOT_EVENTS.CONNECTED);
+      } catch (err: unknown) {
+        this.logger.error(
+          'Error in CONNECTED event handlers:',
+          err instanceof Error ? err.message : err,
+        );
+      }
+    } else {
+      this.eventEmitter.emit(DISCORD_BOT_EVENTS.CONNECTED);
+    }
+  }
+
+  private async fetchTextChannel(channelId: string): Promise<TextChannel> {
+    if (!this.client?.isReady()) {
+      throw new Error('Discord bot is not connected');
+    }
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel || !('send' in channel)) {
+      throw new Error(`Channel ${channelId} not found or not a text channel`);
+    }
+    return channel as TextChannel;
   }
 }

@@ -14,69 +14,17 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
-import { perfLog } from '../../common/perf-logger';
+import {
+  UNKNOWN_SCHEDULED_EVENT,
+  timedDiscordCall,
+  buildDescriptionText,
+  type ScheduledEventData,
+} from './scheduled-event.helpers';
 
-/** Discord API error code for "Unknown Scheduled Event" (manually deleted). */
-const UNKNOWN_SCHEDULED_EVENT = 10070;
-
-/** Maximum description length for Discord Scheduled Events. */
-const MAX_DESCRIPTION_LENGTH = 1000;
-
-/** Timeout (ms) for individual Discord API calls to prevent blocking cron ticks (ROK-685). */
-const DISCORD_API_TIMEOUT_MS = 5_000;
-
-/**
- * Execute a Discord API call with [PERF] DISCORD instrumentation and a timeout guard (ROK-685).
- * Rejects with a timeout error if the call takes longer than DISCORD_API_TIMEOUT_MS.
- */
-async function timedDiscordCall<T>(
-  operation: string,
-  fn: () => Promise<T>,
-  meta?: Record<string, string | number | null | undefined>,
-): Promise<T> {
-  const start = performance.now();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    const result = await Promise.race([
-      fn(),
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Discord API timeout: ${operation} exceeded ${DISCORD_API_TIMEOUT_MS}ms`,
-              ),
-            ),
-          DISCORD_API_TIMEOUT_MS,
-        );
-      }),
-    ]);
-    perfLog('DISCORD', operation, performance.now() - start, meta);
-    return result;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-export interface ScheduledEventData {
-  title: string;
-  description?: string | null;
-  startTime: string;
-  endTime: string;
-  signupCount: number;
-  maxAttendees?: number | null;
-  game?: { name: string } | null;
-}
+export type { ScheduledEventData } from './scheduled-event.helpers';
 
 /**
  * Manages Discord Scheduled Events for Raid Ledger events (ROK-471).
- *
- * Creates VOICE-type scheduled events tied to voice channels for server
- * calendar visibility and LIVE server badge. Does NOT handle reminders
- * or signups — those are handled by Raid Ledger DMs.
- *
- * All methods are fire-and-forget safe: errors are caught and logged,
- * never propagated to the caller.
  */
 @Injectable()
 export class ScheduledEventService {
@@ -91,39 +39,180 @@ export class ScheduledEventService {
     private readonly cronJobService: CronJobService,
   ) {}
 
-  /**
-   * Cron: every 30 seconds, find events whose start time has passed and
-   * transition their Discord Scheduled Event from SCHEDULED → ACTIVE (ROK-573).
-   * Stagger: offset to seconds 3/33 to avoid collision with every-minute jobs at second 0 (ROK-606).
-   */
+  /** Cron: auto-start Discord Scheduled Events whose start time has passed. */
   @Cron('3,33 * * * * *', {
     name: 'ScheduledEventService_startScheduledEvents',
   })
   async handleStartScheduledEvents(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       'ScheduledEventService_startScheduledEvents',
-      async () => {
-        await this.startScheduledEvents();
-      },
+      () => this.startScheduledEvents(),
     );
   }
 
-  /**
-   * Find events where start time has passed and the Discord Scheduled Event
-   * is still in SCHEDULED state, then transition them to ACTIVE (ROK-573).
-   */
+  /** Find and start scheduled events (ROK-573). */
   async startScheduledEvents(): Promise<void> {
     if (!this.clientService.isConnected()) return;
-
     const guild = this.clientService.getGuild();
     if (!guild) return;
 
-    const now = new Date();
+    const candidates = await this.findStartCandidates();
+    if (candidates.length === 0) return;
 
-    // Find events where: start time <= now, has a Discord scheduled event ID,
-    // not cancelled, and effective end time hasn't passed yet (no point starting a finished event).
-    // ROK-576: Use COALESCE(extended_until, upper(duration)) for effective end time.
-    const candidates = await this.db
+    for (const c of candidates) {
+      await this.tryStartEvent(guild, c);
+    }
+  }
+
+  /** Create a Discord Scheduled Event. */
+  async createScheduledEvent(
+    eventId: number,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+    isAdHoc?: boolean,
+    voiceChannelOverride?: string | null,
+  ): Promise<void> {
+    try {
+      if (isAdHoc || !this.clientService.isConnected()) return;
+      if (new Date(eventData.startTime).getTime() <= Date.now()) return;
+
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const voiceChannelId = await this.resolveVoiceChannel(
+        eventId, gameId, voiceChannelOverride,
+      );
+      if (!voiceChannelId) return;
+
+      const description = await this.buildDescription(eventId, eventData);
+
+      const scheduledEvent = await timedDiscordCall(
+        'scheduledEvents.create',
+        () =>
+          guild.scheduledEvents.create({
+            name: eventData.title,
+            scheduledStartTime: new Date(eventData.startTime),
+            scheduledEndTime: new Date(eventData.endTime),
+            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
+            entityType: GuildScheduledEventEntityType.Voice,
+            channel: voiceChannelId,
+            description,
+          }),
+        { eventId },
+      );
+
+      await this.saveScheduledEventId(eventId, scheduledEvent.id);
+    } catch (error) {
+      this.logApiError('create', eventId, error);
+    }
+  }
+
+  /** Update a Discord Scheduled Event. */
+  async updateScheduledEvent(
+    eventId: number,
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+    isAdHoc?: boolean,
+  ): Promise<void> {
+    try {
+      if (isAdHoc || !this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const event = await this.getEventWithOverride(eventId);
+      if (!event?.discordScheduledEventId) {
+        await this.createScheduledEvent(
+          eventId, eventData, gameId, isAdHoc,
+          event?.notificationChannelOverride,
+        );
+        return;
+      }
+
+      await this.tryEditScheduledEvent(
+        guild, eventId, event, eventData, gameId,
+      );
+    } catch (error) {
+      this.logApiError('update', eventId, error);
+    }
+  }
+
+  /** Delete a Discord Scheduled Event. */
+  async deleteScheduledEvent(eventId: number): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await this.getScheduledEventId(eventId);
+      if (!seId) return;
+
+      await this.tryDeleteEvent(guild, eventId, seId);
+      await this.clearScheduledEventId(eventId);
+    } catch (error) {
+      this.logApiError('delete', eventId, error);
+    }
+  }
+
+  /** Complete a Discord Scheduled Event (ROK-577). */
+  async completeScheduledEvent(eventId: number): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await this.getScheduledEventId(eventId);
+      if (!seId) return;
+
+      await this.tryCompleteEvent(guild, eventId, seId);
+      await this.clearScheduledEventId(eventId);
+    } catch (error) {
+      this.logApiError('complete', eventId, error);
+    }
+  }
+
+  /** Update only the end time of a scheduled event (ROK-576). */
+  async updateEndTime(eventId: number, newEndTime: Date): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await this.getScheduledEventId(eventId);
+      if (!seId) return;
+
+      await this.tryEditEndTime(guild, eventId, seId, newEndTime);
+    } catch (error) {
+      this.logApiError('updateEndTime', eventId, error);
+    }
+  }
+
+  /** Update only the description of a scheduled event. */
+  async updateDescription(
+    eventId: number,
+    eventData: ScheduledEventData,
+  ): Promise<void> {
+    try {
+      if (!this.clientService.isConnected()) return;
+      const guild = this.clientService.getGuild();
+      if (!guild) return;
+
+      const seId = await this.getScheduledEventId(eventId);
+      if (!seId) return;
+
+      const description = await this.buildDescription(eventId, eventData);
+      await this.tryEditDescription(guild, eventId, seId, description);
+    } catch (error) {
+      this.logApiError('updateDescription', eventId, error);
+    }
+  }
+
+  // ─── Private helpers ──────────────────────────────────────
+
+  private async findStartCandidates(): Promise<
+    Array<{ id: number; discordScheduledEventId: string | null }>
+  > {
+    const now = new Date();
+    return this.db
       .select({
         id: schema.events.id,
         discordScheduledEventId: schema.events.discordScheduledEventId,
@@ -137,584 +226,275 @@ export class ScheduledEventService {
           sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${now.toISOString()}::timestamptz`,
         ),
       );
+  }
 
-    if (candidates.length === 0) return;
+  private async tryStartEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    candidate: { id: number; discordScheduledEventId: string | null },
+  ): Promise<void> {
+    try {
+      const se = await timedDiscordCall(
+        'scheduledEvents.fetch',
+        () => guild!.scheduledEvents.fetch(candidate.discordScheduledEventId!),
+        { eventId: candidate.id },
+      );
+      if (se.status !== GuildScheduledEventStatus.Scheduled) return;
 
-    this.logger.debug(
-      `Found ${candidates.length} event(s) to auto-start Discord scheduled events`,
-    );
+      await timedDiscordCall(
+        'scheduledEvents.edit',
+        () =>
+          guild!.scheduledEvents.edit(candidate.discordScheduledEventId!, {
+            status: GuildScheduledEventStatus.Active,
+          }),
+        { eventId: candidate.id, op: 'start' },
+      );
+    } catch (error) {
+      await this.handleUnknownEventError(error, candidate.id);
+    }
+  }
 
-    for (const candidate of candidates) {
-      try {
-        const scheduledEvent = await timedDiscordCall(
-          'scheduledEvents.fetch',
-          () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
-          { eventId: candidate.id },
+  private async tryEditScheduledEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    event: {
+      discordScheduledEventId: string | null;
+      notificationChannelOverride: string | null;
+      recurrenceGroupId: string | null;
+    },
+    eventData: ScheduledEventData,
+    gameId?: number | null,
+  ): Promise<void> {
+    const description = await this.buildDescription(eventId, eventData);
+    const voiceChannelId =
+      event.notificationChannelOverride ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        gameId, event.recurrenceGroupId,
+      ));
+
+    try {
+      await timedDiscordCall(
+        'scheduledEvents.edit',
+        () =>
+          guild.scheduledEvents.edit(event.discordScheduledEventId!, {
+            name: eventData.title,
+            scheduledStartTime: new Date(eventData.startTime),
+            scheduledEndTime: new Date(eventData.endTime),
+            description,
+            ...(voiceChannelId ? { channel: voiceChannelId } : {}),
+          }),
+        { eventId, op: 'update' },
+      );
+    } catch (editError) {
+      if (this.isUnknownEventError(editError)) {
+        await this.clearScheduledEventId(eventId);
+        await this.createScheduledEvent(
+          eventId, eventData, gameId, false,
+          event.notificationChannelOverride,
         );
-
-        if (scheduledEvent.status !== GuildScheduledEventStatus.Scheduled) {
-          // Already active, completed, or cancelled — nothing to do
-          continue;
-        }
-
-        await timedDiscordCall(
-          'scheduledEvents.edit',
-          () =>
-            guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
-              status: GuildScheduledEventStatus.Active,
-            }),
-          { eventId: candidate.id, op: 'start' },
-        );
-
-        this.logger.log(
-          `Auto-started Discord Scheduled Event ${candidate.discordScheduledEventId} for event ${candidate.id}`,
-        );
-      } catch (error) {
-        if (
-          error instanceof DiscordAPIError &&
-          error.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          // Event was manually deleted in Discord — clear the reference
-          this.logger.debug(
-            `Scheduled event ${candidate.discordScheduledEventId} was deleted in Discord, clearing reference for event ${candidate.id}`,
-          );
-          await this.db
-            .update(schema.events)
-            .set({ discordScheduledEventId: null })
-            .where(eq(schema.events.id, candidate.id));
-        } else {
-          this.logger.error(
-            `Failed to auto-start scheduled event ${candidate.discordScheduledEventId} for event ${candidate.id}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          );
-        }
+      } else {
+        throw editError;
       }
     }
   }
 
-  /**
-   * Create a Discord Scheduled Event for a Raid Ledger event.
-   * Skips if: ad-hoc, no voice channel, start time in past, bot disconnected.
-   */
-  async createScheduledEvent(
+  private async tryCompleteEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
     eventId: number,
-    eventData: ScheduledEventData,
-    gameId?: number | null,
-    isAdHoc?: boolean,
-    voiceChannelOverride?: string | null,
+    seId: string,
   ): Promise<void> {
     try {
-      if (isAdHoc) {
-        this.logger.debug(
-          `Skipping scheduled event for ad-hoc event ${eventId}`,
-        );
-        return;
-      }
-
-      if (!this.clientService.isConnected()) {
-        this.logger.warn(
-          `Bot not connected, skipping scheduled event for event ${eventId}`,
-        );
-        return;
-      }
-
-      const startTime = new Date(eventData.startTime);
-      if (startTime.getTime() <= Date.now()) {
-        this.logger.debug(
-          `Start time in past (${eventData.startTime}), skipping scheduled event for event ${eventId}`,
-        );
-        return;
-      }
-
-      const guild = this.clientService.getGuild();
-      if (!guild) {
-        this.logger.warn(
-          `No guild available, skipping scheduled event for event ${eventId}`,
-        );
-        return;
-      }
-
-      // ROK-599: Resolve voice channel — per-event override → series → game → default
-      const [eventRow] = await this.db
-        .select({ recurrenceGroupId: schema.events.recurrenceGroupId })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-      const voiceChannelId =
-        voiceChannelOverride ??
-        (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-          gameId,
-          eventRow?.recurrenceGroupId,
-        ));
-      if (!voiceChannelId) {
-        this.logger.warn(
-          `No voice channel resolved for event ${eventId}, skipping scheduled event`,
-        );
-        return;
-      }
-
-      const description = await this.buildDescription(eventId, eventData);
-
-      this.logger.debug(
-        `Creating scheduled event for event ${eventId}: channel=${voiceChannelId}, start=${eventData.startTime}, end=${eventData.endTime}`,
+      const se = await timedDiscordCall(
+        'scheduledEvents.fetch',
+        () => guild.scheduledEvents.fetch(seId),
+        { eventId, op: 'complete' },
       );
 
-      const scheduledEvent = await timedDiscordCall(
-        'scheduledEvents.create',
-        () =>
-          guild.scheduledEvents.create({
-            name: eventData.title,
-            scheduledStartTime: startTime,
-            scheduledEndTime: new Date(eventData.endTime),
-            privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
-            entityType: GuildScheduledEventEntityType.Voice,
-            channel: voiceChannelId,
-            description,
+      if (se.status === GuildScheduledEventStatus.Completed ||
+          se.status === GuildScheduledEventStatus.Canceled) {
+        return;
+      }
+
+      if (se.status === GuildScheduledEventStatus.Scheduled) {
+        await timedDiscordCall(
+          'scheduledEvents.edit',
+          () => guild.scheduledEvents.edit(seId, {
+            status: GuildScheduledEventStatus.Active,
           }),
+          { eventId, op: 'complete-activate' },
+        );
+      }
+
+      await timedDiscordCall(
+        'scheduledEvents.edit',
+        () => guild.scheduledEvents.edit(seId, {
+          status: GuildScheduledEventStatus.Completed,
+        }),
+        { eventId, op: 'complete' },
+      );
+    } catch (error) {
+      if (!this.isUnknownEventError(error)) throw error;
+    }
+  }
+
+  private async tryDeleteEvent(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    seId: string,
+  ): Promise<void> {
+    try {
+      await timedDiscordCall(
+        'scheduledEvents.delete',
+        () => guild.scheduledEvents.delete(seId),
         { eventId },
       );
-
-      await this.db
-        .update(schema.events)
-        .set({ discordScheduledEventId: scheduledEvent.id })
-        .where(eq(schema.events.id, eventId));
-
-      this.logger.log(
-        `Created Discord Scheduled Event ${scheduledEvent.id} for event ${eventId}`,
-      );
     } catch (error) {
-      const details =
-        error instanceof DiscordAPIError
-          ? `code=${error.code}, status=${error.status}, method=${error.method}, url=${error.url}`
-          : '';
-      this.logger.error(
-        `Failed to create scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}${details ? ` [${details}]` : ''}`,
-      );
+      if (!this.isUnknownEventError(error)) throw error;
     }
   }
 
-  /**
-   * Update a Discord Scheduled Event (title, description, time).
-   * If the event was manually deleted in Discord, recreates it.
-   */
-  async updateScheduledEvent(
+  private async tryEditEndTime(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
     eventId: number,
-    eventData: ScheduledEventData,
+    seId: string,
+    newEndTime: Date,
+  ): Promise<void> {
+    try {
+      await timedDiscordCall(
+        'scheduledEvents.edit',
+        () => guild.scheduledEvents.edit(seId, {
+          scheduledEndTime: newEndTime,
+        }),
+        { eventId, op: 'updateEndTime' },
+      );
+    } catch (error) {
+      if (this.isUnknownEventError(error)) {
+        await this.clearScheduledEventId(eventId);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  private async tryEditDescription(
+    guild: NonNullable<ReturnType<DiscordBotClientService['getGuild']>>,
+    eventId: number,
+    seId: string,
+    description: string,
+  ): Promise<void> {
+    try {
+      await timedDiscordCall(
+        'scheduledEvents.edit',
+        () => guild.scheduledEvents.edit(seId, { description }),
+        { eventId, op: 'updateDescription' },
+      );
+    } catch (error) {
+      if (this.isUnknownEventError(error)) {
+        await this.clearScheduledEventId(eventId);
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  private async resolveVoiceChannel(
+    eventId: number,
     gameId?: number | null,
-    isAdHoc?: boolean,
-  ): Promise<void> {
-    try {
-      if (isAdHoc) {
-        this.logger.debug(
-          `Skipping scheduled event update for ad-hoc event ${eventId}`,
-        );
-        return;
-      }
+    override?: string | null,
+  ): Promise<string | null> {
+    const [row] = await this.db
+      .select({ recurrenceGroupId: schema.events.recurrenceGroupId })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
 
-      if (!this.clientService.isConnected()) {
-        this.logger.debug(
-          `Bot not connected, skipping scheduled event update for event ${eventId}`,
-        );
-        return;
-      }
-
-      const guild = this.clientService.getGuild();
-      if (!guild) {
-        this.logger.debug(
-          `No guild available, skipping scheduled event update for event ${eventId}`,
-        );
-        return;
-      }
-
-      // Get stored scheduled event ID + channel override + recurrence group for this event
-      const [event] = await this.db
-        .select({
-          discordScheduledEventId: schema.events.discordScheduledEventId,
-          notificationChannelOverride:
-            schema.events.notificationChannelOverride,
-          recurrenceGroupId: schema.events.recurrenceGroupId,
-        })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event?.discordScheduledEventId) {
-        // No scheduled event yet — create one
-        this.logger.debug(
-          `No existing scheduled event for event ${eventId}, creating new one`,
-        );
-        await this.createScheduledEvent(
-          eventId,
-          eventData,
-          gameId,
-          isAdHoc,
-          event?.notificationChannelOverride,
-        );
-        return;
-      }
-
-      const description = await this.buildDescription(eventId, eventData);
-      const startTime = new Date(eventData.startTime);
-      const endTime = new Date(eventData.endTime);
-
-      // ROK-617: Resolve voice channel — per-event override → series → game → default
-      const voiceChannelId =
-        event.notificationChannelOverride ??
-        (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-          gameId,
-          event.recurrenceGroupId,
-        ));
-
-      try {
-        await timedDiscordCall(
-          'scheduledEvents.edit',
-          () =>
-            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-              name: eventData.title,
-              scheduledStartTime: startTime,
-              scheduledEndTime: endTime,
-              description,
-              ...(voiceChannelId ? { channel: voiceChannelId } : {}),
-            }),
-          { eventId, op: 'update' },
-        );
-
-        this.logger.log(
-          `Updated Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
-        );
-      } catch (editError) {
-        if (
-          editError instanceof DiscordAPIError &&
-          editError.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          // Manual deletion in Discord — clear ID and recreate
-          this.logger.warn(
-            `Scheduled event ${event.discordScheduledEventId} was deleted in Discord, recreating for event ${eventId}`,
-          );
-          await this.db
-            .update(schema.events)
-            .set({ discordScheduledEventId: null })
-            .where(eq(schema.events.id, eventId));
-          await this.createScheduledEvent(
-            eventId,
-            eventData,
-            gameId,
-            isAdHoc,
-            event?.notificationChannelOverride,
-          );
-        } else {
-          throw editError;
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to update scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
+    return (
+      override ??
+      (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
+        gameId, row?.recurrenceGroupId,
+      )) ??
+      null
+    );
   }
 
-  /**
-   * Delete a Discord Scheduled Event (for cancel/delete).
-   */
-  async deleteScheduledEvent(eventId: number): Promise<void> {
-    try {
-      if (!this.clientService.isConnected()) return;
-
-      const guild = this.clientService.getGuild();
-      if (!guild) return;
-
-      const [event] = await this.db
-        .select({
-          discordScheduledEventId: schema.events.discordScheduledEventId,
-        })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event?.discordScheduledEventId) return;
-
-      try {
-        await timedDiscordCall(
-          'scheduledEvents.delete',
-          () => guild.scheduledEvents.delete(event.discordScheduledEventId!),
-          { eventId },
-        );
-        this.logger.log(
-          `Deleted Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
-        );
-      } catch (deleteError) {
-        if (
-          deleteError instanceof DiscordAPIError &&
-          deleteError.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          this.logger.debug(
-            `Scheduled event ${event.discordScheduledEventId} already deleted in Discord`,
-          );
-        } else {
-          throw deleteError;
-        }
-      }
-
-      await this.db
-        .update(schema.events)
-        .set({ discordScheduledEventId: null })
-        .where(eq(schema.events.id, eventId));
-    } catch (error) {
-      this.logger.error(
-        `Failed to delete scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  /**
-   * Complete a Discord Scheduled Event (ROK-577).
-   * Called when a Raid Ledger event reaches its end time.
-   * Discord requires Active -> Completed transition, so we first ensure the
-   * event is Active, then set it to Completed.
-   */
-  async completeScheduledEvent(eventId: number): Promise<void> {
-    try {
-      if (!this.clientService.isConnected()) return;
-
-      const guild = this.clientService.getGuild();
-      if (!guild) return;
-
-      const [event] = await this.db
-        .select({
-          discordScheduledEventId: schema.events.discordScheduledEventId,
-        })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event?.discordScheduledEventId) return;
-
-      try {
-        const scheduledEvent = await timedDiscordCall(
-          'scheduledEvents.fetch',
-          () => guild.scheduledEvents.fetch(event.discordScheduledEventId!),
-          { eventId, op: 'complete' },
-        );
-
-        if (
-          scheduledEvent.status === GuildScheduledEventStatus.Completed ||
-          scheduledEvent.status === GuildScheduledEventStatus.Canceled
-        ) {
-          this.logger.debug(
-            `Scheduled event ${event.discordScheduledEventId} already ended (status=${scheduledEvent.status})`,
-          );
-        } else {
-          if (scheduledEvent.status === GuildScheduledEventStatus.Scheduled) {
-            // Must transition Scheduled -> Active before completing
-            await timedDiscordCall(
-              'scheduledEvents.edit',
-              () =>
-                guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-                  status: GuildScheduledEventStatus.Active,
-                }),
-              { eventId, op: 'complete-activate' },
-            );
-          }
-          await timedDiscordCall(
-            'scheduledEvents.edit',
-            () =>
-              guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-                status: GuildScheduledEventStatus.Completed,
-              }),
-            { eventId, op: 'complete' },
-          );
-
-          this.logger.log(
-            `Completed Discord Scheduled Event ${event.discordScheduledEventId} for event ${eventId}`,
-          );
-        }
-      } catch (editError) {
-        if (
-          editError instanceof DiscordAPIError &&
-          editError.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          this.logger.debug(
-            `Scheduled event ${event.discordScheduledEventId} already deleted in Discord`,
-          );
-        } else {
-          throw editError;
-        }
-      }
-
-      await this.db
-        .update(schema.events)
-        .set({ discordScheduledEventId: null })
-        .where(eq(schema.events.id, eventId));
-    } catch (error) {
-      this.logger.error(
-        `Failed to complete scheduled event for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  /**
-   * Update only the end time of a Discord Scheduled Event (ROK-576).
-   * Called when an event is auto-extended due to voice channel activity.
-   */
-  async updateEndTime(eventId: number, newEndTime: Date): Promise<void> {
-    try {
-      if (!this.clientService.isConnected()) return;
-
-      const guild = this.clientService.getGuild();
-      if (!guild) return;
-
-      const [event] = await this.db
-        .select({
-          discordScheduledEventId: schema.events.discordScheduledEventId,
-        })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event?.discordScheduledEventId) return;
-
-      try {
-        await timedDiscordCall(
-          'scheduledEvents.edit',
-          () =>
-            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-              scheduledEndTime: newEndTime,
-            }),
-          { eventId, op: 'updateEndTime' },
-        );
-        this.logger.log(
-          `Updated end time for scheduled event ${event.discordScheduledEventId} to ${newEndTime.toISOString()}`,
-        );
-      } catch (editError) {
-        if (
-          editError instanceof DiscordAPIError &&
-          editError.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          this.logger.debug(
-            `Scheduled event ${event.discordScheduledEventId} was deleted in Discord, clearing reference`,
-          );
-          await this.db
-            .update(schema.events)
-            .set({ discordScheduledEventId: null })
-            .where(eq(schema.events.id, eventId));
-        } else {
-          throw editError;
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to update scheduled event end time for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  /**
-   * Update only the description of a Discord Scheduled Event (signup count changes).
-   */
-  async updateDescription(
-    eventId: number,
-    eventData: ScheduledEventData,
-  ): Promise<void> {
-    try {
-      if (!this.clientService.isConnected()) return;
-
-      const guild = this.clientService.getGuild();
-      if (!guild) return;
-
-      const [event] = await this.db
-        .select({
-          discordScheduledEventId: schema.events.discordScheduledEventId,
-        })
-        .from(schema.events)
-        .where(eq(schema.events.id, eventId))
-        .limit(1);
-
-      if (!event?.discordScheduledEventId) return;
-
-      const description = await this.buildDescription(eventId, eventData);
-
-      try {
-        await timedDiscordCall(
-          'scheduledEvents.edit',
-          () =>
-            guild.scheduledEvents.edit(event.discordScheduledEventId!, {
-              description,
-            }),
-          { eventId, op: 'updateDescription' },
-        );
-        this.logger.debug(
-          `Updated description for scheduled event ${event.discordScheduledEventId}`,
-        );
-      } catch (editError) {
-        if (
-          editError instanceof DiscordAPIError &&
-          editError.code === UNKNOWN_SCHEDULED_EVENT
-        ) {
-          this.logger.debug(
-            `Scheduled event ${event.discordScheduledEventId} was deleted in Discord, clearing reference`,
-          );
-          await this.db
-            .update(schema.events)
-            .set({ discordScheduledEventId: null })
-            .where(eq(schema.events.id, eventId));
-        } else {
-          throw editError;
-        }
-      }
-    } catch (error) {
-      this.logger.error(
-        `Failed to update scheduled event description for event ${eventId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-    }
-  }
-
-  /**
-   * Build the description for a Discord Scheduled Event.
-   * Format:
-   *   {gameName} — {signupCount}/{maxAttendees} signed up
-   *   {eventDescription (truncated)}
-   *
-   *   View event: {CLIENT_URL}/events/{eventId}
-   *
-   * Truncated to 1000 chars total.
-   */
   private async buildDescription(
     eventId: number,
     eventData: ScheduledEventData,
   ): Promise<string> {
     const clientUrl = await this.settingsService.getClientUrl();
-    const link = clientUrl
-      ? `\n\nView event: ${clientUrl}/events/${eventId}`
-      : '';
+    return buildDescriptionText(eventId, eventData, clientUrl);
+  }
 
-    const gameName = eventData.game?.name ?? 'Event';
-    const attendeeStr = eventData.maxAttendees
-      ? `${eventData.signupCount}/${eventData.maxAttendees}`
-      : `${eventData.signupCount}`;
+  private async getScheduledEventId(
+    eventId: number,
+  ): Promise<string | null> {
+    const [event] = await this.db
+      .select({ discordScheduledEventId: schema.events.discordScheduledEventId })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return event?.discordScheduledEventId ?? null;
+  }
 
-    const header = `${gameName} — ${attendeeStr} signed up`;
-    const eventDesc = eventData.description ?? '';
+  private async getEventWithOverride(eventId: number): Promise<{
+    discordScheduledEventId: string | null;
+    notificationChannelOverride: string | null;
+    recurrenceGroupId: string | null;
+  } | null> {
+    const [event] = await this.db
+      .select({
+        discordScheduledEventId: schema.events.discordScheduledEventId,
+        notificationChannelOverride: schema.events.notificationChannelOverride,
+        recurrenceGroupId: schema.events.recurrenceGroupId,
+      })
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    return event ?? null;
+  }
 
-    const full = eventDesc
-      ? `${header}\n${eventDesc}${link}`
-      : `${header}${link}`;
+  private async saveScheduledEventId(
+    eventId: number,
+    seId: string,
+  ): Promise<void> {
+    await this.db
+      .update(schema.events)
+      .set({ discordScheduledEventId: seId })
+      .where(eq(schema.events.id, eventId));
+  }
 
-    if (full.length <= MAX_DESCRIPTION_LENGTH) {
-      return full;
+  private async clearScheduledEventId(eventId: number): Promise<void> {
+    await this.db
+      .update(schema.events)
+      .set({ discordScheduledEventId: null })
+      .where(eq(schema.events.id, eventId));
+  }
+
+  private async handleUnknownEventError(
+    error: unknown,
+    eventId: number,
+  ): Promise<void> {
+    if (this.isUnknownEventError(error)) {
+      await this.clearScheduledEventId(eventId);
+    } else {
+      this.logApiError('start', eventId, error);
     }
+  }
 
-    // Truncate event description to fit within limit, preserving header + link
-    const headerAndLink = `${header}${link}`;
-    if (headerAndLink.length >= MAX_DESCRIPTION_LENGTH) {
-      return headerAndLink.slice(0, MAX_DESCRIPTION_LENGTH - 3) + '...';
-    }
+  private isUnknownEventError(error: unknown): boolean {
+    return (
+      error instanceof DiscordAPIError &&
+      error.code === UNKNOWN_SCHEDULED_EVENT
+    );
+  }
 
-    // Available space: total - header - "\n" - link - "..."
-    const available =
-      MAX_DESCRIPTION_LENGTH - header.length - 1 - link.length - 3;
-    const truncatedDesc =
-      available > 0 ? eventDesc.slice(0, available) + '...' : '';
-    return truncatedDesc
-      ? `${header}\n${truncatedDesc}${link}`
-      : `${header}${link}`;
+  private logApiError(
+    op: string,
+    eventId: number,
+    error: unknown,
+  ): void {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    this.logger.error(
+      `Failed to ${op} scheduled event for event ${eventId}: ${msg}`,
+    );
   }
 }

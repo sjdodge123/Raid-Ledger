@@ -81,192 +81,146 @@ export class EventLinkListener {
   }
 
   private async handleMessage(message: Message): Promise<void> {
-    // Skip bot messages (prevents self-reply loops)
     if (message.author.bot) return;
-
-    // Module-scoped dedup: prevent duplicate unfurls from HMR ghost instances
     if (recentlyProcessed.has(message.id)) return;
     recentlyProcessed.set(message.id, Date.now());
-
-    // Only unfurl in guild text channels (not DMs)
     if (!message.guild) return;
-    if (
-      message.channel.type !== ChannelType.GuildText &&
-      message.channel.type !== ChannelType.GuildAnnouncement
-    ) {
-      return;
-    }
-
-    const rawClientUrl =
-      process.env.CLIENT_URL || process.env.CORS_ORIGIN || '';
-    const clientUrl =
-      rawClientUrl !== 'auto' ? rawClientUrl.replace(/\/+$/, '') : '';
+    if (!isGuildTextChannel(message.channel.type)) return;
+    const clientUrl = resolveClientUrl();
     if (!clientUrl) {
-      this.logger.warn(
-        'Neither CLIENT_URL nor CORS_ORIGIN is set — link unfurl disabled',
-      );
+      this.logger.warn('CLIENT_URL not set — link unfurl disabled');
       return;
     }
-
-    // Build a protocol-flexible pattern from the hostname so http vs https doesn't matter
-    let hostPattern: string;
-    try {
-      const parsed = new URL(clientUrl);
-      const escapedHost = parsed.hostname.replace(
-        /[.*+?^${}()|[\]\\]/g,
-        '\\$&',
-      );
-      const port = parsed.port ? `:${parsed.port}` : '';
-      hostPattern = `${escapedHost}${port}`;
-    } catch {
+    const hostPattern = buildHostPattern(clientUrl);
+    if (!hostPattern) {
       this.logger.warn(`CLIENT_URL is not a valid URL: ${clientUrl}`);
       return;
     }
-
-    const eventPattern = new RegExp(
-      `https?://${hostPattern}/events/(\\d+)`,
-      'g',
-    );
-    const invitePattern = new RegExp(
-      `https?://${hostPattern}/i/([a-z2-9]{8})`,
-      'g',
-    );
-
-    const eventMatches: number[] = [];
-    const inviteCodes: string[] = [];
-    let match: RegExpExecArray | null;
-
-    while ((match = eventPattern.exec(message.content)) !== null) {
-      const eventId = parseInt(match[1], 10);
-      if (!eventMatches.includes(eventId)) {
-        eventMatches.push(eventId);
-      }
-      if (eventMatches.length >= MAX_UNFURLS_PER_MESSAGE) break;
-    }
-
-    while ((match = invitePattern.exec(message.content)) !== null) {
-      const code = match[1];
-      if (!inviteCodes.includes(code)) {
-        inviteCodes.push(code);
-      }
-      if (inviteCodes.length >= MAX_UNFURLS_PER_MESSAGE) break;
-    }
-
-    if (eventMatches.length === 0 && inviteCodes.length === 0) {
-      // Debug: warn if message contains something that looks like an event link
-      // but didn't match our pattern (helps diagnose CLIENT_URL mismatches)
-      const genericEventLink = /https?:\/\/[^\s/]+\/events\/\d+/i;
-      if (genericEventLink.test(message.content)) {
-        this.logger.warn(
-          `Message contains event-like URL but no match for host "${hostPattern}": ${message.content.substring(0, 200)}`,
-        );
-      }
+    const parsed = parseMessageLinks(message.content, hostPattern);
+    if (!parsed.eventIds.length && !parsed.inviteCodes.length) {
+      warnOnMissedLinks(message, hostPattern, this.logger);
       return;
     }
+    await this.unfurlAndReply(message, parsed, clientUrl);
+  }
 
-    const context = await this.buildContext();
+  /** Build embeds for matched links and reply. */
+  private async unfurlAndReply(
+    message: Message,
+    parsed: ParsedLinks,
+    clientUrl: string,
+  ): Promise<void> {
+    const ctx = await this.buildContext();
+    const result = await this.buildUnfurlEmbeds(parsed, ctx, clientUrl);
+    if (result.embeds.length === 0) return;
+    const reply = await message.reply({
+      embeds: result.embeds,
+      ...(result.rows.length > 0 ? { components: result.rows } : {}),
+    });
+    await this.suppressOriginalEmbeds(message);
+    await this.trackUnfurlMessages(message, reply, result.eventIds);
+  }
+
+  /** Build embeds/rows for event and invite links. */
+  private async buildUnfurlEmbeds(
+    parsed: ParsedLinks,
+    ctx: EmbedContext,
+    clientUrl: string,
+  ): Promise<UnfurlResult> {
     const embeds: EmbedBuilder[] = [];
     const rows: ActionRowType<ButtonType>[] = [];
-    const unfurledEventIds: number[] = [];
-
-    // Unfurl event links — full embed with roster breakdown
-    for (const eventId of eventMatches) {
-      try {
-        const event = await this.eventsService.findOne(eventId);
-        if (event.cancelledAt) continue;
-
-        const eventData = await this.eventsService.buildEmbedEventData(eventId);
-        const { embed, row } = this.embedFactory.buildEventEmbed(
-          eventData,
-          context,
-          { buttons: 'signup' },
-        );
-
-        embeds.push(embed);
-        if (row) rows.push(row);
-        unfurledEventIds.push(eventId);
-      } catch {
-        // Event not found or other error — silently ignore
-      }
+    const eventIds: number[] = [];
+    for (const id of parsed.eventIds) {
+      const r = await this.unfurlEventLink(id, ctx);
+      if (!r) continue;
+      embeds.push(r.embed);
+      if (r.row) rows.push(r.row);
+      eventIds.push(id);
     }
-
-    // Unfurl invite links (ROK-263) — full embed with roster breakdown
-    for (const code of inviteCodes) {
-      try {
-        const slot = await this.pugsService.findByInviteCode(code);
-        if (!slot) continue;
-
-        const event = await this.eventsService.findOne(slot.eventId);
-        if (event.cancelledAt) continue;
-
-        const eventData = await this.eventsService.buildEmbedEventData(
-          slot.eventId,
-        );
-        const { embed } = this.embedFactory.buildEventEmbed(
-          eventData,
-          context,
-          { buttons: 'none' },
-        );
-        embeds.push(embed);
-
-        // Add "Join Event" interactive button + "View Event" link button
-        const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`pug_join:${code}`)
-            .setLabel('Join Event')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setLabel('View Event')
-            .setStyle(ButtonStyle.Link)
-            .setURL(`${clientUrl}/events/${event.id}`),
-        );
-        rows.push(row);
-        if (!unfurledEventIds.includes(slot.eventId)) {
-          unfurledEventIds.push(slot.eventId);
-        }
-      } catch {
-        // Slot/event not found — silently ignore
-      }
+    for (const code of parsed.inviteCodes) {
+      const r = await this.unfurlInviteLink(code, ctx, clientUrl);
+      if (!r) continue;
+      embeds.push(r.embed);
+      rows.push(r.row);
+      if (!eventIds.includes(r.eventId)) eventIds.push(r.eventId);
     }
+    return { embeds, rows, eventIds };
+  }
 
-    if (embeds.length === 0) return;
+  /** Unfurl a single event link. */
+  private async unfurlEventLink(
+    eventId: number,
+    ctx: EmbedContext,
+  ): Promise<{ embed: EmbedBuilder; row?: ActionRowType<ButtonType> } | null> {
+    try {
+      const event = await this.eventsService.findOne(eventId);
+      if (event.cancelledAt) return null;
+      const data = await this.eventsService.buildEmbedEventData(eventId);
+      return this.embedFactory.buildEventEmbed(data, ctx, {
+        buttons: 'signup',
+      });
+    } catch {
+      return null;
+    }
+  }
 
-    // Send all embeds in a single reply
-    const reply = await message.reply({
-      embeds,
-      ...(rows.length > 0 ? { components: rows } : {}),
-    });
+  /** Unfurl a single invite link. */
+  private async unfurlInviteLink(
+    code: string,
+    ctx: EmbedContext,
+    clientUrl: string,
+  ): Promise<InviteUnfurl | null> {
+    try {
+      const slot = await this.pugsService.findByInviteCode(code);
+      if (!slot) return null;
+      const event = await this.eventsService.findOne(slot.eventId);
+      if (event.cancelledAt) return null;
+      const data = await this.eventsService.buildEmbedEventData(slot.eventId);
+      const { embed } = this.embedFactory.buildEventEmbed(data, ctx, {
+        buttons: 'none',
+      });
+      const row = buildInviteButtonRow(code, clientUrl, event.id);
+      return { embed, row, eventId: slot.eventId };
+    } catch {
+      return null;
+    }
+  }
 
-    // Suppress Discord's default OG meta preview on the original message
-    // so only the bot's rich embed is shown
+  /** Suppress Discord's OG embed preview on the original message. */
+  private async suppressOriginalEmbeds(message: Message): Promise<void> {
     try {
       await message.suppressEmbeds(true);
     } catch (err) {
       this.logger.warn(
-        `Failed to suppress embeds on message ${message.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
+        `Failed to suppress embeds on ${message.id}: ${err instanceof Error ? err.message : 'Unknown'}`,
       );
     }
+  }
 
-    // Track unfurl reply in discord_event_messages so embed sync updates it
+  /** Track unfurl messages in discord_event_messages for embed sync. */
+  private async trackUnfurlMessages(
+    message: Message,
+    reply: Message,
+    eventIds: number[],
+  ): Promise<void> {
     const guildId = message.guild?.id;
-    if (guildId && reply.id) {
-      for (const eventId of unfurledEventIds) {
-        try {
-          await this.db
-            .insert(schema.discordEventMessages)
-            .values({
-              eventId,
-              guildId,
-              channelId: message.channel.id,
-              messageId: reply.id,
-              embedState: EMBED_STATES.POSTED,
-            })
-            .onConflictDoNothing();
-        } catch (err) {
-          this.logger.warn(
-            `Failed to track unfurl message for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
-          );
-        }
+    if (!guildId || !reply.id) return;
+    for (const eventId of eventIds) {
+      try {
+        await this.db
+          .insert(schema.discordEventMessages)
+          .values({
+            eventId,
+            guildId,
+            channelId: message.channel.id,
+            messageId: reply.id,
+            embedState: EMBED_STATES.POSTED,
+          })
+          .onConflictDoNothing();
+      } catch (err) {
+        this.logger.warn(
+          `Failed to track unfurl for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown'}`,
+        );
       }
     }
   }
@@ -285,4 +239,103 @@ export class EventLinkListener {
       timezone,
     };
   }
+}
+
+// --- Pure helpers ---
+
+interface ParsedLinks {
+  eventIds: number[];
+  inviteCodes: string[];
+}
+
+interface UnfurlResult {
+  embeds: EmbedBuilder[];
+  rows: ActionRowType<ButtonType>[];
+  eventIds: number[];
+}
+
+function isGuildTextChannel(type: ChannelType): boolean {
+  return (
+    type === ChannelType.GuildText || type === ChannelType.GuildAnnouncement
+  );
+}
+
+function resolveClientUrl(): string {
+  const raw = process.env.CLIENT_URL || process.env.CORS_ORIGIN || '';
+  return raw !== 'auto' ? raw.replace(/\/+$/, '') : '';
+}
+
+function buildHostPattern(clientUrl: string): string | null {
+  try {
+    const parsed = new URL(clientUrl);
+    const escaped = parsed.hostname.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const port = parsed.port ? `:${parsed.port}` : '';
+    return `${escaped}${port}`;
+  } catch {
+    return null;
+  }
+}
+
+function parseMessageLinks(content: string, hostPattern: string): ParsedLinks {
+  const eventPattern = new RegExp(`https?://${hostPattern}/events/(\\d+)`, 'g');
+  const invitePattern = new RegExp(
+    `https?://${hostPattern}/i/([a-z2-9]{8})`,
+    'g',
+  );
+  const eventIds = extractUniqueMatches(eventPattern, content, (m) =>
+    parseInt(m, 10),
+  );
+  const inviteCodes = extractUniqueMatches(invitePattern, content, (m) => m);
+  return { eventIds, inviteCodes };
+}
+
+function extractUniqueMatches<T>(
+  pattern: RegExp,
+  content: string,
+  transform: (match: string) => T,
+): T[] {
+  const results: T[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    const val = transform(match[1]);
+    if (!results.includes(val)) results.push(val);
+    if (results.length >= MAX_UNFURLS_PER_MESSAGE) break;
+  }
+  return results;
+}
+
+function warnOnMissedLinks(
+  message: Message,
+  hostPattern: string,
+  logger: Logger,
+): void {
+  const generic = /https?:\/\/[^\s/]+\/events\/\d+/i;
+  if (generic.test(message.content)) {
+    logger.warn(
+      `Event-like URL found but no match for host "${hostPattern}": ${message.content.substring(0, 200)}`,
+    );
+  }
+}
+
+interface InviteUnfurl {
+  embed: EmbedBuilder;
+  row: ActionRowType<ButtonType>;
+  eventId: number;
+}
+
+function buildInviteButtonRow(
+  code: string,
+  clientUrl: string,
+  eventId: number,
+): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`pug_join:${code}`)
+      .setLabel('Join Event')
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setLabel('View Event')
+      .setStyle(ButtonStyle.Link)
+      .setURL(`${clientUrl}/events/${eventId}`),
+  );
 }
