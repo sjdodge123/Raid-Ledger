@@ -1,0 +1,153 @@
+/* eslint-disable @typescript-eslint/unbound-method */
+import { Test, TestingModule } from '@nestjs/testing';
+import {
+  GuildScheduledEventStatus,
+  DiscordAPIError,
+} from 'discord.js';
+import { ScheduledEventService } from './scheduled-event.service';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { ChannelResolverService } from './channel-resolver.service';
+import { SettingsService } from '../../settings/settings.service';
+import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import type { ScheduledEventData } from './scheduled-event.service';
+
+/** Build a DiscordAPIError mock that satisfies `instanceof DiscordAPIError` checks. */
+export function makeDiscordApiError(code: number, message = 'Discord API error'): DiscordAPIError {
+  const err = Object.create(DiscordAPIError.prototype) as DiscordAPIError;
+  Object.defineProperty(err, 'code', {
+    value: code,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(err, 'message', {
+    value: message,
+    writable: true,
+    configurable: true,
+  });
+  return err;
+}
+
+export const FUTURE = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+export const FUTURE_END = new Date(FUTURE.getTime() + 3 * 60 * 60 * 1000);
+export const PAST = new Date(Date.now() - 1000);
+
+export const baseEventData: ScheduledEventData = {
+  title: 'Raid Night',
+  description: 'Come raid with us!',
+  startTime: FUTURE.toISOString(),
+  endTime: FUTURE_END.toISOString(),
+  signupCount: 5,
+  maxAttendees: 25,
+  game: { name: 'World of Warcraft' },
+};
+
+/** Shared mock types for scheduled event service tests. */
+export interface ScheduledEventMocks {
+  service: ScheduledEventService;
+  clientService: jest.Mocked<DiscordBotClientService>;
+  channelResolver: jest.Mocked<ChannelResolverService>;
+  settingsService: jest.Mocked<SettingsService>;
+  mockDb: { select: jest.Mock; update: jest.Mock };
+  mockGuild: {
+    scheduledEvents: {
+      create: jest.Mock;
+      edit: jest.Mock;
+      delete: jest.Mock;
+      fetch: jest.Mock;
+    };
+  };
+  createSelectChain: (rows?: unknown[]) => Record<string, jest.Mock>;
+  createUpdateChain: () => Record<string, jest.Mock>;
+}
+
+/** Helper to build a chainable Drizzle select mock. */
+export function createSelectChain(rows: unknown[] = []): Record<string, jest.Mock> {
+  const chain: Record<string, jest.Mock> = {};
+  chain.select = jest.fn().mockReturnValue(chain);
+  chain.from = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockReturnValue(chain);
+  chain.limit = jest.fn().mockResolvedValue(rows);
+  return chain;
+}
+
+/** Helper to build a chainable Drizzle update mock. */
+export function createUpdateChain(): Record<string, jest.Mock> {
+  const chain: Record<string, jest.Mock> = {};
+  chain.set = jest.fn().mockReturnValue(chain);
+  chain.where = jest.fn().mockResolvedValue(undefined);
+  return chain;
+}
+
+/** Set up the shared test module and return all mocks. */
+export async function setupScheduledEventTestModule(): Promise<ScheduledEventMocks> {
+  const mockGuild = {
+    scheduledEvents: {
+      create: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
+      edit: jest.fn().mockResolvedValue({ id: 'discord-se-id-1' }),
+      delete: jest.fn().mockResolvedValue(undefined),
+      fetch: jest.fn().mockResolvedValue({
+        id: 'discord-se-id-1',
+        status: GuildScheduledEventStatus.Active,
+        setStatus: jest.fn().mockResolvedValue(undefined),
+      }),
+    },
+  };
+
+  const selectChain = createSelectChain();
+  const updateChain = createUpdateChain();
+
+  const mockDb = {
+    select: jest.fn().mockReturnValue(selectChain),
+    update: jest.fn().mockReturnValue(updateChain),
+  };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      ScheduledEventService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      {
+        provide: DiscordBotClientService,
+        useValue: {
+          isConnected: jest.fn().mockReturnValue(true),
+          getGuild: jest.fn().mockReturnValue(mockGuild),
+        },
+      },
+      {
+        provide: ChannelResolverService,
+        useValue: {
+          resolveVoiceChannelForScheduledEvent: jest
+            .fn()
+            .mockResolvedValue('voice-channel-123'),
+        },
+      },
+      {
+        provide: SettingsService,
+        useValue: {
+          getClientUrl: jest.fn().mockResolvedValue('https://raidledger.app'),
+        },
+      },
+      {
+        provide: CronJobService,
+        useValue: {
+          executeWithTracking: jest
+            .fn()
+            .mockImplementation((_name: string, fn: () => Promise<void>) =>
+              fn(),
+            ),
+        },
+      },
+    ],
+  }).compile();
+
+  return {
+    service: module.get(ScheduledEventService),
+    clientService: module.get(DiscordBotClientService),
+    channelResolver: module.get(ChannelResolverService),
+    settingsService: module.get(SettingsService),
+    mockDb,
+    mockGuild,
+    createSelectChain,
+    createUpdateChain,
+  };
+}

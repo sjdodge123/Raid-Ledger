@@ -1,0 +1,174 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SignupsService } from './signups.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { NotificationService } from '../notifications/notification.service';
+import { RosterNotificationBufferService } from '../notifications/roster-notification-buffer.service';
+import { BenchPromotionService } from './bench-promotion.service';
+
+/** Shared mock types for signups service tests */
+export interface SignupsMocks {
+  service: SignupsService;
+  mockDb: Record<string, jest.Mock>;
+  mockNotificationService: {
+    create: jest.Mock;
+    getDiscordEmbedUrl: jest.Mock;
+    resolveVoiceChannelForEvent: jest.Mock;
+  };
+  mockRosterNotificationBuffer: {
+    bufferLeave: jest.Mock;
+    bufferJoin: jest.Mock;
+  };
+  mockBenchPromotionService: {
+    schedulePromotion: jest.Mock;
+    cancelPromotion: jest.Mock;
+    isEligible: jest.Mock;
+  };
+  mockEventEmitter: { emit: jest.Mock };
+}
+
+/** Shared test fixtures */
+export const mockUser = {
+  id: 1,
+  username: 'testuser',
+  avatar: 'avatar.png',
+  discordId: '123',
+  role: 'member',
+};
+export const mockEvent = { id: 1, title: 'Test Event', creatorId: 99 };
+export const mockSignup = {
+  id: 1,
+  eventId: 1,
+  userId: 1,
+  note: null,
+  signedUpAt: new Date(),
+  characterId: null,
+  confirmationStatus: 'pending',
+};
+export const mockCharacter = {
+  id: 'char-uuid-1',
+  userId: 1,
+  gameId: 'game-uuid-1',
+  name: 'Frostweaver',
+  realm: 'Area52',
+  class: 'Mage',
+  spec: 'Arcane',
+  role: 'dps',
+  isMain: true,
+  itemLevel: 485,
+  avatarUrl: null,
+  externalId: null,
+  displayOrder: 0,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+
+/** Build the NestJS testing module with all mocked providers */
+export async function createSignupsTestModule(): Promise<SignupsMocks> {
+  const mockNotificationService = {
+    create: jest.fn().mockResolvedValue(null),
+    getDiscordEmbedUrl: jest.fn().mockResolvedValue(null),
+    resolveVoiceChannelForEvent: jest.fn().mockResolvedValue(null),
+  };
+  const mockRosterNotificationBuffer = {
+    bufferLeave: jest.fn(),
+    bufferJoin: jest.fn(),
+  };
+  const mockBenchPromotionService = {
+    schedulePromotion: jest.fn().mockResolvedValue(undefined),
+    cancelPromotion: jest.fn().mockResolvedValue(undefined),
+    isEligible: jest.fn().mockResolvedValue(false),
+  };
+
+  const mockDb: Record<string, jest.Mock> = {
+    select: jest.fn(),
+    insert: jest.fn(),
+    delete: jest.fn(),
+    update: jest.fn(),
+    transaction: jest.fn(),
+  };
+
+  // Default select chain - event exists
+  const selectEventChain = {
+    from: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockResolvedValue([mockEvent]),
+      }),
+      leftJoin: jest.fn().mockReturnValue({
+        leftJoin: jest.fn().mockReturnValue({
+          where: jest.fn().mockReturnValue({
+            orderBy: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+        where: jest.fn().mockReturnValue({
+          orderBy: jest.fn().mockResolvedValue([]),
+        }),
+      }),
+    }),
+  };
+  mockDb.select.mockReturnValue(selectEventChain);
+
+  // Default insert chain (with onConflictDoNothing for ROK-364)
+  const insertChain = {
+    values: jest.fn().mockReturnValue({
+      onConflictDoNothing: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockSignup]),
+      }),
+      returning: jest.fn().mockResolvedValue([mockSignup]),
+    }),
+  };
+  mockDb.insert.mockReturnValue(insertChain);
+
+  // Default delete chain
+  const deleteChain = {
+    where: jest.fn().mockReturnValue({
+      returning: jest.fn().mockResolvedValue([mockSignup]),
+    }),
+  };
+  mockDb.delete.mockReturnValue(deleteChain);
+
+  // Default update chain
+  const updateChain = {
+    set: jest.fn().mockReturnValue({
+      where: jest.fn().mockReturnValue({
+        returning: jest.fn().mockResolvedValue([mockSignup]),
+      }),
+    }),
+  };
+  mockDb.update.mockReturnValue(updateChain);
+
+  // Transaction mock
+  mockDb.transaction.mockImplementation(
+    async (cb: (tx: typeof mockDb) => Promise<unknown>) => cb(mockDb),
+  );
+
+  const mockEventEmitter = { emit: jest.fn() };
+
+  const module: TestingModule = await Test.createTestingModule({
+    providers: [
+      SignupsService,
+      { provide: DrizzleAsyncProvider, useValue: mockDb },
+      { provide: NotificationService, useValue: mockNotificationService },
+      {
+        provide: RosterNotificationBufferService,
+        useValue: mockRosterNotificationBuffer,
+      },
+      {
+        provide: BenchPromotionService,
+        useValue: mockBenchPromotionService,
+      },
+      { provide: EventEmitter2, useValue: mockEventEmitter },
+    ],
+  }).compile();
+
+  const service = module.get<SignupsService>(SignupsService);
+
+  return {
+    service,
+    mockDb,
+    mockNotificationService,
+    mockRosterNotificationBuffer,
+    mockBenchPromotionService,
+    mockEventEmitter,
+  };
+}
