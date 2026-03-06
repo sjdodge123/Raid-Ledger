@@ -80,7 +80,9 @@ export class ScheduledEventService {
       if (!guild) return;
 
       const voiceChannelId = await this.resolveVoiceChannel(
-        eventId, gameId, voiceChannelOverride,
+        eventId,
+        gameId,
+        voiceChannelOverride,
       );
       if (!voiceChannelId) return;
 
@@ -122,14 +124,21 @@ export class ScheduledEventService {
       const event = await this.getEventWithOverride(eventId);
       if (!event?.discordScheduledEventId) {
         await this.createScheduledEvent(
-          eventId, eventData, gameId, isAdHoc,
+          eventId,
+          eventData,
+          gameId,
+          isAdHoc,
           event?.notificationChannelOverride,
         );
         return;
       }
 
       await this.tryEditScheduledEvent(
-        guild, eventId, event, eventData, gameId,
+        guild,
+        eventId,
+        event,
+        eventData,
+        gameId,
       );
     } catch (error) {
       this.logApiError('update', eventId, error);
@@ -235,7 +244,7 @@ export class ScheduledEventService {
     try {
       const se = await timedDiscordCall(
         'scheduledEvents.fetch',
-        () => guild!.scheduledEvents.fetch(candidate.discordScheduledEventId!),
+        () => guild.scheduledEvents.fetch(candidate.discordScheduledEventId!),
         { eventId: candidate.id },
       );
       if (se.status !== GuildScheduledEventStatus.Scheduled) return;
@@ -243,7 +252,7 @@ export class ScheduledEventService {
       await timedDiscordCall(
         'scheduledEvents.edit',
         () =>
-          guild!.scheduledEvents.edit(candidate.discordScheduledEventId!, {
+          guild.scheduledEvents.edit(candidate.discordScheduledEventId!, {
             status: GuildScheduledEventStatus.Active,
           }),
         { eventId: candidate.id, op: 'start' },
@@ -268,7 +277,8 @@ export class ScheduledEventService {
     const voiceChannelId =
       event.notificationChannelOverride ??
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId, event.recurrenceGroupId,
+        gameId,
+        event.recurrenceGroupId,
       ));
 
     try {
@@ -288,7 +298,10 @@ export class ScheduledEventService {
       if (this.isUnknownEventError(editError)) {
         await this.clearScheduledEventId(eventId);
         await this.createScheduledEvent(
-          eventId, eventData, gameId, false,
+          eventId,
+          eventData,
+          gameId,
+          false,
           event.notificationChannelOverride,
         );
       } else {
@@ -309,26 +322,30 @@ export class ScheduledEventService {
         { eventId, op: 'complete' },
       );
 
-      if (se.status === GuildScheduledEventStatus.Completed ||
-          se.status === GuildScheduledEventStatus.Canceled) {
+      if (
+        se.status === GuildScheduledEventStatus.Completed ||
+        se.status === GuildScheduledEventStatus.Canceled
+      ) {
         return;
       }
 
       if (se.status === GuildScheduledEventStatus.Scheduled) {
         await timedDiscordCall(
           'scheduledEvents.edit',
-          () => guild.scheduledEvents.edit(seId, {
-            status: GuildScheduledEventStatus.Active,
-          }),
+          () =>
+            guild.scheduledEvents.edit(seId, {
+              status: GuildScheduledEventStatus.Active,
+            }),
           { eventId, op: 'complete-activate' },
         );
       }
 
       await timedDiscordCall(
         'scheduledEvents.edit',
-        () => guild.scheduledEvents.edit(seId, {
-          status: GuildScheduledEventStatus.Completed,
-        }),
+        () =>
+          guild.scheduledEvents.edit(seId, {
+            status: GuildScheduledEventStatus.Completed,
+          }),
         { eventId, op: 'complete' },
       );
     } catch (error) {
@@ -361,9 +378,10 @@ export class ScheduledEventService {
     try {
       await timedDiscordCall(
         'scheduledEvents.edit',
-        () => guild.scheduledEvents.edit(seId, {
-          scheduledEndTime: newEndTime,
-        }),
+        () =>
+          guild.scheduledEvents.edit(seId, {
+            scheduledEndTime: newEndTime,
+          }),
         { eventId, op: 'updateEndTime' },
       );
     } catch (error) {
@@ -410,7 +428,8 @@ export class ScheduledEventService {
     return (
       override ??
       (await this.channelResolver.resolveVoiceChannelForScheduledEvent(
-        gameId, row?.recurrenceGroupId,
+        gameId,
+        row?.recurrenceGroupId,
       )) ??
       null
     );
@@ -424,11 +443,11 @@ export class ScheduledEventService {
     return buildDescriptionText(eventId, eventData, clientUrl);
   }
 
-  private async getScheduledEventId(
-    eventId: number,
-  ): Promise<string | null> {
+  private async getScheduledEventId(eventId: number): Promise<string | null> {
     const [event] = await this.db
-      .select({ discordScheduledEventId: schema.events.discordScheduledEventId })
+      .select({
+        discordScheduledEventId: schema.events.discordScheduledEventId,
+      })
       .from(schema.events)
       .where(eq(schema.events.id, eventId))
       .limit(1);
@@ -482,16 +501,11 @@ export class ScheduledEventService {
 
   private isUnknownEventError(error: unknown): boolean {
     return (
-      error instanceof DiscordAPIError &&
-      error.code === UNKNOWN_SCHEDULED_EVENT
+      error instanceof DiscordAPIError && error.code === UNKNOWN_SCHEDULED_EVENT
     );
   }
 
-  private logApiError(
-    op: string,
-    eventId: number,
-    error: unknown,
-  ): void {
+  private logApiError(op: string, eventId: number, error: unknown): void {
     const msg = error instanceof Error ? error.message : 'Unknown error';
     this.logger.error(
       `Failed to ${op} scheduled event for event ${eventId}: ${msg}`,

@@ -11,15 +11,57 @@ import type { SubInstance } from './blizzard.constants';
  */
 export const CLASSIC_SUB_INSTANCES: Record<string, SubInstance[]> = {
   'Scarlet Monastery': [
-    { idSuffix: 1, name: 'SM: Graveyard', shortName: 'SM:GY', minimumLevel: 26, maximumLevel: 32 },
-    { idSuffix: 2, name: 'SM: Library', shortName: 'SM:Lib', minimumLevel: 29, maximumLevel: 33 },
-    { idSuffix: 3, name: 'SM: Armory', shortName: 'SM:Arm', minimumLevel: 32, maximumLevel: 36 },
-    { idSuffix: 4, name: 'SM: Cathedral', shortName: 'SM:Cath', minimumLevel: 34, maximumLevel: 40 },
+    {
+      idSuffix: 1,
+      name: 'SM: Graveyard',
+      shortName: 'SM:GY',
+      minimumLevel: 26,
+      maximumLevel: 32,
+    },
+    {
+      idSuffix: 2,
+      name: 'SM: Library',
+      shortName: 'SM:Lib',
+      minimumLevel: 29,
+      maximumLevel: 33,
+    },
+    {
+      idSuffix: 3,
+      name: 'SM: Armory',
+      shortName: 'SM:Arm',
+      minimumLevel: 32,
+      maximumLevel: 36,
+    },
+    {
+      idSuffix: 4,
+      name: 'SM: Cathedral',
+      shortName: 'SM:Cath',
+      minimumLevel: 34,
+      maximumLevel: 40,
+    },
   ],
   Maraudon: [
-    { idSuffix: 1, name: 'Maraudon: Purple', shortName: 'Mara:P', minimumLevel: 40, maximumLevel: 49 },
-    { idSuffix: 2, name: 'Maraudon: Orange', shortName: 'Mara:O', minimumLevel: 40, maximumLevel: 49 },
-    { idSuffix: 3, name: 'Maraudon: Pristine Waters', shortName: 'Mara:PW', minimumLevel: 46, maximumLevel: 55 },
+    {
+      idSuffix: 1,
+      name: 'Maraudon: Purple',
+      shortName: 'Mara:P',
+      minimumLevel: 40,
+      maximumLevel: 49,
+    },
+    {
+      idSuffix: 2,
+      name: 'Maraudon: Orange',
+      shortName: 'Mara:O',
+      minimumLevel: 40,
+      maximumLevel: 49,
+    },
+    {
+      idSuffix: 3,
+      name: 'Maraudon: Pristine Waters',
+      shortName: 'Mara:PW',
+      minimumLevel: 46,
+      maximumLevel: 55,
+    },
   ],
 };
 
@@ -51,7 +93,7 @@ export const INSTANCE_SHORT_NAMES: Record<string, string> = {
   'Blackwing Lair': 'BWL',
   "Ruins of Ahn'Qiraj": 'AQ20',
   "Temple of Ahn'Qiraj": 'AQ40',
-  'Onyxia\'s Lair': 'Ony',
+  "Onyxia's Lair": 'Ony',
   'Hellfire Ramparts': 'Ramps',
   'The Blood Furnace': 'BF',
   'The Slave Pens': 'SP',

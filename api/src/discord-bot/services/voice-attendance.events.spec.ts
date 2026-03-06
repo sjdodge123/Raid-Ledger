@@ -461,7 +461,9 @@ describe('EventsController — voice endpoint authorization', () => {
       ],
     }).compile();
 
-    controller = module.get<EventsAttendanceController>(EventsAttendanceController);
+    controller = module.get<EventsAttendanceController>(
+      EventsAttendanceController,
+    );
   });
 
   describe('GET :id/voice-sessions', () => {

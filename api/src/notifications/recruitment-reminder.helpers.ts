@@ -22,23 +22,40 @@ export interface EligibleEvent {
 
 /** Raw row shape returned by the eligible events query. */
 interface EligibleEventRow {
-  id: number; title: string; game_id: number; game_name: string;
-  creator_id: number; start_time: string; max_attendees: number | null;
-  signup_count: string; channel_id: string; guild_id: string; message_id: string;
+  id: number;
+  title: string;
+  game_id: number;
+  game_name: string;
+  creator_id: number;
+  start_time: string;
+  max_attendees: number | null;
+  signup_count: string;
+  channel_id: string;
+  guild_id: string;
+  message_id: string;
 }
 
 /** Map a raw DB row to an EligibleEvent DTO. */
 function mapEligibleRow(r: EligibleEventRow): EligibleEvent {
   return {
-    id: r.id, title: r.title, gameId: r.game_id, gameName: r.game_name,
-    creatorId: r.creator_id, startTime: r.start_time, maxAttendees: r.max_attendees,
-    signupCount: parseInt(r.signup_count, 10), channelId: r.channel_id,
-    guildId: r.guild_id, messageId: r.message_id,
+    id: r.id,
+    title: r.title,
+    gameId: r.game_id,
+    gameName: r.game_name,
+    creatorId: r.creator_id,
+    startTime: r.start_time,
+    maxAttendees: r.max_attendees,
+    signupCount: parseInt(r.signup_count, 10),
+    channelId: r.channel_id,
+    guildId: r.guild_id,
+    messageId: r.message_id,
   };
 }
 
 /** Find future, non-cancelled events starting within [now, now + 48h] that have a Discord embed, are NOT full, and have a game. */
-export async function findEligibleEvents(db: PostgresJsDatabase<typeof schema>): Promise<EligibleEvent[]> {
+export async function findEligibleEvents(
+  db: PostgresJsDatabase<typeof schema>,
+): Promise<EligibleEvent[]> {
   const now = new Date();
   const in48h = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
@@ -66,7 +83,12 @@ export async function findEligibleEvents(db: PostgresJsDatabase<typeof schema>):
 }
 
 /** Find users with game affinity who have no signup record for this event. */
-export async function findRecipients(db: PostgresJsDatabase<typeof schema>, gameId: number, creatorId: number, eventId: number): Promise<number[]> {
+export async function findRecipients(
+  db: PostgresJsDatabase<typeof schema>,
+  gameId: number,
+  creatorId: number,
+  eventId: number,
+): Promise<number[]> {
   const rows = await db.execute<{ id: number }>(sql`
     SELECT DISTINCT u.id FROM users u
     WHERE u.id != ${creatorId}
@@ -79,7 +101,11 @@ export async function findRecipients(db: PostgresJsDatabase<typeof schema>, game
 }
 
 /** Find users with an absence covering the event date. */
-export async function findAbsentUsers(db: PostgresJsDatabase<typeof schema>, userIds: number[], startTime: string): Promise<Set<number>> {
+export async function findAbsentUsers(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: number[],
+  startTime: string,
+): Promise<Set<number>> {
   if (userIds.length === 0) return new Set();
   const eventDate = new Date(startTime).toISOString().split('T')[0];
   const rows = await db.execute<{ user_id: number }>(sql`

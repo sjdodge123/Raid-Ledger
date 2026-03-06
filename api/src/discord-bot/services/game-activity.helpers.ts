@@ -93,7 +93,10 @@ export async function processOpenEvents(
         .where(
           and(
             eq(tables.gameActivitySessions.userId, ev.userId),
-            eq(tables.gameActivitySessions.discordActivityName, ev.discordActivityName),
+            eq(
+              tables.gameActivitySessions.discordActivityName,
+              ev.discordActivityName,
+            ),
             isNull(tables.gameActivitySessions.endedAt),
           ),
         )
@@ -134,7 +137,10 @@ export async function processCloseEvents(
         .where(
           and(
             eq(tables.gameActivitySessions.userId, ev.userId),
-            eq(tables.gameActivitySessions.discordActivityName, ev.discordActivityName),
+            eq(
+              tables.gameActivitySessions.discordActivityName,
+              ev.discordActivityName,
+            ),
             isNull(tables.gameActivitySessions.endedAt),
           ),
         )
@@ -146,7 +152,9 @@ export async function processCloseEvents(
       const durationSeconds = Math.min(
         Math.max(
           0,
-          Math.floor((ev.endedAt.getTime() - session.startedAt.getTime()) / 1000),
+          Math.floor(
+            (ev.endedAt.getTime() - session.startedAt.getTime()) / 1000,
+          ),
         ),
         MAX_SESSION_DURATION_SECONDS,
       );
@@ -289,7 +297,14 @@ function buildRollupMap(
     const d = s.startedAt;
 
     addToMap(map, s.userId, s.gameId, 'day', formatDate(d), s.durationSeconds);
-    addToMap(map, s.userId, s.gameId, 'week', getWeekStart(d), s.durationSeconds);
+    addToMap(
+      map,
+      s.userId,
+      s.gameId,
+      'week',
+      getWeekStart(d),
+      s.durationSeconds,
+    );
     const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
     addToMap(map, s.userId, s.gameId, 'month', month, s.durationSeconds);
   }

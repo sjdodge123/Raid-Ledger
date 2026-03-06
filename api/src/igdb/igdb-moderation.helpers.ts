@@ -17,18 +17,25 @@ export interface ModerationResult {
 async function findGameById(
   db: PostgresJsDatabase<typeof schema>,
   id: number,
-  includeIgdbId = false,
-) {
-  const cols = includeIgdbId
-    ? {
-        id: schema.games.id,
-        name: schema.games.name,
-        igdbId: schema.games.igdbId,
-      }
-    : { id: schema.games.id, name: schema.games.name };
-
+): Promise<Array<{ id: number; name: string }>> {
   return db
-    .select(cols)
+    .select({ id: schema.games.id, name: schema.games.name })
+    .from(schema.games)
+    .where(eq(schema.games.id, id))
+    .limit(1);
+}
+
+/** Fetch a game by ID with igdbId for unban actions. */
+async function findGameByIdWithIgdb(
+  db: PostgresJsDatabase<typeof schema>,
+  id: number,
+): Promise<Array<{ id: number; name: string; igdbId: number | null }>> {
+  return db
+    .select({
+      id: schema.games.id,
+      name: schema.games.name,
+      igdbId: schema.games.igdbId,
+    })
     .from(schema.games)
     .where(eq(schema.games.id, id))
     .limit(1);
@@ -100,7 +107,7 @@ export async function unbanGame(
   db: PostgresJsDatabase<typeof schema>,
   id: number,
 ): Promise<ModerationResult & { igdbId: number | null }> {
-  const existing = await findGameById(db, id, true);
+  const existing = await findGameByIdWithIgdb(db, id);
   if (existing.length === 0) {
     return {
       success: false,
@@ -115,7 +122,7 @@ export async function unbanGame(
     .set({ banned: false, hidden: false })
     .where(eq(schema.games.id, id));
 
-  const game = existing[0] as { id: number; name: string; igdbId: number };
+  const game = existing[0];
   logger.log(`Game "${game.name}" (id=${id}) unbanned via admin UI`);
   return {
     success: true,

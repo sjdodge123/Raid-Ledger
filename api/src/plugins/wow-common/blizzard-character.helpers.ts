@@ -26,7 +26,11 @@ export function buildCharacterParams(
   region: string,
   gameVariant: WowGameVariant,
 ): { realmSlug: string; charName: string; namespace: string; baseUrl: string } {
-  const realmSlug = realm.toLowerCase().replace(/'/g, '').replace(/\s+/g, '-').trim();
+  const realmSlug = realm
+    .toLowerCase()
+    .replace(/'/g, '')
+    .replace(/\s+/g, '-')
+    .trim();
   const charName = name.toLowerCase();
   const { profile: profilePrefix } = getNamespacePrefixes(gameVariant);
   const namespace = `${profilePrefix}-${region}`;
@@ -51,9 +55,13 @@ export async function fetchCharacterMedia(
       const media = (await mediaRes.json()) as {
         assets?: Array<{ key: string; value: string }>;
       };
-      const avatar = media.assets?.find((a) => a.key === 'avatar' || a.key === 'inset');
+      const avatar = media.assets?.find(
+        (a) => a.key === 'avatar' || a.key === 'inset',
+      );
       avatarUrl = avatar?.value ?? null;
-      const mainRaw = media.assets?.find((a) => a.key === 'main-raw') ?? media.assets?.find((a) => a.key === 'main');
+      const mainRaw =
+        media.assets?.find((a) => a.key === 'main-raw') ??
+        media.assets?.find((a) => a.key === 'main');
       renderUrl = mainRaw?.value ?? null;
     }
   } catch (err) {
@@ -73,13 +81,27 @@ export function mapEquipmentItems(
     const quality = item.quality as { type: string } | undefined;
     const level = item.level as { value: number } | undefined;
     const itemSubclass = item.item_subclass as { name: string } | undefined;
-    const enchantments = item.enchantments as Array<{ display_string: string; enchantment_id?: number }> | undefined;
-    const sockets = item.sockets as Array<{ socket_type: { type: string }; item?: { id: number } }> | undefined;
-    const stats = item.stats as Array<{ type: { type: string; name: string }; value: number }> | undefined;
+    const enchantments = item.enchantments as
+      | Array<{ display_string: string; enchantment_id?: number }>
+      | undefined;
+    const sockets = item.sockets as
+      | Array<{ socket_type: { type: string }; item?: { id: number } }>
+      | undefined;
+    const stats = item.stats as
+      | Array<{ type: { type: string; name: string }; value: number }>
+      | undefined;
     const armor = item.armor as { value: number } | undefined;
     const binding = item.binding as { type: string } | undefined;
-    const requirements = item.requirements as { level?: { value: number } } | undefined;
-    const weapon = item.weapon as { damage: { min_value: number; max_value: number }; attack_speed: { value: number }; dps: { value: number } } | undefined;
+    const requirements = item.requirements as
+      | { level?: { value: number } }
+      | undefined;
+    const weapon = item.weapon as
+      | {
+          damage: { min_value: number; max_value: number };
+          attack_speed: { value: number };
+          dps: { value: number };
+        }
+      | undefined;
     const setObj = item.set as { item_set?: { name: string } } | undefined;
 
     return {
@@ -89,13 +111,30 @@ export function mapEquipmentItems(
       quality: (quality?.type ?? 'COMMON').toUpperCase(),
       itemLevel: level?.value ?? 0,
       itemSubclass: itemSubclass?.name ?? null,
-      enchantments: enchantments?.map((e) => ({ displayString: e.display_string, enchantmentId: e.enchantment_id })),
-      sockets: sockets?.map((s) => ({ socketType: s.socket_type?.type ?? 'UNKNOWN', itemId: s.item?.id })),
-      stats: stats?.map((s) => ({ type: s.type.type, name: s.type.name, value: s.value })),
+      enchantments: enchantments?.map((e) => ({
+        displayString: e.display_string,
+        enchantmentId: e.enchantment_id,
+      })),
+      sockets: sockets?.map((s) => ({
+        socketType: s.socket_type?.type ?? 'UNKNOWN',
+        itemId: s.item?.id,
+      })),
+      stats: stats?.map((s) => ({
+        type: s.type.type,
+        name: s.type.name,
+        value: s.value,
+      })),
       armor: armor?.value,
       binding: binding?.type,
       requiredLevel: requirements?.level?.value,
-      weapon: weapon ? { damageMin: weapon.damage.min_value, damageMax: weapon.damage.max_value, attackSpeed: weapon.attack_speed.value, dps: weapon.dps.value } : undefined,
+      weapon: weapon
+        ? {
+            damageMin: weapon.damage.min_value,
+            damageMax: weapon.damage.max_value,
+            attackSpeed: weapon.attack_speed.value,
+            dps: weapon.dps.value,
+          }
+        : undefined,
       description: item.description as string | undefined,
       setName: setObj?.item_set?.name,
       iconUrl: iconUrls.get(itemObj.id),
@@ -105,7 +144,10 @@ export function mapEquipmentItems(
 
 /** Build equipment result from raw API data and icon URLs. */
 export function buildEquipmentResult(
-  data: { equipped_item_level?: number; equipped_items?: Array<Record<string, unknown>> },
+  data: {
+    equipped_item_level?: number;
+    equipped_items?: Array<Record<string, unknown>>;
+  },
   iconUrls: Map<number, string>,
 ): BlizzardCharacterEquipment {
   const rawItems = (data.equipped_items ?? []).filter(
@@ -124,9 +166,17 @@ export function buildEquipmentResult(
 
 /** Infer classic spec from talent trees. */
 export function inferClassicSpec(
-  trees: Array<{ specialization_name?: string; spent_points?: number; talents?: unknown[] }>,
+  trees: Array<{
+    specialization_name?: string;
+    spent_points?: number;
+    talents?: unknown[];
+  }>,
   characterClass: string,
-): { spec: string | null; role: 'tank' | 'healer' | 'dps' | null; talents: unknown } {
+): {
+  spec: string | null;
+  role: 'tank' | 'healer' | 'dps' | null;
+  talents: unknown;
+} {
   const classicTalents = buildClassicTalentData(trees);
 
   let bestTree: { name: string; points: number } | null = null;
@@ -139,7 +189,11 @@ export function inferClassicSpec(
   }
 
   if (!bestTree || bestTree.points === 0) {
-    return { spec: null, role: null, talents: classicTalents.trees.length > 0 ? classicTalents : null };
+    return {
+      spec: null,
+      role: null,
+      talents: classicTalents.trees.length > 0 ? classicTalents : null,
+    };
   }
 
   const classRoles = CLASSIC_TALENT_TREE_ROLES[characterClass];
@@ -150,13 +204,29 @@ export function inferClassicSpec(
 
 /** Build classic talent data structure from talent trees. */
 function buildClassicTalentData(
-  trees: Array<{ specialization_name?: string; spent_points?: number; talents?: Array<Record<string, unknown>> }>,
+  trees: Array<{
+    specialization_name?: string;
+    spent_points?: number;
+    talents?: Array<Record<string, unknown>>;
+  }>,
 ): {
   format: 'classic';
-  trees: Array<{ name: string; spentPoints: number; talents: Array<Record<string, unknown>> }>;
+  trees: Array<{
+    name: string;
+    spentPoints: number;
+    talents: Array<Record<string, unknown>>;
+  }>;
   summary: string;
 } {
-  const result = { format: 'classic' as const, trees: [] as Array<{ name: string; spentPoints: number; talents: Array<Record<string, unknown>> }>, summary: '' };
+  const result = {
+    format: 'classic' as const,
+    trees: [] as Array<{
+      name: string;
+      spentPoints: number;
+      talents: Array<Record<string, unknown>>;
+    }>,
+    summary: '',
+  };
 
   for (const tree of trees) {
     const treeName = tree.specialization_name;
@@ -168,12 +238,18 @@ function buildClassicTalentData(
         talents: (tree.talents ?? [])
           .filter((t: Record<string, unknown>) => {
             const talent = t.talent as { name?: string } | undefined;
-            const spell = t.spell_tooltip as { spell?: { name?: string } } | undefined;
+            const spell = t.spell_tooltip as
+              | { spell?: { name?: string } }
+              | undefined;
             return talent?.name || spell?.spell?.name;
           })
           .map((t: Record<string, unknown>) => {
-            const talent = t.talent as { name?: string; id?: number } | undefined;
-            const spell = t.spell_tooltip as { spell?: { name?: string; id?: number } } | undefined;
+            const talent = t.talent as
+              | { name?: string; id?: number }
+              | undefined;
+            const spell = t.spell_tooltip as
+              | { spell?: { name?: string; id?: number } }
+              | undefined;
             return {
               name: talent?.name ?? spell?.spell?.name ?? 'Unknown',
               id: talent?.id,

@@ -39,13 +39,24 @@ export async function fetchFullProfile(
 
   let talents: unknown = null;
   if (profile.class) {
-    const inferred = await adapter.fetchSpecialization(name, realm, region, profile.class, gameVariant);
+    const inferred = await adapter.fetchSpecialization(
+      name,
+      realm,
+      region,
+      profile.class,
+      gameVariant,
+    );
     if (!profile.spec && inferred.spec) profile.spec = inferred.spec;
     if (!profile.role && inferred.role) profile.role = inferred.role;
     talents = inferred.talents ?? null;
   }
 
-  const equipment = await adapter.fetchEquipment(name, realm, region, gameVariant);
+  const equipment = await adapter.fetchEquipment(
+    name,
+    realm,
+    region,
+    gameVariant,
+  );
   return { profile, talents, equipment };
 }
 

@@ -1,4 +1,7 @@
-import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
+import type {
+  ButtonInteraction,
+  StringSelectMenuInteraction,
+} from 'discord.js';
 
 /**
  * Rate-limit tracker for signup button interactions.

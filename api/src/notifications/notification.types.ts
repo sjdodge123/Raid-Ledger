@@ -2,7 +2,10 @@
  * Notification type definitions.
  * Extracted from notification.service.ts for file size compliance (ROK-711).
  */
-import type { ChannelPrefs, NotificationType } from '../drizzle/schema/notification-preferences';
+import type {
+  ChannelPrefs,
+  NotificationType,
+} from '../drizzle/schema/notification-preferences';
 
 export type { ChannelPrefs, NotificationType };
 export type Channel = 'inApp' | 'push' | 'discord';

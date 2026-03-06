@@ -94,9 +94,6 @@ function truncateDescription(
 
   const available =
     MAX_DESCRIPTION_LENGTH - header.length - 1 - link.length - 3;
-  const truncated =
-    available > 0 ? eventDesc.slice(0, available) + '...' : '';
-  return truncated
-    ? `${header}\n${truncated}${link}`
-    : `${header}${link}`;
+  const truncated = available > 0 ? eventDesc.slice(0, available) + '...' : '';
+  return truncated ? `${header}\n${truncated}${link}` : `${header}${link}`;
 }

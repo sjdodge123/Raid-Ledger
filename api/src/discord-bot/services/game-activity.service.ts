@@ -156,15 +156,16 @@ export class GameActivityService
 
     const unresolvedNames = new Set<string>();
     for (const ev of events) {
-      if (ev.type === 'open' && !this.gameNameCache.has(ev.discordActivityName)) {
+      if (
+        ev.type === 'open' &&
+        !this.gameNameCache.has(ev.discordActivityName)
+      ) {
         unresolvedNames.add(ev.discordActivityName);
       }
     }
 
     if (unresolvedNames.size > 0) {
-      await resolveGameNames(
-        this.db, [...unresolvedNames], this.gameNameCache,
-      );
+      await resolveGameNames(this.db, [...unresolvedNames], this.gameNameCache);
     }
 
     const opens = events.filter(

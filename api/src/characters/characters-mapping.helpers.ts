@@ -8,20 +8,39 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
 /** Map a character database row to a CharacterDto. */
-export function mapCharacterToDto(row: typeof schema.characters.$inferSelect): CharacterDto {
+export function mapCharacterToDto(
+  row: typeof schema.characters.$inferSelect,
+): CharacterDto {
   const roleOverride = row.roleOverride as CharacterDto['role'];
   const role = row.role as CharacterDto['role'];
   return {
-    id: row.id, userId: row.userId, gameId: row.gameId, name: row.name,
-    realm: row.realm, class: row.class, spec: row.spec, role, roleOverride,
-    effectiveRole: roleOverride ?? role, isMain: row.isMain, itemLevel: row.itemLevel,
-    externalId: row.externalId, avatarUrl: row.avatarUrl, renderUrl: row.renderUrl ?? null,
-    level: row.level, race: row.race, faction: row.faction as CharacterDto['faction'],
-    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null, profileUrl: row.profileUrl,
-    region: row.region ?? null, gameVariant: row.gameVariant ?? null,
+    id: row.id,
+    userId: row.userId,
+    gameId: row.gameId,
+    name: row.name,
+    realm: row.realm,
+    class: row.class,
+    spec: row.spec,
+    role,
+    roleOverride,
+    effectiveRole: roleOverride ?? role,
+    isMain: row.isMain,
+    itemLevel: row.itemLevel,
+    externalId: row.externalId,
+    avatarUrl: row.avatarUrl,
+    renderUrl: row.renderUrl ?? null,
+    level: row.level,
+    race: row.race,
+    faction: row.faction as CharacterDto['faction'],
+    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
+    profileUrl: row.profileUrl,
+    region: row.region ?? null,
+    gameVariant: row.gameVariant ?? null,
     equipment: (row.equipment as CharacterDto['equipment']) ?? null,
-    talents: row.talents ?? null, displayOrder: row.displayOrder,
-    createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(),
+    talents: row.talents ?? null,
+    displayOrder: row.displayOrder,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }
 
@@ -35,7 +54,12 @@ export async function resolveMainStatus(
   const [{ charCount }] = await tx
     .select({ charCount: count() })
     .from(schema.characters)
-    .where(and(eq(schema.characters.userId, userId), eq(schema.characters.gameId, gameId)));
+    .where(
+      and(
+        eq(schema.characters.userId, userId),
+        eq(schema.characters.gameId, gameId),
+      ),
+    );
   const shouldBeMain = requestedIsMain === true || Number(charCount) === 0;
   return { shouldBeMain, charCount: Number(charCount) };
 }
@@ -49,5 +73,11 @@ export async function demoteExistingMain(
   await tx
     .update(schema.characters)
     .set({ isMain: false, updatedAt: new Date() })
-    .where(and(eq(schema.characters.userId, userId), eq(schema.characters.gameId, gameId), eq(schema.characters.isMain, true)));
+    .where(
+      and(
+        eq(schema.characters.userId, userId),
+        eq(schema.characters.gameId, gameId),
+        eq(schema.characters.isMain, true),
+      ),
+    );
 }

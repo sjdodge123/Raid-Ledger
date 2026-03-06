@@ -118,19 +118,41 @@ export const INSTANCE_CACHE_TTL = 24 * 60 * 60 * 1000;
 
 /** Spec-to-role mapping for WoW specializations */
 export const SPEC_ROLE_MAP: Record<string, 'tank' | 'healer' | 'dps'> = {
-  Blood: 'tank', Frost: 'dps', Unholy: 'dps',
-  Havoc: 'dps', Vengeance: 'tank',
-  Balance: 'dps', Feral: 'dps', Guardian: 'tank', Restoration: 'healer',
-  Devastation: 'dps', Preservation: 'healer', Augmentation: 'dps',
-  'Beast Mastery': 'dps', Marksmanship: 'dps', Survival: 'dps',
-  Arcane: 'dps', Fire: 'dps',
-  Brewmaster: 'tank', Mistweaver: 'healer', Windwalker: 'dps',
-  Holy: 'healer', Protection: 'tank', Retribution: 'dps',
-  Discipline: 'healer', Shadow: 'dps',
-  Assassination: 'dps', Outlaw: 'dps', Subtlety: 'dps',
-  Elemental: 'dps', Enhancement: 'dps',
-  Affliction: 'dps', Demonology: 'dps', Destruction: 'dps',
-  Arms: 'dps', Fury: 'dps',
+  Blood: 'tank',
+  Frost: 'dps',
+  Unholy: 'dps',
+  Havoc: 'dps',
+  Vengeance: 'tank',
+  Balance: 'dps',
+  Feral: 'dps',
+  Guardian: 'tank',
+  Restoration: 'healer',
+  Devastation: 'dps',
+  Preservation: 'healer',
+  Augmentation: 'dps',
+  'Beast Mastery': 'dps',
+  Marksmanship: 'dps',
+  Survival: 'dps',
+  Arcane: 'dps',
+  Fire: 'dps',
+  Brewmaster: 'tank',
+  Mistweaver: 'healer',
+  Windwalker: 'dps',
+  Holy: 'healer',
+  Protection: 'tank',
+  Retribution: 'dps',
+  Discipline: 'healer',
+  Shadow: 'dps',
+  Assassination: 'dps',
+  Outlaw: 'dps',
+  Subtlety: 'dps',
+  Elemental: 'dps',
+  Enhancement: 'dps',
+  Affliction: 'dps',
+  Demonology: 'dps',
+  Destruction: 'dps',
+  Arms: 'dps',
+  Fury: 'dps',
 };
 
 /**
@@ -141,7 +163,13 @@ export const CLASSIC_TALENT_TREE_ROLES: Record<
   string,
   Record<string, 'tank' | 'healer' | 'dps'>
 > = {
-  Druid: { Balance: 'dps', 'Feral Combat': 'dps', Feral: 'dps', Restoration: 'healer', Guardian: 'tank' },
+  Druid: {
+    Balance: 'dps',
+    'Feral Combat': 'dps',
+    Feral: 'dps',
+    Restoration: 'healer',
+    Guardian: 'tank',
+  },
   Warrior: { Arms: 'dps', Fury: 'dps', Protection: 'tank' },
   Paladin: { Holy: 'healer', Protection: 'tank', Retribution: 'dps' },
   Priest: { Discipline: 'healer', Holy: 'healer', Shadow: 'dps' },
@@ -163,11 +191,23 @@ export function getNamespacePrefixes(variant: WowGameVariant): {
 } {
   switch (variant) {
     case 'classic_era':
-      return { static: 'static-classic1x', dynamic: 'dynamic-classic1x', profile: 'profile-classic1x' };
+      return {
+        static: 'static-classic1x',
+        dynamic: 'dynamic-classic1x',
+        profile: 'profile-classic1x',
+      };
     case 'classic':
-      return { static: 'static-classic', dynamic: 'dynamic-classic', profile: 'profile-classic' };
+      return {
+        static: 'static-classic',
+        dynamic: 'dynamic-classic',
+        profile: 'profile-classic',
+      };
     case 'classic_anniversary':
-      return { static: 'static-classicann', dynamic: 'dynamic-classicann', profile: 'profile-classicann' };
+      return {
+        static: 'static-classicann',
+        dynamic: 'dynamic-classicann',
+        profile: 'profile-classicann',
+      };
     default:
       return { static: 'static', dynamic: 'dynamic', profile: 'profile' };
   }

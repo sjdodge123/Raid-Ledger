@@ -37,20 +37,18 @@ export interface InMemorySession {
 /**
  * Convert a DB voice session row to DTO format.
  */
-export function toVoiceSessionDto(
-  session: {
-    id: number;
-    eventId: number;
-    userId: number | null;
-    discordUserId: string;
-    discordUsername: string;
-    firstJoinAt: Date;
-    lastLeaveAt: Date | null;
-    totalDurationSec: number;
-    segments: unknown;
-    classification: string | null;
-  },
-): EventVoiceSessionDto {
+export function toVoiceSessionDto(session: {
+  id: number;
+  eventId: number;
+  userId: number | null;
+  discordUserId: string;
+  discordUsername: string;
+  firstJoinAt: Date;
+  lastLeaveAt: Date | null;
+  totalDurationSec: number;
+  segments: unknown;
+  classification: string | null;
+}): EventVoiceSessionDto {
   return {
     id: session.id,
     eventId: session.eventId,
@@ -96,7 +94,8 @@ export function buildAttendanceSummary(
     full: sessions.filter((s) => s.classification === 'full').length,
     partial: sessions.filter((s) => s.classification === 'partial').length,
     late: sessions.filter((s) => s.classification === 'late').length,
-    earlyLeaver: sessions.filter((s) => s.classification === 'early_leaver').length,
+    earlyLeaver: sessions.filter((s) => s.classification === 'early_leaver')
+      .length,
     noShow: sessions.filter((s) => s.classification === 'no_show').length,
     unclassified: sessions.filter((s) => s.classification === null).length,
     sessions: dtos,
@@ -193,9 +192,10 @@ export function classifyVoiceSession(
 /**
  * Snapshot active segment data for a flush.
  */
-export function snapshotSessionForFlush(
-  session: InMemorySession,
-): { segments: InMemorySession['segments']; totalDurationSec: number } {
+export function snapshotSessionForFlush(session: InMemorySession): {
+  segments: InMemorySession['segments'];
+  totalDurationSec: number;
+} {
   const snapshotSegments = [...session.segments];
   let snapshotTotal = session.totalDurationSec;
 

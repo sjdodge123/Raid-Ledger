@@ -122,7 +122,9 @@ describe('EventsAttendanceController.getAdHocRoster (ROK-530)', () => {
       ],
     }).compile();
 
-    controller = module.get<EventsAttendanceController>(EventsAttendanceController);
+    controller = module.get<EventsAttendanceController>(
+      EventsAttendanceController,
+    );
   });
 
   // ── Ad-hoc event delegation ──────────────────────────────────────────────

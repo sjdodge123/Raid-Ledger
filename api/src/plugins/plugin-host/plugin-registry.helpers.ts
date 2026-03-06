@@ -11,28 +11,43 @@ import type { PluginManifest } from './plugin-manifest.interface';
 import type { PluginIntegrationInfoDto } from '@raid-ledger/contract';
 
 /** Resolve integration info for a plugin manifest, batch-fetching credential keys. */
-export async function resolveIntegrationInfo(db: PostgresJsDatabase<typeof schema>, manifest: PluginManifest): Promise<PluginIntegrationInfoDto[]> {
+export async function resolveIntegrationInfo(
+  db: PostgresJsDatabase<typeof schema>,
+  manifest: PluginManifest,
+): Promise<PluginIntegrationInfoDto[]> {
   if (!manifest.integrations?.length) return [];
 
-  const allCredentialKeys = manifest.integrations.flatMap((i) => i.credentialKeys);
+  const allCredentialKeys = manifest.integrations.flatMap(
+    (i) => i.credentialKeys,
+  );
   const existingKeys = new Set<string>();
   if (allCredentialKeys.length > 0) {
-    const rows = await db.select({ key: appSettings.key }).from(appSettings).where(inArray(appSettings.key, allCredentialKeys));
+    const rows = await db
+      .select({ key: appSettings.key })
+      .from(appSettings)
+      .where(inArray(appSettings.key, allCredentialKeys));
     for (const row of rows) existingKeys.add(row.key);
   }
 
   return manifest.integrations.map((integration) => ({
-    key: integration.key, name: integration.name, description: integration.description,
-    icon: integration.icon, configured: integration.credentialKeys.every((k) => existingKeys.has(k)),
+    key: integration.key,
+    name: integration.name,
+    description: integration.description,
+    icon: integration.icon,
+    configured: integration.credentialKeys.every((k) => existingKeys.has(k)),
     credentialLabels: integration.credentialLabels,
   }));
 }
 
 /** Clean up settings and credential keys for an uninstalled plugin. */
-export async function cleanupPluginSettings(db: PostgresJsDatabase<typeof schema>, manifest: PluginManifest): Promise<number> {
+export async function cleanupPluginSettings(
+  db: PostgresJsDatabase<typeof schema>,
+  manifest: PluginManifest,
+): Promise<number> {
   const keysToDelete: string[] = [...(manifest.settingKeys ?? [])];
   if (manifest.integrations) {
-    for (const integration of manifest.integrations) keysToDelete.push(...integration.credentialKeys);
+    for (const integration of manifest.integrations)
+      keysToDelete.push(...integration.credentialKeys);
   }
   for (const key of keysToDelete) {
     await db.delete(appSettings).where(eq(appSettings.key, key));
@@ -41,10 +56,21 @@ export async function cleanupPluginSettings(db: PostgresJsDatabase<typeof schema
 }
 
 /** Validate that all plugin dependencies are installed. */
-export async function validateDependencies(db: PostgresJsDatabase<typeof schema>, manifest: PluginManifest, slug: string): Promise<void> {
+export async function validateDependencies(
+  db: PostgresJsDatabase<typeof schema>,
+  manifest: PluginManifest,
+  slug: string,
+): Promise<void> {
   if (!manifest.dependencies?.length) return;
   for (const dep of manifest.dependencies) {
-    const depRecord = await db.select().from(plugins).where(eq(plugins.slug, dep)).limit(1);
-    if (depRecord.length === 0) throw new BadRequestException(`Dependency "${dep}" must be installed before "${slug}"`);
+    const depRecord = await db
+      .select()
+      .from(plugins)
+      .where(eq(plugins.slug, dep))
+      .limit(1);
+    if (depRecord.length === 0)
+      throw new BadRequestException(
+        `Dependency "${dep}" must be installed before "${slug}"`,
+      );
   }
 }

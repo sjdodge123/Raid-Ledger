@@ -3,8 +3,18 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { eq, sql, ilike, asc, and, gte, desc, ne } from 'drizzle-orm';
-import type { UserRole, ActivityPeriod, GameActivityEntryDto } from '@raid-ledger/contract';
-import { findAllByGame, findAllUsers, findAllWithRolesQuery, fetchGameActivity, deleteUserTransaction } from './users-query.helpers';
+import type {
+  UserRole,
+  ActivityPeriod,
+  GameActivityEntryDto,
+} from '@raid-ledger/contract';
+import {
+  findAllByGame,
+  findAllUsers,
+  findAllWithRolesQuery,
+  fetchGameActivity,
+  deleteUserTransaction,
+} from './users-query.helpers';
 
 /** Number of days to look back for "recently joined" users. */
 export const RECENT_MEMBER_DAYS = 30;
@@ -19,27 +29,56 @@ export class UsersService {
   private cachedUserCount: number | null = null;
   private userCountCachedAt = 0;
 
-  constructor(@Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>) {}
+  constructor(
+    @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
+  ) {}
 
   async findByDiscordId(discordId: string) {
-    return this.db.query.users.findFirst({ where: eq(schema.users.discordId, discordId) });
+    return this.db.query.users.findFirst({
+      where: eq(schema.users.discordId, discordId),
+    });
   }
 
-  async createOrUpdate(profile: { discordId: string; username: string; avatar?: string }) {
+  async createOrUpdate(profile: {
+    discordId: string;
+    username: string;
+    avatar?: string;
+  }) {
     const existing = await this.findByDiscordId(profile.discordId);
     if (existing) {
-      const [updated] = await this.db.update(schema.users).set({ username: profile.username, avatar: profile.avatar, updatedAt: new Date() }).where(eq(schema.users.discordId, profile.discordId)).returning();
+      const [updated] = await this.db
+        .update(schema.users)
+        .set({
+          username: profile.username,
+          avatar: profile.avatar,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.discordId, profile.discordId))
+        .returning();
       return updated;
     }
-    const [created] = await this.db.insert(schema.users).values({ discordId: profile.discordId, username: profile.username, avatar: profile.avatar }).returning();
+    const [created] = await this.db
+      .insert(schema.users)
+      .values({
+        discordId: profile.discordId,
+        username: profile.username,
+        avatar: profile.avatar,
+      })
+      .returning();
     this.invalidateCountCache();
     return created;
   }
 
-  async findById(id: number) { return this.db.query.users.findFirst({ where: eq(schema.users.id, id) }); }
+  async findById(id: number) {
+    return this.db.query.users.findFirst({ where: eq(schema.users.id, id) });
+  }
 
   async setRole(userId: number, role: UserRole) {
-    const [updated] = await this.db.update(schema.users).set({ role, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
@@ -49,20 +88,40 @@ export class UsersService {
   }
 
   /** Link a Discord account to an existing user. */
-  async linkDiscord(userId: number, discordId: string, username: string, avatar?: string) {
+  async linkDiscord(
+    userId: number,
+    discordId: string,
+    username: string,
+    avatar?: string,
+  ) {
     const existingWithDiscord = await this.findByDiscordId(discordId);
     if (existingWithDiscord && existingWithDiscord.id !== userId) {
-      throw new ConflictException('This Discord account is already linked to another user');
+      throw new ConflictException(
+        'This Discord account is already linked to another user',
+      );
     }
-    const [updated] = await this.db.update(schema.users).set({ discordId, username, avatar, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ discordId, username, avatar, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Unlink Discord from a user account. Preserves ID as 'unlinked:<id>'. */
   async unlinkDiscord(userId: number) {
     const user = await this.findById(userId);
-    if (!user || !user.discordId || user.discordId.startsWith('local:')) return user;
-    const [updated] = await this.db.update(schema.users).set({ discordId: `unlinked:${user.discordId}`, avatar: null, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    if (!user || !user.discordId || user.discordId.startsWith('local:'))
+      return user;
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({
+        discordId: `unlinked:${user.discordId}`,
+        avatar: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
@@ -70,7 +129,9 @@ export class UsersService {
   async findByDiscordIdIncludingUnlinked(discordId: string) {
     const exact = await this.findByDiscordId(discordId);
     if (exact) return exact;
-    const unlinked = await this.db.query.users.findFirst({ where: eq(schema.users.discordId, `unlinked:${discordId}`) });
+    const unlinked = await this.db.query.users.findFirst({
+      where: eq(schema.users.discordId, `unlinked:${discordId}`),
+    });
     return unlinked ?? null;
   }
 
@@ -79,99 +140,174 @@ export class UsersService {
     const user = await this.findById(userId);
     if (!user?.discordId?.startsWith('unlinked:')) return user;
     const rawDiscordId = user.discordId.replace('unlinked:', '');
-    const [updated] = await this.db.update(schema.users).set({ discordId: rawDiscordId, username, avatar, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ discordId: rawDiscordId, username, avatar, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Find a user by Steam ID (ROK-417). */
   async findBySteamId(steamId: string) {
-    const result = await this.db.query.users.findFirst({ where: eq(schema.users.steamId, steamId) });
+    const result = await this.db.query.users.findFirst({
+      where: eq(schema.users.steamId, steamId),
+    });
     return result ?? null;
   }
 
   /** Link a Steam account to an existing user (ROK-417). */
   async linkSteam(userId: number, steamId: string) {
     const existing = await this.findBySteamId(steamId);
-    if (existing && existing.id !== userId) throw new ConflictException('This Steam account is already linked to another user');
-    const [updated] = await this.db.update(schema.users).set({ steamId, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    if (existing && existing.id !== userId)
+      throw new ConflictException(
+        'This Steam account is already linked to another user',
+      );
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ steamId, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Unlink Steam from a user account (ROK-417). */
   async unlinkSteam(userId: number) {
-    const [updated] = await this.db.update(schema.users).set({ steamId: null, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ steamId: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Count total users with 5-minute cache (ROK-175 AC-4, ROK-662). */
   async count(): Promise<number> {
-    if (this.cachedUserCount !== null && Date.now() - this.userCountCachedAt < USER_COUNT_CACHE_TTL_MS) return this.cachedUserCount;
-    const result = await this.db.select({ count: sql<number>`count(*)` }).from(schema.users);
+    if (
+      this.cachedUserCount !== null &&
+      Date.now() - this.userCountCachedAt < USER_COUNT_CACHE_TTL_MS
+    )
+      return this.cachedUserCount;
+    const result = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users);
     this.cachedUserCount = Number(result[0].count);
     this.userCountCachedAt = Date.now();
     return this.cachedUserCount;
   }
 
   /** Invalidate cached user count. */
-  invalidateCountCache(): void { this.cachedUserCount = null; this.userCountCachedAt = 0; }
+  invalidateCountCache(): void {
+    this.cachedUserCount = null;
+    this.userCountCachedAt = 0;
+  }
 
   /** Paginated list of all users with optional search and gameId filter. */
   async findAll(page: number, limit: number, search?: string, gameId?: number) {
-    return gameId ? findAllByGame(this.db, page, limit, search, gameId) : findAllUsers(this.db, page, limit, search);
+    return gameId
+      ? findAllByGame(this.db, page, limit, search, gameId)
+      : findAllUsers(this.db, page, limit, search);
   }
 
   /** Find recently joined users (last 30 days, max 10) (ROK-298). */
   async findRecent() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - RECENT_MEMBER_DAYS);
-    return this.db.select({
-      id: schema.users.id, username: schema.users.username, avatar: schema.users.avatar,
-      discordId: schema.users.discordId, customAvatarUrl: schema.users.customAvatarUrl, createdAt: schema.users.createdAt,
-    }).from(schema.users).where(gte(schema.users.createdAt, cutoff)).orderBy(desc(schema.users.createdAt)).limit(RECENT_MEMBER_LIMIT);
+    return this.db
+      .select({
+        id: schema.users.id,
+        username: schema.users.username,
+        avatar: schema.users.avatar,
+        discordId: schema.users.discordId,
+        customAvatarUrl: schema.users.customAvatarUrl,
+        createdAt: schema.users.createdAt,
+      })
+      .from(schema.users)
+      .where(gte(schema.users.createdAt, cutoff))
+      .orderBy(desc(schema.users.createdAt))
+      .limit(RECENT_MEMBER_LIMIT);
   }
 
   async setCustomAvatar(userId: number, url: string | null) {
-    const [updated] = await this.db.update(schema.users).set({ customAvatarUrl: url, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ customAvatarUrl: url, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Check if a display name is available (ROK-219). */
-  async checkDisplayNameAvailability(displayName: string, excludeUserId?: number): Promise<boolean> {
+  async checkDisplayNameAvailability(
+    displayName: string,
+    excludeUserId?: number,
+  ): Promise<boolean> {
     const conditions = excludeUserId
-      ? and(ilike(schema.users.displayName, displayName), ne(schema.users.id, excludeUserId))
+      ? and(
+          ilike(schema.users.displayName, displayName),
+          ne(schema.users.id, excludeUserId),
+        )
       : ilike(schema.users.displayName, displayName);
-    const [result] = await this.db.select({ count: sql<number>`count(*)` }).from(schema.users).where(conditions);
+    const [result] = await this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(schema.users)
+      .where(conditions);
     return Number(result.count) === 0;
   }
 
   /** Set a user's display name (ROK-219). */
   async setDisplayName(userId: number, displayName: string) {
-    const [updated] = await this.db.update(schema.users).set({ displayName, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ displayName, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Mark onboarding as completed (ROK-219). */
   async completeOnboarding(userId: number) {
     const now = new Date();
-    const [updated] = await this.db.update(schema.users).set({ onboardingCompletedAt: now, updatedAt: now }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ onboardingCompletedAt: now, updatedAt: now })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Reset onboarding (ROK-219). */
   async resetOnboarding(userId: number) {
-    const [updated] = await this.db.update(schema.users).set({ onboardingCompletedAt: null, updatedAt: new Date() }).where(eq(schema.users.id, userId)).returning();
+    const [updated] = await this.db
+      .update(schema.users)
+      .set({ onboardingCompletedAt: null, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId))
+      .returning();
     return updated;
   }
 
   /** Fetch games a user has hearted (ROK-282). */
   async getHeartedGames(userId: number) {
-    return this.db.select({ id: schema.games.id, igdbId: schema.games.igdbId, name: schema.games.name, slug: schema.games.slug, coverUrl: schema.games.coverUrl })
-      .from(schema.gameInterests).innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
-      .where(eq(schema.gameInterests.userId, userId)).orderBy(asc(schema.games.name));
+    return this.db
+      .select({
+        id: schema.games.id,
+        igdbId: schema.games.igdbId,
+        name: schema.games.name,
+        slug: schema.games.slug,
+        coverUrl: schema.games.coverUrl,
+      })
+      .from(schema.gameInterests)
+      .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
+      .where(eq(schema.gameInterests.userId, userId))
+      .orderBy(asc(schema.games.name));
   }
 
   /** Fetch a user's game activity (ROK-443). */
-  async getUserActivity(userId: number, period: ActivityPeriod, requesterId?: number): Promise<GameActivityEntryDto[]> {
+  async getUserActivity(
+    userId: number,
+    period: ActivityPeriod,
+    requesterId?: number,
+  ): Promise<GameActivityEntryDto[]> {
     return fetchGameActivity(this.db, userId, period, requesterId);
   }
 
@@ -179,11 +315,16 @@ export class UsersService {
   async deleteUser(userId: number, reassignToUserId: number): Promise<void> {
     await deleteUserTransaction(this.db, userId, reassignToUserId);
     this.invalidateCountCache();
-    this.logger.log(`User ${userId} deleted. Events reassigned to user ${reassignToUserId}.`);
+    this.logger.log(
+      `User ${userId} deleted. Events reassigned to user ${reassignToUserId}.`,
+    );
   }
 
   /** Find the instance admin (first admin user by ID). */
   async findAdmin(): Promise<{ id: number } | undefined> {
-    return this.db.query.users.findFirst({ where: eq(schema.users.role, 'admin'), columns: { id: true } });
+    return this.db.query.users.findFirst({
+      where: eq(schema.users.role, 'admin'),
+      columns: { id: true },
+    });
   }
 }

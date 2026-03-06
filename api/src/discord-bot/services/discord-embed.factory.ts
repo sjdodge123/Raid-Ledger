@@ -128,7 +128,8 @@ export class DiscordEmbedFactory {
     context: EmbedContext,
   ): { embed: EmbedBuilder; row?: ActionRowBuilder<ButtonBuilder> } {
     return this.buildEventEmbed(event, context, {
-      state: EMBED_STATES.POSTED, buttons: 'signup',
+      state: EMBED_STATES.POSTED,
+      buttons: 'signup',
     });
   }
 
@@ -160,8 +161,7 @@ export class DiscordEmbedFactory {
       .addFields({
         name: '\uD83D\uDC65 Players',
         value:
-          participants.map((p) => `<@${p.discordUserId}>`).join(', ') ||
-          'None',
+          participants.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
       })
       .setTimestamp()
       .setFooter({ text: context.communityName ?? 'Raid Ledger' });
@@ -238,9 +238,7 @@ export class DiscordEmbedFactory {
     const clientUrl = context.clientUrl || process.env.CLIENT_URL;
     if (clientUrl) embed.setURL(`${clientUrl}/events/${event.id}`);
 
-    const bodyLines = this.buildBodyLines(
-      event, timeDisplay, durationStr,
-    );
+    const bodyLines = this.buildBodyLines(event, timeDisplay, durationStr);
 
     const roster = buildRosterLine(event, this.emojiService);
     if (roster) {
@@ -303,7 +301,8 @@ export class DiscordEmbedFactory {
     const bodyLines: string[] = [];
     if (event.game?.name) bodyLines.push(`\uD83C\uDFAE **${event.game.name}**`);
     bodyLines.push(`\uD83D\uDCC6 ${timeDisplay}`);
-    if (event.voiceChannelId) bodyLines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
+    if (event.voiceChannelId)
+      bodyLines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
     if (event.description) {
       const excerpt =
         event.description.length > 200

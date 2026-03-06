@@ -72,10 +72,15 @@ export class GameTimeService {
   /** Get a user's game time template (raw slots, no status). */
   async getTemplate(userId: number): Promise<{ slots: TemplateSlot[] }> {
     const rows = await this.db
-      .select({ dayOfWeek: schema.gameTimeTemplates.dayOfWeek, startHour: schema.gameTimeTemplates.startHour })
+      .select({
+        dayOfWeek: schema.gameTimeTemplates.dayOfWeek,
+        startHour: schema.gameTimeTemplates.startHour,
+      })
       .from(schema.gameTimeTemplates)
       .where(eq(schema.gameTimeTemplates.userId, userId));
-    return { slots: rows.map((r) => ({ dayOfWeek: r.dayOfWeek, hour: r.startHour })) };
+    return {
+      slots: rows.map((r) => ({ dayOfWeek: r.dayOfWeek, hour: r.startHour })),
+    };
   }
 
   /**
@@ -83,8 +88,14 @@ export class GameTimeService {
    * Committed-slot preservation: template slots overlapping active event
    * signups are automatically preserved server-side.
    */
-  async saveTemplate(userId: number, slots: TemplateSlot[]): Promise<{ slots: TemplateSlot[] }> {
-    const dbSlots = slots.map((s) => ({ ...s, dayOfWeek: (s.dayOfWeek + 6) % 7 }));
+  async saveTemplate(
+    userId: number,
+    slots: TemplateSlot[],
+  ): Promise<{ slots: TemplateSlot[] }> {
+    const dbSlots = slots.map((s) => ({
+      ...s,
+      dayOfWeek: (s.dayOfWeek + 6) % 7,
+    }));
     const committedDbKeys = await this.getCommittedTemplateKeys(userId);
     const payloadKeys = new Set(dbSlots.map((s) => `${s.dayOfWeek}:${s.hour}`));
     const preservedSlots = committedDbKeys
@@ -93,38 +104,61 @@ export class GameTimeService {
     const mergedDbSlots = [...dbSlots, ...preservedSlots];
     await this.performTemplateSave(userId, mergedDbSlots);
     this.invalidateUserCache(userId);
-    const preservedDisplay = preservedSlots.map((s) => ({ dayOfWeek: (s.dayOfWeek + 1) % 7, hour: s.hour }));
+    const preservedDisplay = preservedSlots.map((s) => ({
+      dayOfWeek: (s.dayOfWeek + 1) % 7,
+      hour: s.hour,
+    }));
     return { slots: [...slots, ...preservedDisplay] };
   }
 
   /** Persist template slots in a transaction. */
-  private async performTemplateSave(userId: number, mergedDbSlots: Array<{ dayOfWeek: number; hour: number }>): Promise<void> {
+  private async performTemplateSave(
+    userId: number,
+    mergedDbSlots: Array<{ dayOfWeek: number; hour: number }>,
+  ): Promise<void> {
     await this.db.transaction(async (tx) => {
-      await tx.delete(schema.gameTimeTemplates).where(eq(schema.gameTimeTemplates.userId, userId));
+      await tx
+        .delete(schema.gameTimeTemplates)
+        .where(eq(schema.gameTimeTemplates.userId, userId));
       if (mergedDbSlots.length > 0) {
         const now = new Date();
         await tx.insert(schema.gameTimeTemplates).values(
-          mergedDbSlots.map((s) => ({ userId, dayOfWeek: s.dayOfWeek, startHour: s.hour, createdAt: now, updatedAt: now })),
+          mergedDbSlots.map((s) => ({
+            userId,
+            dayOfWeek: s.dayOfWeek,
+            startHour: s.hour,
+            createdAt: now,
+            updatedAt: now,
+          })),
         );
       }
     });
   }
 
   /** Get committed template slot keys (DB convention: 0=Mon). */
-  private async getCommittedTemplateKeys(userId: number): Promise<Array<{ dayOfWeek: number; hour: number }>> {
+  private async getCommittedTemplateKeys(
+    userId: number,
+  ): Promise<Array<{ dayOfWeek: number; hour: number }>> {
     const existingSlots = await this.db
-      .select({ dayOfWeek: schema.gameTimeTemplates.dayOfWeek, startHour: schema.gameTimeTemplates.startHour })
+      .select({
+        dayOfWeek: schema.gameTimeTemplates.dayOfWeek,
+        startHour: schema.gameTimeTemplates.startHour,
+      })
       .from(schema.gameTimeTemplates)
       .where(eq(schema.gameTimeTemplates.userId, userId));
     if (existingSlots.length === 0) return [];
     const signedUpEvents = await this.fetchUpcomingSignedUpEvents(userId);
     if (signedUpEvents.length === 0) return [];
     const committedKeys = this.buildCommittedDbKeys(signedUpEvents);
-    return existingSlots.filter((s) => committedKeys.has(`${s.dayOfWeek}:${s.startHour}`)).map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.startHour }));
+    return existingSlots
+      .filter((s) => committedKeys.has(`${s.dayOfWeek}:${s.startHour}`))
+      .map((s) => ({ dayOfWeek: s.dayOfWeek, hour: s.startHour }));
   }
 
   /** Fetch signed-up events within the next 2 weeks. */
-  private async fetchUpcomingSignedUpEvents(userId: number): Promise<Array<{ duration: [Date, Date] }>> {
+  private async fetchUpcomingSignedUpEvents(
+    userId: number,
+  ): Promise<Array<{ duration: [Date, Date] }>> {
     const now = new Date();
     const twoWeeksLater = new Date(now);
     twoWeeksLater.setDate(twoWeeksLater.getDate() + 14);
@@ -132,12 +166,22 @@ export class GameTimeService {
     return this.db
       .select({ duration: schema.events.duration })
       .from(schema.eventSignups)
-      .innerJoin(schema.events, eq(schema.eventSignups.eventId, schema.events.id))
-      .where(and(eq(schema.eventSignups.userId, userId), sql`${schema.events.duration} && ${rangeStr}::tsrange`));
+      .innerJoin(
+        schema.events,
+        eq(schema.eventSignups.eventId, schema.events.id),
+      )
+      .where(
+        and(
+          eq(schema.eventSignups.userId, userId),
+          sql`${schema.events.duration} && ${rangeStr}::tsrange`,
+        ),
+      );
   }
 
   /** Convert event durations to DB-convention day:hour keys. */
-  private buildCommittedDbKeys(events: Array<{ duration: [Date, Date] }>): Set<string> {
+  private buildCommittedDbKeys(
+    events: Array<{ duration: [Date, Date] }>,
+  ): Set<string> {
     const committedKeys = new Set<string>();
     for (const event of events) {
       const [eventStart, eventEnd] = event.duration;
@@ -154,42 +198,95 @@ export class GameTimeService {
   }
 
   /** Save per-hour date-specific overrides (upsert). */
-  async saveOverrides(userId: number, overrides: Array<{ date: string; hour: number; status: string }>): Promise<void> {
+  async saveOverrides(
+    userId: number,
+    overrides: Array<{ date: string; hour: number; status: string }>,
+  ): Promise<void> {
     if (overrides.length === 0) return;
     this.invalidateUserCache(userId);
     const now = new Date();
     await this.db.transaction(async (tx) => {
       for (const o of overrides) {
-        await tx.insert(schema.gameTimeOverrides).values({ userId, date: o.date, hour: o.hour, status: o.status, createdAt: now, updatedAt: now })
-          .onConflictDoUpdate({ target: [schema.gameTimeOverrides.userId, schema.gameTimeOverrides.date, schema.gameTimeOverrides.hour], set: { status: o.status, updatedAt: now } });
+        await tx
+          .insert(schema.gameTimeOverrides)
+          .values({
+            userId,
+            date: o.date,
+            hour: o.hour,
+            status: o.status,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [
+              schema.gameTimeOverrides.userId,
+              schema.gameTimeOverrides.date,
+              schema.gameTimeOverrides.hour,
+            ],
+            set: { status: o.status, updatedAt: now },
+          });
       }
     });
   }
 
   /** Create an absence range. */
-  async createAbsence(userId: number, input: { startDate: string; endDate: string; reason?: string }): Promise<AbsenceRecord> {
+  async createAbsence(
+    userId: number,
+    input: { startDate: string; endDate: string; reason?: string },
+  ): Promise<AbsenceRecord> {
     this.invalidateUserCache(userId);
     const now = new Date();
-    const [row] = await this.db.insert(schema.gameTimeAbsences)
-      .values({ userId, startDate: input.startDate, endDate: input.endDate, reason: input.reason ?? null, createdAt: now, updatedAt: now })
-      .returning({ id: schema.gameTimeAbsences.id, startDate: schema.gameTimeAbsences.startDate, endDate: schema.gameTimeAbsences.endDate, reason: schema.gameTimeAbsences.reason });
+    const [row] = await this.db
+      .insert(schema.gameTimeAbsences)
+      .values({
+        userId,
+        startDate: input.startDate,
+        endDate: input.endDate,
+        reason: input.reason ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({
+        id: schema.gameTimeAbsences.id,
+        startDate: schema.gameTimeAbsences.startDate,
+        endDate: schema.gameTimeAbsences.endDate,
+        reason: schema.gameTimeAbsences.reason,
+      });
     return row;
   }
 
   /** Delete an absence. */
   async deleteAbsence(userId: number, absenceId: number): Promise<void> {
     this.invalidateUserCache(userId);
-    await this.db.delete(schema.gameTimeAbsences).where(and(eq(schema.gameTimeAbsences.id, absenceId), eq(schema.gameTimeAbsences.userId, userId)));
+    await this.db
+      .delete(schema.gameTimeAbsences)
+      .where(
+        and(
+          eq(schema.gameTimeAbsences.id, absenceId),
+          eq(schema.gameTimeAbsences.userId, userId),
+        ),
+      );
   }
 
   /** Get all absences for a user. */
   async getAbsences(userId: number): Promise<AbsenceRecord[]> {
-    return this.db.select({ id: schema.gameTimeAbsences.id, startDate: schema.gameTimeAbsences.startDate, endDate: schema.gameTimeAbsences.endDate, reason: schema.gameTimeAbsences.reason })
-      .from(schema.gameTimeAbsences).where(eq(schema.gameTimeAbsences.userId, userId));
+    return this.db
+      .select({
+        id: schema.gameTimeAbsences.id,
+        startDate: schema.gameTimeAbsences.startDate,
+        endDate: schema.gameTimeAbsences.endDate,
+        reason: schema.gameTimeAbsences.reason,
+      })
+      .from(schema.gameTimeAbsences)
+      .where(eq(schema.gameTimeAbsences.userId, userId));
   }
 
   /** Get composite view: merge template with event commitments, overrides, and absences. */
-  async getCompositeView(userId: number, weekStart: Date, tzOffset = 0): Promise<CompositeViewResult> {
+  async getCompositeView(
+    userId: number,
+    weekStart: Date,
+    tzOffset = 0,
+  ): Promise<CompositeViewResult> {
     const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}`;
     const cached = this.getCached<CompositeViewResult>(cacheKey);
     if (cached) return cached;
@@ -199,11 +296,18 @@ export class GameTimeService {
   }
 
   /** Build the composite result from all data sources. */
-  private async buildCompositeResult(userId: number, weekStart: Date, tzOffset: number): Promise<CompositeViewResult> {
+  private async buildCompositeResult(
+    userId: number,
+    weekStart: Date,
+    tzOffset: number,
+  ): Promise<CompositeViewResult> {
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 7);
     const template = await this.getTemplate(userId);
-    const remapped = template.slots.map((s) => ({ ...s, dayOfWeek: (s.dayOfWeek + 1) % 7 }));
+    const remapped = template.slots.map((s) => ({
+      ...s,
+      dayOfWeek: (s.dayOfWeek + 1) % 7,
+    }));
     const [startDate, endDate] = this.weekDateRange(weekStart, weekEnd);
     const [signedUpEvents, overrideRows, absenceRows] = await Promise.all([
       fetchWeekSignedUpEvents(this.db, userId, weekStart, weekEnd),
@@ -212,11 +316,23 @@ export class GameTimeService {
     ]);
     const eventIds = [...new Set(signedUpEvents.map((e) => e.eventId))];
     const signupsMap = await fetchSignupsPreview(this.db, eventIds);
-    return assembleCompositeView(remapped, signedUpEvents, overrideRows, absenceRows, signupsMap, weekStart, weekEnd, tzOffset);
+    return assembleCompositeView(
+      remapped,
+      signedUpEvents,
+      overrideRows,
+      absenceRows,
+      signupsMap,
+      weekStart,
+      weekEnd,
+      tzOffset,
+    );
   }
 
   /** Compute week date range strings for override/absence queries. */
   private weekDateRange(weekStart: Date, weekEnd: Date): [string, string] {
-    return [weekStart.toISOString().split('T')[0], new Date(weekEnd.getTime() - 1).toISOString().split('T')[0]];
+    return [
+      weekStart.toISOString().split('T')[0],
+      new Date(weekEnd.getTime() - 1).toISOString().split('T')[0],
+    ];
   }
 }

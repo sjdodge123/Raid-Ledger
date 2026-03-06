@@ -48,13 +48,18 @@ export class PugInviteService {
         await this.handleMemberFound(pugSlotId, eventId, member, event);
       } else {
         await this.handleMemberNotFound(
-          pugSlotId, eventId, discordUsername, creatorUserId,
+          pugSlotId,
+          eventId,
+          discordUsername,
+          creatorUserId,
         );
       }
     } catch (error) {
       this.logger.error(
         'Failed to process PUG invite for %s (slot: %s):',
-        discordUsername, pugSlotId, error,
+        discordUsername,
+        pugSlotId,
+        error,
       );
     }
   }
@@ -141,12 +146,18 @@ export class PugInviteService {
 
     const voiceChannelId =
       await this.channelResolver.resolveVoiceChannelForEvent(
-        gameId, event.recurrenceGroupId,
+        gameId,
+        event.recurrenceGroupId,
       );
 
     const { embed, row } = buildMemberInviteEmbed(
-      eventId, notificationId, event,
-      communityName, clientUrl, timezone, voiceChannelId,
+      eventId,
+      notificationId,
+      event,
+      communityName,
+      clientUrl,
+      timezone,
+      voiceChannelId,
     );
 
     try {
@@ -200,12 +211,18 @@ export class PugInviteService {
 
     try {
       await this.sendPugInviteDm(
-        slot.id, discordUserId, slot.eventId, slot.role, event,
+        slot.id,
+        discordUserId,
+        slot.eventId,
+        slot.role,
+        event,
       );
     } catch (error) {
       this.logger.error(
         'Failed to auto-invite %s for slot %s:',
-        discordUsername, slot.id, error,
+        discordUsername,
+        slot.id,
+        error,
       );
     }
   }
@@ -225,8 +242,7 @@ export class PugInviteService {
         limit: 10,
       });
       const match = members.find(
-        (m) =>
-          m.user.username.toLowerCase() === discordUsername.toLowerCase(),
+        (m) => m.user.username.toLowerCase() === discordUsername.toLowerCase(),
       );
       return match
         ? { id: match.user.id, avatarHash: match.user.avatar }
@@ -260,9 +276,7 @@ export class PugInviteService {
       .limit(1);
     if (!slot) return;
 
-    await this.sendPugInviteDm(
-      pugSlotId, member.id, eventId, slot.role, event,
-    );
+    await this.sendPugInviteDm(pugSlotId, member.id, eventId, slot.role, event);
   }
 
   private async handleMemberNotFound(
@@ -281,7 +295,9 @@ export class PugInviteService {
 
     if (creatorUserId) {
       await this.notifyCreatorWithInvite(
-        creatorUserId, discordUsername, inviteUrl,
+        creatorUserId,
+        discordUsername,
+        inviteUrl,
       );
     }
   }
@@ -323,12 +339,18 @@ export class PugInviteService {
     const gameId = event.gameId ?? null;
     const voiceChannelId =
       await this.channelResolver.resolveVoiceChannelForEvent(
-        gameId, event.recurrenceGroupId,
+        gameId,
+        event.recurrenceGroupId,
       );
 
     const { embed, row } = buildPugInviteEmbed(
-      pugSlotId, eventId, event,
-      communityName, clientUrl, timezone, voiceChannelId,
+      pugSlotId,
+      eventId,
+      event,
+      communityName,
+      clientUrl,
+      timezone,
+      voiceChannelId,
     );
 
     try {

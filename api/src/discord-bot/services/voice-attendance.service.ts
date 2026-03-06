@@ -16,7 +16,6 @@ import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import type {
-  VoiceClassification,
   VoiceSessionsResponseDto,
   VoiceAttendanceSummaryDto,
   AdHocRosterResponseDto,
@@ -97,17 +96,28 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       if (existing.isActive) return;
       existing.isActive = true;
       existing.activeSegmentStart = now;
-      existing.segments.push({ joinAt: now.toISOString(), leaveAt: null, durationSec: 0 });
+      existing.segments.push({
+        joinAt: now.toISOString(),
+        leaveAt: null,
+        durationSec: 0,
+      });
       existing.dirty = true;
       return;
     }
 
     this.sessions.set(key, {
-      eventId, userId, discordUserId, discordUsername,
+      eventId,
+      userId,
+      discordUserId,
+      discordUsername,
       discordAvatarHash: discordAvatarHash ?? null,
-      firstJoinAt: now, lastLeaveAt: null, totalDurationSec: 0,
+      firstJoinAt: now,
+      lastLeaveAt: null,
+      totalDurationSec: 0,
       segments: [{ joinAt: now.toISOString(), leaveAt: null, durationSec: 0 }],
-      isActive: true, activeSegmentStart: now, dirty: true,
+      isActive: true,
+      activeSegmentStart: now,
+      dirty: true,
     });
   }
 
@@ -125,7 +135,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     if (lastSegment && lastSegment.leaveAt === null) {
       lastSegment.leaveAt = now.toISOString();
       const segDuration = session.activeSegmentStart
-        ? Math.floor((now.getTime() - session.activeSegmentStart.getTime()) / 1000)
+        ? Math.floor(
+            (now.getTime() - session.activeSegmentStart.getTime()) / 1000,
+          )
         : 0;
       lastSegment.durationSec = segDuration;
       session.totalDurationSec += segDuration;
@@ -144,14 +156,16 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     const bindings = await this.channelBindingsService.getBindings(guildId);
     const voiceBinding = bindings.find(
-      (b) => b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
+      (b) =>
+        b.channelId === channelId && b.bindingPurpose === 'game-voice-monitor',
     );
 
     if (voiceBinding && voiceBinding.gameId !== null) {
       return this.queryActiveEvents(voiceBinding.gameId, now);
     }
 
-    const defaultVoice = await this.settingsService.getDiscordBotDefaultVoiceChannel();
+    const defaultVoice =
+      await this.settingsService.getDiscordBotDefaultVoiceChannel();
     if (defaultVoice && channelId === defaultVoice) {
       return this.queryActiveEvents(null, now);
     }
@@ -202,22 +216,33 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
       await this.db
         .insert(schema.eventVoiceSessions)
         .values({
-          eventId: session.eventId, userId: session.userId,
-          discordUserId: session.discordUserId, discordUsername: session.discordUsername,
-          firstJoinAt: session.firstJoinAt, lastLeaveAt: session.lastLeaveAt,
-          totalDurationSec: snapshot.totalDurationSec, segments: snapshot.segments,
+          eventId: session.eventId,
+          userId: session.userId,
+          discordUserId: session.discordUserId,
+          discordUsername: session.discordUsername,
+          firstJoinAt: session.firstJoinAt,
+          lastLeaveAt: session.lastLeaveAt,
+          totalDurationSec: snapshot.totalDurationSec,
+          segments: snapshot.segments,
         })
         .onConflictDoUpdate({
-          target: [schema.eventVoiceSessions.eventId, schema.eventVoiceSessions.discordUserId],
+          target: [
+            schema.eventVoiceSessions.eventId,
+            schema.eventVoiceSessions.discordUserId,
+          ],
           set: {
-            userId: session.userId, discordUsername: session.discordUsername,
+            userId: session.userId,
+            discordUsername: session.discordUsername,
             lastLeaveAt: session.lastLeaveAt,
-            totalDurationSec: snapshot.totalDurationSec, segments: snapshot.segments,
+            totalDurationSec: snapshot.totalDurationSec,
+            segments: snapshot.segments,
           },
         });
       session.dirty = false;
     } catch (err) {
-      this.logger.error(`Failed to flush session ${session.eventId}:${session.discordUserId}: ${err}`);
+      this.logger.error(
+        `Failed to flush session ${session.eventId}:${session.discordUserId}: ${err}`,
+      );
     }
   }
 
@@ -227,27 +252,39 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     eventData?: typeof schema.events.$inferSelect,
     cachedGraceMs?: number,
   ): Promise<void> {
-    const event = eventData ?? await this.fetchEvent(eventId);
+    const event = eventData ?? (await this.fetchEvent(eventId));
     if (!event) return;
 
     const eventStart = event.duration[0];
     const eventEnd = event.duration[1];
-    const eventDurationSec = Math.floor((eventEnd.getTime() - eventStart.getTime()) / 1000);
+    const eventDurationSec = Math.floor(
+      (eventEnd.getTime() - eventStart.getTime()) / 1000,
+    );
     if (eventDurationSec <= 0) return;
 
     const graceMs = cachedGraceMs ?? (await this.getGraceMinutes()) * 60 * 1000;
     const { sessions, orphanCount } = await this.loadAndFilterSessions(eventId);
 
     if (orphanCount > 0) {
-      this.logger.log(`Removed ${orphanCount} voice session(s) for non-signed-up users in event ${eventId}`);
+      this.logger.log(
+        `Removed ${orphanCount} voice session(s) for non-signed-up users in event ${eventId}`,
+      );
     }
 
     if (sessions.length > 0) {
-      await this.batchClassifySessions(sessions, eventStart, eventEnd, eventDurationSec, graceMs);
+      await this.batchClassifySessions(
+        sessions,
+        eventStart,
+        eventEnd,
+        eventDurationSec,
+        graceMs,
+      );
     }
 
     await this.classifyNoShows(eventId, sessions, event);
-    this.logger.log(`Classified ${sessions.length} voice session(s) for event ${eventId}`);
+    this.logger.log(
+      `Classified ${sessions.length} voice session(s) for event ${eventId}`,
+    );
   }
 
   /** Load sessions, filter by signups, and delete orphans. */
@@ -256,24 +293,36 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     orphanCount: number;
   }> {
     const allSessions = await this.db
-      .select().from(schema.eventVoiceSessions)
+      .select()
+      .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
 
     const signups = await this.db
       .select({ discordUserId: schema.eventSignups.discordUserId })
       .from(schema.eventSignups)
-      .where(and(
-        eq(schema.eventSignups.eventId, eventId),
-        sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
-      ));
-    const signedUpIds = new Set(signups.map((s) => s.discordUserId).filter(Boolean));
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
+        ),
+      );
+    const signedUpIds = new Set(
+      signups.map((s) => s.discordUserId).filter(Boolean),
+    );
 
-    const sessions = allSessions.filter((s) => signedUpIds.has(s.discordUserId));
-    const orphanIds = allSessions.filter((s) => !signedUpIds.has(s.discordUserId)).map((s) => s.id);
+    const sessions = allSessions.filter((s) =>
+      signedUpIds.has(s.discordUserId),
+    );
+    const orphanIds = allSessions
+      .filter((s) => !signedUpIds.has(s.discordUserId))
+      .map((s) => s.id);
 
     if (orphanIds.length > 0) {
-      await this.db.delete(schema.eventVoiceSessions)
-        .where(sql`${schema.eventVoiceSessions.id} IN (${sql.join(orphanIds, sql`, `)})`);
+      await this.db
+        .delete(schema.eventVoiceSessions)
+        .where(
+          sql`${schema.eventVoiceSessions.id} IN (${sql.join(orphanIds, sql`, `)})`,
+        );
     }
 
     return { sessions, orphanCount: orphanIds.length };
@@ -282,25 +331,40 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   /** Batch-classify sessions and update DB. */
   private async batchClassifySessions(
     sessions: Array<typeof schema.eventVoiceSessions.$inferSelect>,
-    eventStart: Date, eventEnd: Date,
-    eventDurationSec: number, graceMs: number,
+    eventStart: Date,
+    eventEnd: Date,
+    eventDurationSec: number,
+    graceMs: number,
   ): Promise<void> {
     const classifications = sessions.map((session) => ({
       id: session.id,
       classification: classifyVoiceSession(
-        { totalDurationSec: session.totalDurationSec, firstJoinAt: session.firstJoinAt, lastLeaveAt: session.lastLeaveAt },
-        eventStart, eventEnd, eventDurationSec, graceMs,
+        {
+          totalDurationSec: session.totalDurationSec,
+          firstJoinAt: session.firstJoinAt,
+          lastLeaveAt: session.lastLeaveAt,
+        },
+        eventStart,
+        eventEnd,
+        eventDurationSec,
+        graceMs,
       ),
     }));
 
     const ids = classifications.map((c) => c.id);
     const caseClauses = classifications
-      .map((c) => sql`WHEN ${schema.eventVoiceSessions.id} = ${c.id} THEN ${c.classification}`)
+      .map(
+        (c) =>
+          sql`WHEN ${schema.eventVoiceSessions.id} = ${c.id} THEN ${c.classification}`,
+      )
       .reduce((acc, clause) => sql`${acc} ${clause}`);
 
-    await this.db.update(schema.eventVoiceSessions)
+    await this.db
+      .update(schema.eventVoiceSessions)
       .set({ classification: sql`CASE ${caseClauses} END` })
-      .where(sql`${schema.eventVoiceSessions.id} IN (${sql.join(ids, sql`, `)})`);
+      .where(
+        sql`${schema.eventVoiceSessions.id} IN (${sql.join(ids, sql`, `)})`,
+      );
   }
 
   /** Create no_show entries for signed-up users who have no voice session. */
@@ -310,46 +374,70 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     eventData?: typeof schema.events.$inferSelect,
   ): Promise<void> {
     const trackedIds = new Set(existingSessions.map((s) => s.discordUserId));
-    const signups = await this.db.select().from(schema.eventSignups).where(and(
-      eq(schema.eventSignups.eventId, eventId),
-      sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
-      sql`${schema.eventSignups.status} IN ('signed_up', 'tentative')`,
-    ));
+    const signups = await this.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          sql`${schema.eventSignups.discordUserId} IS NOT NULL`,
+          sql`${schema.eventSignups.status} IN ('signed_up', 'tentative')`,
+        ),
+      );
 
-    const event = eventData ?? await this.fetchEvent(eventId);
+    const event = eventData ?? (await this.fetchEvent(eventId));
     if (!event) return;
 
     const noShowRows = signups
       .filter((s) => s.discordUserId && !trackedIds.has(s.discordUserId))
       .map((s) => ({
-        eventId, userId: s.userId, discordUserId: s.discordUserId!,
+        eventId,
+        userId: s.userId,
+        discordUserId: s.discordUserId!,
         discordUsername: s.discordUsername ?? 'Unknown',
-        firstJoinAt: event.duration[0], lastLeaveAt: event.duration[0],
+        firstJoinAt: event.duration[0],
+        lastLeaveAt: event.duration[0],
         totalDurationSec: 0,
-        segments: [] as Array<{ joinAt: string; leaveAt: string | null; durationSec: number }>,
+        segments: [] as Array<{
+          joinAt: string;
+          leaveAt: string | null;
+          durationSec: number;
+        }>,
         classification: 'no_show',
       }));
 
     if (noShowRows.length > 0) {
-      await this.db.insert(schema.eventVoiceSessions).values(noShowRows).onConflictDoNothing();
+      await this.db
+        .insert(schema.eventVoiceSessions)
+        .values(noShowRows)
+        .onConflictDoNothing();
     }
   }
 
   /** Auto-populate event_signups.attendanceStatus from voice classifications. */
   async autoPopulateAttendance(eventId: number): Promise<void> {
-    const sessions = await this.db.select().from(schema.eventVoiceSessions).where(and(
-      eq(schema.eventVoiceSessions.eventId, eventId),
-      sql`${schema.eventVoiceSessions.classification} IS NOT NULL`,
-    ));
+    const sessions = await this.db
+      .select()
+      .from(schema.eventVoiceSessions)
+      .where(
+        and(
+          eq(schema.eventVoiceSessions.eventId, eventId),
+          sql`${schema.eventVoiceSessions.classification} IS NOT NULL`,
+        ),
+      );
 
     if (sessions.length === 0) {
-      this.logger.log(`Auto-populated attendance for event ${eventId} from 0 voice session(s)`);
+      this.logger.log(
+        `Auto-populated attendance for event ${eventId} from 0 voice session(s)`,
+      );
       return;
     }
 
     const now = new Date();
     await this.batchUpdateAttendance(eventId, sessions, now);
-    this.logger.log(`Auto-populated attendance for event ${eventId} from ${sessions.length} voice session(s)`);
+    this.logger.log(
+      `Auto-populated attendance for event ${eventId} from ${sessions.length} voice session(s)`,
+    );
   }
 
   /** Batch update attendance status for attended and no_show. */
@@ -358,27 +446,37 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     sessions: Array<typeof schema.eventVoiceSessions.$inferSelect>,
     now: Date,
   ): Promise<void> {
-    const noShowIds = sessions.filter((s) => s.classification === 'no_show').map((s) => s.discordUserId);
-    const attendedIds = sessions.filter((s) => s.classification !== 'no_show').map((s) => s.discordUserId);
+    const noShowIds = sessions
+      .filter((s) => s.classification === 'no_show')
+      .map((s) => s.discordUserId);
+    const attendedIds = sessions
+      .filter((s) => s.classification !== 'no_show')
+      .map((s) => s.discordUserId);
 
     if (attendedIds.length > 0) {
-      await this.db.update(schema.eventSignups)
+      await this.db
+        .update(schema.eventSignups)
         .set({ attendanceStatus: 'attended', attendanceRecordedAt: now })
-        .where(and(
-          eq(schema.eventSignups.eventId, eventId),
-          sql`${schema.eventSignups.discordUserId} IN (${sql.join(attendedIds, sql`, `)})`,
-          isNull(schema.eventSignups.attendanceStatus),
-        ));
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            sql`${schema.eventSignups.discordUserId} IN (${sql.join(attendedIds, sql`, `)})`,
+            isNull(schema.eventSignups.attendanceStatus),
+          ),
+        );
     }
 
     if (noShowIds.length > 0) {
-      await this.db.update(schema.eventSignups)
+      await this.db
+        .update(schema.eventSignups)
         .set({ attendanceStatus: 'no_show', attendanceRecordedAt: now })
-        .where(and(
-          eq(schema.eventSignups.eventId, eventId),
-          sql`${schema.eventSignups.discordUserId} IN (${sql.join(noShowIds, sql`, `)})`,
-          isNull(schema.eventSignups.attendanceStatus),
-        ));
+        .where(
+          and(
+            eq(schema.eventSignups.eventId, eventId),
+            sql`${schema.eventSignups.discordUserId} IN (${sql.join(noShowIds, sql`, `)})`,
+            isNull(schema.eventSignups.attendanceStatus),
+          ),
+        );
     }
   }
 
@@ -391,7 +489,9 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return;
 
-    const voiceChannels = guild.channels.cache.filter((ch) => ch.isVoiceBased());
+    const voiceChannels = guild.channels.cache.filter((ch) =>
+      ch.isVoiceBased(),
+    );
     let recovered = 0;
 
     for (const [channelId, channel] of voiceChannels) {
@@ -408,46 +508,72 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (recovered > 0) {
-      this.logger.log(`Recovered ${recovered} voice attendance session(s) from live channels`);
+      this.logger.log(
+        `Recovered ${recovered} voice attendance session(s) from live channels`,
+      );
     }
   }
 
   /** Recover a single member's session from DB or create fresh. */
   private async recoverMemberSession(
-    eventId: number, memberId: string,
+    eventId: number,
+    memberId: string,
     guildMember: import('discord.js').GuildMember,
   ): Promise<void> {
     const key = `${eventId}:${memberId}`;
-    const [existingDb] = await this.db.select().from(schema.eventVoiceSessions)
-      .where(and(eq(schema.eventVoiceSessions.eventId, eventId), eq(schema.eventVoiceSessions.discordUserId, memberId)))
+    const [existingDb] = await this.db
+      .select()
+      .from(schema.eventVoiceSessions)
+      .where(
+        and(
+          eq(schema.eventVoiceSessions.eventId, eventId),
+          eq(schema.eventVoiceSessions.discordUserId, memberId),
+        ),
+      )
       .limit(1);
 
     const now = new Date();
-    const displayName = guildMember.displayName ?? guildMember.user?.username ?? 'Unknown';
+    const displayName =
+      guildMember.displayName ?? guildMember.user?.username ?? 'Unknown';
     const avatarHash = guildMember.user?.avatar ?? null;
 
     if (existingDb) {
       const priorSegments = existingDb.segments ?? [];
       this.sessions.set(key, {
-        eventId, userId: existingDb.userId, discordUserId: memberId,
-        discordUsername: displayName, discordAvatarHash: avatarHash,
-        firstJoinAt: existingDb.firstJoinAt, lastLeaveAt: null,
+        eventId,
+        userId: existingDb.userId,
+        discordUserId: memberId,
+        discordUsername: displayName,
+        discordAvatarHash: avatarHash,
+        firstJoinAt: existingDb.firstJoinAt,
+        lastLeaveAt: null,
         totalDurationSec: existingDb.totalDurationSec ?? 0,
         segments: [
-          ...priorSegments.map((s) => ({ ...s, leaveAt: s.leaveAt ?? now.toISOString(), durationSec: s.durationSec ?? 0 })),
+          ...priorSegments.map((s) => ({
+            ...s,
+            leaveAt: s.leaveAt ?? now.toISOString(),
+            durationSec: s.durationSec ?? 0,
+          })),
           { joinAt: now.toISOString(), leaveAt: null, durationSec: 0 },
         ],
-        isActive: true, activeSegmentStart: now, dirty: true,
+        isActive: true,
+        activeSegmentStart: now,
+        dirty: true,
       });
     } else {
       this.handleJoin(eventId, memberId, displayName, null, avatarHash);
     }
   }
 
-  @Cron('10 */1 * * * *', { name: 'VoiceAttendanceService_classifyCompletedEvents', waitForCompletion: true })
+  @Cron('10 */1 * * * *', {
+    name: 'VoiceAttendanceService_classifyCompletedEvents',
+    waitForCompletion: true,
+  })
   async classifyCompletedEvents(): Promise<void> {
     if (this.classifyRunning) {
-      this.logger.warn('classifyCompletedEvents: previous run still in progress, skipping');
+      this.logger.warn(
+        'classifyCompletedEvents: previous run still in progress, skipping',
+      );
       return;
     }
     this.classifyRunning = true;
@@ -466,12 +592,17 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const now = new Date();
     const lookbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const endedEvents = await this.db.select().from(schema.events).where(and(
-      eq(schema.events.isAdHoc, false),
-      sql`${schema.events.cancelledAt} IS NULL`,
-      sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${lookbackStart.toISOString()}::timestamptz`,
-      sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${now.toISOString()}::timestamptz`,
-    ));
+    const endedEvents = await this.db
+      .select()
+      .from(schema.events)
+      .where(
+        and(
+          eq(schema.events.isAdHoc, false),
+          sql`${schema.events.cancelledAt} IS NULL`,
+          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) >= ${lookbackStart.toISOString()}::timestamptz`,
+          sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration})) <= ${now.toISOString()}::timestamptz`,
+        ),
+      );
 
     if (endedEvents.length === 0) return;
 
@@ -516,7 +647,12 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
     const [unclassified] = await this.db
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.eventVoiceSessions)
-      .where(and(eq(schema.eventVoiceSessions.eventId, eventId), isNull(schema.eventVoiceSessions.classification)));
+      .where(
+        and(
+          eq(schema.eventVoiceSessions.eventId, eventId),
+          isNull(schema.eventVoiceSessions.classification),
+        ),
+      );
 
     const [signupCount] = await this.db
       .select({ count: sql<number>`count(*)::int` })
@@ -539,14 +675,20 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
 
   /** Get raw voice sessions for an event. */
   async getVoiceSessions(eventId: number): Promise<VoiceSessionsResponseDto> {
-    const sessions = await this.db.select().from(schema.eventVoiceSessions)
+    const sessions = await this.db
+      .select()
+      .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
     return { eventId, sessions: sessions.map((s) => toVoiceSessionDto(s)) };
   }
 
   /** Get voice attendance summary with classifications. */
-  async getVoiceAttendanceSummary(eventId: number): Promise<VoiceAttendanceSummaryDto> {
-    const sessions = await this.db.select().from(schema.eventVoiceSessions)
+  async getVoiceAttendanceSummary(
+    eventId: number,
+  ): Promise<VoiceAttendanceSummaryDto> {
+    const sessions = await this.db
+      .select()
+      .from(schema.eventVoiceSessions)
       .where(eq(schema.eventVoiceSessions.eventId, eventId));
     return buildAttendanceSummary(eventId, sessions);
   }
@@ -571,13 +713,21 @@ export class VoiceAttendanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async getGraceMinutes(): Promise<number> {
-    const value = await this.settingsService.get(SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES);
+    const value = await this.settingsService.get(
+      SETTING_KEYS.VOICE_ATTENDANCE_GRACE_MINUTES,
+    );
     const parsed = value ? parseInt(value, 10) : NaN;
     return isNaN(parsed) ? 5 : parsed;
   }
 
-  private async fetchEvent(eventId: number): Promise<typeof schema.events.$inferSelect | undefined> {
-    const [event] = await this.db.select().from(schema.events).where(eq(schema.events.id, eventId)).limit(1);
+  private async fetchEvent(
+    eventId: number,
+  ): Promise<typeof schema.events.$inferSelect | undefined> {
+    const [event] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
     return event;
   }
 }

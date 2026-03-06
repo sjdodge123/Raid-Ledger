@@ -144,9 +144,7 @@ export function buildActivityConditions(
   conditions.push(eq(schema.gameActivityRollups.period, periodFilter));
   const truncFn = period === 'week' ? 'week' : 'month';
   conditions.push(
-    sql`${schema.gameActivityRollups.periodStart} >= date_trunc(${truncFn}, now())::date` as ReturnType<
-      typeof eq
-    >,
+    sql`${schema.gameActivityRollups.periodStart} >= date_trunc(${truncFn}, now())::date`,
   );
   return conditions;
 }

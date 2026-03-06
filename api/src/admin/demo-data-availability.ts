@@ -26,15 +26,65 @@ export function getAvailabilityDefinitions(): {
     new Date(baseHour.getTime() + days * 24 * 60 * 60 * 1000);
 
   return [
-    { username: 'ShadowMage', start: hoursFromNow(-2), end: hoursFromNow(4), status: 'available' },
-    { username: 'DragonSlayer99', start: hoursFromNow(-1), end: hoursFromNow(6), status: 'available' },
-    { username: 'HealzForDayz', start: hoursFromNow(0), end: hoursFromNow(3), status: 'available' },
-    { username: 'TankMaster', start: hoursFromNow(-3), end: hoursFromNow(5), status: 'available' },
-    { username: 'ProRaider', start: hoursFromNow(1), end: hoursFromNow(8), status: 'available' },
-    { username: 'HealzForDayz', start: hoursFromNow(3), end: hoursFromNow(6), status: 'blocked' },
-    { username: 'CasualCarl', start: hoursFromNow(-1), end: hoursFromNow(2), status: 'blocked' },
-    { username: 'NightOwlGamer', start: hoursFromNow(0), end: hoursFromNow(4), status: 'blocked' },
-    { username: 'DragonSlayer99', start: daysFromNow(2), end: daysFromNow(4), status: 'blocked' },
-    { username: 'TankMaster', start: daysFromNow(5), end: daysFromNow(7), status: 'blocked' },
+    {
+      username: 'ShadowMage',
+      start: hoursFromNow(-2),
+      end: hoursFromNow(4),
+      status: 'available',
+    },
+    {
+      username: 'DragonSlayer99',
+      start: hoursFromNow(-1),
+      end: hoursFromNow(6),
+      status: 'available',
+    },
+    {
+      username: 'HealzForDayz',
+      start: hoursFromNow(0),
+      end: hoursFromNow(3),
+      status: 'available',
+    },
+    {
+      username: 'TankMaster',
+      start: hoursFromNow(-3),
+      end: hoursFromNow(5),
+      status: 'available',
+    },
+    {
+      username: 'ProRaider',
+      start: hoursFromNow(1),
+      end: hoursFromNow(8),
+      status: 'available',
+    },
+    {
+      username: 'HealzForDayz',
+      start: hoursFromNow(3),
+      end: hoursFromNow(6),
+      status: 'blocked',
+    },
+    {
+      username: 'CasualCarl',
+      start: hoursFromNow(-1),
+      end: hoursFromNow(2),
+      status: 'blocked',
+    },
+    {
+      username: 'NightOwlGamer',
+      start: hoursFromNow(0),
+      end: hoursFromNow(4),
+      status: 'blocked',
+    },
+    {
+      username: 'DragonSlayer99',
+      start: daysFromNow(2),
+      end: daysFromNow(4),
+      status: 'blocked',
+    },
+    {
+      username: 'TankMaster',
+      start: daysFromNow(5),
+      end: daysFromNow(7),
+      status: 'blocked',
+    },
   ];
 }

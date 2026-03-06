@@ -15,7 +15,9 @@ export async function handleExistingSignup(
   interaction: ButtonInteraction,
   eventId: number,
   existingSignup: NonNullable<
-    Awaited<ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>>
+    Awaited<
+      ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
+    >
   >,
   deps: SignupInteractionDeps,
 ): Promise<void> {
@@ -71,7 +73,9 @@ async function offerCharacterRoleChange(
   eventId: number,
   linkedUser: typeof schema.users.$inferSelect,
   existingSignup: NonNullable<
-    Awaited<ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>>
+    Awaited<
+      ReturnType<SignupInteractionDeps['signupsService']['findByDiscordUser']>
+    >
   >,
   deps: SignupInteractionDeps,
 ): Promise<boolean> {
@@ -106,17 +110,40 @@ async function offerCharacterRoleChange(
 
   if (characters.length >= 1) {
     if (!existingSignup.characterId) {
-      await showCharacterSelect(interaction, eventId, event.title, characters, deps);
+      await showCharacterSelect(
+        interaction,
+        eventId,
+        event.title,
+        characters,
+        deps,
+      );
       return true;
     }
     if (isMMO && !existingSignup.character?.role) {
-      const currentChar = characters.find((c) => c.id === existingSignup.characterId);
-      await showRoleSelect(interaction, eventId, deps, existingSignup.characterId, currentChar
-        ? { name: currentChar.name, role: currentChar.roleOverride ?? currentChar.role ?? null }
-        : undefined);
+      const currentChar = characters.find(
+        (c) => c.id === existingSignup.characterId,
+      );
+      await showRoleSelect(
+        interaction,
+        eventId,
+        deps,
+        existingSignup.characterId,
+        currentChar
+          ? {
+              name: currentChar.name,
+              role: currentChar.roleOverride ?? currentChar.role ?? null,
+            }
+          : undefined,
+      );
       return true;
     }
-    await showCharacterSelect(interaction, eventId, event.title, characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      characters,
+      deps,
+    );
     return true;
   }
 
@@ -150,7 +177,11 @@ export async function handleNewLinkedSignup(
 
   if (event.gameId) {
     const handled = await tryGameSignupFlow(
-      interaction, eventId, linkedUser, event, deps,
+      interaction,
+      eventId,
+      linkedUser,
+      event,
+      deps,
     );
     if (handled) return;
   }
@@ -181,25 +212,46 @@ async function tryGameSignupFlow(
   if (!game) return false;
 
   const characterList = await deps.charactersService.findAllForUser(
-    linkedUser.id, event.gameId!,
+    linkedUser.id,
+    event.gameId!,
   );
   const characters = characterList.data;
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
 
   if (slotConfig?.type === 'mmo' && characters.length >= 1) {
-    await showCharacterSelect(interaction, eventId, event.title, characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      characters,
+      deps,
+    );
     return true;
   }
 
   if (characters.length > 1) {
-    await showCharacterSelect(interaction, eventId, event.title, characters, deps);
+    await showCharacterSelect(
+      interaction,
+      eventId,
+      event.title,
+      characters,
+      deps,
+    );
     return true;
   }
 
   if (characters.length === 1) {
     const char = characters[0];
-    const signupResult = await deps.signupsService.signup(eventId, linkedUser.id);
-    await deps.signupsService.confirmSignup(eventId, signupResult.id, linkedUser.id, { characterId: char.id });
+    const signupResult = await deps.signupsService.signup(
+      eventId,
+      linkedUser.id,
+    );
+    await deps.signupsService.confirmSignup(
+      eventId,
+      signupResult.id,
+      linkedUser.id,
+      { characterId: char.id },
+    );
     await interaction.editReply({ content: `Signed up as **${char.name}**!` });
     await deps.updateEmbedSignupCount(eventId);
     return true;
@@ -244,7 +296,9 @@ async function showCharacterSelect(
 
 /** Wrapper for shared role select dropdown. */
 export async function showRoleSelect(
-  interaction: ButtonInteraction | import('discord.js').StringSelectMenuInteraction,
+  interaction:
+    | ButtonInteraction
+    | import('discord.js').StringSelectMenuInteraction,
   eventId: number,
   deps: Pick<SignupInteractionDeps, 'emojiService'>,
   characterId?: string,

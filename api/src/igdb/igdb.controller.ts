@@ -31,7 +31,6 @@ import {
   GameActivityResponseDto,
   GameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
-import { ZodError } from 'zod';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { redisSwr } from '../common/swr-cache';
 import { handleSearchError } from './igdb-controller.helpers';

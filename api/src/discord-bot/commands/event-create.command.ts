@@ -21,7 +21,10 @@ import { MagicLinkService } from '../../auth/magic-link.service';
 import { parseNaturalTime, toDiscordTimestamp } from '../utils/time-parser';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
-import { buildEventCommandDefinition, buildSlotConfig } from './event-create.helpers';
+import {
+  buildEventCommandDefinition,
+  buildSlotConfig,
+} from './event-create.helpers';
 
 const DEFAULT_SLOTS = 20;
 const DEFAULT_DURATION_HOURS = 2;
@@ -93,8 +96,15 @@ export class EventCreateCommand
       });
 
       await this.replyWithConfirmation(
-        interaction, event.id, user.id, title,
-        game, slotConfig, maxAttendees, parsed, startTime,
+        interaction,
+        event.id,
+        user.id,
+        title,
+        game,
+        slotConfig,
+        maxAttendees,
+        parsed,
+        startTime,
       );
     } catch (error) {
       this.logger.error('Failed to create event:', error);
@@ -117,7 +127,9 @@ export class EventCreateCommand
     }
 
     const magicLinkUrl = await this.magicLinkService.generateLink(
-      user.id, '/events/plan', clientUrl,
+      user.id,
+      '/events/plan',
+      clientUrl,
     );
     if (!magicLinkUrl) {
       await interaction.editReply('Failed to generate a link.');
@@ -185,7 +197,11 @@ export class EventCreateCommand
     }
 
     const { slotConfig, maxAttendees } = buildSlotConfig(
-      rosterType, slots, tanks, healers, dps,
+      rosterType,
+      slots,
+      tanks,
+      healers,
+      dps,
     );
     return { title, game, parsed, slotConfig, maxAttendees };
   }
@@ -203,11 +219,14 @@ export class EventCreateCommand
 
   private async resolveTimezone(userId: number): Promise<string> {
     const pref = await this.preferencesService.getUserPreference(
-      userId, 'timezone',
+      userId,
+      'timezone',
     );
     const userTz = pref?.value as string | undefined;
     const defaultTz = await this.settingsService.get('default_timezone');
-    return (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE;
+    return (
+      (userTz && userTz !== 'auto' ? userTz : defaultTz) || FALLBACK_TIMEZONE
+    );
   }
 
   private async replyWithConfirmation(
@@ -221,12 +240,13 @@ export class EventCreateCommand
     parsed: NonNullable<ReturnType<typeof parseNaturalTime>>,
     startTime: Date,
   ): Promise<void> {
-    const clientUrl =
-      process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
+    const clientUrl = process.env.CLIENT_URL || process.env.CORS_ORIGIN || null;
     let magicLinkUrl: string | null = null;
     if (clientUrl && clientUrl !== 'auto') {
       magicLinkUrl = await this.magicLinkService.generateLink(
-        userId, `/events/${eventId}/edit`, clientUrl,
+        userId,
+        `/events/${eventId}/edit`,
+        clientUrl,
       );
     }
 
@@ -240,11 +260,16 @@ export class EventCreateCommand
       .setTitle('Event Created')
       .setDescription(
         [
-          `**${title}**`, '',
+          `**${title}**`,
+          '',
           `${toDiscordTimestamp(startTime, 'F')} (${toDiscordTimestamp(startTime, 'R')})`,
           game ? `Game: **${game.name}**` : null,
-          rosterInfo, '', `Timezone: ${parsed.timezone}`,
-        ].filter(Boolean).join('\n'),
+          rosterInfo,
+          '',
+          `Timezone: ${parsed.timezone}`,
+        ]
+          .filter(Boolean)
+          .join('\n'),
       );
 
     const components: ActionRowBuilder<ButtonBuilder>[] = [];

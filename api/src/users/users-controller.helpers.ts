@@ -24,7 +24,10 @@ export function parseOrBadRequest<T>(schema: ZodSchema<T>, body: unknown): T {
 }
 
 /** Parse pagination query params with safe defaults. */
-export function parsePagination(pageStr?: string, limitStr?: string): { page: number; limit: number } {
+export function parsePagination(
+  pageStr?: string,
+  limitStr?: string,
+): { page: number; limit: number } {
   const page = Math.max(1, parseInt(pageStr ?? '1', 10) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(limitStr ?? '20', 10) || 20));
   return { page, limit };

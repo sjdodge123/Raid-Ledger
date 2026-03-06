@@ -1,18 +1,38 @@
 import {
-  Inject, Injectable, Logger, NotFoundException,
-  ForbiddenException, ConflictException, HttpException, HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
 } from '@nestjs/common';
 import { eq, and, asc, inArray, isNotNull, ne, ilike } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { CharacterDto, CharacterListResponseDto, CreateCharacterDto, UpdateCharacterDto, ImportWowCharacterDto, RefreshCharacterDto } from '@raid-ledger/contract';
+import {
+  CharacterDto,
+  CharacterListResponseDto,
+  CreateCharacterDto,
+  UpdateCharacterDto,
+  ImportWowCharacterDto,
+  RefreshCharacterDto,
+} from '@raid-ledger/contract';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { EXTENSION_POINTS } from '../plugins/plugin-host/extension-points';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 import { EnrichmentsService } from '../enrichments/enrichments.service';
-import { fetchFullProfile, buildSyncUpdateFields } from './characters-sync.helpers';
-import { mapCharacterToDto, resolveMainStatus, demoteExistingMain } from './characters-mapping.helpers';
+import {
+  fetchFullProfile,
+  buildSyncUpdateFields,
+} from './characters-sync.helpers';
+import {
+  mapCharacterToDto,
+  resolveMainStatus,
+  demoteExistingMain,
+} from './characters-mapping.helpers';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -29,8 +49,13 @@ export class CharactersService {
   ) {}
 
   /** Find a CharacterSyncAdapter that can handle the given game variant. */
-  private findCharacterSyncAdapter(gameVariant?: string): CharacterSyncAdapter | undefined {
-    const adapters = this.pluginRegistry.getAdaptersForExtensionPoint<CharacterSyncAdapter>(EXTENSION_POINTS.CHARACTER_SYNC);
+  private findCharacterSyncAdapter(
+    gameVariant?: string,
+  ): CharacterSyncAdapter | undefined {
+    const adapters =
+      this.pluginRegistry.getAdaptersForExtensionPoint<CharacterSyncAdapter>(
+        EXTENSION_POINTS.CHARACTER_SYNC,
+      );
     const seen = new Set<CharacterSyncAdapter>();
     for (const [, adapter] of adapters) {
       if (seen.has(adapter)) continue;
@@ -41,63 +66,148 @@ export class CharactersService {
   }
 
   /** Check if a character with the same name+realm is already claimed by another user. */
-  private async checkDuplicateClaim(tx: PostgresJsDatabase<typeof schema>, gameId: number, userId: number, name: string, realm?: string | null): Promise<void> {
+  private async checkDuplicateClaim(
+    tx: PostgresJsDatabase<typeof schema>,
+    gameId: number,
+    userId: number,
+    name: string,
+    realm?: string | null,
+  ): Promise<void> {
     if (!realm) return;
-    const [existingClaim] = await tx.select({ id: schema.characters.id, userId: schema.characters.userId }).from(schema.characters)
-      .where(and(eq(schema.characters.gameId, gameId), ne(schema.characters.userId, userId), ilike(schema.characters.name, name), eq(schema.characters.realm, realm))).limit(1);
-    if (existingClaim) throw new ConflictException(`${name} on ${realm} is already claimed by another player`);
+    const [existingClaim] = await tx
+      .select({ id: schema.characters.id, userId: schema.characters.userId })
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.gameId, gameId),
+          ne(schema.characters.userId, userId),
+          ilike(schema.characters.name, name),
+          eq(schema.characters.realm, realm),
+        ),
+      )
+      .limit(1);
+    if (existingClaim)
+      throw new ConflictException(
+        `${name} on ${realm} is already claimed by another player`,
+      );
   }
 
   /** Get the avatar URL for a character by name (ROK-414). */
-  async getAvatarUrlByName(userId: number, characterName: string): Promise<string | null> {
-    const [result] = await this.db.select({ avatarUrl: schema.characters.avatarUrl }).from(schema.characters)
-      .where(and(eq(schema.characters.userId, userId), eq(schema.characters.name, characterName))).limit(1);
+  async getAvatarUrlByName(
+    userId: number,
+    characterName: string,
+  ): Promise<string | null> {
+    const [result] = await this.db
+      .select({ avatarUrl: schema.characters.avatarUrl })
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.name, characterName),
+        ),
+      )
+      .limit(1);
     return result?.avatarUrl ?? null;
   }
 
   /** Get all characters for a user, optionally filtered by game. */
-  async findAllForUser(userId: number, gameId?: number): Promise<CharacterListResponseDto> {
+  async findAllForUser(
+    userId: number,
+    gameId?: number,
+  ): Promise<CharacterListResponseDto> {
     const conditions = [eq(schema.characters.userId, userId)];
     if (gameId) conditions.push(eq(schema.characters.gameId, gameId));
-    const chars = await this.db.select().from(schema.characters).where(and(...conditions)).orderBy(asc(schema.characters.displayOrder));
-    return { data: chars.map((row) => mapCharacterToDto(row)), meta: { total: chars.length } };
+    const chars = await this.db
+      .select()
+      .from(schema.characters)
+      .where(and(...conditions))
+      .orderBy(asc(schema.characters.displayOrder));
+    return {
+      data: chars.map((row) => mapCharacterToDto(row)),
+      meta: { total: chars.length },
+    };
   }
 
   /** Get a single character by ID with ownership check. */
   async findOne(userId: number, characterId: string): Promise<CharacterDto> {
-    const [character] = await this.db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).limit(1);
-    if (!character) throw new NotFoundException(`Character ${characterId} not found`);
-    if (character.userId !== userId) throw new ForbiddenException('You do not own this character');
+    const [character] = await this.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, characterId))
+      .limit(1);
+    if (!character)
+      throw new NotFoundException(`Character ${characterId} not found`);
+    if (character.userId !== userId)
+      throw new ForbiddenException('You do not own this character');
     return mapCharacterToDto(character);
   }
 
   /** Create a new character with main-swap behavior (ROK-206). */
   async create(userId: number, dto: CreateCharacterDto): Promise<CharacterDto> {
-    const [game] = await this.db.select().from(schema.games).where(eq(schema.games.id, dto.gameId)).limit(1);
+    const [game] = await this.db
+      .select()
+      .from(schema.games)
+      .where(eq(schema.games.id, dto.gameId))
+      .limit(1);
     if (!game) throw new NotFoundException(`Game ${dto.gameId} not found`);
     try {
       return await this.db.transaction(async (tx) => {
-        await this.checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm);
-        const { shouldBeMain, charCount } = await resolveMainStatus(tx, userId, dto.gameId, dto.isMain);
-        if (shouldBeMain && charCount > 0) await demoteExistingMain(tx, userId, dto.gameId);
-        const [character] = await tx.insert(schema.characters).values({
-          userId, gameId: dto.gameId, name: dto.name, realm: dto.realm ?? null,
-          class: dto.class ?? null, spec: dto.spec ?? null, role: dto.role ?? null,
-          isMain: shouldBeMain, itemLevel: dto.itemLevel ?? null, avatarUrl: dto.avatarUrl ?? null,
-        }).returning();
-        this.logger.log(`User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`);
+        await this.checkDuplicateClaim(
+          tx,
+          dto.gameId,
+          userId,
+          dto.name,
+          dto.realm,
+        );
+        const { shouldBeMain, charCount } = await resolveMainStatus(
+          tx,
+          userId,
+          dto.gameId,
+          dto.isMain,
+        );
+        if (shouldBeMain && charCount > 0)
+          await demoteExistingMain(tx, userId, dto.gameId);
+        const [character] = await tx
+          .insert(schema.characters)
+          .values({
+            userId,
+            gameId: dto.gameId,
+            name: dto.name,
+            realm: dto.realm ?? null,
+            class: dto.class ?? null,
+            spec: dto.spec ?? null,
+            role: dto.role ?? null,
+            isMain: shouldBeMain,
+            itemLevel: dto.itemLevel ?? null,
+            avatarUrl: dto.avatarUrl ?? null,
+          })
+          .returning();
+        this.logger.log(
+          `User ${userId} created character ${character.id} (${character.name})${shouldBeMain ? ' [main]' : ''}`,
+        );
         return mapCharacterToDto(character);
       });
     } catch (error: unknown) {
-      if (this.isUniqueViolation(error, 'unique_user_game_character')) throw new ConflictException(`Character ${dto.name} already exists for this game/realm`);
+      if (this.isUniqueViolation(error, 'unique_user_game_character'))
+        throw new ConflictException(
+          `Character ${dto.name} already exists for this game/realm`,
+        );
       throw error;
     }
   }
 
   /** Update a character. */
-  async update(userId: number, characterId: string, dto: UpdateCharacterDto): Promise<CharacterDto> {
+  async update(
+    userId: number,
+    characterId: string,
+    dto: UpdateCharacterDto,
+  ): Promise<CharacterDto> {
     await this.findOne(userId, characterId);
-    const [updated] = await this.db.update(schema.characters).set({ ...dto, updatedAt: new Date() }).where(eq(schema.characters.id, characterId)).returning();
+    const [updated] = await this.db
+      .update(schema.characters)
+      .set({ ...dto, updatedAt: new Date() })
+      .where(eq(schema.characters.id, characterId))
+      .returning();
     this.logger.log(`User ${userId} updated character ${characterId}`);
     return mapCharacterToDto(updated);
   }
@@ -105,19 +215,37 @@ export class CharactersService {
   /** Delete a character with auto-promote (ROK-206). */
   async delete(userId: number, characterId: string): Promise<void> {
     const character = await this.findOne(userId, characterId);
-    await this.db.delete(schema.characters).where(eq(schema.characters.id, characterId));
+    await this.db
+      .delete(schema.characters)
+      .where(eq(schema.characters.id, characterId));
     await this.autoPromoteAfterDelete(userId, character.gameId);
     this.logger.log(`User ${userId} deleted character ${characterId}`);
   }
 
   /** After deletion, promote the lowest-order character to main if no main exists. */
-  private async autoPromoteAfterDelete(userId: number, gameId: number): Promise<void> {
-    const remaining = await this.db.select().from(schema.characters)
-      .where(and(eq(schema.characters.userId, userId), eq(schema.characters.gameId, gameId))).orderBy(asc(schema.characters.displayOrder));
+  private async autoPromoteAfterDelete(
+    userId: number,
+    gameId: number,
+  ): Promise<void> {
+    const remaining = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.gameId, gameId),
+        ),
+      )
+      .orderBy(asc(schema.characters.displayOrder));
     if (remaining.length > 0 && !remaining.some((c) => c.isMain)) {
       const promote = remaining[0];
-      await this.db.update(schema.characters).set({ isMain: true, updatedAt: new Date() }).where(eq(schema.characters.id, promote.id));
-      this.logger.log(`Auto-promoted character ${promote.id} (${promote.name}) to main`);
+      await this.db
+        .update(schema.characters)
+        .set({ isMain: true, updatedAt: new Date() })
+        .where(eq(schema.characters.id, promote.id));
+      this.logger.log(
+        `Auto-promoted character ${promote.id} (${promote.name}) to main`,
+      );
     }
   }
 
@@ -126,24 +254,56 @@ export class CharactersService {
     const character = await this.findOne(userId, characterId);
     return this.db.transaction(async (tx) => {
       await demoteExistingMain(tx, userId, character.gameId);
-      const [updated] = await tx.update(schema.characters).set({ isMain: true, updatedAt: new Date() }).where(eq(schema.characters.id, characterId)).returning();
-      this.logger.log(`User ${userId} set character ${characterId} as main for game ${character.gameId}`);
+      const [updated] = await tx
+        .update(schema.characters)
+        .set({ isMain: true, updatedAt: new Date() })
+        .where(eq(schema.characters.id, characterId))
+        .returning();
+      this.logger.log(
+        `User ${userId} set character ${characterId} as main for game ${character.gameId}`,
+      );
       return mapCharacterToDto(updated);
     });
   }
 
   /** Import a character from an external game API via adapter (ROK-234, ROK-237). */
-  async importExternal(userId: number, dto: ImportWowCharacterDto): Promise<CharacterDto> {
+  async importExternal(
+    userId: number,
+    dto: ImportWowCharacterDto,
+  ): Promise<CharacterDto> {
     const adapter = this.findCharacterSyncAdapter(dto.gameVariant);
-    if (!adapter) throw new NotFoundException('No character sync adapter found for this game variant');
-    const { profile, talents, equipment } = await fetchFullProfile(adapter, dto.name, dto.realm, dto.region, dto.gameVariant);
+    if (!adapter)
+      throw new NotFoundException(
+        'No character sync adapter found for this game variant',
+      );
+    const { profile, talents, equipment } = await fetchFullProfile(
+      adapter,
+      dto.name,
+      dto.realm,
+      dto.region,
+      dto.gameVariant,
+    );
     await this.validateUserExists(userId);
     const game = await this.resolveGameByVariant(adapter, dto.gameVariant);
     try {
-      return await this.insertImportedCharacter(userId, game.id, profile, dto, equipment, talents);
+      return await this.insertImportedCharacter(
+        userId,
+        game.id,
+        profile,
+        dto,
+        equipment,
+        talents,
+      );
     } catch (error: unknown) {
       if (this.isUniqueViolation(error, 'unique_user_game_character')) {
-        return this.mergeIntoExisting(userId, game.id, profile, dto, equipment, talents);
+        return this.mergeIntoExisting(
+          userId,
+          game.id,
+          profile,
+          dto,
+          equipment,
+          talents,
+        );
       }
       throw error;
     }
@@ -151,66 +311,161 @@ export class CharactersService {
 
   /** Validate that a user exists. */
   private async validateUserExists(userId: number): Promise<void> {
-    const [user] = await this.db.select({ id: schema.users.id }).from(schema.users).where(eq(schema.users.id, userId)).limit(1);
-    if (!user) throw new NotFoundException(`User ${userId} not found — cannot import character`);
+    const [user] = await this.db
+      .select({ id: schema.users.id })
+      .from(schema.users)
+      .where(eq(schema.users.id, userId))
+      .limit(1);
+    if (!user)
+      throw new NotFoundException(
+        `User ${userId} not found — cannot import character`,
+      );
   }
 
   /** Resolve game by slug candidates from adapter. */
-  private async resolveGameByVariant(adapter: CharacterSyncAdapter, gameVariant: string): Promise<typeof schema.games.$inferSelect> {
+  private async resolveGameByVariant(
+    adapter: CharacterSyncAdapter,
+    gameVariant: string,
+  ): Promise<typeof schema.games.$inferSelect> {
     const slugCandidates = adapter.resolveGameSlugs(gameVariant);
-    const [game] = await this.db.select().from(schema.games).where(inArray(schema.games.slug, slugCandidates)).limit(1);
-    if (!game) throw new NotFoundException('Game not found in the games catalog');
+    const [game] = await this.db
+      .select()
+      .from(schema.games)
+      .where(inArray(schema.games.slug, slugCandidates))
+      .limit(1);
+    if (!game)
+      throw new NotFoundException('Game not found in the games catalog');
     return game;
   }
 
   /** Insert an imported character in a transaction with main-swap. */
   private async insertImportedCharacter(
-    userId: number, gameId: number, profile: { name: string; realm: string; [k: string]: unknown },
-    dto: ImportWowCharacterDto, equipment: unknown, talents: unknown,
+    userId: number,
+    gameId: number,
+    profile: { name: string; realm: string; [k: string]: unknown },
+    dto: ImportWowCharacterDto,
+    equipment: unknown,
+    talents: unknown,
   ): Promise<CharacterDto> {
     return this.db.transaction(async (tx) => {
-      await this.checkDuplicateClaim(tx, gameId, userId, profile.name, profile.realm);
-      const { shouldBeMain, charCount } = await resolveMainStatus(tx, userId, gameId, dto.isMain);
-      if (shouldBeMain && charCount > 0) await demoteExistingMain(tx, userId, gameId);
-      const [character] = await tx.insert(schema.characters).values({
-        userId, gameId, name: profile.name, realm: profile.realm,
-        ...buildSyncUpdateFields(profile as never, equipment, talents, { region: dto.region, gameVariant: dto.gameVariant }),
-        isMain: shouldBeMain,
-      }).returning();
-      this.logger.log(`User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`);
+      await this.checkDuplicateClaim(
+        tx,
+        gameId,
+        userId,
+        profile.name,
+        profile.realm,
+      );
+      const { shouldBeMain, charCount } = await resolveMainStatus(
+        tx,
+        userId,
+        gameId,
+        dto.isMain,
+      );
+      if (shouldBeMain && charCount > 0)
+        await demoteExistingMain(tx, userId, gameId);
+      const [character] = await tx
+        .insert(schema.characters)
+        .values({
+          userId,
+          gameId,
+          name: profile.name,
+          realm: profile.realm,
+          ...buildSyncUpdateFields(profile as never, equipment, talents, {
+            region: dto.region,
+            gameVariant: dto.gameVariant,
+          }),
+          isMain: shouldBeMain,
+        })
+        .returning();
+      this.logger.log(
+        `User ${userId} imported character ${character.id} (${profile.name}-${profile.realm})${shouldBeMain ? ' [main]' : ''}`,
+      );
       return mapCharacterToDto(character);
     });
   }
 
   /** Merge imported data into an existing local character (ROK-578). */
   private async mergeIntoExisting(
-    userId: number, gameId: number, profile: { name: string; realm: string; [k: string]: unknown },
-    dto: ImportWowCharacterDto, equipment: unknown, talents: unknown,
+    userId: number,
+    gameId: number,
+    profile: { name: string; realm: string; [k: string]: unknown },
+    dto: ImportWowCharacterDto,
+    equipment: unknown,
+    talents: unknown,
   ): Promise<CharacterDto> {
-    const [existing] = await this.db.select().from(schema.characters)
-      .where(and(eq(schema.characters.userId, userId), eq(schema.characters.gameId, gameId), ilike(schema.characters.name, profile.name), eq(schema.characters.realm, profile.realm))).limit(1);
-    if (!existing) throw new ConflictException(`Character ${profile.name} on ${profile.realm} already exists`);
-    const [merged] = await this.db.update(schema.characters)
-      .set(buildSyncUpdateFields(profile as never, equipment, talents, { region: dto.region, gameVariant: dto.gameVariant }))
-      .where(eq(schema.characters.id, existing.id)).returning();
-    this.logger.log(`User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`);
+    const [existing] = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          eq(schema.characters.userId, userId),
+          eq(schema.characters.gameId, gameId),
+          ilike(schema.characters.name, profile.name),
+          eq(schema.characters.realm, profile.realm),
+        ),
+      )
+      .limit(1);
+    if (!existing)
+      throw new ConflictException(
+        `Character ${profile.name} on ${profile.realm} already exists`,
+      );
+    const [merged] = await this.db
+      .update(schema.characters)
+      .set(
+        buildSyncUpdateFields(profile as never, equipment, talents, {
+          region: dto.region,
+          gameVariant: dto.gameVariant,
+        }),
+      )
+      .where(eq(schema.characters.id, existing.id))
+      .returning();
+    this.logger.log(
+      `User ${userId} merged import into existing character ${existing.id} (${profile.name}-${profile.realm})`,
+    );
     return mapCharacterToDto(merged);
   }
 
   /** Refresh a character's data from an external game API (ROK-234, ROK-237). */
-  async refreshExternal(userId: number, characterId: string, dto: RefreshCharacterDto): Promise<CharacterDto> {
+  async refreshExternal(
+    userId: number,
+    characterId: string,
+    dto: RefreshCharacterDto,
+  ): Promise<CharacterDto> {
     const character = await this.findOne(userId, characterId);
-    if (!character.realm) throw new NotFoundException('Character has no realm — cannot refresh from external source');
+    if (!character.realm)
+      throw new NotFoundException(
+        'Character has no realm — cannot refresh from external source',
+      );
     this.enforceCooldown(character.lastSyncedAt);
     const region = character.region ?? dto.region;
-    const gameVariant = (character.gameVariant as RefreshCharacterDto['gameVariant']) ?? dto.gameVariant;
+    const gameVariant =
+      (character.gameVariant as RefreshCharacterDto['gameVariant']) ??
+      dto.gameVariant;
     const adapter = this.findCharacterSyncAdapter(gameVariant);
-    if (!adapter) throw new NotFoundException('No character sync adapter found for this game variant');
-    const { profile, talents, equipment } = await fetchFullProfile(adapter, character.name, character.realm, region, gameVariant);
-    const [updated] = await this.db.update(schema.characters)
-      .set(buildSyncUpdateFields(profile, equipment, talents, { region, gameVariant }))
-      .where(eq(schema.characters.id, characterId)).returning();
-    this.logger.log(`User ${userId} refreshed character ${characterId} from external source`);
+    if (!adapter)
+      throw new NotFoundException(
+        'No character sync adapter found for this game variant',
+      );
+    const { profile, talents, equipment } = await fetchFullProfile(
+      adapter,
+      character.name,
+      character.realm,
+      region,
+      gameVariant,
+    );
+    const [updated] = await this.db
+      .update(schema.characters)
+      .set(
+        buildSyncUpdateFields(profile, equipment, talents, {
+          region,
+          gameVariant,
+        }),
+      )
+      .where(eq(schema.characters.id, characterId))
+      .returning();
+    this.logger.log(
+      `User ${userId} refreshed character ${characterId} from external source`,
+    );
     this.enqueueCharacterEnrichmentsBackground(characterId, character.gameId);
     return mapCharacterToDto(updated);
   }
@@ -222,30 +477,68 @@ export class CharactersService {
     const elapsed = Date.now() - new Date(lastSyncedAt).getTime();
     if (elapsed < cooldownMs) {
       const remaining = Math.ceil((cooldownMs - elapsed) / 1000);
-      throw new HttpException(`Refresh on cooldown. Try again in ${remaining}s`, HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        `Refresh on cooldown. Try again in ${remaining}s`,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
   }
 
   /** Fire-and-forget: enqueue enrichment jobs for a character. */
-  private enqueueCharacterEnrichmentsBackground(characterId: string, gameId: number): void {
-    this.db.select({ slug: schema.games.slug }).from(schema.games).where(eq(schema.games.id, gameId)).limit(1)
-      .then(([game]) => { if (game) return this.enrichmentsService.enqueueCharacterEnrichments(characterId, game.slug); })
-      .catch((err) => { this.logger.warn(`Failed to enqueue enrichments for character ${characterId}: ${err}`); });
+  private enqueueCharacterEnrichmentsBackground(
+    characterId: string,
+    gameId: number,
+  ): void {
+    this.db
+      .select({ slug: schema.games.slug })
+      .from(schema.games)
+      .where(eq(schema.games.id, gameId))
+      .limit(1)
+      .then(([game]) => {
+        if (game)
+          return this.enrichmentsService.enqueueCharacterEnrichments(
+            characterId,
+            game.slug,
+          );
+      })
+      .catch((err) => {
+        this.logger.warn(
+          `Failed to enqueue enrichments for character ${characterId}: ${err}`,
+        );
+      });
   }
 
   /** Get a single character by ID (public — no ownership check). */
   async findOnePublic(characterId: string): Promise<CharacterDto> {
-    const [character] = await this.db.select().from(schema.characters).where(eq(schema.characters.id, characterId)).limit(1);
-    if (!character) throw new NotFoundException(`Character ${characterId} not found`);
+    const [character] = await this.db
+      .select()
+      .from(schema.characters)
+      .where(eq(schema.characters.id, characterId))
+      .limit(1);
+    if (!character)
+      throw new NotFoundException(`Character ${characterId} not found`);
     const dto = mapCharacterToDto(character);
-    const enrichmentRows = await this.enrichmentsService.getEnrichmentsForEntity('character', characterId);
-    return enrichmentRows.length > 0 ? { ...dto, enrichments: enrichmentRows } : dto;
+    const enrichmentRows =
+      await this.enrichmentsService.getEnrichmentsForEntity(
+        'character',
+        characterId,
+      );
+    return enrichmentRows.length > 0
+      ? { ...dto, enrichments: enrichmentRows }
+      : dto;
   }
 
   /** Sync all externally-linked characters (for auto-sync cron). */
   async syncAllCharacters(): Promise<{ synced: number; failed: number }> {
-    const externalCharacters = await this.db.select().from(schema.characters)
-      .where(and(isNotNull(schema.characters.region), isNotNull(schema.characters.gameVariant)));
+    const externalCharacters = await this.db
+      .select()
+      .from(schema.characters)
+      .where(
+        and(
+          isNotNull(schema.characters.region),
+          isNotNull(schema.characters.gameVariant),
+        ),
+      );
     let synced = 0;
     let failed = 0;
     for (const char of externalCharacters) {
@@ -258,16 +551,34 @@ export class CharactersService {
   }
 
   /** Sync a single external character. Returns 'synced', 'failed', or 'skipped'. */
-  private async syncSingleCharacter(char: typeof schema.characters.$inferSelect): Promise<'synced' | 'failed' | 'skipped'> {
+  private async syncSingleCharacter(
+    char: typeof schema.characters.$inferSelect,
+  ): Promise<'synced' | 'failed' | 'skipped'> {
     try {
       const variant = char.gameVariant as string;
       const adapter = this.findCharacterSyncAdapter(variant);
-      if (!adapter) { this.logger.debug(`No adapter found for character ${char.id} (variant: ${variant}), skipping`); return 'skipped'; }
-      const { profile, talents, equipment } = await fetchFullProfile(adapter, char.name, char.realm!, char.region!, variant);
-      await this.db.update(schema.characters).set(buildSyncUpdateFields(profile, equipment, talents)).where(eq(schema.characters.id, char.id));
+      if (!adapter) {
+        this.logger.debug(
+          `No adapter found for character ${char.id} (variant: ${variant}), skipping`,
+        );
+        return 'skipped';
+      }
+      const { profile, talents, equipment } = await fetchFullProfile(
+        adapter,
+        char.name,
+        char.realm!,
+        char.region!,
+        variant,
+      );
+      await this.db
+        .update(schema.characters)
+        .set(buildSyncUpdateFields(profile, equipment, talents))
+        .where(eq(schema.characters.id, char.id));
       return 'synced';
     } catch (err) {
-      this.logger.warn(`Auto-sync failed for character ${char.id} (${char.name}): ${err}`);
+      this.logger.warn(
+        `Auto-sync failed for character ${char.id} (${char.name}): ${err}`,
+      );
       return 'failed';
     }
   }
@@ -276,7 +587,8 @@ export class CharactersService {
   private isUniqueViolation(error: unknown, constraintName: string): boolean {
     if (!(error instanceof Error)) return false;
     const msg = error.message ?? '';
-    const causeMsg = error.cause instanceof Error ? (error.cause.message ?? '') : '';
+    const causeMsg =
+      error.cause instanceof Error ? (error.cause.message ?? '') : '';
     return msg.includes(constraintName) || causeMsg.includes(constraintName);
   }
 }

@@ -21,7 +21,10 @@ import {
   type PermissionCheckResult,
 } from './discord-bot-client.helpers';
 
-export type { GuildInfo, PermissionCheckResult } from './discord-bot-client.helpers';
+export type {
+  GuildInfo,
+  PermissionCheckResult,
+} from './discord-bot-client.helpers';
 
 @Injectable()
 export class DiscordBotClientService {
@@ -99,10 +102,7 @@ export class DiscordBotClientService {
     }
   }
 
-  async sendDirectMessage(
-    discordId: string,
-    content: string,
-  ): Promise<void> {
+  async sendDirectMessage(discordId: string, content: string): Promise<void> {
     if (!this.client?.isReady()) {
       throw new Error('Discord bot is not connected');
     }
@@ -198,24 +198,23 @@ export class DiscordBotClientService {
 
     if (start) {
       perfLog('DISCORD', 'editEmbed', performance.now() - start, {
-        channelId, messageId,
+        channelId,
+        messageId,
       });
     }
     return result;
   }
 
   /** Delete a message from a channel. */
-  async deleteMessage(
-    channelId: string,
-    messageId: string,
-  ): Promise<void> {
+  async deleteMessage(channelId: string, messageId: string): Promise<void> {
     const channel = await this.fetchTextChannel(channelId);
     const start = isPerfEnabled() ? performance.now() : 0;
     const message = await channel.messages.fetch(messageId);
     await message.delete();
     if (start) {
       perfLog('DISCORD', 'deleteMessage', performance.now() - start, {
-        channelId, messageId,
+        channelId,
+        messageId,
       });
     }
   }
@@ -243,9 +242,7 @@ export class DiscordBotClientService {
   /** Search guild members by username query. */
   async searchGuildMembers(
     query: string,
-  ): Promise<
-    { discordId: string; username: string; avatar: string | null }[]
-  > {
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
     const guild = this.getGuild();
     if (!guild) return [];
 
@@ -270,9 +267,7 @@ export class DiscordBotClientService {
   /** List guild members (no query required). */
   async listGuildMembers(
     limit = 25,
-  ): Promise<
-    { discordId: string; username: string; avatar: string | null }[]
-  > {
+  ): Promise<{ discordId: string; username: string; avatar: string | null }[]> {
     const guild = this.getGuild();
     if (!guild) return [];
 
@@ -316,10 +311,7 @@ export class DiscordBotClientService {
 
   // ─── Private helpers ──────────────────────────────────────
 
-  private setupReadyHandler(
-    client: Client,
-    resolve: () => void,
-  ): void {
+  private setupReadyHandler(client: Client, resolve: () => void): void {
     client.once('ready', () => {
       clearTimeout(this.connectTimeout!);
       this.connectTimeout = null;

@@ -465,7 +465,9 @@ describe('UsersController', () => {
         .spyOn(usersService, 'completeOnboarding')
         .mockResolvedValue(completedUser as never);
 
-      const result = await meController.completeOnboarding(mockRequest as never);
+      const result = await meController.completeOnboarding(
+        mockRequest as never,
+      );
 
       expect(result.success).toBe(true);
       expect(result.onboardingCompletedAt).toBe('2026-02-13T12:00:00.000Z');
@@ -490,7 +492,9 @@ describe('UsersController', () => {
         .spyOn(usersService, 'completeOnboarding')
         .mockResolvedValue(completedUser as never);
 
-      const result = await meController.completeOnboarding(mockRequest as never);
+      const result = await meController.completeOnboarding(
+        mockRequest as never,
+      );
 
       expect(result).toHaveProperty('success', true);
       expect(result).toHaveProperty('onboardingCompletedAt');

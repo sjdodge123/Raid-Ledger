@@ -21,32 +21,64 @@ export function buildEventCommandDefinition(): RESTPostAPIChatInputApplicationCo
           opt.setName('title').setDescription('Event title').setRequired(true),
         )
         .addStringOption((opt) =>
-          opt.setName('game').setDescription('Game name').setRequired(true).setAutocomplete(true),
+          opt
+            .setName('game')
+            .setDescription('Game name')
+            .setRequired(true)
+            .setAutocomplete(true),
         )
         .addStringOption((opt) =>
-          opt.setName('time').setDescription('When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")').setRequired(true),
+          opt
+            .setName('time')
+            .setDescription(
+              'When the event starts (e.g., "tonight 8pm", "Friday 7:30pm")',
+            )
+            .setRequired(true),
         )
         .addStringOption((opt) =>
-          opt.setName('roster').setDescription('Roster type (default: generic)').addChoices(
-            { name: 'Generic (headcount only)', value: 'generic' },
-            { name: 'MMO Roles (Tank/Healer/DPS)', value: 'mmo' },
-          ),
+          opt
+            .setName('roster')
+            .setDescription('Roster type (default: generic)')
+            .addChoices(
+              { name: 'Generic (headcount only)', value: 'generic' },
+              { name: 'MMO Roles (Tank/Healer/DPS)', value: 'mmo' },
+            ),
         )
         .addIntegerOption((opt) =>
-          opt.setName('slots').setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`).setMinValue(1).setMaxValue(100),
+          opt
+            .setName('slots')
+            .setDescription(`Max attendees (default: ${DEFAULT_SLOTS})`)
+            .setMinValue(1)
+            .setMaxValue(100),
         )
         .addIntegerOption((opt) =>
-          opt.setName('tanks').setDescription('Number of tank slots (MMO roster only)').setMinValue(0).setMaxValue(20),
+          opt
+            .setName('tanks')
+            .setDescription('Number of tank slots (MMO roster only)')
+            .setMinValue(0)
+            .setMaxValue(20),
         )
         .addIntegerOption((opt) =>
-          opt.setName('healers').setDescription('Number of healer slots (MMO roster only)').setMinValue(0).setMaxValue(20),
+          opt
+            .setName('healers')
+            .setDescription('Number of healer slots (MMO roster only)')
+            .setMinValue(0)
+            .setMaxValue(20),
         )
         .addIntegerOption((opt) =>
-          opt.setName('dps').setDescription('Number of DPS slots (MMO roster only)').setMinValue(0).setMaxValue(50),
+          opt
+            .setName('dps')
+            .setDescription('Number of DPS slots (MMO roster only)')
+            .setMinValue(0)
+            .setMaxValue(50),
         ),
     )
     .addSubcommand((sub) =>
-      sub.setName('plan').setDescription('Plan an event with a community poll to find the best time'),
+      sub
+        .setName('plan')
+        .setDescription(
+          'Plan an event with a community poll to find the best time',
+        ),
     )
     .toJSON();
 }
@@ -61,7 +93,12 @@ export function buildSlotConfig(
   healers: number | null,
   dps: number | null,
 ): {
-  slotConfig?: { type: 'generic' | 'mmo'; tank?: number; healer?: number; dps?: number };
+  slotConfig?: {
+    type: 'generic' | 'mmo';
+    tank?: number;
+    healer?: number;
+    dps?: number;
+  };
   maxAttendees: number;
 } {
   if (rosterType !== 'mmo') {

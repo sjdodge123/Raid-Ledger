@@ -5,6 +5,7 @@ import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { showRoleSelect } from './signup-signup.handlers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
+import type { showCharacterSelect as ShowCharSelectFn } from '../utils/signup-dropdown-builders';
 
 /**
  * Handle the Tentative button click.
@@ -70,7 +71,11 @@ async function handleLinkedTentative(
 
   if (event.gameId) {
     const handled = await tryLinkedTentativeGameFlow(
-      interaction, eventId, linkedUser, event, deps,
+      interaction,
+      eventId,
+      linkedUser,
+      event,
+      deps,
     );
     if (handled) return;
   }
@@ -105,47 +110,58 @@ async function tryLinkedTentativeGameFlow(
   if (!game) return false;
 
   const characterList = await deps.charactersService.findAllForUser(
-    linkedUser.id, event.gameId!,
+    linkedUser.id,
+    event.gameId!,
   );
   const characters = characterList.data;
   const slotConfig = event.slotConfig as Record<string, unknown> | null;
 
   if (slotConfig?.type === 'mmo' && characters.length >= 1) {
-    await import('../utils/signup-dropdown-builders').then((m) =>
-      m.showCharacterSelect(interaction, {
-        customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
-        eventId,
-        eventTitle: event.title,
-        characters,
-        emojiService: deps.emojiService,
-        customIdSuffix: 'tentative',
-      }),
-    );
+    const m = (await import('../utils/signup-dropdown-builders')) as {
+      showCharacterSelect: typeof ShowCharSelectFn;
+    };
+    await m.showCharacterSelect(interaction, {
+      customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+      eventId,
+      eventTitle: event.title,
+      characters,
+      emojiService: deps.emojiService,
+      customIdSuffix: 'tentative',
+    });
     return true;
   }
 
   if (characters.length > 1) {
-    await import('../utils/signup-dropdown-builders').then((m) =>
-      m.showCharacterSelect(interaction, {
-        customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
-        eventId,
-        eventTitle: event.title,
-        characters,
-        emojiService: deps.emojiService,
-        customIdSuffix: 'tentative',
-      }),
-    );
+    const m = (await import('../utils/signup-dropdown-builders')) as {
+      showCharacterSelect: typeof ShowCharSelectFn;
+    };
+    await m.showCharacterSelect(interaction, {
+      customIdPrefix: SIGNUP_BUTTON_IDS.CHARACTER_SELECT,
+      eventId,
+      eventTitle: event.title,
+      characters,
+      emojiService: deps.emojiService,
+      customIdSuffix: 'tentative',
+    });
     return true;
   }
 
   if (characters.length === 1) {
     const char = characters[0];
-    const signupResult = await deps.signupsService.signup(eventId, linkedUser.id);
+    const signupResult = await deps.signupsService.signup(
+      eventId,
+      linkedUser.id,
+    );
     await deps.signupsService.confirmSignup(
-      eventId, signupResult.id, linkedUser.id, { characterId: char.id },
+      eventId,
+      signupResult.id,
+      linkedUser.id,
+      { characterId: char.id },
     );
     await deps.signupsService.updateStatus(
-      eventId, { userId: linkedUser.id }, { status: 'tentative' },
+      eventId,
+      { userId: linkedUser.id },
+      { status: 'tentative' },
     );
     await interaction.editReply({
       content: `You're marked as **tentative** with **${char.name}**.`,
@@ -155,7 +171,14 @@ async function tryLinkedTentativeGameFlow(
   }
 
   if (slotConfig?.type === 'mmo') {
-    await showRoleSelect(interaction, eventId, deps, undefined, undefined, 'tentative');
+    await showRoleSelect(
+      interaction,
+      eventId,
+      deps,
+      undefined,
+      undefined,
+      'tentative',
+    );
     return true;
   }
 
@@ -181,7 +204,12 @@ async function handleUnlinkedTentative(
     const slotConfig = event.slotConfig as Record<string, unknown> | null;
     if (slotConfig?.type === 'mmo') {
       await showRoleSelect(
-        interaction, eventId, deps, undefined, undefined, 'tentative',
+        interaction,
+        eventId,
+        deps,
+        undefined,
+        undefined,
+        'tentative',
       );
       return;
     }
@@ -228,7 +256,9 @@ export async function handleDecline(
   if (linkedUser) {
     await deps.signupsService.signup(eventId, linkedUser.id);
     await deps.signupsService.updateStatus(
-      eventId, { userId: linkedUser.id }, { status: 'declined' },
+      eventId,
+      { userId: linkedUser.id },
+      { status: 'declined' },
     );
   } else {
     await deps.signupsService.signupDiscord(eventId, {
@@ -317,7 +347,8 @@ export async function showOnboardingEphemeral(
 
   const clientUrl = process.env.CLIENT_URL ?? '';
   const intentToken = deps.intentTokenService.generate(
-    eventId, interaction.user.id,
+    eventId,
+    interaction.user.id,
   );
   const joinUrl = clientUrl
     ? `${clientUrl}/join?intent=signup&eventId=${eventId}&token=${encodeURIComponent(intentToken)}`

@@ -57,7 +57,11 @@ function buildMmoRoster(
   lines.push(`── ROSTER: ${event.signupCount}/${totalMax} ──`);
 
   const sections = buildRoleSections(
-    tankMax, healerMax, dpsMax, rc, emojiService,
+    tankMax,
+    healerMax,
+    dpsMax,
+    rc,
+    emojiService,
   );
 
   sections.forEach((section, idx) => {
@@ -66,7 +70,9 @@ function buildMmoRoster(
       `${section.emoji} **${section.label}** (${section.count}/${section.max}):`,
     );
     const playerLines = getMentionsForRole(
-      mentions, section.role, emojiService,
+      mentions,
+      section.role,
+      emojiService,
     );
     lines.push(playerLines || '\u2003—');
   });
@@ -93,19 +99,28 @@ function buildRoleSections(
   if (tankMax > 0) {
     sections.push({
       emoji: emojiService.getRoleEmoji('tank'),
-      label: 'Tanks', count: rc['tank'] ?? 0, max: tankMax, role: 'tank',
+      label: 'Tanks',
+      count: rc['tank'] ?? 0,
+      max: tankMax,
+      role: 'tank',
     });
   }
   if (healerMax > 0) {
     sections.push({
       emoji: emojiService.getRoleEmoji('healer'),
-      label: 'Healers', count: rc['healer'] ?? 0, max: healerMax, role: 'healer',
+      label: 'Healers',
+      count: rc['healer'] ?? 0,
+      max: healerMax,
+      role: 'healer',
     });
   }
   if (dpsMax > 0) {
     sections.push({
       emoji: emojiService.getRoleEmoji('dps'),
-      label: 'DPS', count: rc['dps'] ?? 0, max: dpsMax, role: 'dps',
+      label: 'DPS',
+      count: rc['dps'] ?? 0,
+      max: dpsMax,
+      role: 'dps',
     });
   }
   return sections;
@@ -151,9 +166,7 @@ function formatMentionLine(
 ): string {
   const label = m.discordId ? `<@${m.discordId}>` : (m.username ?? '???');
   const tentativePrefix = m.status === 'tentative' ? '\u23F3 ' : '';
-  const classEmoji = m.className
-    ? emojiService.getClassEmoji(m.className)
-    : '';
+  const classEmoji = m.className ? emojiService.getClassEmoji(m.className) : '';
   const prefs =
     m.preferredRoles && m.preferredRoles.length > 0
       ? m.preferredRoles
@@ -193,8 +206,7 @@ export function buildAdHocUpdateEmbed(
     )
     .addFields({
       name: `\uD83D\uDC65 Active (${active.length})`,
-      value:
-        active.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
+      value: active.map((p) => `<@${p.discordUserId}>`).join(', ') || 'None',
     });
 
   if (left.length > 0) {

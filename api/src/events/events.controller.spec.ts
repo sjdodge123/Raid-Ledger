@@ -83,7 +83,11 @@ describe('EventsController', () => {
     };
 
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [EventsController, EventsSignupsController, EventsAttendanceController],
+      controllers: [
+        EventsController,
+        EventsSignupsController,
+        EventsAttendanceController,
+      ],
       providers: [
         { provide: EventsService, useValue: mockEventsService },
         { provide: SignupsService, useValue: mockSignupsService },
@@ -161,8 +165,12 @@ describe('EventsController', () => {
     }).compile();
 
     controller = module.get<EventsController>(EventsController);
-    signupsController = module.get<EventsSignupsController>(EventsSignupsController);
-    attendanceController = module.get<EventsAttendanceController>(EventsAttendanceController);
+    signupsController = module.get<EventsSignupsController>(
+      EventsSignupsController,
+    );
+    attendanceController = module.get<EventsAttendanceController>(
+      EventsAttendanceController,
+    );
   });
 
   describe('create', () => {
@@ -483,7 +491,10 @@ describe('EventsController', () => {
     });
 
     it('should allow operator to view voice sessions', async () => {
-      const result = await attendanceController.getVoiceSessions(1, operatorReq);
+      const result = await attendanceController.getVoiceSessions(
+        1,
+        operatorReq,
+      );
       expect(result).toMatchObject({ eventId: 1 });
     });
 
@@ -514,12 +525,18 @@ describe('EventsController', () => {
     } as AuthenticatedRequest;
 
     it('should allow event creator to view voice attendance', async () => {
-      const result = await attendanceController.getVoiceAttendance(1, creatorReq);
+      const result = await attendanceController.getVoiceAttendance(
+        1,
+        creatorReq,
+      );
       expect(result).toMatchObject({ eventId: 1 });
     });
 
     it('should allow operator to view voice attendance', async () => {
-      const result = await attendanceController.getVoiceAttendance(1, operatorReq);
+      const result = await attendanceController.getVoiceAttendance(
+        1,
+        operatorReq,
+      );
       expect(result).toMatchObject({ eventId: 1 });
     });
 

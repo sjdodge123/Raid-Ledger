@@ -2,9 +2,25 @@
  * Demo data installation steps.
  * Orchestrates the multi-step data generation and insertion process.
  */
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { DemoDataCountsDto } from '@raid-ledger/contract';
-import type { DemoDataService } from './demo-data.service';
+import type { SettingsService } from '../settings/settings.service';
+
+/** Subset of DemoDataService needed by install steps. */
+interface DemoDataDeps {
+  database: PostgresJsDatabase<typeof schema>;
+  settings: SettingsService;
+  batchInsert(
+    table: Parameters<PostgresJsDatabase<typeof schema>['insert']>[0],
+    rows: Record<string, unknown>[],
+    onConflict?: 'doNothing',
+  ): Promise<void>;
+  batchInsertReturning(
+    table: Parameters<PostgresJsDatabase<typeof schema>['insert']>[0],
+    rows: Record<string, unknown>[],
+  ): Promise<Record<string, unknown>[]>;
+}
 import {
   FAKE_GAMERS,
   CHARACTERS_CONFIG,
@@ -43,7 +59,7 @@ type GameRow = typeof schema.games.$inferSelect;
 
 /** Run all demo data installation steps. Returns counts. */
 export async function installDemoDataInner(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
 ): Promise<DemoDataCountsDto> {
   const rng = createRng();
   const now = new Date();
@@ -64,7 +80,7 @@ export async function installDemoDataInner(
 
 /** Insert events, characters, signups, and roster. */
 async function insertEntities(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   seedAdminId: number,
   allUsers: UserRow[],
   userByName: Map<string, UserRow>,
@@ -87,7 +103,7 @@ async function insertEntities(
 
 /** Insert support data and reassign event creators. */
 async function finalizeInstall(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   allUsers: UserRow[],
   userByName: Map<string, UserRow>,
   events: { origEvents: EventRow[]; genEvents: EventRow[] },
@@ -133,7 +149,7 @@ function buildCounts(
 }
 
 /** Create seed admin + all fake gamers. */
-async function createUsers(svc: DemoDataService) {
+async function createUsers(svc: DemoDataDeps) {
   const db = svc.database;
   const [seedAdmin] = await db
     .insert(schema.users)
@@ -177,7 +193,7 @@ function mapEventValue(
 
 /** Insert both original and generated events. */
 async function insertEvents(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   seedAdminId: number,
   allGames: GameRow[],
   generatedEvents: ReturnType<typeof generateEvents>,
@@ -208,7 +224,7 @@ function buildCharByUserGame(created: CharRow[]): Map<string, string> {
 
 /** Insert both original and generated characters. */
 async function insertCharacters(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, { id: number }>,
   allGames: { id: number }[],
   generatedChars: ReturnType<typeof generateCharacters>,
@@ -238,7 +254,7 @@ async function insertCharacters(
 
 /** Insert both original and generated signups, deduped. */
 async function insertSignups(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   events: { origEvents: EventRow[]; genEvents: EventRow[] },
   allUsers: { id: number; role: string }[],
   userByName: Map<string, { id: number }>,
@@ -268,7 +284,7 @@ async function insertSignups(
 
 /** Insert roster assignments. */
 async function insertRoster(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   signups: SignupRow[],
   events: { createdEvents: EventRow[]; genEvents: EventRow[] },
   chars: { createdChars: CharRow[] },

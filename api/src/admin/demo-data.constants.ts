@@ -245,13 +245,6 @@ export function getClassIconUrl(wowClass: string): string {
   return `https://render.worldofwarcraft.com/icons/56/classicon_${wowClass.toLowerCase()}.jpg`;
 }
 
-/** Helper: round a Date to the start of its hour */
-function roundToHour(date: Date): Date {
-  const rounded = new Date(date);
-  rounded.setMinutes(0, 0, 0);
-  return rounded;
-}
-
 /** Helper: expand a time range into individual hour slots */
 export function expandHours(
   username: string,

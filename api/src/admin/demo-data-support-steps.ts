@@ -2,8 +2,18 @@
  * Demo data support data insertion steps (availability, game time, etc).
  */
 import { eq } from 'drizzle-orm';
+import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import type { DemoDataService } from './demo-data.service';
+
+/** Subset of DemoDataService needed by support steps. */
+interface DemoDataDeps {
+  database: PostgresJsDatabase<typeof schema>;
+  batchInsert(
+    table: Parameters<PostgresJsDatabase<typeof schema>['insert']>[0],
+    rows: Record<string, unknown>[],
+    onConflict?: 'doNothing',
+  ): Promise<void>;
+}
 import {
   FAKE_GAMERS,
   ORIGINAL_GAMER_COUNT,
@@ -26,7 +36,7 @@ type EventRow = typeof schema.events.$inferSelect;
 
 /** Insert availability and game time data. */
 async function insertAvailAndGameTime(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, UserRow>,
   gen: GeneratedData,
 ): Promise<void> {
@@ -48,7 +58,7 @@ async function insertAvailAndGameTime(
 
 /** Insert availability, game time, notifications, preferences, interests. */
 export async function insertSupportData(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, UserRow>,
   allUsers: UserRow[],
   origEvents: EventRow[],
@@ -70,7 +80,7 @@ export async function insertSupportData(
 
 /** Insert admin + generated notifications. */
 async function insertNotifications(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, UserRow>,
   allUsers: UserRow[],
   origEvents: EventRow[],
@@ -98,7 +108,7 @@ async function insertNotifications(
 
 /** Insert notification prefs + theme prefs. */
 async function insertPreferences(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, UserRow>,
   allUsers: UserRow[],
   gen: GeneratedData,
@@ -122,7 +132,7 @@ async function insertPreferences(
 
 /** Insert theme preferences for all users. */
 async function insertThemePrefs(
-  svc: DemoDataService,
+  svc: DemoDataDeps,
   userByName: Map<string, { id: number }>,
 ): Promise<void> {
   const values: Record<string, unknown>[] = [];

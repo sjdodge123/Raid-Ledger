@@ -12,9 +12,10 @@ interface TestResult {
 }
 
 /** Test IGDB credentials by fetching a Twitch OAuth token. */
-export async function testIgdbCredentials(
-  config: { clientId: string; clientSecret: string },
-): Promise<TestResult> {
+export async function testIgdbCredentials(config: {
+  clientId: string;
+  clientSecret: string;
+}): Promise<TestResult> {
   try {
     const response = await fetch('https://id.twitch.tv/oauth2/token', {
       method: 'POST',
@@ -32,17 +33,24 @@ export async function testIgdbCredentials(
       return { success: false, message: 'Invalid Client ID or Client Secret' };
     }
 
-    return { success: true, message: 'Credentials verified! IGDB / Twitch API is ready.' };
+    return {
+      success: true,
+      message: 'Credentials verified! IGDB / Twitch API is ready.',
+    };
   } catch (error) {
     logger.error('Failed to test IGDB credentials:', error);
-    return { success: false, message: 'Failed to connect to Twitch API. Please check your network.' };
+    return {
+      success: false,
+      message: 'Failed to connect to Twitch API. Please check your network.',
+    };
   }
 }
 
 /** Test Blizzard credentials by fetching an OAuth token. */
-export async function testBlizzardCredentials(
-  config: { clientId: string; clientSecret: string },
-): Promise<TestResult> {
+export async function testBlizzardCredentials(config: {
+  clientId: string;
+  clientSecret: string;
+}): Promise<TestResult> {
   try {
     const response = await fetch('https://us.battle.net/oauth/token', {
       method: 'POST',
@@ -59,10 +67,16 @@ export async function testBlizzardCredentials(
       return { success: false, message: 'Invalid Client ID or Client Secret' };
     }
 
-    return { success: true, message: 'Credentials verified! Blizzard API is ready.' };
+    return {
+      success: true,
+      message: 'Credentials verified! Blizzard API is ready.',
+    };
   } catch (error) {
     logger.error('Failed to test Blizzard credentials:', error);
-    return { success: false, message: 'Failed to connect to Blizzard API. Please check your network.' };
+    return {
+      success: false,
+      message: 'Failed to connect to Blizzard API. Please check your network.',
+    };
   }
 }
 
@@ -77,12 +91,18 @@ export async function testSteamApiKey(apiKey: string): Promise<TestResult> {
       if (response.status === 403) {
         return { success: false, message: 'Invalid Steam API key' };
       }
-      return { success: false, message: `Steam API returned HTTP ${response.status}` };
+      return {
+        success: false,
+        message: `Steam API returned HTTP ${response.status}`,
+      };
     }
 
     return { success: true, message: 'Steam API key is valid!' };
   } catch (error) {
     logger.error('Failed to test Steam API key:', error);
-    return { success: false, message: 'Failed to connect to Steam API. Please check your network.' };
+    return {
+      success: false,
+      message: 'Failed to connect to Steam API. Please check your network.',
+    };
   }
 }

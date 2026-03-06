@@ -18,8 +18,7 @@ interface OAuthConfig {
 }
 
 const DISCORD_HEADERS = {
-  'User-Agent':
-    'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
+  'User-Agent': 'RaidLedger (https://github.com/sjdodge123/Raid-Ledger, 1.0)',
 };
 
 /** Test Discord OAuth credentials via token endpoint with gateway fallback. */
@@ -85,8 +84,14 @@ async function testTokenEndpoint(
     return { success: false, message: 'Invalid Client ID or Client Secret' };
   }
 
-  if (tokenResponse.status === 400 && tokenData.error === 'unsupported_grant_type') {
-    return { success: true, message: 'Credentials are valid! Discord OAuth is ready to use.' };
+  if (
+    tokenResponse.status === 400 &&
+    tokenData.error === 'unsupported_grant_type'
+  ) {
+    return {
+      success: true,
+      message: 'Credentials are valid! Discord OAuth is ready to use.',
+    };
   }
 
   if (tokenResponse.ok) {
@@ -109,10 +114,9 @@ async function testTokenEndpoint(
 
 /** Lightweight gateway check to confirm Discord API reachability. */
 async function testGatewayFallback(): Promise<OAuthTestResponse> {
-  const gatewayResponse = await fetch(
-    'https://discord.com/api/v10/gateway',
-    { headers: DISCORD_HEADERS },
-  );
+  const gatewayResponse = await fetch('https://discord.com/api/v10/gateway', {
+    headers: DISCORD_HEADERS,
+  });
 
   if (gatewayResponse.ok) {
     return {
