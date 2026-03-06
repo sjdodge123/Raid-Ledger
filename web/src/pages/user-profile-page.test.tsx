@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -89,28 +88,28 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
             ],
             isLoading: false,
             error: null,
-        } as any);
+        } as unknown as ReturnType<typeof useGameRegistryHook.useGameRegistry>);
 
         // Default mock for hearted games
         vi.spyOn(useUserProfileHook, 'useUserHeartedGames').mockReturnValue({
             data: { data: [] },
             isLoading: false,
             error: null,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
 
         // Default mock for event signups
         vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
             data: { data: [], total: 0 },
             isLoading: false,
             error: null,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         // Default mock for user activity (ROK-443)
         vi.spyOn(useUserProfileHook, 'useUserActivity').mockReturnValue({
             data: { data: [], period: 'week' },
             isLoading: false,
             error: null,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserActivity>);
     });
 
     describe('AC1: Characters grouped by game with section headers', () => {
@@ -127,7 +126,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -156,7 +155,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -177,7 +176,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -198,7 +197,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             const { container } = renderWithProviders();
 
@@ -218,7 +217,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -246,7 +245,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -272,7 +271,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -299,7 +298,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -331,19 +330,19 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             vi.spyOn(useUserProfileHook, 'useUserHeartedGames').mockReturnValue({
                 data: { data: heartedGames },
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserHeartedGames>);
 
             vi.spyOn(useUserProfileHook, 'useUserEventSignups').mockReturnValue({
                 data: { data: [], total: 0 },
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
             const { container } = renderWithProviders();
 
@@ -372,7 +371,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -391,7 +390,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -415,7 +414,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -441,7 +440,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -461,14 +460,14 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             // Empty game registry
             vi.spyOn(useGameRegistryHook, 'useGameRegistry').mockReturnValue({
                 games: [],
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useGameRegistryHook.useGameRegistry>);
 
             renderWithProviders();
 
@@ -501,7 +500,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -527,7 +526,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: profile,
                 isLoading: false,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 
@@ -542,7 +541,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: undefined,
                 isLoading: true,
                 error: null,
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             const { container } = renderWithProviders();
 
@@ -555,7 +554,7 @@ describe('UserProfilePage - Game Grouping (ROK-308)', () => {
                 data: null,
                 isLoading: false,
                 error: new Error('Not found'),
-            } as any);
+            } as unknown as ReturnType<typeof useUserProfileHook.useUserProfile>);
 
             renderWithProviders();
 

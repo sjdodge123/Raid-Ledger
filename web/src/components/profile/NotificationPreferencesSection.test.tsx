@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { NotificationPreferencesSection } from './NotificationPreferencesSection';
@@ -32,7 +31,7 @@ describe('NotificationPreferencesSection', () => {
             isLoading: false,
             updatePreferences: mockUpdatePreferences,
             channelAvailability: { discord: { available: true } },
-        } as any);
+        } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
     });
 
     describe('Section header', () => {
@@ -69,7 +68,7 @@ describe('NotificationPreferencesSection', () => {
                 isLoading: false,
                 updatePreferences: mockUpdatePreferences,
                 channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
-            } as any);
+            } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
 
             render(<NotificationPreferencesSection />);
             expect(screen.queryByText('Discord')).not.toBeInTheDocument();
@@ -81,7 +80,7 @@ describe('NotificationPreferencesSection', () => {
                 isLoading: false,
                 updatePreferences: mockUpdatePreferences,
                 channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
-            } as any);
+            } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
 
             render(<NotificationPreferencesSection />);
             expect(screen.getByText('Link your Discord account')).toBeInTheDocument();

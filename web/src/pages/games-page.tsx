@@ -13,7 +13,9 @@ import { GameLibraryTable } from "../components/admin/GameLibraryTable";
 import { GamesMobileToolbar } from "../components/games/games-mobile-toolbar";
 import { BottomSheet } from "../components/ui/bottom-sheet";
 import { FAB } from "../components/ui/fab";
-import { GENRE_FILTERS, AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
+import { AdultContentFilterToggle, ShowHiddenGamesToggle } from "./games/games-helpers";
+import { GENRE_FILTERS } from "./games/games-constants";
+import type { GameDetailDto, GameDiscoverRowDto } from "@raid-ledger/contract";
 
 type GamesTab = "discover" | "manage";
 
@@ -159,7 +161,7 @@ function DesktopGenrePills({ selectedGenres, onGenresChange }: { selectedGenres:
 }
 
 function SearchResults({ searchLoading, searchResults, searchSource, debouncedSearch }: {
-  searchLoading: boolean; searchResults: any[] | undefined; searchSource: string | undefined; debouncedSearch: string;
+  searchLoading: boolean; searchResults: GameDetailDto[] | undefined; searchSource: string | undefined; debouncedSearch: string;
 }): JSX.Element {
   if (searchLoading) {
     return (
@@ -198,7 +200,7 @@ function SearchResults({ searchLoading, searchResults, searchSource, debouncedSe
 
 // eslint-disable-next-line max-lines-per-function
 function DiscoverContent({ discoverLoading, filteredRows, selectedGenres }: {
-  discoverLoading: boolean; filteredRows: any[] | undefined; selectedGenres: Set<string>;
+  discoverLoading: boolean; filteredRows: GameDiscoverRowDto[] | undefined; selectedGenres: Set<string>;
 }): JSX.Element {
   if (discoverLoading) {
     return (
@@ -222,7 +224,7 @@ function DiscoverContent({ discoverLoading, filteredRows, selectedGenres }: {
             <div key={row.slug}>
               <h2 className="text-lg font-semibold text-foreground mb-3">{row.category}</h2>
               <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2" style={{ scrollbarWidth: 'none' }}>
-                {row.games.map((game: any) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><MobileGameCard game={game} /></div>))}
+                {row.games.map((game) => (<div key={game.id} className="w-[140px] flex-shrink-0 snap-start"><MobileGameCard game={game} /></div>))}
               </div>
             </div>
           ))}

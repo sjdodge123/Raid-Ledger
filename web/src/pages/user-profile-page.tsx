@@ -7,8 +7,9 @@ import { resolveAvatar, toAvatarUser } from '../lib/avatar';
 import { UserEventSignups } from '../components/profile/UserEventSignups';
 import {
     HeartedGameCard, GroupedCharacters, ActivitySection,
-    GuestProfile, isGuestRouteState,
+    GuestProfile,
 } from './user-profile/user-profile-components';
+import { isGuestRouteState } from './user-profile/user-profile-helpers';
 import './user-profile-page.css';
 
 /**

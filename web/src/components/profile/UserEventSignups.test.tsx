@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -67,7 +66,7 @@ describe('UserEventSignups', () => {
             isLoading: true,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -85,7 +84,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -110,7 +109,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -130,7 +129,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -149,7 +148,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -170,7 +169,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         renderWithProviders(<UserEventSignups userId={1} />);
 
@@ -192,7 +191,7 @@ describe('UserEventSignups', () => {
             isLoading: false,
             error: null,
             isError: false,
-        } as any);
+        } as unknown as ReturnType<typeof useUserProfileHook.useUserEventSignups>);
 
         const { container } = renderWithProviders(<UserEventSignups userId={1} />);
 

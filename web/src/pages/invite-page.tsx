@@ -8,7 +8,7 @@ import { LoadingSpinner } from '../components/ui/loading-spinner';
 import { toast } from '../lib/toast';
 import { API_BASE_URL } from '../lib/config';
 import { formatRole } from '../lib/role-colors';
-import { STEP_LABELS } from './invite/invite-components';
+import { STEP_LABELS } from './invite/invite-labels';
 import { EventHeader, AuthStep, SuccessStep, CharacterStep } from './invite/invite-steps';
 
 /**

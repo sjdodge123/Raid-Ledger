@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
@@ -82,7 +81,7 @@ describe('NewMembersSection', () => {
         vi.mocked(usePlayersModule.useRecentPlayers).mockReturnValue({
             data: { data: [] },
             isLoading: false,
-        } as any);
+        } as ReturnType<typeof usePlayersModule.useRecentPlayers>);
 
         const { container } = renderWithRouter(<NewMembersSection />);
 

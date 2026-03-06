@@ -20,7 +20,8 @@ import { VoiceRoster } from '../components/events/VoiceRoster';
 import { useVoiceRoster } from '../hooks/use-voice-roster';
 import { fetchApi } from '../lib/api-client';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
-import { EventDetailRoster, alphabetical } from './event-detail/EventDetailRoster';
+import { EventDetailRoster } from './event-detail/EventDetailRoster';
+import { alphabetical } from './event-detail/event-detail-helpers';
 import {
     ConfirmModalSection,
     CancelModalSection,
@@ -228,7 +229,6 @@ export function EventDetailPage(): JSX.Element | null {
                 canManageRoster={canManageRoster}
                 canJoinSlot={canJoinSlot}
                 isMMOGame={isMMOGame}
-                isCancelled={isCancelled}
                 handlers={handlers}
                 user={user}
             />
@@ -503,7 +503,7 @@ function MobileQuickInfo({ event, roster, isSignedUp, alphabetical: sortFn }: {
 
 /** Roster slot section with RosterBuilder */
 // eslint-disable-next-line max-lines-per-function
-function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, isCancelled, handlers, user }: {
+function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthenticated, isSignedUp, userSignup, canManageRoster, canJoinSlot, isMMOGame, handlers, user }: {
     event: { autoUnbench?: boolean; title: string; startTime: string; endTime: string; game?: { id?: number; name?: string; slug?: string; coverUrl?: string } | null; description?: string | null; creator?: { username: string } | null };
     eventId: number;
     roster: { count: number; signups: Array<{ id: number; user: { username: string; avatar?: string | null } }> } | undefined;
@@ -514,7 +514,6 @@ function RosterSlotSection({ event, eventId, roster, rosterAssignments, isAuthen
     canManageRoster: boolean;
     canJoinSlot: boolean;
     isMMOGame: boolean;
-    isCancelled: boolean;
     handlers: ReturnType<typeof useEventDetailHandlers>;
     user: { id: number } | null | undefined;
 }): JSX.Element | null {

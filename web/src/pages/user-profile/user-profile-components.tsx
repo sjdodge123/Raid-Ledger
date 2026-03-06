@@ -173,26 +173,8 @@ function ActivityPrivacyToggle({ showActivity, onToggle, isPending }: {
     );
 }
 
-/** Route state passed when navigating to a guest (PUG) user profile (ROK-381). */
-export interface GuestRouteState {
-    guest: true;
-    username: string;
-    discordId: string;
-    avatarHash: string | null;
-}
-
-/** Type guard for guest route state */
-export function isGuestRouteState(state: unknown): state is GuestRouteState {
-    return (
-        state != null &&
-        typeof state === 'object' &&
-        (state as Record<string, unknown>).guest === true &&
-        typeof (state as Record<string, unknown>).username === 'string'
-    );
-}
-
 /** Guest profile page for non-member Discord users (ROK-381). */
-export function GuestProfile({ username, discordId, avatarHash }: Omit<GuestRouteState, 'guest'>): JSX.Element {
+export function GuestProfile({ username, discordId, avatarHash }: { username: string; discordId: string; avatarHash: string | null }): JSX.Element {
     const navigate = useNavigate();
     const { brandingQuery } = useBranding();
     const communityName = brandingQuery.data?.communityName ?? 'this community';

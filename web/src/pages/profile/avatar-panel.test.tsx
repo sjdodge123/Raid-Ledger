@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -28,13 +27,13 @@ vi.mock('../../lib/avatar', () => ({
         }
         return null;
     },
-    resolveAvatar: (user: any) => {
+    resolveAvatar: (user: Record<string, unknown> | null) => {
         if (!user) return { url: null, type: 'initials' };
         if (user.customAvatarUrl) return { url: `http://localhost:3000${user.customAvatarUrl}`, type: 'custom' };
         if (user.avatar) return { url: user.avatar, type: 'discord' };
         return { url: null, type: 'initials' };
     },
-    toAvatarUser: (user: any) => ({
+    toAvatarUser: (user: Record<string, unknown>) => ({
         avatar: user.discordId && !user.discordId.startsWith('local:') && user.avatar
             ? `https://cdn.discordapp.com/avatars/${user.discordId}/${user.avatar}.png`
             : null,
@@ -78,19 +77,19 @@ describe('AvatarPanel', () => {
             user: mockUser,
             isAuthenticated: true,
             refetch: mockRefetch,
-        } as any);
+        } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
         vi.spyOn(useCharactersHook, 'useMyCharacters').mockReturnValue({
             data: { data: [] },
             isLoading: false,
-        } as any);
+        } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
         vi.spyOn(useAvatarUploadHook, 'useAvatarUpload').mockReturnValue({
             upload: mockUpload,
             deleteAvatar: mockDeleteAvatar,
             isUploading: false,
             uploadProgress: 0,
-        } as any);
+        } as unknown as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
     });
 
     describe('Renders null when no user', () => {
@@ -99,7 +98,7 @@ describe('AvatarPanel', () => {
                 user: null,
                 isAuthenticated: false,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(container.firstChild).toBeNull();
@@ -133,7 +132,7 @@ describe('AvatarPanel', () => {
                 user,
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.queryByText('Available Avatars')).not.toBeInTheDocument();
@@ -148,7 +147,7 @@ describe('AvatarPanel', () => {
                 user,
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Available Avatars')).toBeInTheDocument();
@@ -163,7 +162,7 @@ describe('AvatarPanel', () => {
                 user,
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Custom')).toBeInTheDocument();
@@ -184,7 +183,7 @@ describe('AvatarPanel', () => {
                     ],
                 },
                 isLoading: false,
-            } as any);
+            } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Thrall')).toBeInTheDocument();
@@ -203,7 +202,7 @@ describe('AvatarPanel', () => {
                 user,
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
 
@@ -226,7 +225,7 @@ describe('AvatarPanel', () => {
                     ],
                 },
                 isLoading: false,
-            } as any);
+            } as unknown as ReturnType<typeof useCharactersHook.useMyCharacters>);
 
             const { container } = render(<AvatarPanel />, { wrapper: createWrapper() });
 
@@ -256,7 +255,7 @@ describe('AvatarPanel', () => {
                 deleteAvatar: mockDeleteAvatar,
                 isUploading: true,
                 uploadProgress: 42,
-            } as any);
+            } as unknown as ReturnType<typeof useAvatarUploadHook.useAvatarUpload>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Uploading 42%')).toBeInTheDocument();
@@ -271,7 +270,7 @@ describe('AvatarPanel', () => {
                 user,
                 isAuthenticated: true,
                 refetch: mockRefetch,
-            } as any);
+            } as unknown as ReturnType<typeof useAuthHook.useAuth>);
 
             render(<AvatarPanel />, { wrapper: createWrapper() });
             expect(screen.getByText('Remove Custom')).toBeInTheDocument();

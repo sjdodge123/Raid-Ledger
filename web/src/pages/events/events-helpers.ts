@@ -1,4 +1,4 @@
-import type { EventResponseDto, GameTimeSlot } from '@raid-ledger/contract';
+import type { EventResponseDto } from '@raid-ledger/contract';
 
 /**
  * Convert JS Date.getDay() (0=Sunday) to game-time dayOfWeek (0=Monday).

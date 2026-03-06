@@ -1,7 +1,8 @@
 import type { CharacterDto, InviteCodeResolveResponseDto, PugRole } from '@raid-ledger/contract';
 import { formatRole } from '../../lib/role-colors';
 import { WowArmoryImportForm } from '../../plugins/wow/components/wow-armory-import-form';
-import { StepIndicator, CharacterCard, DISCORD_ICON, CHECK_ICON } from './invite-components';
+import { StepIndicator, CharacterCard } from './invite-components';
+import { DISCORD_ICON, CHECK_ICON } from './invite-constants';
 
 interface EventHeaderProps {
     event: InviteCodeResolveResponseDto['event'];

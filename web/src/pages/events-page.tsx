@@ -12,7 +12,7 @@ import { EventPlansList } from "../components/events/event-plans-list";
 import { InfiniteScrollSentinel } from "../components/ui/infinite-scroll-sentinel";
 import { PullToRefresh } from "../components/ui/pull-to-refresh";
 import { FAB } from "../components/ui/fab";
-import type { GameTimeSlot } from "@raid-ledger/contract";
+import type { EventResponseDto, GameTimeSlot } from "@raid-ledger/contract";
 import { eventOverlapsGameTime } from "./events/events-helpers";
 import { EventsPageHeader } from "./events/EventsPageHeader";
 
@@ -212,7 +212,7 @@ function GameTimeFilter({ slotSet, filterGameTime, setFilterGameTime, overlapSet
 
 // eslint-disable-next-line max-lines-per-function
 function EventsGrid({ isLoading, displayEvents, filterGameTime, setFilterGameTime, overlapSet, navigate }: {
-  isLoading: boolean; displayEvents: any[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
+  isLoading: boolean; displayEvents: EventResponseDto[]; filterGameTime: boolean; setFilterGameTime: (v: boolean) => void;
   overlapSet: Set<number> | null; navigate: (path: string) => void;
 }): JSX.Element {
   const emptyFilterMsg = filterGameTime ? (

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
@@ -53,7 +52,7 @@ describe('CharacterCard', () => {
         vi.spyOn(useCharacterMutationsHook, 'useDeleteCharacter').mockReturnValue({
             mutate: mockDeleteMutate,
             isPending: false,
-        } as any);
+        } as unknown as ReturnType<typeof useCharacterMutationsHook.useDeleteCharacter>);
     });
 
     describe('Mobile actions panel', () => {
@@ -234,7 +233,7 @@ describe('CharacterCard', () => {
             vi.spyOn(useCharacterMutationsHook, 'useDeleteCharacter').mockReturnValue({
                 mutate: mockDeleteMutate,
                 isPending: true,
-            } as any);
+            } as unknown as ReturnType<typeof useCharacterMutationsHook.useDeleteCharacter>);
             renderWithRouter(
                 <CharacterCard character={createMockCharacter()} onEdit={vi.fn()} />
             );

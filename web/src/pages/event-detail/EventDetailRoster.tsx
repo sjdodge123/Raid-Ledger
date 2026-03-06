@@ -4,14 +4,7 @@ import { CharacterCardCompact } from '../../components/characters/character-card
 import { PluginSlot } from '../../plugins';
 import { toast } from '../../lib/toast';
 import type { EventResponseDto, EventRosterDto } from '@raid-ledger/contract';
-
-/** Sort signups alphabetically by username (case-insensitive) */
-export function alphabetical(
-    a: { user: { username: string } },
-    b: { user: { username: string } },
-): number {
-    return a.user.username.localeCompare(b.user.username, undefined, { sensitivity: 'base' });
-}
+import { alphabetical } from './event-detail-helpers';
 
 interface SignupItem {
     id: number;

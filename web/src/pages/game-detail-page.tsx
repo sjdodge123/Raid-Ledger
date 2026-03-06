@@ -10,6 +10,7 @@ import { InterestPlayerAvatars } from '../components/games/InterestPlayerAvatars
 import { GENRE_MAP } from '../lib/game-utils';
 import { PLATFORM_MAP, MODE_MAP } from './game-detail/game-detail-constants';
 import { CommunityActivitySection } from './game-detail/CommunityActivitySection';
+import type { EventResponseDto } from '@raid-ledger/contract';
 
 /** Game detail page — shows full game info, activity, events, screenshots, streams */
 // eslint-disable-next-line max-lines-per-function
@@ -85,7 +86,7 @@ export function GameDetailPage(): JSX.Element {
 /** Smart back button */
 function BackButton({ navigate }: { navigate: (to: string | number) => void }): JSX.Element {
     return (
-        <button onClick={() => { window.history.length > 1 ? navigate(-1) : navigate('/games'); }}
+        <button onClick={() => { if (window.history.length > 1) { navigate(-1); } else { navigate('/games'); } }}
             className="inline-flex items-center gap-1 text-muted hover:text-foreground transition-colors mb-6 bg-transparent border-none cursor-pointer p-0">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -187,7 +188,7 @@ function UpcomingEventsSection({ events, igdbId, navigate }: {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {events.slice(0, 4).map((event) => (
-                    <EventCard key={event.id} event={event as any} signupCount={event.signupCount} onClick={() => navigate(`/events/${event.id}`)} />
+                    <EventCard key={event.id} event={event as EventResponseDto} signupCount={event.signupCount} onClick={() => navigate(`/events/${event.id}`)} />
                 ))}
             </div>
         </section>
