@@ -183,9 +183,8 @@ async function findRescheduleDm(
 /** Check if a message has reschedule button components. */
 function isRescheduleMsg(msg: ButtonInteraction['message']): boolean {
   return msg.components.some((row) =>
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-    row.components.some(
-      (c: { customId?: string }) =>
+    (row.components as Array<{ customId?: string }>).some(
+      (c) =>
         typeof c.customId === 'string' &&
         (c.customId.startsWith(RESCHEDULE_BUTTON_IDS.CONFIRM) ||
           c.customId.startsWith(RESCHEDULE_BUTTON_IDS.DECLINE)),
