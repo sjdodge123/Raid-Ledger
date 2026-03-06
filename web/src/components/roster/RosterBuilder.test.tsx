@@ -1,75 +1,21 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { MemoryRouter } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { RosterBuilder } from './RosterBuilder';
-import { computeAutoFill } from './roster-auto-fill';
 import type { RosterAssignmentResponse, RosterRole } from '@raid-ledger/contract';
-import type { ReactElement } from 'react';
-
-/** Wrap component in MemoryRouter + QueryClientProvider for hook context */
-function renderWithRouter(ui: ReactElement) {
-    const queryClient = new QueryClient({
-        defaultOptions: { queries: { retry: false } },
-    });
-    return render(
-        <QueryClientProvider client={queryClient}>
-            <MemoryRouter>{ui}</MemoryRouter>
-        </QueryClientProvider>
-    );
-}
+import {
+    renderWithRouter,
+    makePlayer,
+    mockPool,
+    mockAssignments,
+} from './RosterBuilder.test-helpers';
 
 // Mock sonner toast
 vi.mock('sonner', () => ({
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }));
 
-import { toast } from 'sonner';
-
 describe('RosterBuilder', () => {
-    const mockPool = [
-        {
-            id: 0,
-            signupId: 1,
-            userId: 101,
-            discordId: '101101101',
-            username: 'PlayerOne',
-            avatar: null,
-            slot: null,
-            position: 0,
-            isOverride: false,
-            character: {
-                id: 'char-1',
-                name: 'Tanker',
-                className: 'Warrior',
-                role: 'tank',
-                avatarUrl: null,
-            },
-        },
-    ];
-
-    const mockAssignments = [
-        {
-            id: 1,
-            signupId: 2,
-            userId: 102,
-            discordId: '102102102',
-            username: 'HealerOne',
-            avatar: null,
-            slot: 'healer' as RosterRole,
-            position: 1,
-            isOverride: false,
-            character: {
-                id: 'char-2',
-                name: 'Healy',
-                className: 'Priest',
-                role: 'healer',
-                avatarUrl: null,
-            },
-        },
-    ];
-
     const mockOnRosterChange = vi.fn();
 
     beforeEach(() => {
@@ -86,43 +32,26 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // Check if assigned item is rendered
         expect(screen.getByText('HealerOne')).toBeInTheDocument();
         expect(screen.getByText('Healer (1/4)')).toBeInTheDocument();
     });
 
     it('renders correct number of slots', () => {
         renderWithRouter(
-            <RosterBuilder
-                pool={[]}
-                assignments={[]}
-                onRosterChange={mockOnRosterChange}
-                canEdit={true}
-            />
+            <RosterBuilder pool={[]} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
 
-        // Check Tank slots (default 2)
         expect(screen.getByText('Tank (0/2)')).toBeInTheDocument();
-
-        // Check Healer slots (default 4)
         expect(screen.getByText('Healer (0/4)')).toBeInTheDocument();
-
-        // Check DPS slots (default 14)
         expect(screen.getByText('DPS (0/14)')).toBeInTheDocument();
     });
 
     it('renders UnassignedBar with pool count', () => {
         renderWithRouter(
-            <RosterBuilder
-                pool={mockPool}
-                assignments={[]}
-                onRosterChange={mockOnRosterChange}
-                canEdit={true}
-            />
+            <RosterBuilder pool={mockPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
 
         expect(screen.getByText('Unassigned')).toBeInTheDocument();
-        // Count badge in the unassigned bar
         const countBadge = document.querySelector('.unassigned-bar__count');
         expect(countBadge).toHaveTextContent('1');
     });
@@ -153,7 +82,6 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // All empty slots should show "+ Join" text
         const joinButtons = screen.getAllByText('Join');
         expect(joinButtons.length).toBeGreaterThan(0);
     });
@@ -169,26 +97,18 @@ describe('RosterBuilder', () => {
             />
         );
 
-        // Empty slots without click handler show a muted "+" icon (ROK-210 AC-7)
         const emptySlots = screen.getAllByText('+');
         expect(emptySlots.length).toBeGreaterThan(0);
     });
 
     it('opens assignment popup when admin clicks slot', () => {
         renderWithRouter(
-            <RosterBuilder
-                pool={mockPool}
-                assignments={[]}
-                onRosterChange={mockOnRosterChange}
-                canEdit={true}
-            />
+            <RosterBuilder pool={mockPool} assignments={[]} onRosterChange={mockOnRosterChange} canEdit={true} />
         );
 
-        // Click first tank slot (admin sees "Assign" text, not "Join")
         const slotElements = screen.getAllByText('Assign');
         fireEvent.click(slotElements[0].closest('div[class*="min-h"]')!);
 
-        // Assignment popup should appear
         expect(screen.getByText(/Assign to/)).toBeInTheDocument();
     });
 
@@ -206,21 +126,8 @@ describe('RosterBuilder', () => {
         expect(screen.getByText('Players (0/8)')).toBeInTheDocument();
     });
 
-    // ROK-209: Auto-Fill & Clear All tests
+    // ROK-209: Auto-Fill UI tests
     describe('Auto-Fill', () => {
-        const makePlayer = (id: number, role: string | null, name: string): RosterAssignmentResponse => ({
-            id: 0,
-            signupId: id,
-            userId: id + 100,
-            discordId: `${id}${id}${id}`,
-            username: name,
-            avatar: null,
-            slot: null,
-            position: 0,
-            isOverride: false,
-            character: role ? { id: `char-${id}`, name, className: 'TestClass', role, avatarUrl: null } : null,
-        });
-
         const mmoPool = [
             makePlayer(10, 'tank', 'TankA'),
             makePlayer(11, 'healer', 'HealerA'),
@@ -252,7 +159,6 @@ describe('RosterBuilder', () => {
         });
 
         it('disables Auto-Fill when all slots are filled', () => {
-            // Fill all default MMO slots: 2 tank, 4 healer, 14 dps, 5 flex = 25 total
             const fullAssignments: RosterAssignmentResponse[] = [];
             let id = 1;
             for (const [role, count] of [['tank', 2], ['healer', 4], ['dps', 14], ['flex', 5]] as const) {
@@ -275,21 +181,17 @@ describe('RosterBuilder', () => {
 
             fireEvent.click(screen.getByText('Auto-Fill'));
 
-            // Modal should appear with summary
             expect(screen.getByText('Auto-Fill Roster')).toBeInTheDocument();
             expect(screen.getByText('Continue')).toBeInTheDocument();
             expect(screen.getByText('Cancel')).toBeInTheDocument();
         });
 
         it('shows info toast when no matching players', () => {
-            // Pool with no characters → no role matches, but backfill still works for MMO...
-            // Use a scenario where all slots are partially filled and the pool has no room
             const tinySlots = { tank: 0, healer: 0, dps: 0, flex: 0, player: 0 };
             renderWithRouter(
                 <RosterBuilder pool={[makePlayer(1, null, 'NoRole')]} assignments={[]} slots={tinySlots} onRosterChange={mockOnRosterChange} canEdit={true} />
             );
 
-            // All slots are 0, so allSlotsFilled is true — button should be disabled
             expect(screen.getByText('Auto-Fill')).toBeDisabled();
         });
 
@@ -303,7 +205,6 @@ describe('RosterBuilder', () => {
 
             expect(mockOnRosterChange).toHaveBeenCalledTimes(1);
             const [newPool, newAssignments] = mockOnRosterChange.mock.calls[0];
-            // All 6 players should be assigned (1 tank, 2 healer, 3 dps = 6 total, fits in available slots)
             expect(newAssignments.length).toBe(6);
             expect(newPool.length).toBe(0);
         });
@@ -318,161 +219,14 @@ describe('RosterBuilder', () => {
             fireEvent.click(screen.getByText('Continue'));
 
             const [, newAssignments] = mockOnRosterChange.mock.calls[0];
-            // Existing assignment should still be there
             expect(newAssignments.find((a: RosterAssignmentResponse) => a.signupId === 99)).toBeTruthy();
-            // TankA from pool should go to tank position 2 (position 1 occupied)
             const tankA = newAssignments.find((a: RosterAssignmentResponse) => a.username === 'TankA');
             expect(tankA?.slot).toBe('tank');
             expect(tankA?.position).toBe(2);
         });
     });
 
-    describe('computeAutoFill (unit)', () => {
-        const makePlayer = (id: number, role: string | null, name: string): RosterAssignmentResponse => ({
-            id: 0,
-            signupId: id,
-            userId: id + 100,
-            discordId: `${id}${id}${id}`,
-            username: name,
-            avatar: null,
-            slot: null,
-            position: 0,
-            isOverride: false,
-            character: role ? { id: `char-${id}`, name, className: 'TestClass', role, avatarUrl: null } : null,
-        });
-
-        it('MMO: assigns by character role matching', () => {
-            const pool = [
-                makePlayer(1, 'tank', 'TankA'),
-                makePlayer(2, 'healer', 'HealerA'),
-                makePlayer(3, 'dps', 'DpsA'),
-            ];
-            const roleSlots = [
-                { role: 'tank' as RosterRole, label: 'Tank' },
-                { role: 'healer' as RosterRole, label: 'Healer' },
-                { role: 'dps' as RosterRole, label: 'DPS' },
-                { role: 'flex' as RosterRole, label: 'Flex' },
-            ];
-            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
-
-            const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
-
-            expect(result.totalFilled).toBe(3);
-            expect(result.newAssignments.find(a => a.username === 'TankA')?.slot).toBe('tank');
-            expect(result.newAssignments.find(a => a.username === 'HealerA')?.slot).toBe('healer');
-            expect(result.newAssignments.find(a => a.username === 'DpsA')?.slot).toBe('dps');
-        });
-
-        it('MMO: overflows unmatched players to flex', () => {
-            const pool = [
-                makePlayer(1, null, 'NoRole'),
-            ];
-            const roleSlots = [
-                { role: 'tank' as RosterRole, label: 'Tank' },
-                { role: 'healer' as RosterRole, label: 'Healer' },
-                { role: 'dps' as RosterRole, label: 'DPS' },
-                { role: 'flex' as RosterRole, label: 'Flex' },
-            ];
-            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
-
-            const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
-
-            expect(result.totalFilled).toBe(1);
-            const assigned = result.newAssignments.find(a => a.username === 'NoRole');
-            expect(assigned?.slot).toBe('flex');
-            expect(assigned?.isOverride).toBe(true);
-        });
-
-        it('MMO: backfills empty role slots when flex is full', () => {
-            const pool = Array.from({ length: 8 }, (_, i) => makePlayer(i + 1, null, `P${i + 1}`));
-            const roleSlots = [
-                { role: 'tank' as RosterRole, label: 'Tank' },
-                { role: 'healer' as RosterRole, label: 'Healer' },
-                { role: 'dps' as RosterRole, label: 'DPS' },
-                { role: 'flex' as RosterRole, label: 'Flex' },
-            ];
-            // Small slots to test backfill: 1 tank, 1 healer, 1 dps, 2 flex = 5 slots
-            const getSlotCount = (role: RosterRole) => (({ tank: 1, healer: 1, dps: 1, flex: 2 } as Record<string, number>)[role] ?? 0);
-
-            const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
-
-            // All 5 slots should be filled
-            expect(result.totalFilled).toBe(5);
-            expect(result.newPool.length).toBe(3); // 8 - 5 = 3 remaining
-        });
-
-        it('MMO: fills bench overflow', () => {
-            const pool = Array.from({ length: 3 }, (_, i) => makePlayer(i + 1, null, `P${i + 1}`));
-            const roleSlots = [
-                { role: 'tank' as RosterRole, label: 'Tank' },
-                { role: 'healer' as RosterRole, label: 'Healer' },
-                { role: 'dps' as RosterRole, label: 'DPS' },
-                { role: 'flex' as RosterRole, label: 'Flex' },
-                { role: 'bench' as RosterRole, label: 'Bench' },
-            ];
-            // All MMO slots are 0, only bench available
-            const getSlotCount = (role: RosterRole) => (({ tank: 0, healer: 0, dps: 0, flex: 0, bench: 3 } as Record<string, number>)[role] ?? 0);
-
-            const result = computeAutoFill(pool, [], roleSlots, getSlotCount, false);
-
-            expect(result.totalFilled).toBe(3);
-            expect(result.newAssignments.every(a => a.slot === 'bench')).toBe(true);
-        });
-
-        it('Generic: fills player slots sequentially', () => {
-            const pool = [
-                makePlayer(1, null, 'Alpha'),
-                makePlayer(2, null, 'Bravo'),
-                makePlayer(3, null, 'Charlie'),
-            ];
-            const roleSlots = [{ role: 'player' as RosterRole, label: 'Player' }];
-            const getSlotCount = (role: RosterRole) => role === 'player' ? 4 : 0;
-
-            const result = computeAutoFill(pool, [], roleSlots, getSlotCount, true);
-
-            expect(result.totalFilled).toBe(3);
-            expect(result.newAssignments[0].username).toBe('Alpha');
-            expect(result.newAssignments[0].position).toBe(1);
-            expect(result.newAssignments[1].username).toBe('Bravo');
-            expect(result.newAssignments[1].position).toBe(2);
-            expect(result.newAssignments[2].username).toBe('Charlie');
-            expect(result.newAssignments[2].position).toBe(3);
-        });
-
-        it('skips occupied positions', () => {
-            const pool = [makePlayer(1, 'tank', 'NewTank')];
-            const existing = [{ ...makePlayer(99, 'tank', 'OldTank'), slot: 'tank' as RosterRole, position: 1 }];
-            const roleSlots = [
-                { role: 'tank' as RosterRole, label: 'Tank' },
-                { role: 'healer' as RosterRole, label: 'Healer' },
-                { role: 'dps' as RosterRole, label: 'DPS' },
-                { role: 'flex' as RosterRole, label: 'Flex' },
-            ];
-            const getSlotCount = (role: RosterRole) => (({ tank: 2, healer: 4, dps: 14, flex: 5 } as Record<string, number>)[role] ?? 0);
-
-            const result = computeAutoFill(pool, existing, roleSlots, getSlotCount, false);
-
-            expect(result.totalFilled).toBe(1);
-            const newTank = result.newAssignments.find(a => a.username === 'NewTank');
-            expect(newTank?.slot).toBe('tank');
-            expect(newTank?.position).toBe(2); // Position 1 is occupied
-        });
-    });
-
     describe('Clear All', () => {
-        const makePlayer = (id: number, role: string | null, name: string): RosterAssignmentResponse => ({
-            id: 0,
-            signupId: id,
-            userId: id + 100,
-            discordId: `${id}${id}${id}`,
-            username: name,
-            avatar: null,
-            slot: null,
-            position: 0,
-            isOverride: false,
-            character: role ? { id: `char-${id}`, name, className: 'TestClass', role, avatarUrl: null } : null,
-        });
-
         const assigned = [
             { ...makePlayer(1, 'tank', 'TankA'), slot: 'tank' as RosterRole, position: 1 },
             { ...makePlayer(2, 'healer', 'HealerA'), slot: 'healer' as RosterRole, position: 1 },
@@ -507,15 +261,13 @@ describe('RosterBuilder', () => {
             const clearBtn = screen.getByText('Clear All');
             fireEvent.click(clearBtn);
 
-            // First click: shows confirmation text
             expect(screen.getByText('Click again to clear')).toBeInTheDocument();
 
-            // Second click: executes clear
             fireEvent.click(screen.getByText('Click again to clear'));
             expect(mockOnRosterChange).toHaveBeenCalledTimes(1);
             const [newPool, newAssignments] = mockOnRosterChange.mock.calls[0];
             expect(newAssignments).toEqual([]);
-            expect(newPool.length).toBe(2); // Both assigned players moved to pool
+            expect(newPool.length).toBe(2);
         });
 
         it('auto-resets confirmation after 3s', () => {
@@ -536,441 +288,6 @@ describe('RosterBuilder', () => {
         });
     });
 
-    // ROK-353: Join? confirmation state tests
-    describe('Join? confirmation flow (ROK-353)', () => {
-        const mockSlotClick = vi.fn();
-
-        it('AC-1: first click shows "Join?", second click triggers onSlotClick', () => {
-            renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // First click on an empty slot — should show "Join?"
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-            expect(mockSlotClick).not.toHaveBeenCalled();
-
-            // Second click — should trigger onSlotClick with role and position
-            fireEvent.click(screen.getByText('Join?'));
-
-            expect(mockSlotClick).toHaveBeenCalledTimes(1);
-            expect(mockSlotClick).toHaveBeenCalledWith('tank', 1);
-        });
-
-        it('AC-4: pending state auto-resets after 3 seconds', () => {
-            vi.useFakeTimers();
-            renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Advance past the 3-second timeout
-            act(() => {
-                vi.advanceTimersByTime(3000);
-            });
-
-            // Should have reset back to "Join"
-            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
-            vi.useRealTimers();
-        });
-
-        it('AC-1: confirm works after 2+ seconds (within 3s window)', () => {
-            vi.useFakeTimers();
-            renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Wait 2 seconds — still within the 3s window
-            act(() => {
-                vi.advanceTimersByTime(2000);
-            });
-
-            // "Join?" should still be showing
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Confirm click should work
-            fireEvent.click(screen.getByText('Join?'));
-            expect(mockSlotClick).toHaveBeenCalledTimes(1);
-
-            vi.useRealTimers();
-        });
-
-        it('AC-3: pending state persists across prop changes (simulated refetch)', () => {
-            const { rerender } = renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    signupSucceeded={false}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Re-render with same props (simulates background refetch re-render)
-            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-            rerender(
-                <QueryClientProvider client={qc}>
-                    <MemoryRouter>
-                        <RosterBuilder
-                            pool={[]}
-                            assignments={[]}
-                            onRosterChange={mockOnRosterChange}
-                            canEdit={false}
-                            canJoin={true}
-                            signupSucceeded={false}
-                            onSlotClick={mockSlotClick}
-                        />
-                    </MemoryRouter>
-                </QueryClientProvider>
-            );
-
-            // "Join?" should still be showing after re-render
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Confirm click should still work
-            fireEvent.click(screen.getByText('Join?'));
-            expect(mockSlotClick).toHaveBeenCalledTimes(1);
-        });
-
-        it('AC-3: pending state persists when canJoin briefly becomes false (refetch race)', () => {
-            const { rerender } = renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    signupSucceeded={false}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Simulate a background refetch that briefly sets canJoin=false
-            // (e.g., isSignedUp momentarily reflects stale data)
-            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-            rerender(
-                <QueryClientProvider client={qc}>
-                    <MemoryRouter>
-                        <RosterBuilder
-                            pool={[]}
-                            assignments={[]}
-                            onRosterChange={mockOnRosterChange}
-                            canEdit={false}
-                            canJoin={false}
-                    signupSucceeded={false}
-                            onSlotClick={mockSlotClick}
-                        />
-                    </MemoryRouter>
-                </QueryClientProvider>
-            );
-
-            // The pending "Join?" should still be visible because pendingSlotKey
-            // is stored in RosterBuilder state, not derived from canJoin
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // The confirm click should still work via savedJoinClickRef
-            fireEvent.click(screen.getByText('Join?'));
-            expect(mockSlotClick).toHaveBeenCalledTimes(1);
-        });
-
-        it('pending state clears when signupSucceeded becomes true (ROK-467)', () => {
-            const { rerender } = renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    signupSucceeded={false}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Rerender with signupSucceeded=true — pending state should clear immediately
-            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-            rerender(
-                <QueryClientProvider client={qc}>
-                    <MemoryRouter>
-                        <RosterBuilder
-                            pool={[]}
-                            assignments={[]}
-                            onRosterChange={mockOnRosterChange}
-                            canEdit={false}
-                            canJoin={false}
-                            signupSucceeded={true}
-                            onSlotClick={mockSlotClick}
-                        />
-                    </MemoryRouter>
-                </QueryClientProvider>
-            );
-
-            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
-        });
-
-        it('canJoin=false alone does NOT clear pending state (ROK-467)', () => {
-            vi.useFakeTimers();
-
-            const { rerender } = renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    signupSucceeded={false}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            // Click to enter pending state
-            const joinLabels = screen.getAllByText('Join');
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Rerender with canJoin=false but signupSucceeded still false
-            const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-            rerender(
-                <QueryClientProvider client={qc}>
-                    <MemoryRouter>
-                        <RosterBuilder
-                            pool={[]}
-                            assignments={[]}
-                            onRosterChange={mockOnRosterChange}
-                            canEdit={false}
-                            canJoin={false}
-                    signupSucceeded={false}
-                            onSlotClick={mockSlotClick}
-                        />
-                    </MemoryRouter>
-                </QueryClientProvider>
-            );
-
-            // Advance timers well past 200ms — pending state should NOT clear
-            act(() => {
-                vi.advanceTimersByTime(200);
-            });
-
-            // "Join?" should still be showing — canJoin alone no longer clears it
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            vi.useRealTimers();
-        });
-
-        it('AC-5: admin assignment popup is unaffected by join confirmation', () => {
-            renderWithRouter(
-                <RosterBuilder
-                    pool={mockPool}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={true}
-                    canJoin={false}
-                    signupSucceeded={false}
-                />
-            );
-
-            // Admin sees "Assign" text, not "Join"
-            const assignLabels = screen.getAllByText('Assign');
-            expect(assignLabels.length).toBeGreaterThan(0);
-            expect(screen.queryByText('Join')).not.toBeInTheDocument();
-
-            // Click should open popup, not enter pending state
-            const firstSlot = assignLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText(/Assign to/)).toBeInTheDocument();
-            expect(screen.queryByText('Join?')).not.toBeInTheDocument();
-        });
-
-        it('only one slot can be in pending state at a time', () => {
-            renderWithRouter(
-                <RosterBuilder
-                    pool={[]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={false}
-                    canJoin={true}
-                    signupSucceeded={false}
-                    onSlotClick={mockSlotClick}
-                />
-            );
-
-            const joinLabels = screen.getAllByText('Join');
-            // Click first slot
-            const firstSlot = joinLabels[0].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(firstSlot);
-
-            expect(screen.getByText('Join?')).toBeInTheDocument();
-
-            // Click a different slot — should move the pending state
-            const secondSlot = joinLabels[1].closest('div[class*="min-h-[60px]"]')!;
-            fireEvent.click(secondSlot);
-
-            // Should still have exactly one "Join?" (the new slot)
-            const joinQuestions = screen.getAllByText('Join?');
-            expect(joinQuestions.length).toBe(1);
-        });
-    });
-
-    // ROK-487: Toast message language for generic vs MMO rosters
-    describe('toast message language (ROK-487)', () => {
-        const makeGenericPlayer = (id: number, name: string): RosterAssignmentResponse => ({
-            id: 0,
-            signupId: id,
-            userId: id + 100,
-            discordId: `${id}${id}${id}`,
-            username: name,
-            avatar: null,
-            slot: null,
-            position: 0,
-            isOverride: false,
-            character: null,
-        });
-
-        it('says "slot N" when assigning a player to a generic player slot', () => {
-            const playerPool = [makeGenericPlayer(1, 'Alice')];
-
-            renderWithRouter(
-                <RosterBuilder
-                    pool={playerPool}
-                    assignments={[]}
-                    slots={{ player: 4 }}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={true}
-                />
-            );
-
-            // Open assignment popup: click on an empty player slot
-            const assignSlots = screen.getAllByText('Assign');
-            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
-
-            // In-modal Assign button is inside the dialog
-            const modal = document.querySelector('[role="dialog"]');
-            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
-            expect(modalAssignBtn).toBeTruthy();
-            fireEvent.click(modalAssignBtn!);
-
-            expect(vi.mocked(toast.success)).toHaveBeenCalledWith(
-                expect.stringMatching(/slot\s+1/i),
-            );
-        });
-
-        it('does NOT say "player N" when assigning to a generic player slot', () => {
-            const playerPool = [makeGenericPlayer(2, 'Bob')];
-
-            renderWithRouter(
-                <RosterBuilder
-                    pool={playerPool}
-                    assignments={[]}
-                    slots={{ player: 4 }}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={true}
-                />
-            );
-
-            const assignSlots = screen.getAllByText('Assign');
-            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
-
-            const modal = document.querySelector('[role="dialog"]');
-            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
-            expect(modalAssignBtn).toBeTruthy();
-            fireEvent.click(modalAssignBtn!);
-
-            const calls = vi.mocked(toast.success).mock.calls;
-            const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Bob'));
-            expect(assignCall).toBeDefined();
-            expect(assignCall![0]).not.toMatch(/player\s+\d/i);
-        });
-
-        it('says "role N" when assigning to an MMO tank slot', () => {
-            const tankPlayer = makeGenericPlayer(3, 'Charlie');
-
-            renderWithRouter(
-                <RosterBuilder
-                    pool={[tankPlayer]}
-                    assignments={[]}
-                    onRosterChange={mockOnRosterChange}
-                    canEdit={true}
-                />
-            );
-
-            const assignSlots = screen.getAllByText('Assign');
-            // First slot rendered is Tank 1
-            fireEvent.click(assignSlots[0].closest('div[class*="min-h"]')!);
-
-            const modal = document.querySelector('[role="dialog"]');
-            const modalAssignBtn = modal?.querySelector('button.assignment-popup__assign-btn');
-            expect(modalAssignBtn).toBeTruthy();
-            fireEvent.click(modalAssignBtn!);
-
-            // For MMO slots, message should say "role position" (e.g. "tank 1")
-            // and should NOT say "slot N"
-            const calls = vi.mocked(toast.success).mock.calls;
-            const assignCall = calls.find((c) => typeof c[0] === 'string' && (c[0] as string).includes('Charlie'));
-            expect(assignCall).toBeDefined();
-            expect(assignCall![0]).not.toMatch(/slot\s+\d/i);
-        });
-    });
-
     // ROK-343: Memoization tests
     describe('memoization (ROK-343)', () => {
         it('is wrapped with React.memo', () => {
@@ -979,7 +296,6 @@ describe('RosterBuilder', () => {
         });
 
         it('has an inner named function (not anonymous)', () => {
-            // Named function expression inside memo retains its name (may be mangled by build transforms)
             const inner = (RosterBuilder as unknown as { type: { name: string } }).type;
             expect(inner.name).toBeTruthy();
             expect(inner.name.length).toBeGreaterThan(0);
