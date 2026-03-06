@@ -1,5 +1,13 @@
 export type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 
+/** Measured grid dimensions used by overlay positioning */
+export interface GridDims {
+    colWidth: number;
+    rowHeight: number;
+    headerHeight: number;
+    colStartLeft: number;
+}
+
 /** Preview block for showing where a specific event falls on the grid */
 export interface GameTimePreviewBlock {
     dayOfWeek: number; // 0=Sun, 6=Sat
